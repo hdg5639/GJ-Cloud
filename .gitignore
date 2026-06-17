@@ -23,3 +23,10 @@ $RECYCLE.BIN/
 
 ### Local guides ###
 NEW_SERVICE_GUIDE.md
+
+### Local docker ###
+compose.yaml
+.env
+.env.*
+!.env.example
+nginx/
