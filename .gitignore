@@ -20,3 +20,6 @@ $RECYCLE.BIN/
 *.iws
 *.iml
 *.ipr
+
+### Local guides ###
+NEW_SERVICE_GUIDE.md
