@@ -1,0 +1,15 @@
+package gj.cloud.user.domain.plan.enums;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@Getter
+@RequiredArgsConstructor
+public enum PlanType {
+    FREE(4, 6, 3),
+    PRO(8, 16, 10);
+
+    private final int vCpu;
+    private final int ramGb;
+    private final int maxVmCount;
+}
