@@ -1,0 +1,26 @@
+spring:
+  sql:
+    init:
+      mode: always
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+auth:
+  server-url: ${AUTH_SERVER_URL}
+  jwks-cache-ttl: 3600000
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
