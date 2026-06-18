@@ -1,0 +1,34 @@
+spring:
+  r2dbc:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+server:
+  port: 8080
+
+auth:
+  server-url: ${AUTH_SERVER_URL}
+  jwks-cache-ttl: 3600000
+
+user:
+  service-url: ${USER_SERVICE_URL}
+
+proxmox:
+  base-url: ${PROXMOX_URL}
+  api-token: ${PROXMOX_API_TOKEN}
+  node: ${PROXMOX_NODE:pve}
+  bridge: ${PROXMOX_BRIDGE:vmbr0}
+  storage: ${PROXMOX_STORAGE:local-lvm}
+  vmid-range-start: ${PROXMOX_VMID_START:1000}
+  vmid-range-end: ${PROXMOX_VMID_END:8999}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
