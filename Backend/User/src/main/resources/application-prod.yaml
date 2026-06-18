@@ -16,6 +16,9 @@ auth:
   server-url: ${AUTH_SERVER_URL}
   jwks-cache-ttl: 3600000
 
+vm:
+  service-url: ${VM_SERVICE_URL}
+
 server:
   port: 8080
 

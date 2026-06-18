@@ -8,6 +8,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
@@ -19,10 +21,17 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @AllArgsConstructor
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class VmEntity {
+public class VmEntity implements Persistable<UUID> {
 
     @Id
     private UUID id;
+
+    @Transient
+    @Builder.Default
+    private boolean isNew = false;
+
+    @Override
+    public boolean isNew() { return isNew; }
 
     @Column("user_id")
     private String userId;
@@ -59,6 +68,7 @@ public class VmEntity {
     public static VmEntity createPending(String userId, String name, PlanType planType, String sshKeyId) {
         return VmEntity.builder()
                 .id(UUID.randomUUID())
+                .isNew(true)
                 .userId(userId)
                 .name(name)
                 .planType(planType)
@@ -70,11 +80,12 @@ public class VmEntity {
     }
 
     public VmEntity withStatus(VmStatus status) {
-        return this.toBuilder().status(status).updatedAt(LocalDateTime.now()).build();
+        return this.toBuilder().isNew(false).status(status).updatedAt(LocalDateTime.now()).build();
     }
 
     public VmEntity withVmidAndTaskId(int vmid, String proxmoxTaskId) {
         return this.toBuilder()
+                .isNew(false)
                 .vmid(vmid)
                 .proxmoxTaskId(proxmoxTaskId)
                 .updatedAt(LocalDateTime.now())
@@ -83,6 +94,7 @@ public class VmEntity {
 
     public VmEntity withRunning(String internalIp) {
         return this.toBuilder()
+                .isNew(false)
                 .status(VmStatus.RUNNING)
                 .internalIp(internalIp)
                 .updatedAt(LocalDateTime.now())
@@ -91,6 +103,7 @@ public class VmEntity {
 
     public VmEntity withFailed(String errorMessage) {
         return this.toBuilder()
+                .isNew(false)
                 .status(VmStatus.FAILED)
                 .errorMessage(errorMessage)
                 .updatedAt(LocalDateTime.now())
@@ -99,6 +112,7 @@ public class VmEntity {
 
     public VmEntity withDeleted() {
         return this.toBuilder()
+                .isNew(false)
                 .status(VmStatus.DELETED)
                 .deletedAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())

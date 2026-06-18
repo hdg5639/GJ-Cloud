@@ -16,6 +16,7 @@ public class ProxmoxProperties {
     private String node;
     private String bridge;
     private String storage;
+    private String pool = "user-vm";
     private int vmidRangeStart;
     private int vmidRangeEnd;
 }

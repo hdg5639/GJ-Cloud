@@ -3,10 +3,9 @@ package gj.cloud.user.application.usage.service.impl;
 import gj.cloud.user.application.profile.service.ProfileService;
 import gj.cloud.user.application.usage.dto.UsageResponse;
 import gj.cloud.user.application.usage.service.UsageService;
+import gj.cloud.user.application.vm.client.VmServiceClient;
 import gj.cloud.user.domain.plan.enums.PlanType;
 import gj.cloud.user.domain.profile.repository.UserProfileRepository;
-import gj.cloud.user.global.exception.UserException;
-import gj.cloud.user.global.exception.enums.UserErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,11 +16,11 @@ public class UsageServiceImpl implements UsageService {
 
     private final UserProfileRepository profileRepository;
     private final ProfileService profileService;
+    private final VmServiceClient vmServiceClient;
 
     @Override
     @Transactional(readOnly = true)
-    public UsageResponse getUsage(String userId, String email) {
-        // Lazy provision if needed, then fetch plan
+    public UsageResponse getUsage(String userId, String email, String bearerToken) {
         PlanType planType = profileRepository.findById(userId)
                 .map(p -> p.getPlanType())
                 .orElseGet(() -> {
@@ -29,14 +28,13 @@ public class UsageServiceImpl implements UsageService {
                     return PlanType.FREE;
                 });
 
-        // TODO: call vm-service GET /internal/vms/count?userId={userId} via Token Exchange
-        int currentVmCount = 0;
+        long currentVmCount = vmServiceClient.getVmCount(userId, bearerToken);
 
         return new UsageResponse(
                 planType.name(),
                 planType.getVCpu(),
                 planType.getRamGb(),
-                currentVmCount,
+                (int) currentVmCount,
                 planType.getMaxVmCount()
         );
     }

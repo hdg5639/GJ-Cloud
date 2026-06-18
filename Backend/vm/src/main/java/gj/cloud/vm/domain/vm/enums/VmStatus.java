@@ -5,6 +5,11 @@ public enum VmStatus {
     CREATING,
     BOOTING,
     RUNNING,
+    STARTING,
+    STOPPING,
+    STOPPED,
+    SUSPENDING,
+    SUSPENDED,
     FAILED,
     DELETING,
     DELETED

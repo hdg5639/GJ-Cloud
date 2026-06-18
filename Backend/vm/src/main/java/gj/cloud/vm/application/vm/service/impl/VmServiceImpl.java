@@ -2,6 +2,8 @@ package gj.cloud.vm.application.vm.service.impl;
 
 import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
+import gj.cloud.vm.application.vm.dto.VmPowerRequest;
+import gj.cloud.vm.application.vm.dto.VmPowerRequest.VmPowerAction;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.dto.VmStatusEvent;
 import gj.cloud.vm.application.vm.service.VmService;
@@ -58,7 +60,8 @@ public class VmServiceImpl implements VmService {
                         .flatMap(tuple -> {
                             String sshPublicKey = tuple.getT1().publicKey();
                             int newVmid = tuple.getT2();
-                            return proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName())
+                            return proxmoxClient.ensurePoolExists(proxmoxProperties.getPool())
+                                    .then(proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName()))
                                     .flatMap(taskId -> vmRepository.save(creating.withVmidAndTaskId(newVmid, taskId)))
                                     .map(saved -> new Object[]{saved, sshPublicKey});
                         })
@@ -162,15 +165,40 @@ public class VmServiceImpl implements VmService {
         sseEmitterManager.publish(entity.getUserId(), event);
     }
 
+    @Override
+    public Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getDeletedAt() != null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    if (!vm.getUserId().equals(userId)) return Mono.error(new VmException(VmErrorCode.FORBIDDEN));
+                    if (vm.getVmid() == null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    return switch (request.action()) {
+                        case START -> updateStatus(vm, VmStatus.STARTING)
+                                .flatMap(v -> proxmoxClient.startVm(v.getVmid())
+                                        .then(updateStatus(v, VmStatus.RUNNING)));
+                        case STOP -> updateStatus(vm, VmStatus.STOPPING)
+                                .flatMap(v -> proxmoxClient.stopVm(v.getVmid())
+                                        .then(updateStatus(v, VmStatus.STOPPED)));
+                        case SUSPEND -> updateStatus(vm, VmStatus.SUSPENDING)
+                                .flatMap(v -> proxmoxClient.suspendVm(v.getVmid())
+                                        .then(updateStatus(v, VmStatus.SUSPENDED)));
+                    };
+                })
+                .map(VmResponse::from);
+    }
+
     private Mono<Integer> allocateVmId() {
-        return vmRepository.findAllActiveVmids()
-                .collectList()
-                .map(existingIds -> {
-                    Set<Integer> used = new HashSet<>(existingIds);
-                    for (int i = proxmoxProperties.getVmidRangeStart(); i <= proxmoxProperties.getVmidRangeEnd(); i++) {
-                        if (!used.contains(i)) return i;
-                    }
-                    throw new VmException(VmErrorCode.VMID_ALLOCATION_FAILED);
-                });
+        return Mono.zip(
+                proxmoxClient.getProxmoxVmids(),
+                vmRepository.findAllActiveVmids().collectList()
+        ).map(tuple -> {
+            Set<Integer> usedOnProxmox = tuple.getT1();
+            Set<Integer> usedInDb = new HashSet<>(tuple.getT2());
+            for (int i = proxmoxProperties.getVmidRangeStart(); i <= proxmoxProperties.getVmidRangeEnd(); i++) {
+                if (!usedOnProxmox.contains(i) && !usedInDb.contains(i)) return i;
+            }
+            throw new VmException(VmErrorCode.VMID_ALLOCATION_FAILED);
+        });
     }
 }

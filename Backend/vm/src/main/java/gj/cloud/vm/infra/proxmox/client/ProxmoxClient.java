@@ -1,6 +1,9 @@
 package gj.cloud.vm.infra.proxmox.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashSet;
+import java.util.Set;
 import gj.cloud.vm.domain.vm.enums.PlanType;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
@@ -43,37 +46,35 @@ public class ProxmoxClient {
         cloneParams.add("newid", String.valueOf(newVmid));
         cloneParams.add("name", name);
         cloneParams.add("full", "1");
+        cloneParams.add("pool", props.getPool());
 
         return proxmoxWebClient.post()
                 .uri("/nodes/{node}/qemu/{vmid}/clone", props.getNode(), templateVmid)
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(cloneParams))
-                .exchangeToMono(res -> {
-                    log.info("Proxmox 클론 HTTP status={}, headers={}", res.statusCode(), res.headers().asHttpHeaders());
-                    return res.bodyToMono(String.class)
-                            .defaultIfEmpty("")
-                            .flatMap(rawBody -> {
-                                log.info("Proxmox 클론 raw body={}", rawBody);
-                                if (!res.statusCode().is2xxSuccessful()) {
-                                    log.error("Proxmox 클론 오류 응답: status={}, body={}", res.statusCode(), rawBody);
+                .exchangeToMono(res -> res.bodyToMono(String.class)
+                        .defaultIfEmpty("")
+                        .flatMap(rawBody -> {
+                            if (!res.statusCode().is2xxSuccessful()) {
+                                log.error("Proxmox 클론 실패: status={}, body={}", res.statusCode(), rawBody);
+                                return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                            }
+                            try {
+                                ObjectMapper mapper = new ObjectMapper();
+                                JsonNode json = mapper.readTree(rawBody);
+                                String taskId = json.path("data").asText();
+                                if (taskId == null || taskId.isEmpty() || "null".equals(taskId)) {
+                                    log.error("Proxmox 클론 응답에 taskId 없음: vmid={}", newVmid);
                                     return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
                                 }
-                                try {
-                                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                                    JsonNode json = mapper.readTree(rawBody);
-                                    String taskId = json.path("data").asText();
-                                    if (taskId == null || taskId.isEmpty() || "null".equals(taskId)) {
-                                        log.error("Proxmox 클론 응답에 taskId 없음: vmid={}, body={}", newVmid, rawBody);
-                                        return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
-                                    }
-                                    return Mono.just(taskId);
-                                } catch (Exception e) {
-                                    log.error("Proxmox 클론 응답 파싱 실패: body={}, error={}", rawBody, e.getMessage());
-                                    return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
-                                }
-                            });
-                })
+                                return Mono.just(taskId);
+                            } catch (Exception e) {
+                                log.error("Proxmox 클론 응답 파싱 실패: {}", e.getMessage());
+                                return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                            }
+                        })
+                )
                 .doOnSubscribe(s -> log.info("VM 클론 시작: vmid={}, templateVmid={}, plan={}", newVmid, templateVmid, planType))
                 .doOnSuccess(t -> log.info("VM 클론 태스크 등록: vmid={}, taskId={}", newVmid, t))
                 .doOnError(e -> log.error("VM 클론 실패: vmid={}, error={}", newVmid, e.getMessage()));
@@ -132,11 +133,19 @@ public class ProxmoxClient {
                 .uri("/nodes/{node}/tasks/{upid}/status", props.getNode(), upid)
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .retrieve()
-                .bodyToMono(JsonNode.class)
-                .map(json -> new ProxmoxTaskStatus(
-                        json.path("data").path("status").asText(),
-                        json.path("data").path("exitstatus").asText("")
-                ));
+                .bodyToMono(String.class)
+                .map(body -> {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        JsonNode json = mapper.readTree(body);
+                        return new ProxmoxTaskStatus(
+                                json.path("data").path("status").asText(),
+                                json.path("data").path("exitstatus").asText("")
+                        );
+                    } catch (Exception e) {
+                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+                    }
+                });
     }
 
     public Mono<Void> startVm(int vmid) {
@@ -146,6 +155,42 @@ public class ProxmoxClient {
                 .retrieve()
                 .bodyToMono(Void.class)
                 .doOnSubscribe(s -> log.info("VM 시작: vmid={}", vmid))
+                .then();
+    }
+
+    public Mono<Void> stopVm(int vmid) {
+        return proxmoxWebClient.post()
+                .uri("/nodes/{node}/qemu/{vmid}/status/stop", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .flatMap(body -> {
+                    try {
+                        String taskId = new ObjectMapper().readTree(body).path("data").asText();
+                        return waitForTaskCompletion(taskId);
+                    } catch (Exception e) {
+                        return Mono.empty();
+                    }
+                })
+                .doOnSubscribe(s -> log.info("VM 정지: vmid={}", vmid))
+                .then();
+    }
+
+    public Mono<Void> suspendVm(int vmid) {
+        return proxmoxWebClient.post()
+                .uri("/nodes/{node}/qemu/{vmid}/status/suspend", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .flatMap(body -> {
+                    try {
+                        String taskId = new ObjectMapper().readTree(body).path("data").asText();
+                        return waitForTaskCompletion(taskId);
+                    } catch (Exception e) {
+                        return Mono.empty();
+                    }
+                })
+                .doOnSubscribe(s -> log.info("VM 일시정지: vmid={}", vmid))
                 .then();
     }
 
@@ -163,30 +208,97 @@ public class ProxmoxClient {
                 .uri("/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces", props.getNode(), vmid)
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .retrieve()
-                .bodyToMono(JsonNode.class)
-                .flatMap(json -> {
-                    Optional<String> ipOpt = StreamSupport
-                            .stream(json.path("data").path("result").spliterator(), false)
-                            .filter(n -> "eth0".equals(n.path("name").asText()))
-                            .flatMap(n -> StreamSupport.stream(n.path("ip-addresses").spliterator(), false))
-                            .filter(n -> "ipv4".equals(n.path("ip-address-type").asText()))
-                            .map(n -> n.path("ip-address").asText())
-                            .findFirst();
+                .bodyToMono(String.class)
+                .flatMap(body -> {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        JsonNode json = mapper.readTree(body);
+                        Optional<String> ipOpt = StreamSupport
+                                .stream(json.path("data").path("result").spliterator(), false)
+                                .filter(n -> "eth0".equals(n.path("name").asText()))
+                                .flatMap(n -> StreamSupport.stream(n.path("ip-addresses").spliterator(), false))
+                                .filter(n -> "ipv4".equals(n.path("ip-address-type").asText()))
+                                .map(n -> n.path("ip-address").asText())
+                                .findFirst();
+                        return Mono.justOrEmpty(ipOpt)
+                                .switchIfEmpty(Mono.error(new IllegalStateException("eth0 IPv4 not found")));
+                    } catch (Exception e) {
+                        return Mono.error(new IllegalStateException("IP 파싱 실패: " + e.getMessage()));
+                    }
+                });
+    }
 
-                    return Mono.justOrEmpty(ipOpt)
-                            .switchIfEmpty(Mono.error(new IllegalStateException("eth0 IPv4 not found")));
+    public Mono<Void> ensurePoolExists(String poolId) {
+        return proxmoxWebClient.get()
+                .uri("/pools/{poolId}", poolId)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .exchangeToMono(res -> {
+                    if (res.statusCode().is2xxSuccessful()) {
+                        return res.bodyToMono(Void.class).then(Mono.<Void>empty());
+                    }
+                    return res.bodyToMono(Void.class).then(
+                            proxmoxWebClient.post()
+                                    .uri("/pools")
+                                    .header(HttpHeaders.AUTHORIZATION, authHeader())
+                                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                                    .body(BodyInserters.fromFormData("poolid", poolId))
+                                    .exchangeToMono(createRes -> createRes.bodyToMono(Void.class).then(Mono.<Void>empty()))
+                                    .doOnSuccess(v -> log.info("Proxmox pool 생성: {}", poolId))
+                                    .onErrorResume(e -> {
+                                        log.warn("Pool 생성 실패 (이미 존재할 수 있음): poolId={}, error={}", poolId, e.getMessage());
+                                        return Mono.empty();
+                                    })
+                    );
+                });
+    }
+
+    public Mono<Set<Integer>> getProxmoxVmids() {
+        return proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu", props.getNode())
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(body -> {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        JsonNode data = mapper.readTree(body).path("data");
+                        Set<Integer> vmids = new java.util.HashSet<>();
+                        data.forEach(vm -> vmids.add(vm.path("vmid").asInt()));
+                        log.debug("Proxmox 기존 vmid 목록: {}", vmids);
+                        return vmids;
+                    } catch (Exception e) {
+                        log.warn("Proxmox vmid 목록 조회 실패: {}", e.getMessage());
+                        return new HashSet<>();
+                    }
                 });
     }
 
     public Mono<Void> deleteVm(int vmid) {
-        return proxmoxWebClient.delete()
-                .uri("/nodes/{node}/qemu/{vmid}", props.getNode(), vmid)
+        return proxmoxWebClient.post()
+                .uri("/nodes/{node}/qemu/{vmid}/status/stop", props.getNode(), vmid)
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .retrieve()
-                .bodyToMono(Void.class)
-                .doOnSubscribe(s -> log.info("VM 삭제 요청: vmid={}", vmid))
-                .doOnSuccess(v -> log.info("VM 삭제 완료: vmid={}", vmid))
-                .doOnError(e -> log.error("VM 삭제 실패: vmid={}, error={}", vmid, e.getMessage()))
-                .then();
+                .bodyToMono(String.class)
+                .flatMap(body -> {
+                    try {
+                        String stopTaskId = new ObjectMapper().readTree(body).path("data").asText();
+                        return waitForTaskCompletion(stopTaskId);
+                    } catch (Exception e) {
+                        return Mono.empty();
+                    }
+                })
+                .onErrorResume(e -> {
+                    log.warn("VM 정지 실패 (이미 꺼져있을 수 있음): vmid={}", vmid);
+                    return Mono.empty();
+                })
+                .then(proxmoxWebClient.delete()
+                        .uri("/nodes/{node}/qemu/{vmid}", props.getNode(), vmid)
+                        .header(HttpHeaders.AUTHORIZATION, authHeader())
+                        .retrieve()
+                        .bodyToMono(Void.class)
+                        .doOnSubscribe(s -> log.info("VM 삭제 요청: vmid={}", vmid))
+                        .doOnSuccess(v -> log.info("VM 삭제 완료: vmid={}", vmid))
+                        .doOnError(e -> log.error("VM 삭제 실패: vmid={}, error={}", vmid, e.getMessage()))
+                        .then());
     }
 }

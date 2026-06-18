@@ -4,6 +4,7 @@ import gj.cloud.user.application.sshkey.dto.SshKeyInternalResponse;
 import gj.cloud.user.application.sshkey.service.SshKeyService;
 import gj.cloud.user.global.response.ApiResponse;
 import gj.cloud.user.global.security.UserPrincipal;
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Hidden
 @RestController
 @RequestMapping("/internal")
 @RequiredArgsConstructor
