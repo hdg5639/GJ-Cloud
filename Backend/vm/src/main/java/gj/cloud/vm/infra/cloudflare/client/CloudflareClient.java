@@ -36,27 +36,29 @@ public class CloudflareClient {
 
     public Mono<String> registerCname(String subdomain) {
         String fqdn = subdomain + "." + props.getBaseDomain();
-        Map<String, String> body = Map.of(
+        Map<String, Object> body = Map.of(
                 "type", "CNAME",
                 "name", fqdn,
                 "content", props.getTunnelId() + ".cfargotunnel.com",
-                "proxied", "true",
-                "ttl", "1"
+                "proxied", true,
+                "ttl", 1
         );
         return cloudflareWebClient.post()
                 .uri("/zones/{zoneId}/dns_records", props.getZoneId())
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .map(raw -> {
-                    try {
-                        return objectMapper.readTree(raw).path("result").path("id").asText();
-                    } catch (Exception e) {
-                        throw new VmException(VmErrorCode.CLOUDFLARE_ERROR);
+                .exchangeToMono(res -> res.bodyToMono(String.class).defaultIfEmpty("").flatMap(raw -> {
+                    if (!res.statusCode().is2xxSuccessful()) {
+                        log.error("CNAME 등록 실패: status={}, body={}", res.statusCode(), raw);
+                        return Mono.error(new VmException(VmErrorCode.CLOUDFLARE_ERROR));
                     }
-                })
+                    try {
+                        return Mono.just(objectMapper.readTree(raw).path("result").path("id").asText());
+                    } catch (Exception e) {
+                        return Mono.error(new VmException(VmErrorCode.CLOUDFLARE_ERROR));
+                    }
+                }))
                 .doOnSuccess(id -> log.info("CNAME 등록 완료: subdomain={}, recordId={}", subdomain, id))
                 .doOnError(e -> log.error("CNAME 등록 실패: subdomain={}, error={}", subdomain, e.getMessage()));
     }
