@@ -10,6 +10,7 @@ import java.util.UUID;
 
 public interface VmService {
     Mono<VmResponse> createVm(String userId, String bearerToken, VmCreateRequest request);
+    Mono<VmResponse> createVmWithEmail(String userId, String bearerToken, VmCreateRequest request, String ownerEmail);
     Flux<VmResponse> getVms(String userId);
     Mono<VmResponse> getVm(String userId, UUID vmId);
     Mono<Void> deleteVm(String userId, UUID vmId);

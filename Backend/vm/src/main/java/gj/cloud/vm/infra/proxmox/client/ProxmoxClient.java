@@ -80,9 +80,9 @@ public class ProxmoxClient {
                 .doOnError(e -> log.error("VM 클론 실패: vmid={}, error={}", newVmid, e.getMessage()));
     }
 
-    public Mono<Void> configureVm(int vmid, PlanType planType, String sshPublicKey) {
+    public Mono<Void> configureVm(int vmid, PlanType planType, String sshPublicKey, String staticIp) {
         VmCreate config = VmCreate.from(planType, vmid, null, sshPublicKey,
-                props.getBridge(), props.getStorage());
+                props.getBridge(), props.getStorage(), staticIp);
 
         MultiValueMap<String, String> configParams = new LinkedMultiValueMap<>();
         configParams.add("cores", String.valueOf(config.getCores()));

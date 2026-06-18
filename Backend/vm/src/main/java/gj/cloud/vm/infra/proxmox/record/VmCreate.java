@@ -25,12 +25,12 @@ public class VmCreate {
     private final String ipconfig0;
 
     public static VmCreate from(PlanType planType, int newVmid, String name, String sshPublicKey,
-                                 String bridge, String storage) {
-        return new VmCreate(planType, newVmid, name, sshPublicKey, bridge, storage);
+                                 String bridge, String storage, String staticIp) {
+        return new VmCreate(planType, newVmid, name, sshPublicKey, bridge, storage, staticIp);
     }
 
     private VmCreate(PlanType planType, int newVmid, String name, String sshPublicKey,
-                     String bridge, String storage) {
+                     String bridge, String storage, String staticIp) {
         this.newVmid = newVmid;
         this.templateVmid = planType.getTemplateVmid();
         this.name = name;
@@ -49,6 +49,6 @@ public class VmCreate {
         this.net0 = "virtio,bridge=" + bridge;
         this.ide2 = storage + ":cloudinit";
         this.cipassword = "password";
-        this.ipconfig0 = "ip=dhcp";
+        this.ipconfig0 = "ip=" + staticIp + "/24,gw=192.168.0.1";
     }
 }

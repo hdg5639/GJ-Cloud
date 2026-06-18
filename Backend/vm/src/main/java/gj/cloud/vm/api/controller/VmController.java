@@ -45,7 +45,7 @@ public class VmController {
     ) {
         String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
         String token = authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
-        return vmService.createVm(principal.userId(), token, request)
+        return vmService.createVmWithEmail(principal.userId(), token, request, principal.email())
                 .map(ApiResponse::ok);
     }
 

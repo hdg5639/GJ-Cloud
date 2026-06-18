@@ -1,5 +1,6 @@
 package gj.cloud.vm.global.config;
 
+import gj.cloud.vm.infra.cloudflare.config.CloudflareProperties;
 import gj.cloud.vm.infra.proxmox.config.ProxmoxProperties;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -18,6 +19,7 @@ import javax.net.ssl.SSLException;
 public class WebClientConfig {
 
     private final ProxmoxProperties proxmoxProperties;
+    private final CloudflareProperties cloudflareProperties;
 
     @Bean
     public WebClient proxmoxWebClient() throws SSLException {
@@ -31,6 +33,13 @@ public class WebClientConfig {
         return WebClient.builder()
                 .baseUrl(proxmoxProperties.getBaseUrl())
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
+    }
+
+    @Bean
+    public WebClient cloudflareWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://api.cloudflare.com/client/v4")
                 .build();
     }
 }

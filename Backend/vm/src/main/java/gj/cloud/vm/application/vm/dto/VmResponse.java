@@ -10,6 +10,7 @@ public record VmResponse(
         String planType,
         String status,
         String internalIp,
+        String subdomain,
         String errorMessage,
         LocalDateTime createdAt
 ) {
@@ -20,6 +21,7 @@ public record VmResponse(
                 entity.getPlanType().name(),
                 entity.getStatus().name(),
                 entity.getInternalIp(),
+                entity.getSubdomain(),
                 entity.getErrorMessage(),
                 entity.getCreatedAt()
         );

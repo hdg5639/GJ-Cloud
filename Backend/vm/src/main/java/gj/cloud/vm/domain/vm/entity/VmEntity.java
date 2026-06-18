@@ -65,7 +65,19 @@ public class VmEntity implements Persistable<UUID> {
     @Column("deleted_at")
     private LocalDateTime deletedAt;
 
+    private String subdomain;
+
+    @Column("cf_dns_record_id")
+    private String cfDnsRecordId;
+
+    @Column("cf_app_id")
+    private String cfAppId;
+
+    @Column("cf_policy_id")
+    private String cfPolicyId;
+
     public static VmEntity createPending(String userId, String name, PlanType planType, String sshKeyId) {
+        String shortUuid = UUID.randomUUID().toString().replace("-", "").substring(0, 6);
         return VmEntity.builder()
                 .id(UUID.randomUUID())
                 .isNew(true)
@@ -74,6 +86,7 @@ public class VmEntity implements Persistable<UUID> {
                 .planType(planType)
                 .status(VmStatus.PENDING)
                 .sshKeyId(sshKeyId)
+                .subdomain("gj-" + shortUuid)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -115,6 +128,16 @@ public class VmEntity implements Persistable<UUID> {
                 .isNew(false)
                 .status(VmStatus.DELETED)
                 .deletedAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+    }
+
+    public VmEntity withCloudflareIds(String cfDnsRecordId, String cfAppId, String cfPolicyId) {
+        return this.toBuilder()
+                .isNew(false)
+                .cfDnsRecordId(cfDnsRecordId)
+                .cfAppId(cfAppId)
+                .cfPolicyId(cfPolicyId)
                 .updatedAt(LocalDateTime.now())
                 .build();
     }

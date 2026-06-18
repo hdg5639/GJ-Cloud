@@ -3,28 +3,33 @@ package gj.cloud.vm.application.vm.service.impl;
 import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
-import gj.cloud.vm.application.vm.dto.VmPowerRequest.VmPowerAction;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.dto.VmStatusEvent;
 import gj.cloud.vm.application.vm.service.VmService;
 import gj.cloud.vm.domain.vm.entity.VmEntity;
+import gj.cloud.vm.domain.vm.enums.PlanType;
 import gj.cloud.vm.domain.vm.enums.VmStatus;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
 import gj.cloud.vm.global.sse.SseEmitterManager;
+import gj.cloud.vm.infra.cloudflare.client.CloudflareClient;
 import gj.cloud.vm.infra.proxmox.client.ProxmoxClient;
 import gj.cloud.vm.infra.proxmox.config.ProxmoxProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -33,52 +38,72 @@ public class VmServiceImpl implements VmService {
 
     private final VmRepository vmRepository;
     private final ProxmoxClient proxmoxClient;
+    private final CloudflareClient cloudflareClient;
     private final UserServiceClient userServiceClient;
     private final SseEmitterManager sseEmitterManager;
     private final ProxmoxProperties proxmoxProperties;
 
     @Override
     public Mono<VmResponse> createVm(String userId, String bearerToken, VmCreateRequest request) {
-        VmEntity pending = VmEntity.createPending(userId, request.name(), request.planType(), request.sshKeyId());
-
-        return vmRepository.save(pending)
-                .doOnNext(saved -> provisionVm(saved, bearerToken)
-                        .subscribe(
-                                null,
-                                error -> log.error("프로비저닝 실패: vmId={}, error={}", saved.getId(), error.getMessage())
-                        ))
-                .map(VmResponse::from);
+        return Mono.defer(() -> {
+            VmEntity pending = VmEntity.createPending(userId, request.name(), request.planType(), request.sshKeyId());
+            return vmRepository.save(pending);
+        })
+        .retryWhen(Retry.max(3).filter(e -> e instanceof DataIntegrityViolationException))
+        .doOnNext(saved -> provisionVm(saved, bearerToken, null)
+                .subscribe(
+                        null,
+                        error -> log.error("프로비저닝 실패: vmId={}, error={}", saved.getId(), error.getMessage())
+                ))
+        .map(VmResponse::from);
     }
 
-    private Mono<Void> provisionVm(VmEntity vm, String bearerToken) {
+    public Mono<VmResponse> createVmWithEmail(String userId, String bearerToken, VmCreateRequest request, String ownerEmail) {
+        return Mono.defer(() -> {
+            VmEntity pending = VmEntity.createPending(userId, request.name(), request.planType(), request.sshKeyId());
+            return vmRepository.save(pending);
+        })
+        .retryWhen(Retry.max(3).filter(e -> e instanceof DataIntegrityViolationException))
+        .doOnNext(saved -> provisionVm(saved, bearerToken, ownerEmail)
+                .subscribe(
+                        null,
+                        error -> log.error("프로비저닝 실패: vmId={}, error={}", saved.getId(), error.getMessage())
+                ))
+        .map(VmResponse::from);
+    }
+
+    private Mono<Void> provisionVm(VmEntity vm, String bearerToken, String ownerEmail) {
         return updateStatus(vm, VmStatus.CREATING)
                 .flatMap(creating ->
                         Mono.zip(
                                 userServiceClient.getSshKey(bearerToken, creating.getSshKeyId()),
-                                allocateVmId()
+                                allocateVmId(),
+                                allocateIp(creating.getPlanType())
                         )
                         .flatMap(tuple -> {
                             String sshPublicKey = tuple.getT1().publicKey();
                             int newVmid = tuple.getT2();
+                            String staticIp = tuple.getT3();
                             return proxmoxClient.ensurePoolExists(proxmoxProperties.getPool())
                                     .then(proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName()))
                                     .flatMap(taskId -> vmRepository.save(creating.withVmidAndTaskId(newVmid, taskId)))
-                                    .map(saved -> new Object[]{saved, sshPublicKey});
+                                    .map(saved -> new Object[]{saved, sshPublicKey, staticIp});
                         })
                 )
                 .flatMap(arr -> {
                     VmEntity cloned = (VmEntity) arr[0];
                     String sshPublicKey = (String) arr[1];
+                    String staticIp = (String) arr[2];
                     return updateStatus(cloned, VmStatus.BOOTING)
                             .flatMap(booting ->
                                     proxmoxClient.waitForTaskCompletion(booting.getProxmoxTaskId())
-                                            .then(proxmoxClient.configureVm(booting.getVmid(), booting.getPlanType(), sshPublicKey))
+                                            .then(proxmoxClient.configureVm(booting.getVmid(), booting.getPlanType(), sshPublicKey, staticIp))
                                             .then(proxmoxClient.startVm(booting.getVmid()))
                                             .then(proxmoxClient.waitForIpAssignment(booting.getVmid()))
                                             .flatMap(ip -> {
                                                 VmEntity running = booting.withRunning(ip);
                                                 return vmRepository.save(running)
-                                                        .doOnNext(saved -> publishEvent(saved, null));
+                                                        .flatMap(saved -> setupCloudflare(saved, ownerEmail));
                                             })
                             );
                 })
@@ -92,6 +117,33 @@ public class VmServiceImpl implements VmService {
                             });
                 })
                 .then();
+    }
+
+    private Mono<VmEntity> setupCloudflare(VmEntity vm, String ownerEmail) {
+        if (vm.getSubdomain() == null) {
+            publishEvent(vm, null);
+            return Mono.just(vm);
+        }
+        return cloudflareClient.registerCname(vm.getSubdomain())
+                .flatMap(dnsRecordId ->
+                        cloudflareClient.addIngressRule(vm.getSubdomain(), vm.getInternalIp())
+                                .then(cloudflareClient.createAccessApp(vm.getSubdomain()))
+                                .flatMap(appId -> {
+                                    if (ownerEmail != null) {
+                                        return cloudflareClient.createAccessPolicy(appId, ownerEmail)
+                                                .flatMap(policyId ->
+                                                        vmRepository.save(vm.withCloudflareIds(dnsRecordId, appId, policyId))
+                                                );
+                                    }
+                                    return vmRepository.save(vm.withCloudflareIds(dnsRecordId, appId, null));
+                                })
+                )
+                .doOnNext(saved -> publishEvent(saved, null))
+                .onErrorResume(e -> {
+                    log.error("Cloudflare 설정 실패: vmId={}, error={}", vm.getId(), e.getMessage());
+                    publishEvent(vm, null);
+                    return Mono.just(vm);
+                });
     }
 
     @Override
@@ -131,13 +183,15 @@ public class VmServiceImpl implements VmService {
                 })
                 .flatMap(vm -> updateStatus(vm, VmStatus.DELETING))
                 .flatMap(vm -> {
+                    Mono<Void> cloudflareTeardown = teardownCloudflare(vm);
                     if (vm.getVmid() == null) {
-                        // vmid 없으면 바로 DELETED 처리
-                        return vmRepository.save(vm.withDeleted())
+                        return cloudflareTeardown
+                                .then(vmRepository.save(vm.withDeleted()))
                                 .doOnNext(saved -> publishEvent(saved, null))
                                 .then();
                     }
-                    return proxmoxClient.deleteVm(vm.getVmid())
+                    return cloudflareTeardown
+                            .then(proxmoxClient.deleteVm(vm.getVmid()))
                             .then(vmRepository.save(vm.withDeleted()))
                             .doOnNext(saved -> publishEvent(saved, null))
                             .onErrorResume(e -> {
@@ -146,6 +200,23 @@ public class VmServiceImpl implements VmService {
                             })
                             .then();
                 });
+    }
+
+    private Mono<Void> teardownCloudflare(VmEntity vm) {
+        if (vm.getCfPolicyId() != null && vm.getCfAppId() != null) {
+            return cloudflareClient.deleteAccessPolicy(vm.getCfAppId(), vm.getCfPolicyId())
+                    .then(cloudflareClient.deleteAccessApp(vm.getCfAppId()))
+                    .then(vm.getSubdomain() != null ? cloudflareClient.removeIngressRule(vm.getSubdomain()) : Mono.empty())
+                    .then(vm.getCfDnsRecordId() != null ? cloudflareClient.deleteCname(vm.getCfDnsRecordId()) : Mono.empty());
+        } else if (vm.getCfAppId() != null) {
+            return cloudflareClient.deleteAccessApp(vm.getCfAppId())
+                    .then(vm.getSubdomain() != null ? cloudflareClient.removeIngressRule(vm.getSubdomain()) : Mono.empty())
+                    .then(vm.getCfDnsRecordId() != null ? cloudflareClient.deleteCname(vm.getCfDnsRecordId()) : Mono.empty());
+        } else if (vm.getSubdomain() != null) {
+            return cloudflareClient.removeIngressRule(vm.getSubdomain())
+                    .then(vm.getCfDnsRecordId() != null ? cloudflareClient.deleteCname(vm.getCfDnsRecordId()) : Mono.empty());
+        }
+        return Mono.empty();
     }
 
     private Mono<VmEntity> updateStatus(VmEntity entity, VmStatus status) {
@@ -200,5 +271,17 @@ public class VmServiceImpl implements VmService {
             }
             throw new VmException(VmErrorCode.VMID_ALLOCATION_FAILED);
         });
+    }
+
+    private Mono<String> allocateIp(PlanType planType) {
+        List<String> pool = planType.getIpPool();
+        return vmRepository.findAllActiveInternalIps()
+                .collect(Collectors.toSet())
+                .map(usedIps -> {
+                    for (String ip : pool) {
+                        if (!usedIps.contains(ip)) return ip;
+                    }
+                    throw new VmException(VmErrorCode.IP_POOL_EXHAUSTED);
+                });
     }
 }
