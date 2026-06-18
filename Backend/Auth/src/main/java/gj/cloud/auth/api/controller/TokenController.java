@@ -7,6 +7,7 @@ import gj.cloud.auth.application.auth.dto.TokenRefreshRequest;
 import gj.cloud.auth.application.token.dto.TokenResponse;
 import gj.cloud.auth.application.token.service.TokenService;
 import gj.cloud.auth.global.response.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,8 +24,9 @@ public class TokenController implements TokenApi {
     }
 
     @Override
-    public ApiResponse<TokenResponse> exchange(String authHeader, TokenExchangeRequest request) {
-        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+    public ApiResponse<TokenResponse> exchange(HttpServletRequest httpRequest, TokenExchangeRequest request) {
+        String authHeader = httpRequest.getHeader("Authorization");
+        String token = authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
         return ApiResponse.ok(tokenService.exchange(token, request));
     }
 
