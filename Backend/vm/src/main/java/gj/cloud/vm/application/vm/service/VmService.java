@@ -1,6 +1,7 @@
 package gj.cloud.vm.application.vm.service;
 
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
+import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import reactor.core.publisher.Flux;
@@ -15,4 +16,5 @@ public interface VmService {
     Mono<VmResponse> getVm(String userId, UUID vmId);
     Mono<Void> deleteVm(String userId, UUID vmId);
     Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request);
+    Mono<VmResponse> updatePlan(String userId, UUID vmId, VmPlanUpdateRequest request);
 }

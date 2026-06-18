@@ -1,6 +1,7 @@
 package gj.cloud.vm.api.controller;
 
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
+import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.service.VmService;
@@ -77,7 +78,7 @@ public class VmController {
         return vmService.deleteVm(principal.userId(), vmId);
     }
 
-    @Operation(summary = "VM 전원 제어", description = "START(시작) · STOP(정지) · SUSPEND(일시정지)")
+    @Operation(summary = "VM 전원 제어", description = "START(시작) · STOP(정지) · SUSPEND(일시정지) · REBOOT(재시작)")
     @PatchMapping("/{vmId}/power")
     public Mono<ApiResponse<VmResponse>> changePower(
             @AuthenticationPrincipal VmPrincipal principal,
@@ -85,6 +86,17 @@ public class VmController {
             @Valid @RequestBody VmPowerRequest request
     ) {
         return vmService.changePower(principal.userId(), vmId, request)
+                .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "VM 플랜 변경", description = "플랜(FREE↔PRO) 및 디스크 크기 변경. 디스크 축소 불가.")
+    @PatchMapping("/{vmId}/plan")
+    public Mono<ApiResponse<VmResponse>> updatePlan(
+            @AuthenticationPrincipal VmPrincipal principal,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody VmPlanUpdateRequest request
+    ) {
+        return vmService.updatePlan(principal.userId(), vmId, request)
                 .map(ApiResponse::ok);
     }
 }

@@ -273,6 +273,64 @@ public class ProxmoxClient {
                 });
     }
 
+    public Mono<Void> resizeDisk(int vmid, int targetDiskGb) {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("disk", "scsi0");
+        params.add("size", targetDiskGb + "G");
+
+        return proxmoxWebClient.put()
+                .uri("/nodes/{node}/qemu/{vmid}/resize", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(params))
+                .exchangeToMono(res -> res.statusCode().is2xxSuccessful()
+                        ? res.bodyToMono(Void.class).then(Mono.<Void>empty())
+                        : res.bodyToMono(String.class).flatMap(body -> {
+                            log.error("디스크 리사이즈 실패: vmid={}, status={}, body={}", vmid, res.statusCode(), body);
+                            return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                        }))
+                .doOnSuccess(v -> log.info("디스크 리사이즈 완료: vmid={}, size={}G", vmid, targetDiskGb))
+                .doOnError(e -> log.error("디스크 리사이즈 실패: vmid={}, error={}", vmid, e.getMessage()));
+    }
+
+    public Mono<Void> rebootVm(int vmid) {
+        return proxmoxWebClient.post()
+                .uri("/nodes/{node}/qemu/{vmid}/status/reboot", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(Void.class)
+                .doOnSubscribe(s -> log.info("VM 재시작: vmid={}", vmid))
+                .then();
+    }
+
+    public Mono<Void> updateResources(int vmid, PlanType planType) {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("cores", String.valueOf(planType.getCores()));
+        params.add("memory", planType.getMemory());
+        params.add("cpu", "host,hidden=1");
+        if (planType == PlanType.FREE) {
+            params.add("cpulimit", "4");
+            params.add("cpuunits", "1024");
+        } else {
+            params.add("cpulimit", "0");
+            params.add("cpuunits", "3072");
+        }
+
+        return proxmoxWebClient.put()
+                .uri("/nodes/{node}/qemu/{vmid}/config", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(params))
+                .exchangeToMono(res -> res.statusCode().is2xxSuccessful()
+                        ? res.bodyToMono(Void.class).then(Mono.<Void>empty())
+                        : res.bodyToMono(String.class).flatMap(body -> {
+                            log.error("리소스 변경 실패: vmid={}, status={}, body={}", vmid, res.statusCode(), body);
+                            return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                        }))
+                .doOnSuccess(v -> log.info("리소스 변경 완료: vmid={}, plan={}", vmid, planType))
+                .doOnError(e -> log.error("리소스 변경 실패: vmid={}, error={}", vmid, e.getMessage()));
+    }
+
     public Mono<Void> deleteVm(int vmid) {
         return proxmoxWebClient.post()
                 .uri("/nodes/{node}/qemu/{vmid}/status/stop", props.getNode(), vmid)

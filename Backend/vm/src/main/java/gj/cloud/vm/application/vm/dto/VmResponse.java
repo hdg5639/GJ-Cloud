@@ -11,6 +11,7 @@ public record VmResponse(
         String status,
         String internalIp,
         String subdomain,
+        int diskSizeGb,
         String errorMessage,
         LocalDateTime createdAt
 ) {
@@ -22,6 +23,7 @@ public record VmResponse(
                 entity.getStatus().name(),
                 entity.getInternalIp(),
                 entity.getSubdomain(),
+                entity.getDiskSizeGb(),
                 entity.getErrorMessage(),
                 entity.getCreatedAt()
         );

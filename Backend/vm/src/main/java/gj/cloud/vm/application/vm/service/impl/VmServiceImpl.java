@@ -2,6 +2,7 @@ package gj.cloud.vm.application.vm.service.impl;
 
 import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
+import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.dto.VmStatusEvent;
@@ -45,22 +46,18 @@ public class VmServiceImpl implements VmService {
 
     @Override
     public Mono<VmResponse> createVm(String userId, String bearerToken, VmCreateRequest request) {
-        return Mono.defer(() -> {
-            VmEntity pending = VmEntity.createPending(userId, request.name(), request.planType(), request.sshKeyId());
-            return vmRepository.save(pending);
-        })
-        .retryWhen(Retry.max(3).filter(e -> e instanceof DataIntegrityViolationException))
-        .doOnNext(saved -> provisionVm(saved, bearerToken, null)
-                .subscribe(
-                        null,
-                        error -> log.error("프로비저닝 실패: vmId={}, error={}", saved.getId(), error.getMessage())
-                ))
-        .map(VmResponse::from);
+        return createVmWithEmail(userId, bearerToken, request, null);
     }
 
+    @Override
     public Mono<VmResponse> createVmWithEmail(String userId, String bearerToken, VmCreateRequest request, String ownerEmail) {
+        PlanType plan = request.planType();
+        int disk = request.diskSizeGb();
+        if (disk < plan.getMinDiskGb() || disk > plan.getMaxDiskGb()) {
+            return Mono.error(new VmException(VmErrorCode.INVALID_DISK_SIZE));
+        }
         return Mono.defer(() -> {
-            VmEntity pending = VmEntity.createPending(userId, request.name(), request.planType(), request.sshKeyId());
+            VmEntity pending = VmEntity.createPending(userId, request.name(), plan, request.sshKeyId(), disk);
             return vmRepository.save(pending);
         })
         .retryWhen(Retry.max(3).filter(e -> e instanceof DataIntegrityViolationException))
@@ -98,6 +95,7 @@ public class VmServiceImpl implements VmService {
                             .flatMap(booting ->
                                     proxmoxClient.waitForTaskCompletion(booting.getProxmoxTaskId())
                                             .then(proxmoxClient.configureVm(booting.getVmid(), booting.getPlanType(), sshPublicKey, staticIp))
+                                            .then(proxmoxClient.resizeDisk(booting.getVmid(), booting.getDiskSizeGb()))
                                             .then(proxmoxClient.startVm(booting.getVmid()))
                                             .then(proxmoxClient.waitForIpAssignment(booting.getVmid()))
                                             .flatMap(ip -> {
@@ -219,23 +217,6 @@ public class VmServiceImpl implements VmService {
         return Mono.empty();
     }
 
-    private Mono<VmEntity> updateStatus(VmEntity entity, VmStatus status) {
-        VmEntity updated = entity.withStatus(status);
-        return vmRepository.save(updated)
-                .doOnNext(saved -> publishEvent(saved, null));
-    }
-
-    private void publishEvent(VmEntity entity, String errorMessage) {
-        VmStatusEvent event = new VmStatusEvent(
-                entity.getId().toString(),
-                entity.getStatus().name(),
-                entity.getInternalIp(),
-                errorMessage,
-                LocalDateTime.now()
-        );
-        sseEmitterManager.publish(entity.getUserId(), event);
-    }
-
     @Override
     public Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request) {
         return vmRepository.findById(vmId)
@@ -254,9 +235,69 @@ public class VmServiceImpl implements VmService {
                         case SUSPEND -> updateStatus(vm, VmStatus.SUSPENDING)
                                 .flatMap(v -> proxmoxClient.suspendVm(v.getVmid())
                                         .then(updateStatus(v, VmStatus.SUSPENDED)));
+                        case REBOOT -> proxmoxClient.rebootVm(vm.getVmid())
+                                .then(updateStatus(vm, VmStatus.RUNNING));
                     };
                 })
                 .map(VmResponse::from);
+    }
+
+    @Override
+    public Mono<VmResponse> updatePlan(String userId, UUID vmId, VmPlanUpdateRequest request) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getDeletedAt() != null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    if (!vm.getUserId().equals(userId)) return Mono.error(new VmException(VmErrorCode.FORBIDDEN));
+                    return validatePlanChange(vm, request);
+                })
+                .flatMap(vm -> {
+                    Mono<Void> resourceUpdate = vm.getVmid() != null
+                            ? proxmoxClient.updateResources(vm.getVmid(), request.planType())
+                            : Mono.empty();
+                    Mono<Void> diskResize = (vm.getVmid() != null && request.diskSizeGb() > vm.getDiskSizeGb())
+                            ? proxmoxClient.resizeDisk(vm.getVmid(), request.diskSizeGb())
+                            : Mono.empty();
+                    return resourceUpdate
+                            .then(diskResize)
+                            .then(vmRepository.save(vm.withPlanChange(request.planType(), request.diskSizeGb())))
+                            .doOnNext(saved -> publishEvent(saved, null));
+                })
+                .map(VmResponse::from);
+    }
+
+    private Mono<VmEntity> validatePlanChange(VmEntity vm, VmPlanUpdateRequest request) {
+        int newDisk = request.diskSizeGb();
+        PlanType newPlan = request.planType();
+
+        if (newDisk < vm.getDiskSizeGb()) {
+            return Mono.error(new VmException(VmErrorCode.DISK_DOWNSIZE_NOT_ALLOWED));
+        }
+        if (newDisk < newPlan.getMinDiskGb() || newDisk > newPlan.getMaxDiskGb()) {
+            return Mono.error(new VmException(VmErrorCode.INVALID_DISK_SIZE));
+        }
+        // PRO → FREE 다운그레이드: 현재 디스크가 FREE maxDisk 초과하면 불가
+        if (newPlan == PlanType.FREE && vm.getDiskSizeGb() > PlanType.FREE.getMaxDiskGb()) {
+            return Mono.error(new VmException(VmErrorCode.DOWNGRADE_DISK_TOO_LARGE));
+        }
+        return Mono.just(vm);
+    }
+
+    private Mono<VmEntity> updateStatus(VmEntity entity, VmStatus status) {
+        VmEntity updated = entity.withStatus(status);
+        return vmRepository.save(updated)
+                .doOnNext(saved -> publishEvent(saved, null));
+    }
+
+    private void publishEvent(VmEntity entity, String errorMessage) {
+        VmStatusEvent event = new VmStatusEvent(
+                entity.getId().toString(),
+                entity.getStatus().name(),
+                entity.getInternalIp(),
+                errorMessage,
+                LocalDateTime.now()
+        );
+        sseEmitterManager.publish(entity.getUserId(), event);
     }
 
     private Mono<Integer> allocateVmId() {

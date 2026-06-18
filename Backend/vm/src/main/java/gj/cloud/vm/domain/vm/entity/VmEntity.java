@@ -76,7 +76,10 @@ public class VmEntity implements Persistable<UUID> {
     @Column("cf_policy_id")
     private String cfPolicyId;
 
-    public static VmEntity createPending(String userId, String name, PlanType planType, String sshKeyId) {
+    @Column("disk_size_gb")
+    private int diskSizeGb;
+
+    public static VmEntity createPending(String userId, String name, PlanType planType, String sshKeyId, int diskSizeGb) {
         String shortUuid = UUID.randomUUID().toString().replace("-", "").substring(0, 6);
         return VmEntity.builder()
                 .id(UUID.randomUUID())
@@ -87,6 +90,7 @@ public class VmEntity implements Persistable<UUID> {
                 .status(VmStatus.PENDING)
                 .sshKeyId(sshKeyId)
                 .subdomain("gj-" + shortUuid)
+                .diskSizeGb(diskSizeGb)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -138,6 +142,15 @@ public class VmEntity implements Persistable<UUID> {
                 .cfDnsRecordId(cfDnsRecordId)
                 .cfAppId(cfAppId)
                 .cfPolicyId(cfPolicyId)
+                .updatedAt(LocalDateTime.now())
+                .build();
+    }
+
+    public VmEntity withPlanChange(PlanType planType, int diskSizeGb) {
+        return this.toBuilder()
+                .isNew(false)
+                .planType(planType)
+                .diskSizeGb(diskSizeGb)
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
