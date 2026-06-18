@@ -8,6 +8,8 @@ import gj.cloud.vm.domain.vm.enums.PlanType;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
 import gj.cloud.vm.infra.proxmox.config.ProxmoxProperties;
+import gj.cloud.vm.infra.proxmox.record.ProxmoxConfigInfo;
+import gj.cloud.vm.infra.proxmox.record.ProxmoxStatusInfo;
 import gj.cloud.vm.infra.proxmox.record.ProxmoxTaskStatus;
 import gj.cloud.vm.infra.proxmox.record.VmCreate;
 import lombok.RequiredArgsConstructor;
@@ -329,6 +331,55 @@ public class ProxmoxClient {
                         }))
                 .doOnSuccess(v -> log.info("리소스 변경 완료: vmid={}, plan={}", vmid, planType))
                 .doOnError(e -> log.error("리소스 변경 실패: vmid={}, error={}", vmid, e.getMessage()));
+    }
+
+    public Mono<ProxmoxConfigInfo> getConfig(int vmid) {
+        return proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/config", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(body -> {
+                    try {
+                        JsonNode data = new ObjectMapper().readTree(body).path("data");
+                        return new ProxmoxConfigInfo(
+                                data.path("cores").asInt(),
+                                data.path("memory").asLong()
+                        );
+                    } catch (Exception e) {
+                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+                    }
+                });
+    }
+
+    public Mono<ProxmoxStatusInfo> getCurrentStatus(int vmid) {
+        return proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/status/current", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(body -> {
+                    try {
+                        JsonNode data = new ObjectMapper().readTree(body).path("data");
+                        return new ProxmoxStatusInfo(
+                                data.path("cpus").asInt(),
+                                data.path("maxmem").asLong() / (1024 * 1024)
+                        );
+                    } catch (Exception e) {
+                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+                    }
+                });
+    }
+
+    public Mono<Boolean> needsReboot(int vmid) {
+        return Mono.zip(getConfig(vmid), getCurrentStatus(vmid))
+                .map(tuple -> {
+                    ProxmoxConfigInfo config = tuple.getT1();
+                    ProxmoxStatusInfo current = tuple.getT2();
+                    return config.cores() != current.cores()
+                            || config.memory() != current.memory();
+                })
+                .onErrorReturn(false);
     }
 
     public Mono<Void> deleteVm(int vmid) {

@@ -12,10 +12,15 @@ public record VmResponse(
         String internalIp,
         String subdomain,
         int diskSizeGb,
+        Boolean needsReboot,
         String errorMessage,
         LocalDateTime createdAt
 ) {
     public static VmResponse from(VmEntity entity) {
+        return from(entity, null);
+    }
+
+    public static VmResponse from(VmEntity entity, Boolean needsReboot) {
         return new VmResponse(
                 entity.getId().toString(),
                 entity.getName(),
@@ -24,6 +29,7 @@ public record VmResponse(
                 entity.getInternalIp(),
                 entity.getSubdomain(),
                 entity.getDiskSizeGb(),
+                needsReboot,
                 entity.getErrorMessage(),
                 entity.getCreatedAt()
         );

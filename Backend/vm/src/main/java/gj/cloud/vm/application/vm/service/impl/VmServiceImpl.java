@@ -161,9 +161,12 @@ public class VmServiceImpl implements VmService {
                     if (!vm.getUserId().equals(userId)) {
                         return Mono.error(new VmException(VmErrorCode.FORBIDDEN));
                     }
-                    return Mono.just(vm);
-                })
-                .map(VmResponse::from);
+                    if (vm.getStatus() != VmStatus.RUNNING || vm.getVmid() == null) {
+                        return Mono.just(VmResponse.from(vm, null));
+                    }
+                    return proxmoxClient.needsReboot(vm.getVmid())
+                            .map(needsReboot -> VmResponse.from(vm, needsReboot));
+                });
     }
 
     @Override
@@ -261,9 +264,13 @@ public class VmServiceImpl implements VmService {
                     return resourceUpdate
                             .then(diskResize)
                             .then(vmRepository.save(vm.withPlanChange(request.planType(), request.diskSizeGb())))
-                            .doOnNext(saved -> publishEvent(saved, null));
-                })
-                .map(VmResponse::from);
+                            .doOnNext(saved -> publishEvent(saved, null))
+                            .flatMap(saved -> {
+                                if (saved.getVmid() == null) return Mono.just(VmResponse.from(saved, null));
+                                return proxmoxClient.needsReboot(saved.getVmid())
+                                        .map(needsReboot -> VmResponse.from(saved, needsReboot));
+                            });
+                });
     }
 
     private Mono<VmEntity> validatePlanChange(VmEntity vm, VmPlanUpdateRequest request) {
