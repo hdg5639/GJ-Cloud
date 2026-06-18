@@ -36,36 +36,46 @@ public class ProxmoxClient {
         return "PVEAPIToken=" + props.getApiToken();
     }
 
-    public Mono<String> cloneVm(int newVmid, PlanType planType, String name, String sshPublicKey) {
-        VmCreate config = VmCreate.from(planType, newVmid, name, sshPublicKey,
-                props.getBridge(), props.getStorage());
+    public Mono<String> cloneVm(int newVmid, PlanType planType, String name) {
+        int templateVmid = planType.getTemplateVmid();
 
         MultiValueMap<String, String> cloneParams = new LinkedMultiValueMap<>();
-        cloneParams.add("newid", String.valueOf(config.getNewVmid()));
-        cloneParams.add("name", config.getName());
+        cloneParams.add("newid", String.valueOf(newVmid));
+        cloneParams.add("name", name);
         cloneParams.add("full", "1");
-        cloneParams.add("pool", config.getPool());
 
         return proxmoxWebClient.post()
-                .uri("/nodes/{node}/qemu/{vmid}/clone", props.getNode(), config.getTemplateVmid())
+                .uri("/nodes/{node}/qemu/{vmid}/clone", props.getNode(), templateVmid)
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(cloneParams))
                 .exchangeToMono(res -> {
                     if (res.statusCode().is2xxSuccessful()) {
                         return res.bodyToMono(JsonNode.class)
-                                .map(json -> json.path("data").asText());
+                                .map(json -> json.path("data").asText())
+                                .flatMap(taskId -> {
+                                    if (taskId == null || taskId.isEmpty() || "null".equals(taskId)) {
+                                        log.error("Proxmox 클론 응답에 taskId 없음: vmid={}", newVmid);
+                                        return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                                    }
+                                    return Mono.just(taskId);
+                                });
                     }
                     return res.bodyToMono(String.class)
-                            .flatMap(body -> Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED)));
+                            .flatMap(body -> {
+                                log.error("Proxmox 클론 오류 응답: status={}, body={}", res.statusCode(), body);
+                                return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                            });
                 })
-                .flatMap(taskId -> customizeVm(config).thenReturn(taskId))
-                .doOnSubscribe(s -> log.info("VM 클론 시작: vmid={}, plan={}", newVmid, planType))
-                .doOnSuccess(t -> log.info("VM 클론 완료: vmid={}, taskId={}", newVmid, t))
+                .doOnSubscribe(s -> log.info("VM 클론 시작: vmid={}, templateVmid={}, plan={}", newVmid, templateVmid, planType))
+                .doOnSuccess(t -> log.info("VM 클론 태스크 등록: vmid={}, taskId={}", newVmid, t))
                 .doOnError(e -> log.error("VM 클론 실패: vmid={}, error={}", newVmid, e.getMessage()));
     }
 
-    private Mono<Void> customizeVm(VmCreate config) {
+    public Mono<Void> configureVm(int vmid, PlanType planType, String sshPublicKey) {
+        VmCreate config = VmCreate.from(planType, vmid, null, sshPublicKey,
+                props.getBridge(), props.getStorage());
+
         MultiValueMap<String, String> configParams = new LinkedMultiValueMap<>();
         configParams.add("cores", String.valueOf(config.getCores()));
         configParams.add("memory", config.getMemory());
@@ -81,16 +91,21 @@ public class ProxmoxClient {
         }
 
         return proxmoxWebClient.put()
-                .uri("/nodes/{node}/qemu/{vmid}/config", props.getNode(), config.getNewVmid())
+                .uri("/nodes/{node}/qemu/{vmid}/config", props.getNode(), vmid)
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(configParams))
-                .exchangeToMono(res -> res.statusCode().is2xxSuccessful()
-                        ? res.bodyToMono(Void.class)
-                        : res.bodyToMono(String.class).flatMap(body ->
-                                Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED))))
-                .retryWhen(Retry.backoff(5, Duration.ofSeconds(2)))
-                .timeout(Duration.ofSeconds(60))
+                .exchangeToMono(res -> {
+                    if (res.statusCode().is2xxSuccessful()) {
+                        return res.bodyToMono(Void.class);
+                    }
+                    return res.bodyToMono(String.class).flatMap(body -> {
+                        log.error("Proxmox config 오류: status={}, body={}", res.statusCode(), body);
+                        return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                    });
+                })
+                .doOnSuccess(v -> log.info("VM config 완료: vmid={}", vmid))
+                .doOnError(e -> log.error("VM config 실패: vmid={}, error={}", vmid, e.getMessage()))
                 .then();
     }
 
@@ -128,7 +143,6 @@ public class ProxmoxClient {
     }
 
     public Mono<String> waitForIpAssignment(int vmid) {
-        // VM 부팅 및 guest agent 시작 대기
         return Mono.delay(Duration.ofSeconds(20))
                 .then(getVmIp(vmid)
                         .retryWhen(Retry.backoff(5, Duration.ofSeconds(2)))

@@ -58,21 +58,27 @@ public class VmServiceImpl implements VmService {
                         .flatMap(tuple -> {
                             String sshPublicKey = tuple.getT1().publicKey();
                             int newVmid = tuple.getT2();
-                            return proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName(), sshPublicKey)
-                                    .flatMap(taskId -> vmRepository.save(creating.withVmidAndTaskId(newVmid, taskId)));
+                            return proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName())
+                                    .flatMap(taskId -> vmRepository.save(creating.withVmidAndTaskId(newVmid, taskId)))
+                                    .map(saved -> new Object[]{saved, sshPublicKey});
                         })
                 )
-                .flatMap(cloned -> updateStatus(cloned, VmStatus.BOOTING))
-                .flatMap(booting ->
-                        proxmoxClient.waitForTaskCompletion(booting.getProxmoxTaskId())
-                                .then(proxmoxClient.startVm(booting.getVmid()))
-                                .then(proxmoxClient.waitForIpAssignment(booting.getVmid()))
-                                .flatMap(ip -> {
-                                    VmEntity running = booting.withRunning(ip);
-                                    return vmRepository.save(running)
-                                            .doOnNext(saved -> publishEvent(saved, null));
-                                })
-                )
+                .flatMap(arr -> {
+                    VmEntity cloned = (VmEntity) arr[0];
+                    String sshPublicKey = (String) arr[1];
+                    return updateStatus(cloned, VmStatus.BOOTING)
+                            .flatMap(booting ->
+                                    proxmoxClient.waitForTaskCompletion(booting.getProxmoxTaskId())
+                                            .then(proxmoxClient.configureVm(booting.getVmid(), booting.getPlanType(), sshPublicKey))
+                                            .then(proxmoxClient.startVm(booting.getVmid()))
+                                            .then(proxmoxClient.waitForIpAssignment(booting.getVmid()))
+                                            .flatMap(ip -> {
+                                                VmEntity running = booting.withRunning(ip);
+                                                return vmRepository.save(running)
+                                                        .doOnNext(saved -> publishEvent(saved, null));
+                                            })
+                            );
+                })
                 .onErrorResume(e -> {
                     log.error("프로비저닝 오류: vmId={}, error={}", vm.getId(), e.getMessage());
                     return vmRepository.findById(vm.getId())
