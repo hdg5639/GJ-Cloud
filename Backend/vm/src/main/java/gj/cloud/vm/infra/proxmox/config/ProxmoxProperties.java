@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "proxmox")
 public class ProxmoxProperties {
     private String baseUrl;
-    private String apiToken;
+    private String tokenId;
+    private String tokenSecret;
     private String node;
     private String bridge;
     private String storage;

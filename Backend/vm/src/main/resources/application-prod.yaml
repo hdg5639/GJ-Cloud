@@ -20,7 +20,8 @@ user:
 
 proxmox:
   base-url: ${PROXMOX_URL}
-  api-token: ${PROXMOX_API_TOKEN}
+  token-id: ${PROXMOX_TOKEN_ID}
+  token-secret: ${PROXMOX_TOKEN_SECRET}
   node: ${PROXMOX_NODE:pve}
   bridge: ${PROXMOX_BRIDGE:vmbr0}
   storage: ${PROXMOX_STORAGE:local-lvm}

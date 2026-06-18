@@ -33,7 +33,7 @@ public class ProxmoxClient {
     private final ProxmoxProperties props;
 
     private String authHeader() {
-        return "PVEAPIToken=" + props.getApiToken();
+        return "PVEAPIToken=" + props.getTokenId() + "=" + props.getTokenSecret();
     }
 
     public Mono<String> cloneVm(int newVmid, PlanType planType, String name) {
@@ -50,21 +50,28 @@ public class ProxmoxClient {
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(cloneParams))
                 .exchangeToMono(res -> {
-                    if (res.statusCode().is2xxSuccessful()) {
-                        return res.bodyToMono(JsonNode.class)
-                                .map(json -> json.path("data").asText())
-                                .flatMap(taskId -> {
+                    log.info("Proxmox 클론 HTTP status={}, headers={}", res.statusCode(), res.headers().asHttpHeaders());
+                    return res.bodyToMono(String.class)
+                            .defaultIfEmpty("")
+                            .flatMap(rawBody -> {
+                                log.info("Proxmox 클론 raw body={}", rawBody);
+                                if (!res.statusCode().is2xxSuccessful()) {
+                                    log.error("Proxmox 클론 오류 응답: status={}, body={}", res.statusCode(), rawBody);
+                                    return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                                }
+                                try {
+                                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                    JsonNode json = mapper.readTree(rawBody);
+                                    String taskId = json.path("data").asText();
                                     if (taskId == null || taskId.isEmpty() || "null".equals(taskId)) {
-                                        log.error("Proxmox 클론 응답에 taskId 없음: vmid={}", newVmid);
+                                        log.error("Proxmox 클론 응답에 taskId 없음: vmid={}, body={}", newVmid, rawBody);
                                         return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
                                     }
                                     return Mono.just(taskId);
-                                });
-                    }
-                    return res.bodyToMono(String.class)
-                            .flatMap(body -> {
-                                log.error("Proxmox 클론 오류 응답: status={}, body={}", res.statusCode(), body);
-                                return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                                } catch (Exception e) {
+                                    log.error("Proxmox 클론 응답 파싱 실패: body={}, error={}", rawBody, e.getMessage());
+                                    return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                                }
                             });
                 })
                 .doOnSubscribe(s -> log.info("VM 클론 시작: vmid={}, templateVmid={}, plan={}", newVmid, templateVmid, planType))
