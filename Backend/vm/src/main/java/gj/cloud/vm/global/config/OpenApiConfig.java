@@ -1,7 +1,10 @@
 package gj.cloud.vm.global.config;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -9,6 +12,8 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class OpenApiConfig {
+
+    private static final String BEARER_SCHEME = "bearerAuth";
 
     @Value("${springdoc.server-url:http://localhost:9000}")
     private String serverUrl;
@@ -18,8 +23,14 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .addServersItem(new Server().url(serverUrl).description("Local"))
                 .info(new Info()
-                        .title("VM Service API")
-                        .version("v1")
-                        .description("GJ Cloud VM 관리 서비스"));
+                        .title("GJ Cloud VM API")
+                        .description("VM 관리 서비스 API")
+                        .version("v1"))
+                .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))
+                .components(new Components()
+                        .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")));
     }
 }
