@@ -1,5 +1,6 @@
 package gj.cloud.user.application.sshkey.service.impl;
 
+import gj.cloud.user.application.sshkey.dto.SshKeyInternalResponse;
 import gj.cloud.user.application.sshkey.dto.SshKeyRegisterRequest;
 import gj.cloud.user.application.sshkey.dto.SshKeyResponse;
 import gj.cloud.user.application.sshkey.service.SshKeyService;
@@ -68,6 +69,19 @@ public class SshKeyServiceImpl implements SshKeyService {
         }
 
         sshKeyRepository.delete(key);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SshKeyInternalResponse getKeyById(String userId, String keyId) {
+        SshKeyEntity key = sshKeyRepository.findById(keyId)
+                .orElseThrow(() -> new UserException(UserErrorCode.SSH_KEY_NOT_FOUND));
+
+        if (!key.getUserId().equals(userId)) {
+            throw new UserException(UserErrorCode.FORBIDDEN);
+        }
+
+        return SshKeyInternalResponse.from(key);
     }
 
     private void validateKeyFormat(String publicKey) {

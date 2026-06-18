@@ -1,5 +1,6 @@
 package gj.cloud.user.application.sshkey.service;
 
+import gj.cloud.user.application.sshkey.dto.SshKeyInternalResponse;
 import gj.cloud.user.application.sshkey.dto.SshKeyRegisterRequest;
 import gj.cloud.user.application.sshkey.dto.SshKeyResponse;
 
@@ -9,4 +10,5 @@ public interface SshKeyService {
     SshKeyResponse registerKey(String userId, SshKeyRegisterRequest request);
     List<SshKeyResponse> getKeys(String userId);
     void deleteKey(String userId, String keyId);
+    SshKeyInternalResponse getKeyById(String userId, String keyId);
 }
