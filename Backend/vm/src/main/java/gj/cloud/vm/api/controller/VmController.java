@@ -14,10 +14,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -34,10 +34,11 @@ public class VmController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public Mono<ApiResponse<VmResponse>> createVm(
             @AuthenticationPrincipal VmPrincipal principal,
-            @RequestHeader("Authorization") String authHeader,
+            ServerWebExchange exchange,
             @Valid @RequestBody VmCreateRequest request
     ) {
-        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
+        String token = authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
         return vmService.createVm(principal.userId(), token, request)
                 .map(ApiResponse::ok);
     }
