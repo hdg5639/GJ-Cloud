@@ -1,9 +1,8 @@
 package gj.cloud.auth.application.token.service.impl;
 
 import com.nimbusds.jwt.JWTClaimsSet;
-import gj.cloud.auth.application.auth.dto.LoginResponse;
 import gj.cloud.auth.application.auth.dto.TokenExchangeRequest;
-import gj.cloud.auth.application.auth.dto.TokenRefreshRequest;
+import gj.cloud.auth.application.token.dto.RefreshResult;
 import gj.cloud.auth.application.token.dto.TokenResponse;
 import gj.cloud.auth.application.token.service.TokenService;
 import gj.cloud.auth.domain.token.enums.ServiceAudience;
@@ -45,8 +44,7 @@ public class TokenServiceImpl implements TokenService {
     }
 
     @Override
-    public LoginResponse refresh(TokenRefreshRequest request) {
-        String tokenId = request.refreshToken();
+    public RefreshResult refresh(String tokenId) {
         Set<String> keys = redisTemplate.keys("refresh:*:" + tokenId);
         if (keys == null || keys.isEmpty()) {
             throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
@@ -54,7 +52,6 @@ public class TokenServiceImpl implements TokenService {
         String key = keys.iterator().next();
         String userId = key.split(":")[1];
 
-        // Rotation: delete old, issue new
         redisTemplate.delete(key);
 
         UserEntity user = userRepository.findById(userId)
@@ -62,7 +59,7 @@ public class TokenServiceImpl implements TokenService {
 
         String newAccessToken = issueAccessToken(userId, user.getEmail(), user.getRole(), ServiceAudience.AUTH);
         String newRefreshToken = issueRefreshToken(userId);
-        return new LoginResponse(newAccessToken, newRefreshToken, "Bearer", 900L);
+        return new RefreshResult(newAccessToken, newRefreshToken);
     }
 
     @Override
@@ -78,7 +75,6 @@ public class TokenServiceImpl implements TokenService {
         String userId = claims.getSubject();
         String cacheKey = "exchange:" + userId + ":" + targetAudience.getValue();
 
-        // Check cache — reuse if >30s remaining
         String cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
             Long ttlMs = redisTemplate.getExpire(cacheKey, TimeUnit.MILLISECONDS);

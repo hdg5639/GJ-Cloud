@@ -1,7 +1,7 @@
 package gj.cloud.auth.application.auth.service.impl;
 
 import gj.cloud.auth.application.auth.dto.LoginRequest;
-import gj.cloud.auth.application.auth.dto.LoginResponse;
+import gj.cloud.auth.application.auth.dto.LoginResult;
 import gj.cloud.auth.application.auth.dto.RegisterRequest;
 import gj.cloud.auth.application.auth.service.AuthService;
 import gj.cloud.auth.application.token.service.TokenService;
@@ -35,10 +35,13 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public LoginResponse login(LoginRequest request) {
+    public LoginResult login(LoginRequest request) {
         UserEntity user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
 
+        if (user.getStatus() == UserStatus.PENDING_VERIFICATION) {
+            throw new AuthException(AuthErrorCode.EMAIL_NOT_VERIFIED);
+        }
         if (user.getStatus() == UserStatus.DELETED) {
             throw new AuthException(AuthErrorCode.ACCOUNT_DELETED);
         }
@@ -53,7 +56,7 @@ public class AuthServiceImpl implements AuthService {
                 user.getId(), user.getEmail(), user.getRole(), ServiceAudience.AUTH);
         String refreshToken = tokenService.issueRefreshToken(user.getId());
 
-        return new LoginResponse(accessToken, refreshToken, "Bearer", 900L);
+        return new LoginResult(accessToken, refreshToken);
     }
 
     @Override

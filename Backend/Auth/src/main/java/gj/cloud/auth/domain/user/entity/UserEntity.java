@@ -53,10 +53,14 @@ public class UserEntity {
                 .email(email)
                 .password(encodedPassword)
                 .role(UserRole.FREE)
-                .status(UserStatus.ACTIVE)
+                .status(UserStatus.PENDING_VERIFICATION)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+    }
+
+    public void activate() {
+        this.status = UserStatus.ACTIVE;
     }
 
     public void softDelete() {

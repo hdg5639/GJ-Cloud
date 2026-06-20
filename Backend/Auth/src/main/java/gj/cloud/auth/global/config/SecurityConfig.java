@@ -37,6 +37,8 @@ public class SecurityConfig {
                                 "/auth/register",
                                 "/auth/login",
                                 "/auth/token/refresh",
+                                "/auth/email/verify/send",
+                                "/auth/email/verify/confirm",
                                 "/auth/.well-known/jwks.json",
                                 "/actuator/health",
                                 "/v3/api-docs/**",
@@ -57,7 +59,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:9000"));
+        config.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "http://localhost:9000",
+                "https://gamjabox.cloud"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
