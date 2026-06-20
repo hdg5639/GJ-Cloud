@@ -14,7 +14,7 @@ public class CorsConfig {
 
     @Bean
     @Profile("dev")
-    public CorsConfigurationSource localCorsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
@@ -26,14 +26,6 @@ public class CorsConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-        return source;
-    }
-
-    @Bean
-    @Profile("!dev")
-    public CorsConfigurationSource noopCorsConfigurationSource() {
-        // prod에서는 Caddy가 CORS 처리 — 백엔드는 헤더 추가 안 함
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         return source;
     }
 }

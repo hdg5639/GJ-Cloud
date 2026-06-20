@@ -6,6 +6,7 @@ import gj.cloud.user.global.security.InternalJwtAuthenticationFilter;
 import gj.cloud.user.global.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -25,13 +26,23 @@ public class SecurityConfig {
     private final JwtValidator jwtValidator;
     private final InternalJwtValidator internalJwtValidator;
 
+    @Autowired(required = false)
+    private CorsConfigurationSource corsConfigurationSource;
+
     @Bean
     @Order(1)
-    public SecurityFilterChain internalFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
+    public SecurityFilterChain internalFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/internal/**")
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                .csrf(AbstractHttpConfigurer::disable);
+
+        if (corsConfigurationSource != null) {
+            http.cors(cors -> cors.configurationSource(corsConfigurationSource));
+        } else {
+            http.cors(AbstractHttpConfigurer::disable);
+        }
+
+        http
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                 .exceptionHandling(e -> e
@@ -45,10 +56,17 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    public SecurityFilterChain filterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                .csrf(AbstractHttpConfigurer::disable);
+
+        if (corsConfigurationSource != null) {
+            http.cors(cors -> cors.configurationSource(corsConfigurationSource));
+        } else {
+            http.cors(AbstractHttpConfigurer::disable);
+        }
+
+        http
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -67,5 +85,4 @@ public class SecurityConfig {
                 .addFilterBefore(new JwtAuthenticationFilter(jwtValidator), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
-
 }

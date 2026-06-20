@@ -14,7 +14,7 @@ public class CorsConfig {
 
     @Bean
     @Profile("dev")
-    public CorsConfigurationSource localCorsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
@@ -27,11 +27,5 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
-    }
-
-    @Bean
-    @Profile("!dev")
-    public CorsConfigurationSource noopCorsConfigurationSource() {
-        return new UrlBasedCorsConfigurationSource();
     }
 }
