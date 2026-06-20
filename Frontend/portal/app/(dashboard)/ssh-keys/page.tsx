@@ -152,11 +152,11 @@ function GenerateKeyForm({
 
   function handleDownload() {
     if (!privateKey) return;
-    const blob = new Blob([privateKey], { type: "text/plain" });
+    const blob = new Blob([privateKey], { type: "application/x-pem-file" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${name}_id_ed25519`;
+    a.download = `${name}_id_ed25519.pem`;
     a.click();
     URL.revokeObjectURL(url);
   }
