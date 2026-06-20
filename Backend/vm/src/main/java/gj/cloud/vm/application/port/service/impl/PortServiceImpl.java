@@ -53,18 +53,24 @@ public class PortServiceImpl implements PortService {
                             if (existing > 0) {
                                 return Mono.error(new VmException(VmErrorCode.PORT_ALREADY_EXISTS));
                             }
+                            return vmPortRepository.countByVmIdAndNickname(vmId, request.nickname());
+                        })
+                        .flatMap(nickExists -> {
+                            if (nickExists > 0) {
+                                return Mono.error(new VmException(VmErrorCode.PORT_NICKNAME_ALREADY_EXISTS));
+                            }
                             return Mono.just(vm);
                         })
                 )
                 .flatMap(vm -> {
-                    String portSubdomain = vm.getSubdomain() + "-" + request.port();
+                    String portSubdomain = vm.getSubdomain() + "-" + request.nickname();
                     return cloudflareClient.registerCname(portSubdomain)
                             .flatMap(dnsRecordId ->
                                     cloudflareClient.addIngressRule(
                                                     portSubdomain, vm.getInternalIp(),
                                                     request.port(), request.protocol().name())
                                             .then(setupVisibility(vm.getId(), portSubdomain, dnsRecordId,
-                                                    request, ownerEmail))
+                                                    request, ownerEmail, request.nickname()))
                             )
                             .onErrorResume(e -> {
                                 log.error("포트 Cloudflare 설정 실패: vmId={}, port={}, error={}",
@@ -75,10 +81,10 @@ public class PortServiceImpl implements PortService {
     }
 
     private Mono<PortResponse> setupVisibility(UUID vmId, String subdomain, String dnsRecordId,
-                                               PortAddRequest request, String ownerEmail) {
+                                               PortAddRequest request, String ownerEmail, String nickname) {
         if (request.visibility() == Visibility.PUBLIC) {
             VmPortEntity port = VmPortEntity.createPublic(vmId, request.port(),
-                    request.protocol(), subdomain, dnsRecordId);
+                    request.protocol(), nickname, subdomain, dnsRecordId);
             return vmPortRepository.save(port)
                     .map(saved -> PortResponse.of(saved, List.of(), cloudflareProperties.getBaseDomain()));
         }
@@ -91,7 +97,7 @@ public class PortServiceImpl implements PortService {
                 .flatMap(appId -> cloudflareClient.createAccessPolicy(appId, emails)
                         .flatMap(policyId -> {
                             VmPortEntity port = VmPortEntity.createPrivate(vmId, request.port(),
-                                    request.protocol(), subdomain, dnsRecordId, appId, policyId);
+                                    request.protocol(), nickname, subdomain, dnsRecordId, appId, policyId);
                             return vmPortRepository.save(port)
                                     .flatMap(saved -> savePortEmails(saved.getId(), emails)
                                             .thenReturn(PortResponse.of(saved, emails,

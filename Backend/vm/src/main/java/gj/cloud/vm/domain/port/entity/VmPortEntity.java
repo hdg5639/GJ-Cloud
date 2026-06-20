@@ -39,6 +39,7 @@ public class VmPortEntity implements Persistable<UUID> {
     private int port;
     private Protocol protocol;
     private Visibility visibility;
+    private String nickname;
     private String subdomain;
 
     @Column("cf_dns_record_id")
@@ -54,21 +55,21 @@ public class VmPortEntity implements Persistable<UUID> {
     private LocalDateTime createdAt;
 
     public static VmPortEntity createPublic(UUID vmId, int port, Protocol protocol,
-                                            String subdomain, String cfDnsRecordId) {
+                                            String nickname, String subdomain, String cfDnsRecordId) {
         return VmPortEntity.builder()
                 .id(UUID.randomUUID()).isNew(true)
                 .vmId(vmId).port(port).protocol(protocol).visibility(Visibility.PUBLIC)
-                .subdomain(subdomain).cfDnsRecordId(cfDnsRecordId)
+                .nickname(nickname).subdomain(subdomain).cfDnsRecordId(cfDnsRecordId)
                 .createdAt(LocalDateTime.now()).build();
     }
 
     public static VmPortEntity createPrivate(UUID vmId, int port, Protocol protocol,
-                                             String subdomain, String cfDnsRecordId,
+                                             String nickname, String subdomain, String cfDnsRecordId,
                                              String cfAppId, String cfPolicyId) {
         return VmPortEntity.builder()
                 .id(UUID.randomUUID()).isNew(true)
                 .vmId(vmId).port(port).protocol(protocol).visibility(Visibility.PRIVATE)
-                .subdomain(subdomain).cfDnsRecordId(cfDnsRecordId)
+                .nickname(nickname).subdomain(subdomain).cfDnsRecordId(cfDnsRecordId)
                 .cfAppId(cfAppId).cfPolicyId(cfPolicyId)
                 .createdAt(LocalDateTime.now()).build();
     }

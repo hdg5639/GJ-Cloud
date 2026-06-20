@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS vm_ports (
     port             INTEGER NOT NULL,
     protocol         VARCHAR(10) NOT NULL,
     visibility       VARCHAR(10) NOT NULL,
+    nickname         VARCHAR(20) NOT NULL,
     subdomain        VARCHAR(40) UNIQUE NOT NULL,
     cf_dns_record_id VARCHAR(255),
     cf_app_id        VARCHAR(255),
@@ -43,8 +44,12 @@ CREATE TABLE IF NOT EXISTS vm_ports (
 
     CONSTRAINT chk_port_protocol   CHECK (protocol   IN ('HTTP', 'TCP')),
     CONSTRAINT chk_port_visibility CHECK (visibility IN ('PUBLIC', 'PRIVATE')),
-    CONSTRAINT uq_vm_port          UNIQUE (vm_id, port)
+    CONSTRAINT uq_vm_port          UNIQUE (vm_id, port),
+    CONSTRAINT uq_vm_port_nickname UNIQUE (vm_id, nickname)
 );
+
+ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS nickname VARCHAR(20);
+ALTER TABLE vm_ports ADD CONSTRAINT IF NOT EXISTS uq_vm_port_nickname UNIQUE (vm_id, nickname);
 
 CREATE TABLE IF NOT EXISTS vm_port_access_emails (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
