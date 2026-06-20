@@ -53,6 +53,11 @@ public class JwtAuthenticationWebFilter implements WebFilter {
         if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
             return header.substring(7);
         }
+        // SSE: EventSource는 헤더 설정 불가 → 쿼리 파라미터 fallback
+        String queryToken = exchange.getRequest().getQueryParams().getFirst("token");
+        if (StringUtils.hasText(queryToken)) {
+            return queryToken;
+        }
         return null;
     }
 }
