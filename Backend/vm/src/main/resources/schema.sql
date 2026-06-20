@@ -49,13 +49,7 @@ CREATE TABLE IF NOT EXISTS vm_ports (
 );
 
 ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS nickname VARCHAR(20);
-DO $$ BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'uq_vm_port_nickname'
-  ) THEN
-    ALTER TABLE vm_ports ADD CONSTRAINT uq_vm_port_nickname UNIQUE (vm_id, nickname);
-  END IF;
-END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_vm_port_nickname ON vm_ports(vm_id, nickname);
 
 CREATE TABLE IF NOT EXISTS vm_port_access_emails (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
