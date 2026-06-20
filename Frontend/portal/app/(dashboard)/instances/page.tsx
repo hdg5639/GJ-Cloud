@@ -8,12 +8,17 @@ import { useVmEvents } from "@/hooks/use-vm-events";
 import type { VmResponse, VmStatusEvent } from "@/lib/types";
 
 const STATUS_STYLE: Record<string, string> = {
-  RUNNING: "bg-[#03C75A]/10 text-[#03C75A]",
-  BOOTING: "bg-amber-100 text-amber-700",
+  PENDING: "bg-amber-100 text-amber-700",
   CREATING: "bg-amber-100 text-amber-700",
-  PENDING: "bg-gray-100 text-gray-600",
+  BOOTING: "bg-amber-100 text-amber-700",
+  RUNNING: "bg-[#03C75A]/10 text-[#03C75A]",
+  STARTING: "bg-amber-100 text-amber-700",
+  STOPPING: "bg-amber-100 text-amber-700",
+  STOPPED: "bg-gray-100 text-gray-600",
+  SUSPENDING: "bg-amber-100 text-amber-700",
+  SUSPENDED: "bg-gray-100 text-gray-600",
   FAILED: "bg-red-100 text-red-700",
-  DELETING: "bg-gray-100 text-gray-500",
+  DELETING: "bg-red-100 text-red-700",
   DELETED: "bg-gray-100 text-gray-400",
 };
 

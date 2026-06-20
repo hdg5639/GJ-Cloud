@@ -53,14 +53,17 @@ function GuideStep({ num, title, children }: { num: number; title: string; child
 }
 
 const STATUS_STYLE: Record<string, string> = {
+  PENDING: "bg-amber-100 text-amber-700",
+  CREATING: "bg-amber-100 text-amber-700",
+  BOOTING: "bg-amber-100 text-amber-700",
   RUNNING: "bg-[#03C75A]/10 text-[#03C75A]",
   STARTING: "bg-amber-100 text-amber-700",
   STOPPING: "bg-amber-100 text-amber-700",
-  CREATING: "bg-amber-100 text-amber-700",
+  STOPPED: "bg-gray-100 text-gray-600",
   SUSPENDING: "bg-amber-100 text-amber-700",
   SUSPENDED: "bg-gray-100 text-gray-600",
-  STOPPED: "bg-gray-100 text-gray-600",
-  ERROR: "bg-red-100 text-red-700",
+  FAILED: "bg-red-100 text-red-700",
+  DELETING: "bg-red-100 text-red-700",
   DELETED: "bg-gray-100 text-gray-400",
 };
 
@@ -237,7 +240,7 @@ export default function InstanceDetailPage() {
 
   const isRunning = vm.status === "RUNNING";
   const isStopped = vm.status === "STOPPED";
-  const isTransitioning = ["STARTING", "STOPPING", "CREATING", "SUSPENDING"].includes(vm.status);
+  const isTransitioning = ["PENDING", "CREATING", "BOOTING", "STARTING", "STOPPING", "SUSPENDING", "DELETING"].includes(vm.status);
 
   return (
     <div>
@@ -298,7 +301,7 @@ export default function InstanceDetailPage() {
       )}
 
       {/* ERROR 에러 메시지 */}
-      {vm.status === "ERROR" && vm.errorMessage && (
+      {vm.status === "FAILED" && vm.errorMessage && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-5">
           <p className="text-sm font-medium text-red-800">오류 발생</p>
           <p className="text-xs text-red-700 mt-0.5">{vm.errorMessage}</p>

@@ -1,13 +1,27 @@
+export type VmStatus =
+  | "PENDING"
+  | "CREATING"
+  | "BOOTING"
+  | "RUNNING"
+  | "STARTING"
+  | "STOPPING"
+  | "STOPPED"
+  | "SUSPENDING"
+  | "SUSPENDED"
+  | "FAILED"
+  | "DELETING"
+  | "DELETED";
+
 export interface VmResponse {
   id: string;
   name: string;
   planType: "FREE" | "PRO";
-  status: "PENDING" | "CREATING" | "BOOTING" | "RUNNING" | "FAILED" | "DELETING" | "DELETED";
+  status: VmStatus;
   internalIp: string | null;
   errorMessage: string | null;
   diskSizeGb: number;
   subdomain: string;
-  needsReboot: boolean | null;
+  needsReboot: boolean;
   createdAt: string;
 }
 
@@ -49,4 +63,12 @@ export interface ProfileResponse {
   nickname: string | null;
   profileImageUrl: string | null;
   planType: string;
+}
+
+export interface UsageResponse {
+  planType: string;
+  vCpuLimit: number;
+  ramGbLimit: number;
+  currentVmCount: number;
+  maxVmCount: number;
 }
