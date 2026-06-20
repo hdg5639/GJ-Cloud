@@ -118,10 +118,14 @@ public class CloudflareClient {
     }
 
     public Mono<Void> addIngressRule(String subdomain, String internalIp) {
+        return addIngressRule(subdomain, internalIp, 22, "ssh");
+    }
+
+    public Mono<Void> addIngressRule(String subdomain, String internalIp, int port, String protocol) {
         String fqdn = subdomain + "." + props.getBaseDomain();
+        String service = buildService(protocol, internalIp, port);
         return getIngressRules().flatMap(rules -> {
             List<IngressRule> updated = new ArrayList<>();
-            // existing rules except catch-all
             List<IngressRule> catchAll = new ArrayList<>();
             for (IngressRule r : rules) {
                 if (r.hostname() == null || r.hostname().isEmpty()) {
@@ -130,12 +134,21 @@ public class CloudflareClient {
                     updated.add(r);
                 }
             }
-            updated.add(new IngressRule(fqdn, "ssh://" + internalIp + ":22"));
+            updated.add(new IngressRule(fqdn, service));
             updated.addAll(catchAll);
             return putIngressRules(updated);
         })
-        .doOnSuccess(v -> log.info("Ingress 규칙 추가: subdomain={}, ip={}", subdomain, internalIp))
+        .doOnSuccess(v -> log.info("Ingress 규칙 추가: subdomain={}, service={}", subdomain, service))
         .doOnError(e -> log.error("Ingress 규칙 추가 실패: subdomain={}, error={}", subdomain, e.getMessage()));
+    }
+
+    private String buildService(String protocol, String ip, int port) {
+        return switch (protocol.toLowerCase()) {
+            case "ssh"  -> "ssh://" + ip + ":" + port;
+            case "http" -> "http://" + ip + ":" + port;
+            case "tcp"  -> "tcp://" + ip + ":" + port;
+            default     -> throw new VmException(VmErrorCode.CLOUDFLARE_ERROR);
+        };
     }
 
     public Mono<Void> removeIngressRule(String subdomain) {
@@ -151,11 +164,15 @@ public class CloudflareClient {
     }
 
     public Mono<String> createAccessApp(String subdomain) {
+        return createAccessApp(subdomain, "ssh");
+    }
+
+    public Mono<String> createAccessApp(String subdomain, String appType) {
         String fqdn = subdomain + "." + props.getBaseDomain();
         Map<String, Object> body = Map.of(
                 "name", subdomain,
                 "domain", fqdn,
-                "type", "ssh",
+                "type", appType,
                 "session_duration", "24h"
         );
         return cloudflareWebClient.post()
@@ -176,12 +193,14 @@ public class CloudflareClient {
                 .doOnError(e -> log.error("Access App 생성 실패: subdomain={}, error={}", subdomain, e.getMessage()));
     }
 
-    public Mono<String> createAccessPolicy(String appId, String ownerEmail) {
-        Map<String, Object> include = Map.of("email", Map.of("email", ownerEmail));
+    public Mono<String> createAccessPolicy(String appId, List<String> emails) {
+        List<Map<String, Object>> include = emails.stream()
+                .map(email -> Map.<String, Object>of("email", Map.of("email", email)))
+                .toList();
         Map<String, Object> body = Map.of(
-                "name", "owner-only",
+                "name", "allowed-users",
                 "decision", "allow",
-                "include", List.of(include)
+                "include", include
         );
         return cloudflareWebClient.post()
                 .uri("/accounts/{accountId}/access/apps/{appId}/policies",
@@ -198,8 +217,30 @@ public class CloudflareClient {
                         throw new VmException(VmErrorCode.CLOUDFLARE_ERROR);
                     }
                 })
-                .doOnSuccess(id -> log.info("Access Policy 생성: appId={}, policyId={}", appId, id))
+                .doOnSuccess(id -> log.info("Access Policy 생성: appId={}, policyId={}, emails={}", appId, id, emails.size()))
                 .doOnError(e -> log.error("Access Policy 생성 실패: appId={}, error={}", appId, e.getMessage()));
+    }
+
+    public Mono<Void> updateAccessPolicy(String appId, String policyId, List<String> emails) {
+        List<Map<String, Object>> include = emails.stream()
+                .map(email -> Map.<String, Object>of("email", Map.of("email", email)))
+                .toList();
+        Map<String, Object> body = Map.of(
+                "name", "allowed-users",
+                "decision", "allow",
+                "include", include
+        );
+        return cloudflareWebClient.put()
+                .uri("/accounts/{accountId}/access/apps/{appId}/policies/{policyId}",
+                        props.getAccountId(), appId, policyId)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(Void.class)
+                .then()
+                .doOnSuccess(v -> log.info("Access Policy 갱신: appId={}, policyId={}, emails={}", appId, policyId, emails.size()))
+                .doOnError(e -> log.error("Access Policy 갱신 실패: appId={}, error={}", appId, e.getMessage()));
     }
 
     public Mono<Void> deleteAccessPolicy(String appId, String policyId) {

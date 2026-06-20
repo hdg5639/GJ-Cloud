@@ -1,5 +1,6 @@
 package gj.cloud.vm.application.vm.service.impl;
 
+import gj.cloud.vm.application.port.service.PortService;
 import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse.PlanAvailability;
@@ -9,6 +10,8 @@ import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.dto.VmStatusEvent;
 import gj.cloud.vm.application.vm.service.VmService;
+import gj.cloud.vm.domain.port.entity.VmSshAccessEmailEntity;
+import gj.cloud.vm.domain.port.repository.VmSshAccessEmailRepository;
 import gj.cloud.vm.domain.vm.entity.VmEntity;
 import gj.cloud.vm.domain.vm.enums.PlanType;
 import gj.cloud.vm.domain.vm.enums.VmStatus;
@@ -39,12 +42,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class VmServiceImpl implements VmService {
 
+    private static final int SSH_EMAIL_MAX_COUNT = 10;
+
     private final VmRepository vmRepository;
     private final ProxmoxClient proxmoxClient;
     private final CloudflareClient cloudflareClient;
     private final UserServiceClient userServiceClient;
     private final SseEmitterManager sseEmitterManager;
     private final ProxmoxProperties proxmoxProperties;
+    private final VmSshAccessEmailRepository sshAccessEmailRepository;
+    private final PortService portService;
 
     @Override
     public Mono<VmResponse> createVm(String userId, String bearerToken, VmCreateRequest request) {
@@ -130,9 +137,14 @@ public class VmServiceImpl implements VmService {
                                 .then(cloudflareClient.createAccessApp(vm.getSubdomain()))
                                 .flatMap(appId -> {
                                     if (ownerEmail != null) {
-                                        return cloudflareClient.createAccessPolicy(appId, ownerEmail)
+                                        return cloudflareClient.createAccessPolicy(appId, List.of(ownerEmail))
                                                 .flatMap(policyId ->
                                                         vmRepository.save(vm.withCloudflareIds(dnsRecordId, appId, policyId))
+                                                                .flatMap(saved ->
+                                                                        sshAccessEmailRepository.save(
+                                                                                VmSshAccessEmailEntity.create(saved.getId(), ownerEmail))
+                                                                                .thenReturn(saved)
+                                                                )
                                                 );
                                     }
                                     return vmRepository.save(vm.withCloudflareIds(dnsRecordId, appId, null));
@@ -206,20 +218,27 @@ public class VmServiceImpl implements VmService {
     }
 
     private Mono<Void> teardownCloudflare(VmEntity vm) {
+        Mono<Void> portsTeardown = portService.teardownAllPortsForVm(vm.getId());
+        Mono<Void> sshEmailCleanup = sshAccessEmailRepository.deleteAllByVmId(vm.getId());
+        Mono<Void> sshTeardown;
+
         if (vm.getCfPolicyId() != null && vm.getCfAppId() != null) {
-            return cloudflareClient.deleteAccessPolicy(vm.getCfAppId(), vm.getCfPolicyId())
+            sshTeardown = cloudflareClient.deleteAccessPolicy(vm.getCfAppId(), vm.getCfPolicyId())
                     .then(cloudflareClient.deleteAccessApp(vm.getCfAppId()))
                     .then(vm.getSubdomain() != null ? cloudflareClient.removeIngressRule(vm.getSubdomain()) : Mono.empty())
                     .then(vm.getCfDnsRecordId() != null ? cloudflareClient.deleteCname(vm.getCfDnsRecordId()) : Mono.empty());
         } else if (vm.getCfAppId() != null) {
-            return cloudflareClient.deleteAccessApp(vm.getCfAppId())
+            sshTeardown = cloudflareClient.deleteAccessApp(vm.getCfAppId())
                     .then(vm.getSubdomain() != null ? cloudflareClient.removeIngressRule(vm.getSubdomain()) : Mono.empty())
                     .then(vm.getCfDnsRecordId() != null ? cloudflareClient.deleteCname(vm.getCfDnsRecordId()) : Mono.empty());
         } else if (vm.getSubdomain() != null) {
-            return cloudflareClient.removeIngressRule(vm.getSubdomain())
+            sshTeardown = cloudflareClient.removeIngressRule(vm.getSubdomain())
                     .then(vm.getCfDnsRecordId() != null ? cloudflareClient.deleteCname(vm.getCfDnsRecordId()) : Mono.empty());
+        } else {
+            sshTeardown = Mono.empty();
         }
-        return Mono.empty();
+
+        return portsTeardown.then(sshEmailCleanup).then(sshTeardown);
     }
 
     @Override
@@ -332,6 +351,71 @@ public class VmServiceImpl implements VmService {
                         if (!usedIps.contains(ip)) return ip;
                     }
                     throw new VmException(VmErrorCode.IP_POOL_EXHAUSTED);
+                });
+    }
+
+    @Override
+    public Mono<List<String>> getSshAccessEmails(String userId, UUID vmId) {
+        return vmRepository.findById(vmId)
+                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .then(sshAccessEmailRepository.findAllByVmId(vmId)
+                        .map(VmSshAccessEmailEntity::getEmail)
+                        .collectList()
+                );
+    }
+
+    @Override
+    public Mono<List<String>> addSshAccessEmail(String userId, String ownerEmail, UUID vmId, String email) {
+        return vmRepository.findById(vmId)
+                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getCfAppId() == null || vm.getCfPolicyId() == null) {
+                        return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    }
+                    return sshAccessEmailRepository.countByVmId(vmId)
+                            .flatMap(count -> {
+                                if (count >= SSH_EMAIL_MAX_COUNT) {
+                                    return Mono.error(new VmException(VmErrorCode.EMAIL_LIMIT_EXCEEDED));
+                                }
+                                return sshAccessEmailRepository.save(
+                                        VmSshAccessEmailEntity.create(vmId, email));
+                            })
+                            .then(sshAccessEmailRepository.findAllByVmId(vmId)
+                                    .map(VmSshAccessEmailEntity::getEmail)
+                                    .collectList()
+                            )
+                            .flatMap(emails -> cloudflareClient.updateAccessPolicy(
+                                    vm.getCfAppId(), vm.getCfPolicyId(), emails)
+                                    .thenReturn(emails)
+                            );
+                });
+    }
+
+    @Override
+    public Mono<List<String>> removeSshAccessEmail(String userId, String ownerEmail, UUID vmId, String email) {
+        if (email.equals(ownerEmail)) {
+            return Mono.error(new VmException(VmErrorCode.OWNER_EMAIL_REMOVAL_NOT_ALLOWED));
+        }
+        return vmRepository.findById(vmId)
+                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getCfAppId() == null || vm.getCfPolicyId() == null) {
+                        return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    }
+                    return sshAccessEmailRepository.findByVmIdAndEmail(vmId, email)
+                            .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
+                            .flatMap(entry -> sshAccessEmailRepository.delete(entry))
+                            .then(sshAccessEmailRepository.findAllByVmId(vmId)
+                                    .map(VmSshAccessEmailEntity::getEmail)
+                                    .collectList()
+                            )
+                            .flatMap(remaining -> cloudflareClient.updateAccessPolicy(
+                                    vm.getCfAppId(), vm.getCfPolicyId(), remaining)
+                                    .thenReturn(remaining)
+                            );
                 });
     }
 

@@ -28,3 +28,36 @@ ALTER TABLE vms ADD COLUMN IF NOT EXISTS cf_dns_record_id VARCHAR(255);
 ALTER TABLE vms ADD COLUMN IF NOT EXISTS cf_app_id        VARCHAR(255);
 ALTER TABLE vms ADD COLUMN IF NOT EXISTS cf_policy_id     VARCHAR(255);
 ALTER TABLE vms ADD COLUMN IF NOT EXISTS disk_size_gb     INTEGER NOT NULL DEFAULT 20;
+
+CREATE TABLE IF NOT EXISTS vm_ports (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vm_id            UUID NOT NULL REFERENCES vms(id),
+    port             INTEGER NOT NULL,
+    protocol         VARCHAR(10) NOT NULL,
+    visibility       VARCHAR(10) NOT NULL,
+    subdomain        VARCHAR(40) UNIQUE NOT NULL,
+    cf_dns_record_id VARCHAR(255),
+    cf_app_id        VARCHAR(255),
+    cf_policy_id     VARCHAR(255),
+    created_at       TIMESTAMP NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_port_protocol   CHECK (protocol   IN ('HTTP', 'TCP')),
+    CONSTRAINT chk_port_visibility CHECK (visibility IN ('PUBLIC', 'PRIVATE')),
+    CONSTRAINT uq_vm_port          UNIQUE (vm_id, port)
+);
+
+CREATE TABLE IF NOT EXISTS vm_port_access_emails (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vm_port_id UUID NOT NULL REFERENCES vm_ports(id),
+    email      VARCHAR(255) NOT NULL,
+
+    CONSTRAINT uq_port_email UNIQUE (vm_port_id, email)
+);
+
+CREATE TABLE IF NOT EXISTS vm_ssh_access_emails (
+    id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vm_id  UUID NOT NULL REFERENCES vms(id),
+    email  VARCHAR(255) NOT NULL,
+
+    CONSTRAINT uq_vm_ssh_email UNIQUE (vm_id, email)
+);

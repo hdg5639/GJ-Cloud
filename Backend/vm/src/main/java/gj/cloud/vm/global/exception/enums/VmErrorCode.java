@@ -20,7 +20,12 @@ public enum VmErrorCode {
     CLOUDFLARE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Cloudflare 연동에 실패했습니다."),
     INVALID_DISK_SIZE(HttpStatus.BAD_REQUEST, "디스크 크기가 플랜 허용 범위를 벗어났습니다."),
     DISK_DOWNSIZE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "디스크 크기는 줄일 수 없습니다."),
-    DOWNGRADE_DISK_TOO_LARGE(HttpStatus.BAD_REQUEST, "현재 디스크 크기가 너무 커서 다운그레이드할 수 없습니다. 새 VM을 생성해 데이터를 이전해주세요.");
+    DOWNGRADE_DISK_TOO_LARGE(HttpStatus.BAD_REQUEST, "현재 디스크 크기가 너무 커서 다운그레이드할 수 없습니다. 새 VM을 생성해 데이터를 이전해주세요."),
+    PORT_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "VM당 추가 가능한 포트 개수를 초과했습니다."),
+    EMAIL_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "등록 가능한 이메일 개수를 초과했습니다."),
+    PORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 포트입니다."),
+    PORT_NOT_FOUND(HttpStatus.NOT_FOUND, "포트를 찾을 수 없습니다."),
+    OWNER_EMAIL_REMOVAL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "소유자 이메일은 삭제할 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;

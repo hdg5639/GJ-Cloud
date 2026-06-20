@@ -1,5 +1,6 @@
 package gj.cloud.vm.api.controller;
 
+import gj.cloud.vm.application.port.dto.SshAccessAddRequest;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
 import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
@@ -106,6 +107,39 @@ public class VmController {
             @Valid @RequestBody VmPlanUpdateRequest request
     ) {
         return vmService.updatePlan(principal.userId(), vmId, request)
+                .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "SSH 접근 이메일 목록 조회")
+    @GetMapping("/{vmId}/ssh-access")
+    public Mono<ApiResponse<List<String>>> getSshAccessEmails(
+            @AuthenticationPrincipal VmPrincipal principal,
+            @PathVariable UUID vmId
+    ) {
+        return vmService.getSshAccessEmails(principal.userId(), vmId)
+                .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "SSH 접근 이메일 추가")
+    @PostMapping("/{vmId}/ssh-access")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Mono<ApiResponse<List<String>>> addSshAccessEmail(
+            @AuthenticationPrincipal VmPrincipal principal,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody SshAccessAddRequest request
+    ) {
+        return vmService.addSshAccessEmail(principal.userId(), principal.email(), vmId, request.email())
+                .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "SSH 접근 이메일 제거", description = "소유자 이메일은 제거 불가.")
+    @DeleteMapping("/{vmId}/ssh-access/{email}")
+    public Mono<ApiResponse<List<String>>> removeSshAccessEmail(
+            @AuthenticationPrincipal VmPrincipal principal,
+            @PathVariable UUID vmId,
+            @PathVariable String email
+    ) {
+        return vmService.removeSshAccessEmail(principal.userId(), principal.email(), vmId, email)
                 .map(ApiResponse::ok);
     }
 }

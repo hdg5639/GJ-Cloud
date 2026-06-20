@@ -1,5 +1,7 @@
 package gj.cloud.vm.global.config;
 
+import gj.cloud.vm.domain.port.enums.Protocol;
+import gj.cloud.vm.domain.port.enums.Visibility;
 import gj.cloud.vm.domain.vm.enums.PlanType;
 import gj.cloud.vm.domain.vm.enums.VmStatus;
 import io.r2dbc.spi.ConnectionFactory;
@@ -24,7 +26,11 @@ public class R2dbcConfig {
                 new StringToVmStatusConverter(),
                 new VmStatusToStringConverter(),
                 new StringToPlanTypeConverter(),
-                new PlanTypeToStringConverter()
+                new PlanTypeToStringConverter(),
+                new StringToProtocolConverter(),
+                new ProtocolToStringConverter(),
+                new StringToVisibilityConverter(),
+                new VisibilityToStringConverter()
         ));
     }
 
@@ -46,5 +52,25 @@ public class R2dbcConfig {
     @WritingConverter
     static class PlanTypeToStringConverter implements Converter<PlanType, String> {
         public String convert(PlanType source) { return source.name(); }
+    }
+
+    @ReadingConverter
+    static class StringToProtocolConverter implements Converter<String, Protocol> {
+        public Protocol convert(String source) { return Protocol.valueOf(source); }
+    }
+
+    @WritingConverter
+    static class ProtocolToStringConverter implements Converter<Protocol, String> {
+        public String convert(Protocol source) { return source.name(); }
+    }
+
+    @ReadingConverter
+    static class StringToVisibilityConverter implements Converter<String, Visibility> {
+        public Visibility convert(String source) { return Visibility.valueOf(source); }
+    }
+
+    @WritingConverter
+    static class VisibilityToStringConverter implements Converter<Visibility, String> {
+        public String convert(Visibility source) { return source.name(); }
     }
 }

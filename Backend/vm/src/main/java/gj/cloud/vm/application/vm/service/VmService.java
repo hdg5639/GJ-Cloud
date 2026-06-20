@@ -8,6 +8,7 @@ import gj.cloud.vm.application.vm.dto.VmResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface VmService {
@@ -19,4 +20,7 @@ public interface VmService {
     Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request);
     Mono<VmResponse> updatePlan(String userId, UUID vmId, VmPlanUpdateRequest request);
     Mono<VmAvailabilityResponse> getAvailability();
+    Mono<List<String>> getSshAccessEmails(String userId, UUID vmId);
+    Mono<List<String>> addSshAccessEmail(String userId, String ownerEmail, UUID vmId, String email);
+    Mono<List<String>> removeSshAccessEmail(String userId, String ownerEmail, UUID vmId, String email);
 }
