@@ -1,12 +1,56 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { PortResponse } from "@/lib/api-client";
 import { useVmEvents } from "@/hooks/use-vm-events";
 import type { VmResponse, VmStatusEvent } from "@/lib/types";
+
+function CodeBlock({
+  id,
+  value,
+  copiedKey,
+  onCopy,
+}: {
+  id: string;
+  value: string;
+  copiedKey: string | null;
+  onCopy: (key: string | null) => void;
+}) {
+  const isCopied = copiedKey === id;
+  function handleCopy() {
+    navigator.clipboard.writeText(value);
+    onCopy(id);
+    setTimeout(() => onCopy(null), 1500);
+  }
+  return (
+    <div className="relative group bg-gray-900 rounded-md px-3 py-2.5 pr-16 overflow-x-auto">
+      <pre className="font-mono text-xs text-gray-100 whitespace-pre-wrap break-all">{value}</pre>
+      <button
+        onClick={handleCopy}
+        className="absolute right-2.5 top-2 text-[11px] text-gray-400 hover:text-white transition-colors"
+      >
+        {isCopied ? "복사됨" : "복사"}
+      </button>
+    </div>
+  );
+}
+
+function GuideStep({ num, title, children }: { num: number; title: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-[11px] font-semibold flex items-center justify-center mt-0.5">
+        {num}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-gray-700 mb-1.5">{title}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 const STATUS_STYLE: Record<string, string> = {
   RUNNING: "bg-[#03C75A]/10 text-[#03C75A]",
@@ -26,6 +70,9 @@ export default function InstanceDetailPage() {
   const { accessToken } = useAuth();
   const [vm, setVm] = useState<VmResponse | null>(null);
   const [accordionOpen, setAccordionOpen] = useState(false);
+  const [installTab, setInstallTab] = useState<"mac" | "win" | "linux">("mac");
+  const [sshGuideTab, setSshGuideTab] = useState<"own" | "generated">("own");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -305,19 +352,191 @@ export default function InstanceDetailPage() {
         </button>
 
         {accordionOpen && (
-          <div className="mt-3 flex flex-col gap-2.5">
+          <div className="mt-4 space-y-6">
+
+            {/* Step 1 — cloudflared 설치 */}
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1.5">Mac / Linux</p>
-              <div className="bg-white border border-gray-200 rounded-md px-3 py-2 font-mono text-xs text-gray-900 select-all">
-                cloudflared access ssh --hostname {vm.subdomain}.gamjabox.cloud
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 1 — cloudflared 설치</p>
+              <div className="flex gap-1 mb-2">
+                {(["mac", "win", "linux"] as const).map((os) => (
+                  <button
+                    key={os}
+                    onClick={() => setInstallTab(os)}
+                    className={`text-xs px-3 h-7 rounded-md transition-colors ${
+                      installTab === os
+                        ? "bg-gray-900 text-white"
+                        : "bg-white border border-gray-200 text-gray-500 hover:border-gray-400"
+                    }`}
+                  >
+                    {os === "mac" ? "macOS" : os === "win" ? "Windows" : "Linux"}
+                  </button>
+                ))}
+              </div>
+              {installTab === "mac" && (
+                <CodeBlock id="install-mac" value="brew install cloudflared" copiedKey={copiedKey} onCopy={setCopiedKey} />
+              )}
+              {installTab === "win" && (
+                <CodeBlock id="install-win" value="winget install --id Cloudflare.cloudflared" copiedKey={copiedKey} onCopy={setCopiedKey} />
+              )}
+              {installTab === "linux" && (
+                <CodeBlock
+                  id="install-linux"
+                  value={`sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-public-v2.gpg | sudo tee /usr/share/keyrings/cloudflare-public-v2.gpg >/dev/null
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-public-v2.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt-get update && sudo apt-get install cloudflared`}
+                  copiedKey={copiedKey}
+                  onCopy={setCopiedKey}
+                />
+              )}
+              <p className="text-[11px] text-gray-400 mt-2">설치 확인: <code className="bg-gray-100 px-1 rounded">cloudflared --version</code></p>
+            </div>
+
+            {/* Step 2 — SSH 접속 */}
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 2 — SSH 접속</p>
+              <div className="flex gap-1 mb-4">
+                <button
+                  onClick={() => setSshGuideTab("own")}
+                  className={`text-xs px-3 h-7 rounded-md transition-colors ${
+                    sshGuideTab === "own"
+                      ? "bg-gray-900 text-white"
+                      : "bg-white border border-gray-200 text-gray-500 hover:border-gray-400"
+                  }`}
+                >
+                  개인 SSH 키로 접속
+                </button>
+                <button
+                  onClick={() => setSshGuideTab("generated")}
+                  className={`text-xs px-3 h-7 rounded-md transition-colors ${
+                    sshGuideTab === "generated"
+                      ? "bg-gray-900 text-white"
+                      : "bg-white border border-gray-200 text-gray-500 hover:border-gray-400"
+                  }`}
+                >
+                  발급받은 키로 접속
+                </button>
+              </div>
+
+              {sshGuideTab === "own" && (
+                <div className="space-y-4">
+                  <GuideStep num={1} title="공개키 확인">
+                    <CodeBlock id="own-pubkey" value="cat ~/.ssh/id_ed25519.pub" copiedKey={copiedKey} onCopy={setCopiedKey} />
+                    <p className="text-[11px] text-gray-400 mt-1.5">portal → SSH 키 → 키 등록 → <strong>직접 등록</strong> 탭에 붙여넣기</p>
+                  </GuideStep>
+                  <GuideStep num={2} title="~/.ssh/config 추가">
+                    <CodeBlock
+                      id="own-config"
+                      value={`Host ${vm.subdomain}
+    HostName ${vm.subdomain}.gamjabox.cloud
+    ProxyCommand cloudflared access ssh --hostname %h
+    User ubuntu
+    IdentityFile ~/.ssh/id_ed25519`}
+                      copiedKey={copiedKey}
+                      onCopy={setCopiedKey}
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1.5">Windows 경로: <code className="bg-gray-100 px-1 rounded">C:\Users\{"{사용자명}"}\.ssh\config</code></p>
+                  </GuideStep>
+                  <GuideStep num={3} title="접속">
+                    <CodeBlock id="own-connect" value={`ssh ${vm.subdomain}`} copiedKey={copiedKey} onCopy={setCopiedKey} />
+                    <p className="text-[11px] text-gray-400 mt-1.5">최초 접속 시 브라우저에서 Cloudflare 인증 → 등록된 이메일로 확인 후 자동 접속</p>
+                  </GuideStep>
+                </div>
+              )}
+
+              {sshGuideTab === "generated" && (
+                <div className="space-y-4">
+                  <GuideStep num={1} title="다운로드한 키 파일 준비">
+                    <div className="flex gap-1 mb-2">
+                      {(["mac", "win"] as const).map((os) => (
+                        <button
+                          key={os}
+                          onClick={() => setInstallTab(os)}
+                          className={`text-[11px] px-2.5 h-6 rounded transition-colors ${
+                            installTab === os
+                              ? "bg-gray-700 text-white"
+                              : "bg-white border border-gray-200 text-gray-500"
+                          }`}
+                        >
+                          {os === "mac" ? "macOS / Linux" : "Windows"}
+                        </button>
+                      ))}
+                    </div>
+                    {installTab !== "win" ? (
+                      <>
+                        <CodeBlock
+                          id="gen-move-mac"
+                          value={`mv ~/Downloads/{키이름}_id_ed25519.pem ~/.ssh/{키이름}_id_ed25519.pem\nchmod 600 ~/.ssh/{키이름}_id_ed25519.pem`}
+                          copiedKey={copiedKey}
+                          onCopy={setCopiedKey}
+                        />
+                        <p className="text-[11px] text-gray-400 mt-1.5"><code className="bg-gray-100 px-1 rounded">chmod 600</code> 필수 — 권한이 열려 있으면 SSH가 키 사용을 거부합니다</p>
+                      </>
+                    ) : (
+                      <>
+                        <CodeBlock
+                          id="gen-move-win"
+                          value={`Move-Item "$env:USERPROFILE\\Downloads\\{키이름}_id_ed25519.pem" "$env:USERPROFILE\\.ssh\\{키이름}_id_ed25519.pem"`}
+                          copiedKey={copiedKey}
+                          onCopy={setCopiedKey}
+                        />
+                        <p className="text-[11px] text-gray-400 mt-1.5">오류 시 파일 속성 → 상속 해제 후 본인 읽기 권한만 부여</p>
+                      </>
+                    )}
+                  </GuideStep>
+                  <GuideStep num={2} title="~/.ssh/config 추가">
+                    <CodeBlock
+                      id="gen-config"
+                      value={`Host ${vm.subdomain}
+    HostName ${vm.subdomain}.gamjabox.cloud
+    ProxyCommand cloudflared access ssh --hostname %h
+    User ubuntu
+    IdentityFile ~/.ssh/{키이름}_id_ed25519.pem`}
+                      copiedKey={copiedKey}
+                      onCopy={setCopiedKey}
+                    />
+                  </GuideStep>
+                  <GuideStep num={3} title="접속">
+                    <CodeBlock id="gen-connect" value={`ssh ${vm.subdomain}`} copiedKey={copiedKey} onCopy={setCopiedKey} />
+                  </GuideStep>
+                  <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5 text-[11px] text-amber-700">
+                    발급받은 개인키는 <strong>재다운로드 불가</strong>합니다. 분실 시 새 키를 발급받아 다시 등록해야 합니다.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 1회성 접속 */}
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">config 없이 1회성 접속</p>
+              <CodeBlock
+                id="oneliner"
+                value={`ssh -i ~/.ssh/{키파일}.pem -o ProxyCommand="cloudflared access ssh --hostname ${vm.subdomain}.gamjabox.cloud" ubuntu@${vm.subdomain}.gamjabox.cloud`}
+                copiedKey={copiedKey}
+                onCopy={setCopiedKey}
+              />
+            </div>
+
+            {/* FAQ */}
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">자주 발생하는 문제</p>
+              <div className="bg-white border border-gray-200 rounded-md divide-y divide-gray-100 text-xs">
+                {[
+                  ["Cloudflare 인증 페이지가 안 뜸", "cloudflared 미설치 또는 PATH 미등록", "cloudflared --version 으로 확인"],
+                  ["Permission denied (publickey)", "공개키 미등록 또는 다른 키 사용", "portal SSH 키 목록 및 IdentityFile 경로 재확인"],
+                  ["UNPROTECTED PRIVATE KEY FILE", "개인키 파일 권한 문제", "chmod 600 적용"],
+                  ["매번 인증 페이지가 뜸", "Cloudflare Access 세션 만료 (기본 24h)", "재인증 필요 — 정상 동작"],
+                  ["인증됐는데 접속 거부", "SSH 접근 허용 이메일 미등록", "인스턴스 상세 → SSH 허용 이메일 확인"],
+                ].map(([symptom, cause, fix]) => (
+                  <div key={symptom} className="px-3 py-2.5 grid grid-cols-3 gap-2">
+                    <span className="text-gray-700 font-medium">{symptom}</span>
+                    <span className="text-gray-400">{cause}</span>
+                    <span className="text-[#03C75A]">{fix}</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1.5">Windows (PowerShell)</p>
-              <div className="bg-white border border-gray-200 rounded-md px-3 py-2 font-mono text-xs text-gray-900 select-all">
-                cloudflared.exe access ssh --hostname {vm.subdomain}.gamjabox.cloud
-              </div>
-            </div>
+
           </div>
         )}
       </div>
