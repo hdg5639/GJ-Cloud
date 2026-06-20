@@ -78,6 +78,10 @@ async function request<T>(
     throw new Error(error.message ?? "요청에 실패했습니다");
   }
 
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
+
   const body: ApiResponse<T> = await res.json();
   return body.data;
 }
