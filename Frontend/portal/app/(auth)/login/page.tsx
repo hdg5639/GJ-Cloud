@@ -22,12 +22,12 @@ export default function LoginPage() {
       login(result.accessToken, { email });
       router.push("/instances");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "로그인에 실패했습니다";
-      if (msg.includes("이메일 인증") || msg.includes("EMAIL_NOT_VERIFIED")) {
+      const e = err as Error & { errorCode?: string };
+      if (e.errorCode === "EMAIL_NOT_VERIFIED") {
         router.push(`/verify?email=${encodeURIComponent(email)}`);
         return;
       }
-      setError(msg);
+      setError(e.message ?? "로그인에 실패했습니다");
     } finally {
       setLoading(false);
     }

@@ -74,8 +74,10 @@ async function request<T>(
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: "요청에 실패했습니다" }));
-    throw new Error(error.message ?? "요청에 실패했습니다");
+    const error = await res.json().catch(() => ({ message: "요청에 실패했습니다", errorCode: null }));
+    const err = new Error(error.message ?? "요청에 실패했습니다") as Error & { errorCode?: string };
+    err.errorCode = error.errorCode ?? undefined;
+    throw err;
   }
 
   if (res.status === 204 || res.headers.get("content-length") === "0") {
