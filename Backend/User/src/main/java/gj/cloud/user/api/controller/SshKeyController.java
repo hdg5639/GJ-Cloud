@@ -1,6 +1,8 @@
 package gj.cloud.user.api.controller;
 
 import gj.cloud.user.api.controller.spec.SshKeyApi;
+import gj.cloud.user.application.sshkey.dto.SshKeyGenerateRequest;
+import gj.cloud.user.application.sshkey.dto.SshKeyGenerateResponse;
 import gj.cloud.user.application.sshkey.dto.SshKeyRegisterRequest;
 import gj.cloud.user.application.sshkey.dto.SshKeyResponse;
 import gj.cloud.user.application.sshkey.service.SshKeyService;
@@ -29,6 +31,14 @@ public class SshKeyController implements SshKeyApi {
             SshKeyRegisterRequest request
     ) {
         return ApiResponse.ok(sshKeyService.registerKey(principal.userId(), request));
+    }
+
+    @Override
+    public ApiResponse<SshKeyGenerateResponse> generateKey(
+            @AuthenticationPrincipal UserPrincipal principal,
+            SshKeyGenerateRequest request
+    ) {
+        return ApiResponse.ok(sshKeyService.generateKey(principal.userId(), request));
     }
 
     @Override

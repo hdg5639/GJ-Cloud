@@ -14,7 +14,8 @@ public enum UserErrorCode {
     INVALID_SSH_KEY_FORMAT(HttpStatus.BAD_REQUEST, "유효하지 않은 SSH 키 형식입니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
-    INVALID_AUDIENCE(HttpStatus.UNAUTHORIZED, "이 서비스에 유효하지 않은 토큰입니다.");
+    INVALID_AUDIENCE(HttpStatus.UNAUTHORIZED, "이 서비스에 유효하지 않은 토큰입니다."),
+    KEY_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "SSH 키 생성에 실패했습니다.");
 
     private final HttpStatus status;
     private final String message;
