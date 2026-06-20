@@ -16,7 +16,7 @@ public class CorsConfig {
 
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
-    @Profile("local")
+    @Profile("dev")
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(

@@ -13,7 +13,7 @@ import java.util.List;
 public class CorsConfig {
 
     @Bean
-    @Profile("local")
+    @Profile("dev")
     public CorsConfigurationSource localCorsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
@@ -30,7 +30,7 @@ public class CorsConfig {
     }
 
     @Bean
-    @Profile("!local")
+    @Profile("!dev")
     public CorsConfigurationSource noopCorsConfigurationSource() {
         // prod에서는 Caddy가 CORS 처리 — 백엔드는 헤더 추가 안 함
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
