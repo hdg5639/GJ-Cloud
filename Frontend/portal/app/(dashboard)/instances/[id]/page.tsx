@@ -30,7 +30,7 @@ function CodeBlock({
       <pre className="font-mono text-xs text-gray-100 whitespace-pre-wrap break-all">{value}</pre>
       <button
         onClick={handleCopy}
-        className="absolute right-2.5 top-2 text-[11px] text-gray-400 hover:text-white transition-colors"
+        className="absolute right-2.5 top-2 text-[11px] text-gray-300 hover:text-white transition-colors"
       >
         {isCopied ? "복사됨" : "복사"}
       </button>
@@ -41,11 +41,11 @@ function CodeBlock({
 function GuideStep({ num, title, children }: { num: number; title: string; children: ReactNode }) {
   return (
     <div className="flex gap-3">
-      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-200 text-gray-600 text-[11px] font-semibold flex items-center justify-center mt-0.5">
+      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-700 text-white text-[11px] font-semibold flex items-center justify-center mt-0.5">
         {num}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-700 mb-1.5">{title}</p>
+        <p className="text-xs font-medium text-gray-800 mb-1.5">{title}</p>
         {children}
       </div>
     </div>
@@ -356,7 +356,7 @@ export default function InstanceDetailPage() {
 
             {/* Step 1 — cloudflared 설치 */}
             <div>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 1 — cloudflared 설치</p>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-3">Step 1 — cloudflared 설치</p>
               <div className="flex gap-1 mb-2">
                 {(["mac", "win", "linux"] as const).map((os) => (
                   <button
@@ -389,12 +389,12 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   onCopy={setCopiedKey}
                 />
               )}
-              <p className="text-[11px] text-gray-400 mt-2">설치 확인: <code className="bg-gray-100 px-1 rounded">cloudflared --version</code></p>
+              <p className="text-[11px] text-gray-600 mt-2">설치 확인: <code className="bg-gray-200 text-gray-700 px-1 rounded">cloudflared --version</code></p>
             </div>
 
             {/* Step 2 — SSH 접속 */}
             <div>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Step 2 — SSH 접속</p>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-3">Step 2 — SSH 접속</p>
               <div className="flex gap-1 mb-4">
                 <button
                   onClick={() => setSshGuideTab("own")}
@@ -422,7 +422,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 <div className="space-y-4">
                   <GuideStep num={1} title="공개키 확인">
                     <CodeBlock id="own-pubkey" value="cat ~/.ssh/id_ed25519.pub" copiedKey={copiedKey} onCopy={setCopiedKey} />
-                    <p className="text-[11px] text-gray-400 mt-1.5">portal → SSH 키 → 키 등록 → <strong>직접 등록</strong> 탭에 붙여넣기</p>
+                    <p className="text-[11px] text-gray-600 mt-1.5">portal → SSH 키 → 키 등록 → <strong>직접 등록</strong> 탭에 붙여넣기</p>
                   </GuideStep>
                   <GuideStep num={2} title="~/.ssh/config 추가">
                     <CodeBlock
@@ -435,11 +435,11 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                       copiedKey={copiedKey}
                       onCopy={setCopiedKey}
                     />
-                    <p className="text-[11px] text-gray-400 mt-1.5">Windows 경로: <code className="bg-gray-100 px-1 rounded">C:\Users\{"{사용자명}"}\.ssh\config</code></p>
+                    <p className="text-[11px] text-gray-600 mt-1.5">Windows 경로: <code className="bg-gray-200 text-gray-700 px-1 rounded">C:\Users\{"{사용자명}"}\.ssh\config</code></p>
                   </GuideStep>
                   <GuideStep num={3} title="접속">
                     <CodeBlock id="own-connect" value={`ssh ${vm.subdomain}`} copiedKey={copiedKey} onCopy={setCopiedKey} />
-                    <p className="text-[11px] text-gray-400 mt-1.5">최초 접속 시 브라우저에서 Cloudflare 인증 → 등록된 이메일로 확인 후 자동 접속</p>
+                    <p className="text-[11px] text-gray-600 mt-1.5">최초 접속 시 브라우저에서 Cloudflare 인증 → 등록된 이메일로 확인 후 자동 접속</p>
                   </GuideStep>
                 </div>
               )}
@@ -470,7 +470,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                           copiedKey={copiedKey}
                           onCopy={setCopiedKey}
                         />
-                        <p className="text-[11px] text-gray-400 mt-1.5"><code className="bg-gray-100 px-1 rounded">chmod 600</code> 필수 — 권한이 열려 있으면 SSH가 키 사용을 거부합니다</p>
+                        <p className="text-[11px] text-gray-600 mt-1.5"><code className="bg-gray-200 text-gray-700 px-1 rounded">chmod 600</code> 필수 — 권한이 열려 있으면 SSH가 키 사용을 거부합니다</p>
                       </>
                     ) : (
                       <>
@@ -480,7 +480,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                           copiedKey={copiedKey}
                           onCopy={setCopiedKey}
                         />
-                        <p className="text-[11px] text-gray-400 mt-1.5">오류 시 파일 속성 → 상속 해제 후 본인 읽기 권한만 부여</p>
+                        <p className="text-[11px] text-gray-600 mt-1.5">오류 시 파일 속성 → 상속 해제 후 본인 읽기 권한만 부여</p>
                       </>
                     )}
                   </GuideStep>
@@ -508,7 +508,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
             {/* 1회성 접속 */}
             <div>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">config 없이 1회성 접속</p>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">config 없이 1회성 접속</p>
               <CodeBlock
                 id="oneliner"
                 value={`ssh -i ~/.ssh/{키파일}.pem -o ProxyCommand="cloudflared access ssh --hostname ${vm.subdomain}.gamjabox.cloud" ubuntu@${vm.subdomain}.gamjabox.cloud`}
@@ -519,7 +519,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
             {/* FAQ */}
             <div>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">자주 발생하는 문제</p>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">자주 발생하는 문제</p>
               <div className="bg-white border border-gray-200 rounded-md divide-y divide-gray-100 text-xs">
                 {[
                   ["Cloudflare 인증 페이지가 안 뜸", "cloudflared 미설치 또는 PATH 미등록", "cloudflared --version 으로 확인"],
@@ -529,9 +529,9 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   ["인증됐는데 접속 거부", "SSH 접근 허용 이메일 미등록", "인스턴스 상세 → SSH 허용 이메일 확인"],
                 ].map(([symptom, cause, fix]) => (
                   <div key={symptom} className="px-3 py-2.5 grid grid-cols-3 gap-2">
-                    <span className="text-gray-700 font-medium">{symptom}</span>
-                    <span className="text-gray-400">{cause}</span>
-                    <span className="text-[#03C75A]">{fix}</span>
+                    <span className="text-gray-800 font-medium">{symptom}</span>
+                    <span className="text-gray-500">{cause}</span>
+                    <span className="text-[#03C75A] font-medium">{fix}</span>
                   </div>
                 ))}
               </div>
