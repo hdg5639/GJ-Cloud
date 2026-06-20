@@ -26,13 +26,17 @@ function CodeBlock({
     setTimeout(() => onCopy(null), 1500);
   }
   return (
-    <div className="relative group bg-gray-900 rounded-md px-3 py-2.5 pr-16 overflow-x-auto">
-      <pre className="font-mono text-xs text-gray-100 whitespace-pre-wrap break-all">{value}</pre>
+    <div className="relative group bg-slate-50 border border-slate-200 rounded-lg px-3 py-3 pr-20 overflow-x-auto">
+      <pre className="font-mono text-xs text-slate-800 whitespace-pre-wrap break-all leading-relaxed">{value}</pre>
       <button
         onClick={handleCopy}
-        className="absolute right-2.5 top-2 text-[11px] text-gray-300 hover:text-white transition-colors"
+        className={`absolute right-2 top-2 text-[11px] font-medium px-2 py-1 rounded transition-all ${
+          isCopied
+            ? "bg-[#03C75A]/10 text-[#03C75A]"
+            : "text-slate-400 hover:text-slate-700 hover:bg-slate-200"
+        }`}
       >
-        {isCopied ? "복사됨" : "복사"}
+        {isCopied ? "✓ 복사됨" : "복사"}
       </button>
     </div>
   );
@@ -348,10 +352,14 @@ export default function InstanceDetailPage() {
 
         <button
           onClick={() => setAccordionOpen(!accordionOpen)}
-          className="flex items-center justify-between w-full pt-3 border-t border-gray-200"
+          className={`flex items-center justify-between w-full mt-1 px-3 py-2.5 rounded-lg border transition-colors ${
+            accordionOpen
+              ? "bg-gray-900 border-gray-900 text-white"
+              : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+          }`}
         >
-          <span className="text-sm font-medium text-gray-900">접속 방법 보기 (Mac / Linux / Windows)</span>
-          <span className={`text-gray-400 transition-transform duration-200 ${accordionOpen ? "rotate-180" : ""}`}>▾</span>
+          <span className="text-sm font-medium">🔌 SSH 접속 방법 보기</span>
+          <span className={`text-xs transition-transform duration-200 ${accordionOpen ? "rotate-180" : ""}`}>▾</span>
         </button>
 
         {accordionOpen && (
@@ -427,7 +435,14 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                     <CodeBlock id="own-pubkey" value="cat ~/.ssh/id_ed25519.pub" copiedKey={copiedKey} onCopy={setCopiedKey} />
                     <p className="text-[11px] text-gray-600 mt-1.5">portal → SSH 키 → 키 등록 → <strong>직접 등록</strong> 탭에 붙여넣기</p>
                   </GuideStep>
-                  <GuideStep num={2} title="~/.ssh/config 추가">
+                  <GuideStep num={2} title="~/.ssh/config 파일에 아래 내용 추가">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+                      <span>파일 경로:</span>
+                      <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono">~/.ssh/config</code>
+                      <span className="text-slate-400">·</span>
+                      <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono">C:\Users\{"{사용자명}"}\.ssh\config</code>
+                      <span className="text-slate-400">(Windows)</span>
+                    </div>
                     <CodeBlock
                       id="own-config"
                       value={`Host ${vm.subdomain}
@@ -438,7 +453,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                       copiedKey={copiedKey}
                       onCopy={setCopiedKey}
                     />
-                    <p className="text-[11px] text-gray-600 mt-1.5">Windows 경로: <code className="bg-gray-200 text-gray-700 px-1 rounded">C:\Users\{"{사용자명}"}\.ssh\config</code></p>
+                    <p className="text-[11px] text-slate-500 mt-1.5">파일이 없으면 새로 만들면 됩니다. 들여쓰기는 반드시 <strong>스페이스 4칸</strong>.</p>
                   </GuideStep>
                   <GuideStep num={3} title="접속">
                     <CodeBlock id="own-connect" value={`ssh ${vm.subdomain}`} copiedKey={copiedKey} onCopy={setCopiedKey} />
@@ -487,7 +502,14 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                       </>
                     )}
                   </GuideStep>
-                  <GuideStep num={2} title="~/.ssh/config 추가">
+                  <GuideStep num={2} title="~/.ssh/config 파일에 아래 내용 추가">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+                      <span>파일 경로:</span>
+                      <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono">~/.ssh/config</code>
+                      <span className="text-slate-400">·</span>
+                      <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono">C:\Users\{"{사용자명}"}\.ssh\config</code>
+                      <span className="text-slate-400">(Windows)</span>
+                    </div>
                     <CodeBlock
                       id="gen-config"
                       value={`Host ${vm.subdomain}
@@ -498,6 +520,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                       copiedKey={copiedKey}
                       onCopy={setCopiedKey}
                     />
+                    <p className="text-[11px] text-slate-500 mt-1.5">파일이 없으면 새로 만들면 됩니다. 들여쓰기는 반드시 <strong>스페이스 4칸</strong>.</p>
                   </GuideStep>
                   <GuideStep num={3} title="접속">
                     <CodeBlock id="gen-connect" value={`ssh ${vm.subdomain}`} copiedKey={copiedKey} onCopy={setCopiedKey} />
