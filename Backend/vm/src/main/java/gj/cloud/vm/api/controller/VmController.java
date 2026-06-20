@@ -1,5 +1,6 @@
 package gj.cloud.vm.api.controller;
 
+import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
 import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
@@ -87,6 +88,14 @@ public class VmController {
     ) {
         return vmService.changePower(principal.userId(), vmId, request)
                 .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "VM 슬롯 가용성 조회", description = "플랜별 전체 슬롯 중 사용 중인 수를 조회합니다.")
+    @GetMapping("/availability")
+    public Mono<ApiResponse<VmAvailabilityResponse>> getAvailability(
+            @AuthenticationPrincipal VmPrincipal principal
+    ) {
+        return vmService.getAvailability().map(ApiResponse::ok);
     }
 
     @Operation(summary = "VM 플랜 변경", description = "플랜(FREE↔PRO) 및 디스크 크기 변경. 디스크 축소 불가.")

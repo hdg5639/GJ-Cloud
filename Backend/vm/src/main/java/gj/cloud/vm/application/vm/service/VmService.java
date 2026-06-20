@@ -1,5 +1,6 @@
 package gj.cloud.vm.application.vm.service;
 
+import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
 import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
@@ -17,4 +18,5 @@ public interface VmService {
     Mono<Void> deleteVm(String userId, UUID vmId);
     Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request);
     Mono<VmResponse> updatePlan(String userId, UUID vmId, VmPlanUpdateRequest request);
+    Mono<VmAvailabilityResponse> getAvailability();
 }

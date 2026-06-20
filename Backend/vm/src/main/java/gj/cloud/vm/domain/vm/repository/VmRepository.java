@@ -21,4 +21,10 @@ public interface VmRepository extends ReactiveCrudRepository<VmEntity, UUID> {
 
     @Query("SELECT internal_ip FROM vms WHERE status NOT IN ('DELETED', 'FAILED') AND internal_ip IS NOT NULL")
     Flux<String> findAllActiveInternalIps();
+
+    @Query("SELECT COUNT(*) FROM vms WHERE status NOT IN ('DELETED', 'FAILED') AND plan_type = 'FREE'")
+    Mono<Long> countActiveByPlanTypeFree();
+
+    @Query("SELECT COUNT(*) FROM vms WHERE status NOT IN ('DELETED', 'FAILED') AND plan_type = 'PRO'")
+    Mono<Long> countActiveByPlanTypePro();
 }

@@ -1,6 +1,8 @@
 package gj.cloud.vm.application.vm.service.impl;
 
 import gj.cloud.vm.application.ssh.client.UserServiceClient;
+import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
+import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse.PlanAvailability;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
 import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
@@ -331,5 +333,23 @@ public class VmServiceImpl implements VmService {
                     }
                     throw new VmException(VmErrorCode.IP_POOL_EXHAUSTED);
                 });
+    }
+
+    @Override
+    public Mono<VmAvailabilityResponse> getAvailability() {
+        int freeTotal = PlanType.FREE.getIpPool().size();
+        int proTotal = PlanType.PRO.getIpPool().size();
+
+        return Mono.zip(
+                vmRepository.countActiveByPlanTypeFree(),
+                vmRepository.countActiveByPlanTypePro()
+        ).map(tuple -> {
+            int freeUsed = tuple.getT1().intValue();
+            int proUsed = tuple.getT2().intValue();
+            return new VmAvailabilityResponse(
+                    new PlanAvailability(freeUsed, freeTotal, freeUsed >= freeTotal),
+                    new PlanAvailability(proUsed, proTotal, proUsed >= proTotal)
+            );
+        });
     }
 }
