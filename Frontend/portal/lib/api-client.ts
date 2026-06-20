@@ -5,6 +5,7 @@ import type {
   SshKeyResponse,
   SshKeyGenerateResponse,
   ProfileResponse,
+  UsageResponse,
 } from "./types";
 
 const API_BASE = {
@@ -13,7 +14,6 @@ const API_BASE = {
   vm: process.env.NEXT_PUBLIC_VM_API!,
 };
 
-// service → targetService 이름 매핑
 const SERVICE_AUDIENCE: Partial<Record<keyof typeof API_BASE, string>> = {
   user: "user-service",
   vm: "vm-service",
@@ -25,7 +25,6 @@ interface ApiResponse<T> {
   message: string | null;
 }
 
-// accessToken + targetService 조합으로 캐싱 (access token이 바뀌면 자연히 무효화)
 const exchangeCache = new Map<string, string>();
 
 export async function getExchangedToken(accessToken: string, targetService: string): Promise<string> {
@@ -108,6 +107,8 @@ export const api = {
       }),
     logout: (accessToken: string) =>
       request<void>("auth", "/auth/logout", { method: "POST", accessToken }),
+    withdraw: (accessToken: string) =>
+      request<void>("auth", "/auth/withdraw", { method: "DELETE", accessToken }),
   },
   vm: {
     list: (accessToken: string) =>
@@ -122,8 +123,8 @@ export const api = {
       }),
     delete: (accessToken: string, id: string) =>
       request<void>("vm", `/vms/${id}`, { method: "DELETE", accessToken }),
-    power: (accessToken: string, id: string, action: string) =>
-      request<void>("vm", `/vms/${id}/power`, {
+    power: (accessToken: string, id: string, action: "START" | "STOP" | "REBOOT" | "SUSPEND") =>
+      request<VmResponse>("vm", `/vms/${id}/power`, {
         method: "PATCH",
         body: JSON.stringify({ action }),
         accessToken,
@@ -141,7 +142,7 @@ export const api = {
         accessToken,
       }),
     getSshAccess: (accessToken: string, id: string) =>
-      request<{ emails: string[] }>("vm", `/vms/${id}/ssh-access`, { accessToken }),
+      request<string[]>("vm", `/vms/${id}/ssh-access`, { accessToken }),
     addSshAccess: (accessToken: string, id: string, email: string) =>
       request<void>("vm", `/vms/${id}/ssh-access`, {
         method: "POST",
@@ -163,10 +164,29 @@ export const api = {
       }),
     deletePort: (accessToken: string, id: string, portId: string) =>
       request<void>("vm", `/vms/${id}/ports/${portId}`, { method: "DELETE", accessToken }),
+    addPortAccess: (accessToken: string, vmId: string, portId: string, email: string) =>
+      request<PortResponse>("vm", `/vms/${vmId}/ports/${portId}/access`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+        accessToken,
+      }),
+    removePortAccess: (accessToken: string, vmId: string, portId: string, email: string) =>
+      request<PortResponse>("vm", `/vms/${vmId}/ports/${portId}/access/${encodeURIComponent(email)}`, {
+        method: "DELETE",
+        accessToken,
+      }),
   },
   user: {
     profile: (accessToken: string) =>
       request<ProfileResponse>("user", "/users/profile", { accessToken }),
+    updateProfile: (accessToken: string, body: { nickname?: string; profileImageUrl?: string }) =>
+      request<ProfileResponse>("user", "/users/profile", {
+        method: "PATCH",
+        body: JSON.stringify(body),
+        accessToken,
+      }),
+    usage: (accessToken: string) =>
+      request<UsageResponse>("user", "/users/usage", { accessToken }),
     sshKeys: (accessToken: string) =>
       request<SshKeyResponse[]>("user", "/users/ssh-keys", { accessToken }),
     registerSshKey: (accessToken: string, body: { publicKey: string; name: string }) =>
@@ -191,6 +211,7 @@ export interface PortResponse {
   port: number;
   protocol: string;
   visibility: string;
+  nickname: string;
   subdomain: string;
   fullDomain: string;
   accessEmails: string[];
@@ -201,5 +222,6 @@ export interface PortAddRequest {
   port: number;
   protocol: "HTTP" | "TCP";
   visibility: "PUBLIC" | "PRIVATE";
+  nickname: string;
   initialEmails?: string[];
 }
