@@ -45,7 +45,7 @@ export default function InstancesPage() {
     );
   }, []);
 
-  useVmEvents(accessToken ?? "", handleVmEvent);
+  useVmEvents(accessToken ?? "", handleVmEvent, vms.length > 0);
 
   const runningCount = vms.filter((v) => v.status === "RUNNING").length;
   const freeCount = vms.filter((v) => v.planType === "FREE" && v.status !== "DELETED").length;

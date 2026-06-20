@@ -4,18 +4,22 @@ import { useEffect, useRef } from "react";
 import type { VmStatusEvent } from "@/lib/types";
 import { getExchangedToken } from "@/lib/api-client";
 
+const MAX_RETRIES = 5;
+
 export function useVmEvents(
   accessToken: string,
-  onEvent: (event: VmStatusEvent) => void
+  onEvent: (event: VmStatusEvent) => void,
+  enabled = true
 ) {
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!accessToken || !enabled) return;
 
     let es: EventSource | null = null;
     let closed = false;
+    let retries = 0;
 
     function connect() {
       if (closed) return;
@@ -28,19 +32,22 @@ export function useVmEvents(
           es = new EventSource(url);
 
           es.addEventListener("VM_STATUS_CHANGED", (e) => {
+            retries = 0;
             onEventRef.current(JSON.parse((e as MessageEvent).data));
           });
 
           es.onerror = () => {
             es?.close();
             es = null;
-            if (!closed) {
+            if (!closed && retries < MAX_RETRIES) {
+              retries++;
               setTimeout(connect, 5000);
             }
           };
         })
         .catch(() => {
-          if (!closed) {
+          if (!closed && retries < MAX_RETRIES) {
+            retries++;
             setTimeout(connect, 5000);
           }
         });
@@ -52,5 +59,5 @@ export function useVmEvents(
       closed = true;
       es?.close();
     };
-  }, [accessToken]);
+  }, [accessToken, enabled]);
 }
