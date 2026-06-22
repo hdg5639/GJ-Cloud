@@ -45,6 +45,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokenRefresher(refreshAccessToken);
   }, []);
 
+  function redirectToLogin() {
+    const authPaths = ["/login", "/register", "/verify"];
+    if (typeof window !== "undefined" && !authPaths.some(p => window.location.pathname.startsWith(p))) {
+      window.location.href = "/login";
+    }
+  }
+
   async function refreshAccessToken(): Promise<string | null> {
     // 이미 진행 중이면 같은 Promise 반환 (중복 요청 방지)
     if (pendingRefreshRef.current) return pendingRefreshRef.current;
@@ -71,11 +78,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setAccessToken(null);
           setUser(null);
+          redirectToLogin();
           return null;
         }
       } catch {
         setAccessToken(null);
         setUser(null);
+        redirectToLogin();
         return null;
       } finally {
         isRefreshingRef.current = false;
