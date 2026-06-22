@@ -118,12 +118,20 @@ async function request<T>(
   });
   console.debug(`[api] ${service} ${options.method ?? "GET"} ${path} → ${res.status}`);
 
-  // 401 → refresh → 1회 재시도 (auth 서비스 자체는 제외 — 로그인 실패가 401이므로)
-  if (res.status === 401 && !_retry && tokenRefresher && service !== "auth") {
+  // 401 처리 (auth 서비스 자체는 제외 — 로그인 실패가 401이므로)
+  if (res.status === 401 && !_retry && service !== "auth") {
     if (accessToken) invalidateExchangeCache(accessToken);
-    const newToken = await tokenRefresher();
-    if (newToken) {
-      return request<T>(service, path, { ...options, accessToken: newToken }, true);
+    // 1단계: 교환 토큰만 새로 받아서 재시도
+    try {
+      return await request<T>(service, path, options, true);
+    } catch {
+      // 2단계: 액세스 토큰 자체가 만료된 경우 → 리프레시 후 재시도
+      if (tokenRefresher) {
+        const newToken = await tokenRefresher();
+        if (newToken) {
+          return request<T>(service, path, { ...options, accessToken: newToken }, true);
+        }
+      }
     }
   }
 
