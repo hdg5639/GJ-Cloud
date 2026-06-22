@@ -92,7 +92,7 @@ export default function CreateInstancePage() {
                   } ${full ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {selected && (
-                    <span className="absolute -top-2.5 left-3 z-10 bg-[#03C75A]/10 text-[#03C75A] text-[11px] font-medium px-2 py-0.5 rounded-md">
+                    <span className="absolute -top-2.5 left-3 z-10 bg-[#e6faf0] text-[#03C75A] text-[11px] font-medium px-2 py-0.5 rounded-md">
                       선택됨
                     </span>
                   )}
