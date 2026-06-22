@@ -14,6 +14,7 @@ export type VmStatus =
 
 export interface VmResponse {
   id: string;
+  userId: string;
   name: string;
   planType: "FREE" | "PRO";
   status: VmStatus;
