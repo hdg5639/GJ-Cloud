@@ -12,10 +12,16 @@ import gj.cloud.auth.domain.user.repository.UserRepository;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClient;
 
+import java.util.Map;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
@@ -23,6 +29,13 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
+    private final RestClient restClient;
+
+    @Value("${app.email-verification.enabled:true}")
+    private boolean emailVerificationEnabled;
+
+    @Value("${app.services.user-service-url:http://user:8080}")
+    private String userServiceUrl;
 
     @Override
     @Transactional
@@ -31,7 +44,13 @@ public class AuthServiceImpl implements AuthService {
             throw new AuthException(AuthErrorCode.EMAIL_ALREADY_EXISTS);
         }
         UserEntity user = UserEntity.create(request.email(), passwordEncoder.encode(request.password()));
+        if (!emailVerificationEnabled) {
+            user.activate();
+        }
         userRepository.save(user);
+        if (!emailVerificationEnabled) {
+            createUserProfile(user.getId(), user.getEmail());
+        }
     }
 
     @Override
@@ -71,5 +90,18 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
         user.softDelete();
         logout(userId);
+    }
+
+    private void createUserProfile(String userId, String email) {
+        try {
+            restClient.post()
+                    .uri(userServiceUrl + "/internal/profiles")
+                    .header("Content-Type", "application/json")
+                    .body(Map.of("userId", userId, "email", email))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.warn("User 서비스 프로필 생성 실패 (userId={}): {}", userId, e.getMessage());
+        }
     }
 }

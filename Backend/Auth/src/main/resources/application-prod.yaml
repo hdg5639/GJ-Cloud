@@ -34,6 +34,12 @@ jwt:
   refresh-token-expiry: 604800000
   exchange-token-expiry: 900000
 
+app:
+  email-verification:
+    enabled: ${EMAIL_VERIFICATION_ENABLED:true}
+  services:
+    user-service-url: ${USER_SERVICE_URL:http://user:8080}
+
 server:
   port: 8080
 
