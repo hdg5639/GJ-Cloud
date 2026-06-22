@@ -1,0 +1,16 @@
+name: Deploy portal to ops-01
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'Frontend/portal/**'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          docker compose down portal --rmi local
+          docker compose up portal -d --build
