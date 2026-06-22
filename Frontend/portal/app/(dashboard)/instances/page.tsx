@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import { useVmEvents } from "@/hooks/use-vm-events";
-import type { VmResponse, VmStatusEvent } from "@/lib/types";
+import type { VmResponse, VmStatusEvent, UsageResponse } from "@/lib/types";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-700",
@@ -25,12 +25,16 @@ const STATUS_STYLE: Record<string, string> = {
 export default function InstancesPage() {
   const { accessToken, refresh } = useAuth();
   const [vms, setVms] = useState<VmResponse[]>([]);
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!accessToken) return;
-    api.vm.list(accessToken)
-      .then(setVms)
+    Promise.all([
+      api.vm.list(accessToken),
+      api.user.usage(accessToken),
+    ])
+      .then(([vmData, usageData]) => { setVms(vmData); setUsage(usageData); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [accessToken]);
@@ -74,17 +78,17 @@ export default function InstancesPage() {
           <p className="text-xs text-gray-500 mb-1">내 FREE 인스턴스</p>
           <p className="text-2xl font-medium text-gray-900">
             {freeCount}
-            <span className="text-base text-gray-400"> / 3</span>
+            <span className="text-base text-gray-400"> / {usage?.maxFreeVmCount ?? "-"}</span>
           </p>
-          <p className="text-[11px] text-gray-400 mt-0.5">최대 3대</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">최대 {usage?.maxFreeVmCount ?? "-"}대</p>
         </div>
         <div className="bg-gray-50 rounded-md p-4">
           <p className="text-xs text-gray-500 mb-1">내 PRO 인스턴스</p>
           <p className="text-2xl font-medium text-gray-900">
             {proCount}
-            <span className="text-base text-gray-400"> / 10</span>
+            <span className="text-base text-gray-400"> / {usage?.maxProVmCount ?? "-"}</span>
           </p>
-          <p className="text-[11px] text-gray-400 mt-0.5">최대 10대</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">최대 {usage?.maxProVmCount ?? "-"}대</p>
         </div>
       </div>
 
