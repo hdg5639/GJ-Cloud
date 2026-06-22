@@ -1,0 +1,16 @@
+name: Deploy Vm to ops-01
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'Backend/vm/**'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          docker compose down vm --rmi local
+          docker compose up vm -d --build
