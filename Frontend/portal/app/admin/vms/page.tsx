@@ -23,8 +23,8 @@ export default function AdminVmsPage() {
   useEffect(() => {
     if (!accessToken) return;
     api.admin.vms.list(accessToken)
-      .then(setVms)
-      .catch(() => {})
+      .then((data) => { console.log("[admin/vms] data:", data); setVms(data); })
+      .catch((err) => console.error("[admin/vms] error:", err))
       .finally(() => setLoading(false));
   }, [accessToken]);
 

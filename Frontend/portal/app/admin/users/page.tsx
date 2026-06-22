@@ -14,8 +14,8 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (!accessToken) return;
     api.admin.users.list(accessToken)
-      .then(setUsers)
-      .catch(() => {})
+      .then((data) => { console.log("[admin/users] data:", data); setUsers(data); })
+      .catch((err) => console.error("[admin/users] error:", err))
       .finally(() => setLoading(false));
   }, [accessToken]);
 
