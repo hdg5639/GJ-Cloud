@@ -275,21 +275,21 @@ export const api = {
   admin: {
     users: {
       list: (accessToken: string) =>
-        request<AdminUserResponse[]>("adminUser", "/users", { accessToken }),
+        request<AdminUserResponse[]>("adminUser", "/admin/users", { accessToken }),
       get: (accessToken: string, userId: string) =>
-        request<AdminUserResponse>("adminUser", `/users/${userId}`, { accessToken }),
+        request<AdminUserResponse>("adminUser", `/admin/users/${userId}`, { accessToken }),
       suspend: (accessToken: string, userId: string) =>
-        request<AdminUserResponse>("adminUser", `/users/${userId}/suspend`, { method: "PATCH", accessToken }),
+        request<AdminUserResponse>("adminUser", `/admin/users/${userId}/suspend`, { method: "PATCH", accessToken }),
       activate: (accessToken: string, userId: string) =>
-        request<AdminUserResponse>("adminUser", `/users/${userId}/activate`, { method: "PATCH", accessToken }),
+        request<AdminUserResponse>("adminUser", `/admin/users/${userId}/activate`, { method: "PATCH", accessToken }),
     },
     vms: {
       list: (accessToken: string) =>
-        request<AdminVmResponse[]>("adminVm", "/vms", { accessToken }),
+        request<AdminVmResponse[]>("adminVm", "/admin/vms", { accessToken }),
       get: (accessToken: string, vmId: string) =>
-        request<AdminVmResponse>("adminVm", `/vms/${vmId}`, { accessToken }),
+        request<AdminVmResponse>("adminVm", `/admin/vms/${vmId}`, { accessToken }),
       forceDelete: (accessToken: string, vmId: string) =>
-        request<void>("adminVm", `/vms/${vmId}/force`, { method: "DELETE", accessToken }),
+        request<void>("adminVm", `/admin/vms/${vmId}/force`, { method: "DELETE", accessToken }),
     },
   },
 };
