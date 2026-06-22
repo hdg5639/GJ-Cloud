@@ -76,6 +76,7 @@ export interface AdminUserResponse {
 
 export interface AdminVmResponse {
   id: string;
+  userId: string;
   name: string;
   planType: string;
   status: string;

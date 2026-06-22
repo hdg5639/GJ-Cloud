@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { AdminVmResponse } from "@/lib/types";
+import type { AdminVmResponse, AdminUserResponse } from "@/lib/types";
 
 const STATUS_COLOR: Record<string, string> = {
   RUNNING: "bg-green-900 text-green-400",
@@ -16,14 +16,21 @@ const STATUS_COLOR: Record<string, string> = {
 export default function AdminVmsPage() {
   const { accessToken } = useAuth();
   const [vms, setVms] = useState<AdminVmResponse[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<AdminVmResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
-    api.admin.vms.list(accessToken)
-      .then((data) => { console.log("[admin/vms] data:", data); setVms(data); })
+    Promise.all([
+      api.admin.vms.list(accessToken),
+      api.admin.users.list(accessToken),
+    ])
+      .then(([vmData, userData]) => {
+        setVms(vmData);
+        setUserMap(Object.fromEntries(userData.map((u: AdminUserResponse) => [u.userId, u.email])));
+      })
       .catch((err) => console.error("[admin/vms] error:", err))
       .finally(() => setLoading(false));
   }, [accessToken]);
@@ -56,6 +63,7 @@ export default function AdminVmsPage() {
             <thead>
               <tr className="border-b border-gray-800">
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">이름</th>
+                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">소유자</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">플랜</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">상태</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">IP</th>
@@ -72,6 +80,9 @@ export default function AdminVmsPage() {
                     {vm.subdomain && (
                       <p className="text-xs text-gray-500">{vm.subdomain}</p>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">
+                    {userMap[vm.userId] ?? vm.userId.slice(0, 8) + "…"}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${

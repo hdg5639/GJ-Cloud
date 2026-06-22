@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 
 public record VmResponse(
         String id,
+        String userId,
         String name,
         String planType,
         String status,
@@ -23,6 +24,7 @@ public record VmResponse(
     public static VmResponse from(VmEntity entity, Boolean needsReboot) {
         return new VmResponse(
                 entity.getId().toString(),
+                entity.getUserId(),
                 entity.getName(),
                 entity.getPlanType().name(),
                 entity.getStatus().name(),
