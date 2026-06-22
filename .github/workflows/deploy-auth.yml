@@ -1,0 +1,17 @@
+name: Deploy Auth to ops-01
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'Backend/Auth/**'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          docker compose down auth --rmi local
+          docker compose build
+          docker compose up -d
