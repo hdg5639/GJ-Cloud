@@ -69,6 +69,10 @@ export interface UsageResponse {
   planType: string;
   vCpuLimit: number;
   ramGbLimit: number;
-  currentVmCount: number;
-  maxVmCount: number;
+  myFreeCount: number;
+  maxFreeVmCount: number;
+  myProCount: number;
+  maxProVmCount: number;
+  systemFreeCount: number;
+  systemProCount: number;
 }

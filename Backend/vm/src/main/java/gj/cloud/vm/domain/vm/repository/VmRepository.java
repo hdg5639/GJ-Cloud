@@ -27,4 +27,10 @@ public interface VmRepository extends ReactiveCrudRepository<VmEntity, UUID> {
 
     @Query("SELECT COUNT(*) FROM vms WHERE status NOT IN ('DELETED', 'FAILED') AND plan_type = 'PRO'")
     Mono<Long> countActiveByPlanTypePro();
+
+    @Query("SELECT COUNT(*) FROM vms WHERE user_id = :userId AND deleted_at IS NULL AND status NOT IN ('PENDING', 'FAILED', 'DELETED') AND plan_type = 'FREE'")
+    Mono<Long> countActiveByUserIdAndPlanTypeFree(String userId);
+
+    @Query("SELECT COUNT(*) FROM vms WHERE user_id = :userId AND deleted_at IS NULL AND status NOT IN ('PENDING', 'FAILED', 'DELETED') AND plan_type = 'PRO'")
+    Mono<Long> countActiveByUserIdAndPlanTypePro(String userId);
 }

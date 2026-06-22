@@ -4,6 +4,7 @@ import gj.cloud.user.application.profile.service.ProfileService;
 import gj.cloud.user.application.usage.dto.UsageResponse;
 import gj.cloud.user.application.usage.service.UsageService;
 import gj.cloud.user.application.vm.client.VmServiceClient;
+import gj.cloud.user.application.vm.dto.VmUsageStats;
 import gj.cloud.user.domain.plan.enums.PlanType;
 import gj.cloud.user.domain.profile.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,14 +29,18 @@ public class UsageServiceImpl implements UsageService {
                     return PlanType.FREE;
                 });
 
-        long currentVmCount = vmServiceClient.getVmCount(userId, bearerToken);
+        VmUsageStats stats = vmServiceClient.getVmUsage(userId, bearerToken);
 
         return new UsageResponse(
                 planType.name(),
                 planType.getVCpu(),
                 planType.getRamGb(),
-                (int) currentVmCount,
-                planType.getMaxVmCount()
+                (int) stats.myFreeCount(),
+                PlanType.FREE.getMaxVmCount(),
+                (int) stats.myProCount(),
+                PlanType.PRO.getMaxVmCount(),
+                stats.systemFreeCount(),
+                stats.systemProCount()
         );
     }
 }

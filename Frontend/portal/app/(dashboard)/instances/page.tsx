@@ -68,14 +68,23 @@ export default function InstancesPage() {
         <div className="bg-gray-50 rounded-md p-4">
           <p className="text-xs text-gray-500 mb-1">실행 중</p>
           <p className="text-2xl font-medium text-gray-900">{runningCount}</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">내 인스턴스 기준</p>
         </div>
         <div className="bg-gray-50 rounded-md p-4">
-          <p className="text-xs text-gray-500 mb-1">FREE 사용</p>
-          <p className="text-2xl font-medium text-gray-900">{freeCount} / 5</p>
+          <p className="text-xs text-gray-500 mb-1">내 FREE 인스턴스</p>
+          <p className="text-2xl font-medium text-gray-900">
+            {freeCount}
+            <span className="text-base text-gray-400"> / 3</span>
+          </p>
+          <p className="text-[11px] text-gray-400 mt-0.5">최대 3대</p>
         </div>
         <div className="bg-gray-50 rounded-md p-4">
-          <p className="text-xs text-gray-500 mb-1">PRO 사용</p>
-          <p className="text-2xl font-medium text-gray-900">{proCount} / 3</p>
+          <p className="text-xs text-gray-500 mb-1">내 PRO 인스턴스</p>
+          <p className="text-2xl font-medium text-gray-900">
+            {proCount}
+            <span className="text-base text-gray-400"> / 10</span>
+          </p>
+          <p className="text-[11px] text-gray-400 mt-0.5">최대 10대</p>
         </div>
       </div>
 

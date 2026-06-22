@@ -4,6 +4,10 @@ public record UsageResponse(
         String planType,
         int vCpuLimit,
         int ramGbLimit,
-        int currentVmCount,
-        int maxVmCount
+        int myFreeCount,
+        int maxFreeVmCount,
+        int myProCount,
+        int maxProVmCount,
+        long systemFreeCount,
+        long systemProCount
 ) {}

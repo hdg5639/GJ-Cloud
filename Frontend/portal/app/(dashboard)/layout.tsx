@@ -70,22 +70,60 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* 플랜/사용량 */}
         {usage && (
-          <div className="mx-3 mb-3 px-3 py-3 bg-white border border-gray-200 rounded-lg">
-            <div className="flex items-center justify-between mb-1.5">
+          <div className="mx-3 mb-3 px-3 py-3 bg-white border border-gray-200 rounded-lg space-y-2">
+            {/* 플랜 배지 */}
+            <div className="flex items-center justify-between">
               <span className="text-[11px] text-gray-500">플랜</span>
-              <span className="text-[11px] font-medium text-gray-900">{usage.planType}</span>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                usage.planType === "PRO"
+                  ? "bg-violet-100 text-violet-700"
+                  : "bg-gray-100 text-gray-600"
+              }`}>{usage.planType}</span>
             </div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] text-gray-500">인스턴스</span>
-              <span className="text-[11px] font-medium text-gray-900">{usage.currentVmCount} / {usage.maxVmCount}</span>
+
+            <div className="border-t border-gray-100" />
+
+            {/* 내 인스턴스 */}
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">내 인스턴스</p>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">FREE</span>
+              <span className="text-[11px] font-medium text-gray-900">
+                {usage.myFreeCount}
+                <span className="text-gray-400"> / {usage.maxFreeVmCount}</span>
+              </span>
             </div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] text-gray-500">vCPU 한도</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">PRO</span>
+              <span className="text-[11px] font-medium text-gray-900">
+                {usage.myProCount}
+                <span className="text-gray-400"> / {usage.maxProVmCount}</span>
+              </span>
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* 리소스 한도 */}
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">리소스 한도</p>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">vCPU</span>
               <span className="text-[11px] font-medium text-gray-900">{usage.vCpuLimit} core</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">RAM 한도</span>
-              <span className="text-[11px] font-medium text-gray-900">{usage.ramGbLimit}GB</span>
+              <span className="text-[11px] text-gray-500">RAM</span>
+              <span className="text-[11px] font-medium text-gray-900">{usage.ramGbLimit} GB</span>
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* 전체 서버 점유 현황 */}
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">서버 전체 점유</p>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">FREE</span>
+              <span className="text-[11px] font-medium text-gray-700">{usage.systemFreeCount}대</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">PRO</span>
+              <span className="text-[11px] font-medium text-gray-700">{usage.systemProCount}대</span>
             </div>
           </div>
         )}
