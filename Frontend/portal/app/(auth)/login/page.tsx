@@ -19,11 +19,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const result = await api.auth.login(email, password);
-      console.log("[login] api result:", result);
       login(result.accessToken, { email });
       router.push("/instances");
     } catch (err) {
-      console.error("[login] error:", err);
       const e = err as Error & { errorCode?: string };
       if (e.errorCode === "EMAIL_NOT_VERIFIED") {
         router.push(`/verify?email=${encodeURIComponent(email)}`);

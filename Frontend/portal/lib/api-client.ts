@@ -102,9 +102,7 @@ async function request<T>(
     token = await getExchangedToken(accessToken, targetAudience);
   }
 
-  const url = `${API_BASE[service]}${path}`;
-  console.log(`[api] ${init.method ?? "GET"} ${url}`);
-  const res = await fetch(url, {
+  const res = await fetch(`${API_BASE[service]}${path}`, {
     ...init,
     credentials: "include",
     headers: {
@@ -134,9 +132,7 @@ async function request<T>(
     return undefined as T;
   }
 
-  const text = await res.text();
-  console.log(`[api] ${res.status} response:`, text.slice(0, 200));
-  const body: ApiResponse<T> = JSON.parse(text);
+  const body: ApiResponse<T> = await res.json();
   return body.data;
 }
 
