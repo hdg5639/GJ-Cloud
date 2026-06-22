@@ -128,7 +128,7 @@ export default function InstanceDetailPage() {
     [id]
   );
 
-  useVmEvents(accessToken ?? "", handleVmEvent);
+  useVmEvents(accessToken ?? "", handleVmEvent, !!accessToken);
 
   async function handlePower(action: "START" | "STOP" | "REBOOT" | "SUSPEND") {
     if (!accessToken) return;
