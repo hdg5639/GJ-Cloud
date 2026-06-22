@@ -112,8 +112,8 @@ async function request<T>(
     },
   });
 
-  // 401 → refresh → 1회 재시도
-  if (res.status === 401 && !_retry && tokenRefresher) {
+  // 401 → refresh → 1회 재시도 (auth 서비스 자체는 제외 — 로그인 실패가 401이므로)
+  if (res.status === 401 && !_retry && tokenRefresher && service !== "auth") {
     if (accessToken) invalidateExchangeCache(accessToken);
     const newToken = await tokenRefresher();
     if (newToken) {
