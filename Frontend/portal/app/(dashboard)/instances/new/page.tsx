@@ -58,6 +58,16 @@ export default function CreateInstancePage() {
 
   return (
     <div className="max-w-xl">
+      <button
+        onClick={() => router.push("/instances")}
+        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4 transition-colors"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        인스턴스 목록
+      </button>
+
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <h1 className="text-lg font-medium text-gray-900 mb-1">인스턴스 생성</h1>
         <p className="text-sm text-gray-500 mb-5">플랜과 디스크 크기를 선택하세요</p>
