@@ -10,7 +10,13 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
-      - run: |
+      - name: Pull latest code in production directory
+        run: |
+          cd ~/GJ-Cloud
+          git fetch origin develop
+          git reset --hard origin/develop
+
+      - name: Build and deploy
+        run: |
           docker compose down vm --rmi local
           docker compose up vm -d --build
