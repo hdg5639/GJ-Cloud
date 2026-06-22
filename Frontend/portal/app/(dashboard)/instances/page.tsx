@@ -23,7 +23,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default function InstancesPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, refresh } = useAuth();
   const [vms, setVms] = useState<VmResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,7 +45,7 @@ export default function InstancesPage() {
     );
   }, []);
 
-  useVmEvents(accessToken ?? "", handleVmEvent, !!accessToken && vms.length > 0);
+  useVmEvents(accessToken ?? "", handleVmEvent, !!accessToken && vms.length > 0, refresh);
 
   const runningCount = vms.filter((v) => v.status === "RUNNING").length;
   const freeCount = vms.filter((v) => v.planType === "FREE" && v.status !== "DELETED").length;

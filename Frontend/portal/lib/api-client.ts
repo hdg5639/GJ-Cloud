@@ -23,14 +23,41 @@ interface ApiResponse<T> {
   success: boolean;
   data: T;
   message: string | null;
+  errorCode?: string | null;
 }
 
-const exchangeCache = new Map<string, string>();
+// ─── Exchange token cache with exp-based TTL ──────────────────────────────────
+interface CachedToken {
+  token: string;
+  expiresAt: number; // ms
+}
+
+const exchangeCache = new Map<string, CachedToken>();
+
+function parseJwtExp(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+export function invalidateExchangeCache(accessToken: string) {
+  for (const key of exchangeCache.keys()) {
+    if (key.startsWith(`${accessToken}:`)) {
+      exchangeCache.delete(key);
+    }
+  }
+}
 
 export async function getExchangedToken(accessToken: string, targetService: string): Promise<string> {
   const cacheKey = `${accessToken}:${targetService}`;
   const cached = exchangeCache.get(cacheKey);
-  if (cached) return cached;
+  // 만료 30초 전부터 캐시 무효화
+  if (cached && cached.expiresAt - Date.now() > 30_000) {
+    return cached.token;
+  }
 
   const res = await fetch(`${API_BASE.auth}/auth/token/exchange`, {
     method: "POST",
@@ -46,14 +73,24 @@ export async function getExchangedToken(accessToken: string, targetService: stri
 
   const body: ApiResponse<{ accessToken: string }> = await res.json();
   const token = body.data.accessToken;
-  exchangeCache.set(cacheKey, token);
+  const expiresAt = parseJwtExp(token) ?? Date.now() + 14 * 60 * 1000; // fallback 14분
+  exchangeCache.set(cacheKey, { token, expiresAt });
   return token;
 }
 
+// ─── 401 시 access token 갱신 콜백 (auth-context에서 등록) ───────────────────
+let tokenRefresher: (() => Promise<string | null>) | null = null;
+
+export function setTokenRefresher(fn: () => Promise<string | null>) {
+  tokenRefresher = fn;
+}
+
+// ─── Core request ─────────────────────────────────────────────────────────────
 async function request<T>(
   service: keyof typeof API_BASE,
   path: string,
-  options: RequestInit & { accessToken?: string } = {}
+  options: RequestInit & { accessToken?: string } = {},
+  _retry = false
 ): Promise<T> {
   const { accessToken, ...init } = options;
 
@@ -72,6 +109,15 @@ async function request<T>(
       ...(init.headers as Record<string, string> | undefined),
     },
   });
+
+  // 401 → refresh → 1회 재시도
+  if (res.status === 401 && !_retry && tokenRefresher) {
+    if (accessToken) invalidateExchangeCache(accessToken);
+    const newToken = await tokenRefresher();
+    if (newToken) {
+      return request<T>(service, path, { ...options, accessToken: newToken }, true);
+    }
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: "요청에 실패했습니다", errorCode: null }));

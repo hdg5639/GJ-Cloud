@@ -74,7 +74,7 @@ const STATUS_STYLE: Record<string, string> = {
 export default function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { accessToken } = useAuth();
+  const { accessToken, refresh } = useAuth();
   const [vm, setVm] = useState<VmResponse | null>(null);
   const [accordionOpen, setAccordionOpen] = useState(false);
   const [installTab, setInstallTab] = useState<"mac" | "win" | "linux">("mac");
@@ -128,7 +128,7 @@ export default function InstanceDetailPage() {
     [id]
   );
 
-  useVmEvents(accessToken ?? "", handleVmEvent, !!accessToken);
+  useVmEvents(accessToken ?? "", handleVmEvent, !!accessToken, refresh);
 
   async function handlePower(action: "START" | "STOP" | "REBOOT" | "SUSPEND") {
     if (!accessToken) return;
