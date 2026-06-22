@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     nickname          VARCHAR(50),
     profile_image_url VARCHAR(500),
     plan_type         VARCHAR(20)  NOT NULL DEFAULT 'FREE',
+    suspended         TINYINT(1)   NOT NULL DEFAULT 0,
     created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id)

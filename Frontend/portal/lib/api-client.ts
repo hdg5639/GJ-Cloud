@@ -6,6 +6,8 @@ import type {
   SshKeyGenerateResponse,
   ProfileResponse,
   UsageResponse,
+  AdminUserResponse,
+  AdminVmResponse,
 } from "./types";
 
 const API_BASE = {
@@ -255,6 +257,26 @@ export const api = {
       }),
     deleteSshKey: (accessToken: string, keyId: string) =>
       request<void>("user", `/users/ssh-keys/${keyId}`, { method: "DELETE", accessToken }),
+  },
+  admin: {
+    users: {
+      list: (accessToken: string) =>
+        request<AdminUserResponse[]>("user", "/admin/users", { accessToken }),
+      get: (accessToken: string, userId: string) =>
+        request<AdminUserResponse>("user", `/admin/users/${userId}`, { accessToken }),
+      suspend: (accessToken: string, userId: string) =>
+        request<AdminUserResponse>("user", `/admin/users/${userId}/suspend`, { method: "PATCH", accessToken }),
+      activate: (accessToken: string, userId: string) =>
+        request<AdminUserResponse>("user", `/admin/users/${userId}/activate`, { method: "PATCH", accessToken }),
+    },
+    vms: {
+      list: (accessToken: string) =>
+        request<AdminVmResponse[]>("vm", "/admin/vms", { accessToken }),
+      get: (accessToken: string, vmId: string) =>
+        request<AdminVmResponse>("vm", `/admin/vms/${vmId}`, { accessToken }),
+      forceDelete: (accessToken: string, vmId: string) =>
+        request<void>("vm", `/admin/vms/${vmId}/force`, { method: "DELETE", accessToken }),
+    },
   },
 };
 

@@ -420,6 +420,52 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
+    public Flux<VmResponse> getAllVms() {
+        return vmRepository.findAll()
+                .filter(vm -> vm.getDeletedAt() == null)
+                .map(VmResponse::from);
+    }
+
+    @Override
+    public Mono<VmResponse> getVmAdmin(UUID vmId) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getDeletedAt() != null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    return Mono.just(VmResponse.from(vm));
+                });
+    }
+
+    @Override
+    public Mono<Void> forceDeleteVm(UUID vmId) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getDeletedAt() != null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    return Mono.just(vm);
+                })
+                .flatMap(vm -> updateStatus(vm, VmStatus.DELETING))
+                .flatMap(vm -> {
+                    Mono<Void> cloudflareTeardown = teardownCloudflare(vm);
+                    if (vm.getVmid() == null) {
+                        return cloudflareTeardown
+                                .then(vmRepository.save(vm.withDeleted()))
+                                .doOnNext(saved -> publishEvent(saved, null))
+                                .then();
+                    }
+                    return cloudflareTeardown
+                            .then(proxmoxClient.deleteVm(vm.getVmid()))
+                            .then(vmRepository.save(vm.withDeleted()))
+                            .doOnNext(saved -> publishEvent(saved, null))
+                            .onErrorResume(e -> {
+                                log.error("Admin 강제 삭제 - Proxmox VM 삭제 실패, 수동 확인 필요: vmid={}, error={}", vm.getVmid(), e.getMessage());
+                                return Mono.error(new VmException(VmErrorCode.PROXMOX_DELETE_FAILED));
+                            })
+                            .then();
+                });
+    }
+
+    @Override
     public Mono<VmAvailabilityResponse> getAvailability() {
         int freeTotal = PlanType.FREE.getIpPool().size();
         int proTotal = PlanType.PRO.getIpPool().size();

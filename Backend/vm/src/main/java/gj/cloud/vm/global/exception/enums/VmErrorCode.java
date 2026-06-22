@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 public enum VmErrorCode {
     VM_NOT_FOUND(HttpStatus.NOT_FOUND, "VM을 찾을 수 없습니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
+    ADMIN_ACCESS_REQUIRED(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다."),
     VM_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "VM 생성 한도를 초과했습니다."),
     SSH_KEY_FETCH_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "SSH 키 조회에 실패했습니다."),
     PROXMOX_CLONE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "VM 생성에 실패했습니다."),

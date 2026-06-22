@@ -17,6 +17,9 @@ public interface VmService {
     Flux<VmResponse> getVms(String userId);
     Mono<VmResponse> getVm(String userId, UUID vmId);
     Mono<Void> deleteVm(String userId, UUID vmId);
+    Flux<VmResponse> getAllVms();
+    Mono<VmResponse> getVmAdmin(UUID vmId);
+    Mono<Void> forceDeleteVm(UUID vmId);
     Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request);
     Mono<VmResponse> updatePlan(String userId, UUID vmId, VmPlanUpdateRequest request);
     Mono<VmAvailabilityResponse> getAvailability();

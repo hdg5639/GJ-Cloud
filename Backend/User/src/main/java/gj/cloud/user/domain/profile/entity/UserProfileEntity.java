@@ -29,6 +29,10 @@ public class UserProfileEntity {
     @Column(nullable = false)
     private PlanType planType;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean suspended = false;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -40,6 +44,7 @@ public class UserProfileEntity {
                 .userId(userId)
                 .email(email)
                 .planType(PlanType.FREE)
+                .suspended(false)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
@@ -48,6 +53,21 @@ public class UserProfileEntity {
     public void updateProfile(String nickname, String profileImageUrl) {
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void suspend() {
+        this.suspended = true;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void activate() {
+        this.suspended = false;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void updatePlanType(PlanType planType) {
+        this.planType = planType;
         this.updatedAt = LocalDateTime.now();
     }
 }

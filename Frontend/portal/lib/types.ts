@@ -65,6 +65,28 @@ export interface ProfileResponse {
   planType: string;
 }
 
+export interface AdminUserResponse {
+  userId: string;
+  email: string;
+  nickname: string | null;
+  planType: string;
+  suspended: boolean;
+  createdAt: string;
+}
+
+export interface AdminVmResponse {
+  id: string;
+  name: string;
+  planType: string;
+  status: string;
+  internalIp: string | null;
+  subdomain: string | null;
+  diskSizeGb: number;
+  needsReboot: boolean | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
 export interface UsageResponse {
   planType: string;
   vCpuLimit: number;
