@@ -1,0 +1,17 @@
+name: Deploy User to ops-01
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'Backend/User/**'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          docker compose down user --rmi local
+          docker compose build
+          docker compose up user -d
