@@ -34,13 +34,23 @@ public class MetricsController {
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId
     ) {
+        if (principal == null) {
+            log.warn("메트릭 SSE 인증 실패: vmId={}", vmId);
+            return Flux.error(new IllegalArgumentException("Unauthorized"));
+        }
+
+        log.info("메트릭 SSE 구독: userId={}, vmId={}", principal.userId(), vmId);
+
         return Flux.interval(Duration.ofSeconds(5))
-                .flatMap(tick -> vmService.getVmMetricsCurrent(principal.userId(), vmId))
+                .flatMap(tick -> vmService.getVmMetricsCurrent(principal.userId(), vmId)
+                        .doOnSuccess(metrics -> log.debug("메트릭 발행: vmId={}, cpu={}", vmId, metrics.cpuUsagePercent()))
+                        .doOnError(e -> log.warn("메트릭 조회 실패: vmId={}, error={}", vmId, e.getMessage())))
                 .map(metrics -> ServerSentEvent.<VmMetricsCurrentResponse>builder()
                         .data(metrics)
                         .build())
+                .doOnCancel(() -> log.info("메트릭 SSE 구독 해제: vmId={}", vmId))
                 .onErrorResume(e -> {
-                    log.error("메트릭 스트림 오류: vmId={}, error={}", vmId, e.getMessage());
+                    log.warn("메트릭 스트림 종료: vmId={}, error={}", vmId, e.getMessage());
                     return Flux.empty();
                 });
     }
