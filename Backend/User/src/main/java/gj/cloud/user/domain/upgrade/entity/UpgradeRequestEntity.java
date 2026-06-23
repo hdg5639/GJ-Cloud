@@ -46,7 +46,6 @@ public class UpgradeRequestEntity {
 
     public static UpgradeRequestEntity createRequest(String userId, UpgradeRequestType type, PlanType targetPlanType) {
         UpgradeRequestEntity entity = new UpgradeRequestEntity();
-        entity.setId(UUID.randomUUID());
         entity.setUserId(userId);
         entity.setType(type);
         entity.setTargetPlanType(targetPlanType);
