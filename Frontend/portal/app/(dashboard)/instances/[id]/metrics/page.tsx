@@ -42,8 +42,17 @@ export default function MetricsPage() {
   useEffect(() => {
     if (!accessToken) return;
 
-    const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream`;
-    const eventSource = new EventSource(url, { withCredentials: true });
+    let eventSource: EventSource | null = null;
+    let closed = false;
+
+    async function connect() {
+      if (closed) return;
+      try {
+        const vmToken = await getExchangedToken(accessToken, "vm-service");
+        if (closed) return;
+
+        const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream?token=${vmToken}`;
+        eventSource = new EventSource(url);
 
     eventSource.onmessage = (event) => {
       try {
@@ -73,12 +82,21 @@ export default function MetricsPage() {
       }
     };
 
-    eventSource.onerror = () => {
-      setError("메트릭 수신 실패");
-      eventSource.close();
-    };
+        eventSource.onerror = () => {
+          setError("메트릭 수신 실패");
+          eventSource?.close();
+        };
+      } catch (err) {
+        console.error("메트릭 연결 실패:", err);
+      }
+    }
 
-    return () => eventSource.close();
+    connect();
+
+    return () => {
+      closed = true;
+      eventSource?.close();
+    };
   }, [accessToken, vmId]);
 
   if (!currentMetrics) {

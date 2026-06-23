@@ -13,6 +13,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
@@ -32,9 +33,17 @@ public class MetricsController {
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<VmMetricsCurrentResponse>> streamMetrics(
             @AuthenticationPrincipal VmPrincipal principal,
-            @PathVariable UUID vmId
+            @PathVariable UUID vmId,
+            @RequestParam(required = false) String token
     ) {
-        if (principal == null) {
+        VmPrincipal auth = principal;
+
+        if (auth == null && token != null) {
+            log.warn("메트릭 SSE 토큰 인증: vmId={}", vmId);
+            return Flux.error(new IllegalArgumentException("Token-based auth not supported"));
+        }
+
+        if (auth == null) {
             log.warn("메트릭 SSE 인증 실패: vmId={}", vmId);
             return Flux.error(new IllegalArgumentException("Unauthorized"));
         }
