@@ -22,14 +22,22 @@ export default function CreateInstancePage() {
   const [sshKeys, setSshKeys] = useState<SshKeyResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [userPlan, setUserPlan] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
-    api.vm.availability(accessToken).then(setAvailability).catch(() => {});
-    api.user.sshKeys(accessToken).then((keys) => {
-      setSshKeys(keys);
-      if (keys.length > 0) setSshKeyId(keys[0].id);
-    }).catch(() => {});
+    Promise.all([
+      api.vm.availability(accessToken),
+      api.user.profile(accessToken),
+      api.user.sshKeys(accessToken),
+    ])
+      .then(([availabilityData, profileData, keysData]) => {
+        setAvailability(availabilityData);
+        setUserPlan(profileData.planType);
+        setSshKeys(keysData);
+        if (keysData.length > 0) setSshKeyId(keysData[0].id);
+      })
+      .catch(() => {});
   }, [accessToken]);
 
   // 플랜 변경 시 디스크 크기를 플랜 최솟값으로 리셋
