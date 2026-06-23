@@ -106,7 +106,6 @@ async function request<T>(
     token = await getExchangedToken(accessToken, targetAudience);
   }
 
-  console.debug(`[api] ${service} ${options.method ?? "GET"} ${API_BASE[service]}${path}`);
   const res = await fetch(`${API_BASE[service]}${path}`, {
     ...init,
     credentials: "include",
@@ -116,7 +115,6 @@ async function request<T>(
       ...(init.headers as Record<string, string> | undefined),
     },
   });
-  console.debug(`[api] ${service} ${options.method ?? "GET"} ${path} → ${res.status}`);
 
   // 401 처리 (auth 서비스 자체는 제외 — 로그인 실패가 401이므로)
   if (res.status === 401 && !_retry && service !== "auth") {

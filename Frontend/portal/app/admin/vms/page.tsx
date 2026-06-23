@@ -31,7 +31,7 @@ export default function AdminVmsPage() {
         setVms(vmData);
         setUserMap(Object.fromEntries(userData.map((u: AdminUserResponse) => [u.userId, u.email])));
       })
-      .catch((err) => console.error("[admin/vms] error:", err))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [accessToken]);
 
