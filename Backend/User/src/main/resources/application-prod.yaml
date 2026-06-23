@@ -14,8 +14,8 @@ spring:
   jackson:
     default-property-inclusion: non_null
     serialization:
-      write-dates-as-timestamps: false
-      indent-output: false
+      WRITE_DATES_AS_TIMESTAMPS: false
+      INDENT_OUTPUT: false
 
 auth:
   server-url: ${AUTH_SERVER_URL}
