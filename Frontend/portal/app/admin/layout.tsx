@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: "/", label: "대시보드", exact: true },
   { href: "/users", label: "사용자 관리" },
   { href: "/vms", label: "VM 관리" },
+  { href: "/upgrade-requests", label: "플랜 변경 요청" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
