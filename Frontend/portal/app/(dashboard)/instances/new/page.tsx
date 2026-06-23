@@ -93,11 +93,12 @@ export default function CreateInstancePage() {
         <div className="mb-5">
           <label className="text-xs text-gray-500 block mb-2">플랜</label>
           <div className="grid grid-cols-2 gap-2.5">
-            {(["FREE", "PRO"] as const)
-              .filter(plan => userPlan === "PRO" || plan === "FREE")
-              .map((plan) => {
+            {(["FREE", "PRO"] as const).map((plan) => {
               const info = PLAN_INFO[plan];
-              const full = plan === "FREE" ? freeFull : proFull;
+              const isFree = plan === "FREE";
+              const isPro = plan === "PRO";
+              const full = isFree ? freeFull : proFull;
+              const planLocked = isPro && userPlan === "FREE";
               const used = availability?.[plan.toLowerCase() as "free" | "pro"].used ?? 0;
               const total = availability?.[plan.toLowerCase() as "free" | "pro"].total ?? 0;
               const selected = planType === plan;
@@ -105,15 +106,20 @@ export default function CreateInstancePage() {
               return (
                 <button
                   key={plan}
-                  disabled={full}
+                  disabled={full || planLocked}
                   onClick={() => handlePlanChange(plan)}
                   className={`relative border rounded-lg p-4 text-left transition-colors ${
                     selected ? "border-2 border-[#03C75A]" : "border-gray-200 hover:border-gray-300"
-                  } ${full ? "opacity-50 cursor-not-allowed" : ""}`}
+                  } ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {selected && (
                     <span className="absolute -top-2.5 left-3 z-10 bg-[#e6faf0] text-[#03C75A] text-[11px] font-medium px-2 py-0.5 rounded-md">
                       선택됨
+                    </span>
+                  )}
+                  {planLocked && (
+                    <span className="absolute -top-2.5 right-3 z-10 bg-amber-100 text-amber-700 text-[11px] font-medium px-2 py-0.5 rounded-md">
+                      프로 플랜만
                     </span>
                   )}
                   <p className="text-sm font-medium text-gray-900 mb-1">{plan}</p>
