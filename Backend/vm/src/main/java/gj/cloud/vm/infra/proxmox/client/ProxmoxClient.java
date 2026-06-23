@@ -12,6 +12,7 @@ import gj.cloud.vm.infra.proxmox.record.ProxmoxConfigInfo;
 import gj.cloud.vm.infra.proxmox.record.ProxmoxStatusInfo;
 import gj.cloud.vm.infra.proxmox.record.ProxmoxTaskStatus;
 import gj.cloud.vm.infra.proxmox.record.VmCreate;
+import gj.cloud.vm.infra.proxmox.record.GuestAgentDiskInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -409,5 +410,61 @@ public class ProxmoxClient {
                         .doOnSuccess(v -> log.info("VM 삭제 완료: vmid={}", vmid))
                         .doOnError(e -> log.error("VM 삭제 실패: vmid={}, error={}", vmid, e.getMessage()))
                         .then());
+    }
+
+    public Mono<JsonNode> getVmMetricsCurrent(int vmid) {
+        return proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/status/current", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(body -> {
+                    try {
+                        return new ObjectMapper().readTree(body).path("data");
+                    } catch (Exception e) {
+                        log.error("메트릭 현재값 파싱 실패: vmid={}, error={}", vmid, e.getMessage());
+                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+                    }
+                })
+                .doOnError(e -> log.error("메트릭 현재값 조회 실패: vmid={}, error={}", vmid, e.getMessage()));
+    }
+
+    public Mono<JsonNode> getVmMetricsHistory(int vmid, String timeframe) {
+        return proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/rrddata?timeframe={timeframe}&cf=average",
+                        props.getNode(), vmid, timeframe)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(body -> {
+                    try {
+                        return new ObjectMapper().readTree(body).path("data");
+                    } catch (Exception e) {
+                        log.error("메트릭 히스토리 파싱 실패: vmid={}, timeframe={}, error={}",
+                                vmid, timeframe, e.getMessage());
+                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+                    }
+                })
+                .doOnError(e -> log.error("메트릭 히스토리 조회 실패: vmid={}, timeframe={}, error={}",
+                        vmid, timeframe, e.getMessage()));
+    }
+
+    public Mono<GuestAgentDiskInfo> getVmDiskInfo(int vmid) {
+        return proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/agent/get-fsinfo", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(body -> {
+                    try {
+                        JsonNode data = new ObjectMapper().readTree(body).path("data").path("result");
+                        return new ObjectMapper().convertValue(data, GuestAgentDiskInfo.class);
+                    } catch (Exception e) {
+                        log.error("게스트 에이전트 디스크 정보 파싱 실패: vmid={}, error={}", vmid, e.getMessage());
+                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+                    }
+                })
+                .onErrorReturn(new GuestAgentDiskInfo(java.util.List.of()))
+                .doOnError(e -> log.warn("게스트 에이전트 디스크 정보 조회 실패: vmid={}, error={}", vmid, e.getMessage()));
     }
 }

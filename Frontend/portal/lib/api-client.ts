@@ -207,6 +207,12 @@ export const api = {
         body: JSON.stringify(body),
         accessToken,
       }),
+    metricsCurrent: (accessToken: string, id: string) =>
+      request<VmMetricsCurrentResponse>("vm", `/vms/${id}/metrics/current`, { accessToken }),
+    metricsHistory: (accessToken: string, id: string, timeframe: string = "hour") =>
+      request<VmMetricsHistoryResponse>("vm", `/vms/${id}/metrics/history?timeframe=${timeframe}`, {
+        accessToken,
+      }),
     getSshAccess: (accessToken: string, id: string) =>
       request<string[]>("vm", `/vms/${id}/ssh-access`, { accessToken }),
     addSshAccess: (accessToken: string, id: string, email: string) =>

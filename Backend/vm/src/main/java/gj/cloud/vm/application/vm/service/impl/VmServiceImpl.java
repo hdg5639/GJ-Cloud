@@ -9,6 +9,8 @@ import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.dto.VmStatusEvent;
+import gj.cloud.vm.application.vm.dto.VmMetricsCurrentResponse;
+import gj.cloud.vm.application.vm.dto.VmMetricsHistoryResponse;
 import gj.cloud.vm.application.vm.service.VmService;
 import gj.cloud.vm.domain.port.entity.VmSshAccessEmailEntity;
 import gj.cloud.vm.domain.port.repository.VmSshAccessEmailRepository;
@@ -18,6 +20,7 @@ import gj.cloud.vm.domain.vm.enums.VmStatus;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
+import gj.cloud.vm.global.cache.MetricsCache;
 import gj.cloud.vm.global.sse.SseEmitterManager;
 import gj.cloud.vm.infra.cloudflare.client.CloudflareClient;
 import gj.cloud.vm.infra.proxmox.client.ProxmoxClient;
@@ -52,6 +55,7 @@ public class VmServiceImpl implements VmService {
     private final ProxmoxProperties proxmoxProperties;
     private final VmSshAccessEmailRepository sshAccessEmailRepository;
     private final PortService portService;
+    private final MetricsCache metricsCache;
 
     @Override
     public Mono<VmResponse> createVm(String userId, String bearerToken, VmCreateRequest request) {
@@ -481,5 +485,87 @@ public class VmServiceImpl implements VmService {
                     new PlanAvailability(proUsed, proTotal, proUsed >= proTotal)
             );
         });
+    }
+
+    @Override
+    public Mono<VmMetricsCurrentResponse> getVmMetricsCurrent(String userId, UUID vmId) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getVmid() == null || !vm.getStatus().equals(VmStatus.RUNNING)) {
+                        return Mono.error(new VmException(VmErrorCode.VM_NOT_RUNNING));
+                    }
+                    String cacheKey = "metrics:current:" + vm.getVmid();
+                    var cachedData = metricsCache.get(cacheKey);
+                    if (cachedData != null) {
+                        return Mono.just(buildMetricsCurrentResponse(vmId, cachedData, null));
+                    }
+
+                    return proxmoxClient.getVmMetricsCurrent(vm.getVmid())
+                            .zipWith(proxmoxClient.getVmDiskInfo(vm.getVmid()))
+                            .doOnNext(tuple -> metricsCache.put(cacheKey, tuple.getT1()))
+                            .map(tuple -> buildMetricsCurrentResponse(vmId, tuple.getT1(), tuple.getT2()));
+                });
+    }
+
+    private VmMetricsCurrentResponse buildMetricsCurrentResponse(UUID vmId, com.fasterxml.jackson.databind.JsonNode currentData, gj.cloud.vm.infra.proxmox.record.GuestAgentDiskInfo diskInfo) {
+        long diskUsedBytes = 0;
+        long diskAllocatedBytes = currentData.path("maxdisk").asLong(0);
+
+        if (diskInfo != null && !diskInfo.disks().isEmpty()) {
+            diskUsedBytes = diskInfo.disks().get(0).used() != null
+                    ? diskInfo.disks().get(0).used()
+                    : 0;
+        }
+
+        return new VmMetricsCurrentResponse(
+                vmId.toString(),
+                currentData.path("status").asText(),
+                currentData.path("cpu").decimalValue(),
+                currentData.path("cpus").asInt(),
+                currentData.path("mem").asLong(),
+                currentData.path("maxmem").asLong(),
+                diskUsedBytes,
+                diskAllocatedBytes,
+                currentData.path("netin").asLong(),
+                currentData.path("netout").asLong(),
+                currentData.path("uptime").asLong(),
+                System.currentTimeMillis()
+        );
+    }
+
+    @Override
+    public Mono<VmMetricsHistoryResponse> getVmMetricsHistory(String userId, UUID vmId, String timeframe) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getVmid() == null) {
+                        return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    }
+                    return proxmoxClient.getVmMetricsHistory(vm.getVmid(), timeframe)
+                            .map(rrdData -> {
+                                var dataPoints = new java.util.ArrayList<VmMetricsHistoryResponse.MetricDataPoint>();
+                                rrdData.forEach(entry -> {
+                                    try {
+                                        dataPoints.add(new VmMetricsHistoryResponse.MetricDataPoint(
+                                                entry.path("time").asLong(),
+                                                entry.path("cpu").asDouble(),
+                                                entry.path("mem").asLong(),
+                                                entry.path("netin").asLong(),
+                                                entry.path("netout").asLong(),
+                                                entry.path("diskread").asLong(),
+                                                entry.path("diskwrite").asLong()
+                                        ));
+                                    } catch (Exception e) {
+                                        log.debug("RRD 데이터 포인트 파싱 실패: {}", e.getMessage());
+                                    }
+                                });
+                                return new VmMetricsHistoryResponse(vmId.toString(), timeframe, dataPoints);
+                            });
+                });
     }
 }

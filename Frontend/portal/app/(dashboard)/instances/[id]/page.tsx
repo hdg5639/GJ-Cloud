@@ -280,6 +280,12 @@ export default function InstanceDetailPage() {
             {isRunning ? "정지" : "시작"}
           </button>
           <button
+            onClick={() => router.push(`/instances/${id}/metrics`)}
+            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            메트릭
+          </button>
+          <button
             onClick={() => setConfirmDelete(true)}
             className="text-sm px-3.5 h-8 bg-red-50 text-red-600 rounded-md hover:bg-red-100"
           >

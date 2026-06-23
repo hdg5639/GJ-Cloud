@@ -18,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -140,6 +141,27 @@ public class VmController {
             @PathVariable String email
     ) {
         return vmService.removeSshAccessEmail(principal.userId(), principal.email(), vmId, email)
+                .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "VM 실시간 메트릭")
+    @GetMapping("/{vmId}/metrics/current")
+    public Mono<ApiResponse<Object>> getVmMetricsCurrent(
+            @AuthenticationPrincipal VmPrincipal principal,
+            @PathVariable UUID vmId
+    ) {
+        return vmService.getVmMetricsCurrent(principal.userId(), vmId)
+                .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "VM 메트릭 히스토리", description = "timeframe: hour, day, week, month, year")
+    @GetMapping("/{vmId}/metrics/history")
+    public Mono<ApiResponse<Object>> getVmMetricsHistory(
+            @AuthenticationPrincipal VmPrincipal principal,
+            @PathVariable UUID vmId,
+            @RequestParam(defaultValue = "hour") String timeframe
+    ) {
+        return vmService.getVmMetricsHistory(principal.userId(), vmId, timeframe)
                 .map(ApiResponse::ok);
     }
 }

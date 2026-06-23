@@ -5,6 +5,8 @@ import gj.cloud.vm.application.vm.dto.VmCreateRequest;
 import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
+import gj.cloud.vm.application.vm.dto.VmMetricsCurrentResponse;
+import gj.cloud.vm.application.vm.dto.VmMetricsHistoryResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -26,4 +28,6 @@ public interface VmService {
     Mono<List<String>> getSshAccessEmails(String userId, UUID vmId);
     Mono<List<String>> addSshAccessEmail(String userId, String ownerEmail, UUID vmId, String email);
     Mono<List<String>> removeSshAccessEmail(String userId, String ownerEmail, UUID vmId, String email);
+    Mono<VmMetricsCurrentResponse> getVmMetricsCurrent(String userId, UUID vmId);
+    Mono<VmMetricsHistoryResponse> getVmMetricsHistory(String userId, UUID vmId, String timeframe);
 }

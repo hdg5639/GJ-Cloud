@@ -27,7 +27,8 @@ public enum VmErrorCode {
     PORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 포트입니다."),
     PORT_NICKNAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     PORT_NOT_FOUND(HttpStatus.NOT_FOUND, "포트를 찾을 수 없습니다."),
-    OWNER_EMAIL_REMOVAL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "소유자 이메일은 삭제할 수 없습니다.");
+    OWNER_EMAIL_REMOVAL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "소유자 이메일은 삭제할 수 없습니다."),
+    VM_NOT_RUNNING(HttpStatus.BAD_REQUEST, "VM이 실행 중이 아니므로 메트릭을 조회할 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;

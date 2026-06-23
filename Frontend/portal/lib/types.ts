@@ -100,3 +100,32 @@ export interface UsageResponse {
   systemFreeCount: number;
   systemProCount: number;
 }
+
+export interface VmMetricsCurrentResponse {
+  vmId: string;
+  status: string;
+  cpuUsagePercent: number;
+  allocatedCpu: number;
+  memoryUsedBytes: number;
+  memoryAllocatedBytes: number;
+  diskUsedBytes: number;
+  diskAllocatedBytes: number;
+  networkInBytes: number;
+  networkOutBytes: number;
+  uptimeSeconds: number;
+  timestamp: number;
+}
+
+export interface VmMetricsHistoryResponse {
+  vmId: string;
+  timeframe: string;
+  dataPoints: Array<{
+    timestamp: number;
+    cpuPercent: number;
+    memoryUsedBytes: number;
+    networkInBytes: number;
+    networkOutBytes: number;
+    diskReadBytes: number;
+    diskWriteBytes: number;
+  }>;
+}
