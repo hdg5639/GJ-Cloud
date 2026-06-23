@@ -21,16 +21,25 @@ export default function MetricsPage() {
     if (!accessToken) return;
     setLoading(true);
 
-    Promise.all([
-      api.vm.metricsCurrent(accessToken, vmId),
-      api.vm.metricsHistory(accessToken, vmId, timeframe),
-    ])
-      .then(([current, history]) => {
+    const fetchMetrics = async () => {
+      try {
+        const [current, history] = await Promise.all([
+          api.vm.metricsCurrent(accessToken, vmId),
+          api.vm.metricsHistory(accessToken, vmId, timeframe),
+        ]);
         setCurrentMetrics(current);
         setHistoryMetrics(history);
-      })
-      .catch((err) => console.error("메트릭 조회 실패:", err))
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.error("메트릭 조회 실패:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMetrics();
+
+    const interval = setInterval(fetchMetrics, 5000);
+    return () => clearInterval(interval);
   }, [accessToken, vmId, timeframe]);
 
   const formatBytes = (bytes: number) => {
@@ -48,7 +57,7 @@ export default function MetricsPage() {
     return `${days}d ${hours}h ${mins}m`;
   };
 
-  if (loading) {
+  if (loading && !currentMetrics) {
     return <div className="p-6 text-gray-400">메트릭 로딩 중...</div>;
   }
 
