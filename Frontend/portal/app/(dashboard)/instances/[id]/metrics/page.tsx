@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { VmMetricsCurrentResponse, VmMetricsHistoryResponse } from "@/lib/types";
+import type { VmMetricsHistoryResponse } from "@/lib/types";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface SSEMetrics {
@@ -35,16 +35,9 @@ export default function MetricsPage() {
   useEffect(() => {
     if (!accessToken) return;
 
-    // SSE 스트림 구독
-    const eventSource = new EventSource(
-      `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream`,
-      {
-        withCredentials: false,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      } as any
-    );
+    const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream?token=${encodeURIComponent(accessToken)}`;
+    
+    const eventSource = new EventSource(url);
 
     eventSource.onmessage = (event) => {
       try {
@@ -56,15 +49,14 @@ export default function MetricsPage() {
       }
     };
 
-    eventSource.onerror = () => {
-      console.error("SSE 연결 오류");
+    eventSource.onerror = (err) => {
+      console.error("SSE 연결 오류:", err);
       eventSource.close();
     };
 
     return () => eventSource.close();
   }, [accessToken, vmId]);
 
-  // 히스토리는 timeframe 변경시에만 조회
   useEffect(() => {
     if (!accessToken) return;
     api.vm.metricsHistory(accessToken, vmId, timeframe)
@@ -130,9 +122,7 @@ export default function MetricsPage() {
         </div>
       </div>
 
-      {/* 메트릭 카드 */}
       <div className="grid grid-cols-2 gap-4">
-        {/* CPU */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <div className="text-sm text-gray-500 mb-2">CPU 사용률</div>
           <div className="text-3xl font-bold text-blue-400">
@@ -143,7 +133,6 @@ export default function MetricsPage() {
           </div>
         </div>
 
-        {/* 메모리 */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <div className="text-sm text-gray-500 mb-2">메모리</div>
           <div className="text-3xl font-bold text-purple-400">
@@ -154,7 +143,6 @@ export default function MetricsPage() {
           </div>
         </div>
 
-        {/* 디스크 */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <div className="text-sm text-gray-500 mb-2">디스크</div>
           <div className="text-3xl font-bold text-orange-400">
@@ -165,7 +153,6 @@ export default function MetricsPage() {
           </div>
         </div>
 
-        {/* 업타임 */}
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <div className="text-sm text-gray-500 mb-2">가동 시간</div>
           <div className="text-3xl font-bold text-green-400">
@@ -175,7 +162,6 @@ export default function MetricsPage() {
         </div>
       </div>
 
-      {/* 네트워크 정보 */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h2 className="text-lg font-semibold text-white mb-4">네트워크</h2>
         <div className="grid grid-cols-2 gap-4">
@@ -194,7 +180,6 @@ export default function MetricsPage() {
         </div>
       </div>
 
-      {/* 그래프 */}
       {chartData.length > 0 && (
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
           <h2 className="text-lg font-semibold text-white mb-4">시계열 데이터</h2>
