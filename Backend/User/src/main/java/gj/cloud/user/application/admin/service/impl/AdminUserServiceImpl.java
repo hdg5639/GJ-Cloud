@@ -2,8 +2,8 @@ package gj.cloud.user.application.admin.service.impl;
 
 import gj.cloud.user.application.admin.dto.AdminUserResponse;
 import gj.cloud.user.application.admin.service.AdminUserService;
+import gj.cloud.user.domain.plan.enums.PlanType;
 import gj.cloud.user.domain.profile.entity.UserProfileEntity;
-import gj.cloud.user.domain.profile.enums.PlanType;
 import gj.cloud.user.domain.profile.repository.UserProfileRepository;
 import gj.cloud.user.global.exception.UserException;
 import gj.cloud.user.global.exception.enums.UserErrorCode;
