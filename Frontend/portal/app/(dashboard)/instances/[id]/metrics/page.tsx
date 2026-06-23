@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
 import type { VmMetricsHistoryResponse } from "@/lib/types";
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -43,10 +42,8 @@ export default function MetricsPage() {
   useEffect(() => {
     if (!accessToken) return;
 
-    const eventSource = new EventSource(
-      `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream`,
-      { withCredentials: true }
-    );
+    const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream`;
+    const eventSource = new EventSource(url, { withCredentials: true });
 
     eventSource.onmessage = (event) => {
       try {
