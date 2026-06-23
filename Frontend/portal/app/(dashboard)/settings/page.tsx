@@ -20,6 +20,8 @@ export default function SettingsPage() {
   const [withdrawConfirm, setWithdrawConfirm] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<"FREE" | "PRO" | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -63,6 +65,22 @@ export default function SettingsPage() {
     } catch {
       setWithdrawConfirm(false);
       setWithdrawing(false);
+    }
+  }
+
+  async function handleCreateRequest() {
+    if (!accessToken || !profile || !selectedPlan) return;
+    setRequestLoading(true);
+    try {
+      await api.user.createUpgradeRequest(accessToken, profile.userId, selectedPlan);
+      setSelectedPlan(null);
+      await new Promise(r => setTimeout(r, 500));
+      const updated = await api.user.getUpgradeRequests(accessToken, profile.userId);
+      setRequests(updated);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequestLoading(false);
     }
   }
 
@@ -188,49 +206,105 @@ export default function SettingsPage() {
       )}
 
       {tab === "upgrade-requests" && (
-      <div>
-        <h2 className="text-sm font-medium text-gray-900 mb-4">플랜 변경 요청 현황</h2>
+      <div className="space-y-6">
+        {/* 요청 보내기 */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <h2 className="text-sm font-medium text-gray-900 mb-4">요청 보내기</h2>
 
-        {loadingRequests ? (
-          <p className="text-sm text-gray-500">불러오는 중...</p>
-        ) : requests.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-            <p className="text-sm text-gray-500">요청이 없습니다</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {requests.map((req) => (
-              <div key={req.id} className="bg-white border border-gray-200 rounded-xl p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {req.type === "UPGRADE" ? "업그레이드" : "다운그레이드"} 요청
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      대상: <span className="font-medium">{req.targetPlanType}</span>
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      요청일: {new Date(req.createdAt).toLocaleString("ko-KR")}
-                    </p>
-                  </div>
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap ${
-                    req.status === "PENDING" ? "bg-amber-100 text-amber-700"
-                    : req.status === "APPROVED" ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                  }`}>
-                    {req.status === "PENDING" ? "대기 중" : req.status === "APPROVED" ? "승인됨" : "거절됨"}
-                  </span>
-                </div>
-                {req.status === "REJECTED" && req.reason && (
-                  <p className="text-xs text-red-600 mt-3 p-2 bg-red-50 rounded">거절 사유: {req.reason}</p>
-                )}
-                {req.status === "APPROVED" && req.reviewedAt && (
-                  <p className="text-xs text-gray-500 mt-2">승인일: {new Date(req.reviewedAt).toLocaleString("ko-KR")}</p>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs text-gray-500 mb-2">현재 플랜</p>
+              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm font-medium text-gray-900">{profile.planType}</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-gray-500 mb-2">변경할 플랜</p>
+              <div className="space-y-2">
+                {profile.planType === "FREE" ? (
+                  <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="plan"
+                      value="PRO"
+                      checked={selectedPlan === "PRO"}
+                      onChange={() => setSelectedPlan("PRO")}
+                      className="w-4 h-4"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-900">PRO</span>
+                  </label>
+                ) : (
+                  <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="plan"
+                      value="FREE"
+                      checked={selectedPlan === "FREE"}
+                      onChange={() => setSelectedPlan("FREE")}
+                      className="w-4 h-4"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-900">FREE</span>
+                  </label>
                 )}
               </div>
-            ))}
+            </div>
+
+            <button
+              onClick={handleCreateRequest}
+              disabled={requestLoading || !selectedPlan}
+              className="w-full h-9 bg-[#03C75A] text-white rounded-md text-sm font-medium disabled:opacity-60"
+            >
+              {requestLoading ? "요청 중..." : "변경 요청"}
+            </button>
           </div>
-        )}
+        </div>
+
+        {/* 요청 현황 */}
+        <div>
+          <h2 className="text-sm font-medium text-gray-900 mb-4">요청 현황</h2>
+
+          {loadingRequests ? (
+            <p className="text-sm text-gray-500">불러오는 중...</p>
+          ) : requests.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+              <p className="text-sm text-gray-500">요청이 없습니다</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {requests.map((req) => (
+                <div key={req.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {req.type === "UPGRADE" ? "업그레이드" : "다운그레이드"} 요청
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        대상: <span className="font-medium">{req.targetPlanType}</span>
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        요청일: {new Date(req.createdAt).toLocaleString("ko-KR")}
+                      </p>
+                    </div>
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap ${
+                      req.status === "PENDING" ? "bg-amber-100 text-amber-700"
+                      : req.status === "APPROVED" ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                    }`}>
+                      {req.status === "PENDING" ? "대기 중" : req.status === "APPROVED" ? "승인됨" : "거절됨"}
+                    </span>
+                  </div>
+                  {req.status === "REJECTED" && req.reason && (
+                    <p className="text-xs text-red-600 mt-3 p-2 bg-red-50 rounded">거절 사유: {req.reason}</p>
+                  )}
+                  {req.status === "APPROVED" && req.reviewedAt && (
+                    <p className="text-xs text-gray-500 mt-2">승인일: {new Date(req.reviewedAt).toLocaleString("ko-KR")}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       )}
     </div>
