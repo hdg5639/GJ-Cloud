@@ -4,17 +4,22 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { ProfileResponse } from "@/lib/types";
+import type { ProfileResponse, UpgradeRequestResponse } from "@/lib/types";
+
+type Tab = "profile" | "upgrade-requests";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { accessToken, logout } = useAuth();
+  const [tab, setTab] = useState<Tab>("profile");
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
+  const [requests, setRequests] = useState<UpgradeRequestResponse[]>([]);
   const [nickname, setNickname] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [withdrawConfirm, setWithdrawConfirm] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -23,6 +28,15 @@ export default function SettingsPage() {
       setNickname(p.nickname ?? "");
     }).catch(() => {});
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken || !profile || tab !== "upgrade-requests") return;
+    setLoadingRequests(true);
+    api.user.getUpgradeRequests(accessToken, profile.userId)
+      .then((data) => setRequests(data))
+      .catch(console.error)
+      .finally(() => setLoadingRequests(false));
+  }, [accessToken, profile, tab]);
 
   async function handleSave() {
     if (!accessToken) return;
@@ -58,8 +72,31 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-lg">
-      <h1 className="text-lg font-medium text-gray-900 mb-6">프로필 설정</h1>
+      <div className="flex gap-4 mb-6 border-b border-gray-200">
+        <button
+          onClick={() => setTab("profile")}
+          className={`pb-3 text-sm font-medium transition-colors ${
+            tab === "profile"
+              ? "text-gray-900 border-b-2 border-[#03C75A]"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          프로필 설정
+        </button>
+        <button
+          onClick={() => setTab("upgrade-requests")}
+          className={`pb-3 text-sm font-medium transition-colors ${
+            tab === "upgrade-requests"
+              ? "text-gray-900 border-b-2 border-[#03C75A]"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          플랜 변경 요청
+        </button>
+      </div>
 
+      {tab === "profile" && (
+      <>
       {/* 프로필 카드 */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
         <h2 className="text-sm font-medium text-gray-700 mb-4">계정 정보</h2>
@@ -147,6 +184,55 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {tab === "upgrade-requests" && (
+      <div>
+        <h2 className="text-sm font-medium text-gray-900 mb-4">플랜 변경 요청 현황</h2>
+
+        {loadingRequests ? (
+          <p className="text-sm text-gray-500">불러오는 중...</p>
+        ) : requests.length === 0 ? (
+          <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+            <p className="text-sm text-gray-500">요청이 없습니다</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {requests.map((req) => (
+              <div key={req.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {req.type === "UPGRADE" ? "업그레이드" : "다운그레이드"} 요청
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      대상: <span className="font-medium">{req.targetPlanType}</span>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      요청일: {new Date(req.createdAt).toLocaleString("ko-KR")}
+                    </p>
+                  </div>
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap ${
+                    req.status === "PENDING" ? "bg-amber-100 text-amber-700"
+                    : req.status === "APPROVED" ? "bg-green-100 text-green-700"
+                    : "bg-red-100 text-red-700"
+                  }`}>
+                    {req.status === "PENDING" ? "대기 중" : req.status === "APPROVED" ? "승인됨" : "거절됨"}
+                  </span>
+                </div>
+                {req.status === "REJECTED" && req.reason && (
+                  <p className="text-xs text-red-600 mt-3 p-2 bg-red-50 rounded">거절 사유: {req.reason}</p>
+                )}
+                {req.status === "APPROVED" && req.reviewedAt && (
+                  <p className="text-xs text-gray-500 mt-2">승인일: {new Date(req.reviewedAt).toLocaleString("ko-KR")}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      )}
     </div>
   );
 }
