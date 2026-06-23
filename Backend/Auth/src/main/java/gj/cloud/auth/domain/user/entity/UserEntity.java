@@ -52,7 +52,7 @@ public class UserEntity {
                 .id(UUID.randomUUID().toString())
                 .email(email)
                 .password(encodedPassword)
-                .role(UserRole.FREE)
+                .role(UserRole.USER)
                 .status(UserStatus.PENDING_VERIFICATION)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
