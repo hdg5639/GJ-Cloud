@@ -10,6 +10,7 @@ import type { UsageResponse } from "@/lib/types";
 const NAV_ITEMS = [
   { href: "/instances", label: "인스턴스" },
   { href: "/ssh-keys", label: "SSH 키" },
+  { href: "/settings", label: "설정" },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
