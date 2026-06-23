@@ -8,6 +8,8 @@ import type {
   UsageResponse,
   AdminUserResponse,
   AdminVmResponse,
+  VmMetricsCurrentResponse,
+  VmMetricsHistoryResponse,
 } from "./types";
 
 const API_BASE = {
