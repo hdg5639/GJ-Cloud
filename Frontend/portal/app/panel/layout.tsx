@@ -6,10 +6,10 @@ import { useAuth } from "@/lib/auth-context";
 import { useEffect } from "react";
 
 const NAV_ITEMS = [
-  { href: "/", label: "대시보드", exact: true },
-  { href: "/users", label: "사용자 관리" },
-  { href: "/vms", label: "VM 관리" },
-  { href: "/upgrade-requests", label: "플랜 변경 요청" },
+  { href: "/panel", label: "대시보드", exact: true },
+  { href: "/panel/users", label: "사용자 관리" },
+  { href: "/panel/vms", label: "VM 관리" },
+  { href: "/panel/upgrade-requests", label: "플랜 변경 요청" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -19,7 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!isLoading && !accessToken) {
-      router.replace("/login");
+      router.replace("/panel/login");
     }
   }, [accessToken, isLoading, router]);
 
@@ -27,7 +27,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   async function handleLogout() {
     logout();
-    router.push("/login");
+    router.push("/panel/login");
   }
 
   return (

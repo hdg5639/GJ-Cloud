@@ -27,7 +27,7 @@ export default function AdminLoginPage() {
       }
 
       login(result.accessToken, { email });
-      router.push("/");
+      router.push("/panel");
     } catch (err) {
       const e = err as Error & { errorCode?: string };
       setError(e.message ?? "로그인에 실패했습니다");
