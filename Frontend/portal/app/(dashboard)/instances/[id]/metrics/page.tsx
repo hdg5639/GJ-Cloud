@@ -55,33 +55,33 @@ export default function MetricsPage() {
         const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream?token=${vmToken}`;
         eventSource = new EventSource(url);
 
-    eventSource.onmessage = (event) => {
-      try {
-        const metrics = JSON.parse(event.data) as SSEMetrics;
-        setCurrentMetrics(metrics);
-        
-        setChartData(prev => {
-          const newPoint: ChartPoint = {
-            time: new Date(metrics.timestamp * 1000).toLocaleTimeString("ko-KR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            cpu: Math.round(metrics.cpuUsagePercent * 100),
-            mem: Math.round((metrics.memoryUsedBytes / metrics.memoryAllocatedBytes) * 100),
-            netin: Math.round(metrics.networkInBytes / (1024 * 1024)),
-            netout: Math.round(metrics.networkOutBytes / (1024 * 1024)),
-          };
-          
-          const updated = [...prev, newPoint];
-          return updated.slice(-12);
-        });
-        
-        setLoading(false);
-        setError(null);
-      } catch (err) {
-        console.error("메트릭 파싱 실패:", err);
-      }
-    };
+        eventSource.onmessage = (event) => {
+          try {
+            const metrics = JSON.parse(event.data) as SSEMetrics;
+            setCurrentMetrics(metrics);
+            
+            setChartData(prev => {
+              const newPoint: ChartPoint = {
+                time: new Date(metrics.timestamp * 1000).toLocaleTimeString("ko-KR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                cpu: Math.round(metrics.cpuUsagePercent * 100),
+                mem: Math.round((metrics.memoryUsedBytes / metrics.memoryAllocatedBytes) * 100),
+                netin: Math.round(metrics.networkInBytes / (1024 * 1024)),
+                netout: Math.round(metrics.networkOutBytes / (1024 * 1024)),
+              };
+              
+              const updated = [...prev, newPoint];
+              return updated.slice(-12);
+            });
+            
+            setLoading(false);
+            setError(null);
+          } catch (err) {
+            console.error("메트릭 파싱 실패:", err);
+          }
+        };
 
         eventSource.onerror = () => {
           setError("메트릭 수신 실패");
@@ -103,7 +103,7 @@ export default function MetricsPage() {
   if (!currentMetrics) {
     return (
       <div className="p-8 text-center">
-        <p className="text-gray-400">메트릭 데이터 로딩 중...</p>
+        <p className="text-gray-500">메트릭 데이터 로딩 중...</p>
       </div>
     );
   }
@@ -117,14 +117,13 @@ export default function MetricsPage() {
     : 0;
 
   return (
-    <div className="p-6 bg-gray-950 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-2xl font-medium text-white mb-1">인스턴스 모니터링</h1>
-        <p className="text-sm text-gray-400">{vmId}</p>
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-lg font-medium text-gray-900">메트릭</h1>
       </div>
 
       {error && (
-        <div className="bg-red-900/20 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6 text-sm">
           {error}
         </div>
       )}
@@ -139,21 +138,21 @@ export default function MetricsPage() {
 
       {/* 차트 그리드 */}
       <div className="grid grid-cols-2 gap-3 mb-3">
-        <ChartCard title="CPU 사용률" dataKey="cpu" color="#60a5fa" data={chartData} />
-        <ChartCard title="메모리 사용률" dataKey="mem" color="#34d399" data={chartData} />
+        <ChartCard title="CPU 사용률 (최근 1시간)" dataKey="cpu" color="#3b82f6" data={chartData} />
+        <ChartCard title="메모리 사용률 (최근 1시간)" dataKey="mem" color="#10b981" data={chartData} />
       </div>
 
       {/* 네트워크 차트 (풀 너비) */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <p className="text-sm font-medium text-white mb-4">네트워크 트래픽</p>
+      <div className="bg-gray-50 border border-slate-200 rounded-lg p-4">
+        <p className="text-sm font-medium text-gray-900 mb-4">네트워크 트래픽 (최근 1시간)</p>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-            <XAxis dataKey="time" stroke="#999" style={{ fontSize: "12px" }} />
-            <YAxis stroke="#999" style={{ fontSize: "12px" }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <XAxis dataKey="time" stroke="#9ca3af" style={{ fontSize: "12px" }} />
+            <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} />
             <Tooltip
-              contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #4b5563", borderRadius: "6px" }}
-              labelStyle={{ color: "#fff" }}
+              contentStyle={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "6px" }}
+              labelStyle={{ color: "#111827" }}
             />
             <Line type="monotone" dataKey="netin" stroke="#3b82f6" name="In (MB)" dot={false} strokeWidth={2} />
             <Line type="monotone" dataKey="netout" stroke="#f59e0b" name="Out (MB)" dot={false} strokeWidth={2} />
@@ -166,9 +165,9 @@ export default function MetricsPage() {
 
 function MetricCard({ label, value, subtext }: { label: string; value: string; subtext: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+    <div className="bg-gray-50 border border-slate-200 rounded-lg p-4">
       <p className="text-xs text-gray-500 mb-2 font-medium">{label}</p>
-      <p className="text-xl font-medium text-white">{value}</p>
+      <p className="text-xl font-medium text-gray-900">{value}</p>
       <p className="text-xs text-gray-600 mt-1">{subtext}</p>
     </div>
   );
@@ -176,22 +175,22 @@ function MetricCard({ label, value, subtext }: { label: string; value: string; s
 
 function ChartCard({ title, dataKey, color, data }: { title: string; dataKey: string; color: string; data: ChartPoint[] }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-      <p className="text-sm font-medium text-white mb-4">{title}</p>
+    <div className="bg-gray-50 border border-slate-200 rounded-lg p-4">
+      <p className="text-sm font-medium text-gray-900 mb-4">{title}</p>
       <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+              <stop offset="5%" stopColor={color} stopOpacity={0.2} />
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-          <XAxis dataKey="time" stroke="#999" style={{ fontSize: "12px" }} />
-          <YAxis stroke="#999" style={{ fontSize: "12px" }} domain={[0, 100]} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+          <XAxis dataKey="time" stroke="#9ca3af" style={{ fontSize: "12px" }} />
+          <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} domain={[0, 100]} />
           <Tooltip
-            contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #4b5563", borderRadius: "6px" }}
-            labelStyle={{ color: "#fff" }}
+            contentStyle={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "6px" }}
+            labelStyle={{ color: "#111827" }}
           />
           <Area
             type="monotone"
