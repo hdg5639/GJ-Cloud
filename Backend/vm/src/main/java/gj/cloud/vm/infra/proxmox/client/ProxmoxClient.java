@@ -443,12 +443,12 @@ public class ProxmoxClient {
                                 try {
                                     return Mono.just(new ObjectMapper().readTree(body).path("data"));
                                 } catch (Exception e) {
-                                    log.error("메트릭 히스토리 파싱 실패: vmid={}, timeframe={}, error={}",
+                                    log.debug("메트릭 히스토리 파싱 실패: vmid={}, timeframe={}, error={}",
                                             vmid, timeframe, e.getMessage());
                                     return Mono.just(new ObjectMapper().createArrayNode());
                                 }
                             }
-                            log.warn("메트릭 히스토리 조회 실패 (Proxmox API): vmid={}, timeframe={}, status={}",
+                            log.debug("메트릭 히스토리 조회 실패 (Proxmox API): vmid={}, timeframe={}, status={}",
                                     vmid, timeframe, res.statusCode());
                             return Mono.just(new ObjectMapper().createArrayNode());
                         }));
