@@ -547,23 +547,27 @@ public class VmServiceImpl implements VmService {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
                     }
                     return proxmoxClient.getVmMetricsHistory(vm.getVmid(), timeframe)
-                            .map(rrdData -> {
+                            .map(rrdArray -> {
                                 var dataPoints = new java.util.ArrayList<VmMetricsHistoryResponse.MetricDataPoint>();
-                                rrdData.forEach(entry -> {
-                                    try {
-                                        dataPoints.add(new VmMetricsHistoryResponse.MetricDataPoint(
-                                                entry.path("time").asLong(),
-                                                entry.path("cpu").asDouble(),
-                                                entry.path("mem").asLong(),
-                                                entry.path("netin").asLong(),
-                                                entry.path("netout").asLong(),
-                                                entry.path("diskread").asLong(),
-                                                entry.path("diskwrite").asLong()
-                                        ));
-                                    } catch (Exception e) {
-                                        log.debug("RRD 데이터 포인트 파싱 실패: {}", e.getMessage());
+                                if (rrdArray.isArray()) {
+                                    for (com.fasterxml.jackson.databind.JsonNode row : rrdArray) {
+                                        try {
+                                            if (row.isArray() && row.size() >= 7) {
+                                                dataPoints.add(new VmMetricsHistoryResponse.MetricDataPoint(
+                                                        row.get(0).asLong(),
+                                                        row.get(1).asDouble(),
+                                                        row.get(3).asLong(),
+                                                        row.get(5).asLong(),
+                                                        row.get(6).asLong(),
+                                                        0L,
+                                                        0L
+                                                ));
+                                            }
+                                        } catch (Exception e) {
+                                            log.debug("RRD 데이터 포인트 파싱 실패: {}", e.getMessage());
+                                        }
                                     }
-                                });
+                                }
                                 return new VmMetricsHistoryResponse(vmId.toString(), timeframe, dataPoints);
                             });
                 });
