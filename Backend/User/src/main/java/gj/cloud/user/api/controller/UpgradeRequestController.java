@@ -19,14 +19,13 @@ import java.util.UUID;
 
 @Tag(name = "UpgradeRequest")
 @RestController
-@RequestMapping("/users")
 @RequiredArgsConstructor
 public class UpgradeRequestController {
 
     private final UpgradeRequestService upgradeRequestService;
 
     @Operation(summary = "플랜 변경 요청 생성")
-    @PostMapping("/{userId}/upgrade-requests")
+    @PostMapping("/users/{userId}/upgrade-requests")
     public ApiResponse<UpgradeRequestResponse> createUpgradeRequest(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String userId,
@@ -40,7 +39,7 @@ public class UpgradeRequestController {
     }
 
     @Operation(summary = "사용자 요청 목록 조회")
-    @GetMapping("/{userId}/upgrade-requests")
+    @GetMapping("/users/{userId}/upgrade-requests")
     public ApiResponse<List<UpgradeRequestResponse>> getUserUpgradeRequests(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String userId
@@ -50,6 +49,20 @@ public class UpgradeRequestController {
         }
         List<UpgradeRequestResponse> responses = upgradeRequestService.getUserRequests(userId);
         return ApiResponse.ok(responses);
+    }
+
+    @Operation(summary = "플랜 변경 요청 취소")
+    @DeleteMapping("/users/{userId}/upgrade-requests/{requestId}")
+    public ApiResponse<Void> cancelUpgradeRequest(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String userId,
+            @PathVariable UUID requestId
+    ) {
+        if (!userId.equals(principal.userId())) {
+            throw new RuntimeException("Forbidden");
+        }
+        upgradeRequestService.cancelRequest(requestId, userId);
+        return ApiResponse.ok(null);
     }
 
     @Operation(summary = "대기 중인 플랜 변경 요청 목록 (관리자)")
@@ -71,19 +84,5 @@ public class UpgradeRequestController {
     ) {
         UpgradeRequestResponse response = upgradeRequestService.reviewRequest(principal.userId(), requestId, request);
         return ApiResponse.ok(response);
-    }
-
-    @Operation(summary = "플랜 변경 요청 취소")
-    @DeleteMapping("/{userId}/upgrade-requests/{requestId}")
-    public ApiResponse<Void> cancelUpgradeRequest(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable String userId,
-            @PathVariable UUID requestId
-    ) {
-        if (!userId.equals(principal.userId())) {
-            throw new RuntimeException("Forbidden");
-        }
-        upgradeRequestService.cancelRequest(requestId, userId);
-        return ApiResponse.ok(null);
     }
 }
