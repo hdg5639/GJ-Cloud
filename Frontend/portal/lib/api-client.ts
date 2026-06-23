@@ -282,6 +282,12 @@ export const api = {
         request<AdminUserResponse>("adminUser", `/admin/users/${userId}/suspend`, { method: "PATCH", accessToken }),
       activate: (accessToken: string, userId: string) =>
         request<AdminUserResponse>("adminUser", `/admin/users/${userId}/activate`, { method: "PATCH", accessToken }),
+      updatePlan: (accessToken: string, userId: string, planType: string) =>
+        request<AdminUserResponse>("adminUser", `/admin/users/${userId}/plan`, {
+          method: "PATCH",
+          body: JSON.stringify({ planType }),
+          accessToken,
+        }),
     },
     vms: {
       list: (accessToken: string) =>

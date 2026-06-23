@@ -2,6 +2,8 @@ package gj.cloud.user.application.admin.service.impl;
 
 import gj.cloud.user.application.admin.dto.AdminUserResponse;
 import gj.cloud.user.application.admin.service.AdminUserService;
+import gj.cloud.user.domain.profile.entity.UserProfileEntity;
+import gj.cloud.user.domain.profile.enums.PlanType;
 import gj.cloud.user.domain.profile.repository.UserProfileRepository;
 import gj.cloud.user.global.exception.UserException;
 import gj.cloud.user.global.exception.enums.UserErrorCode;
@@ -48,6 +50,15 @@ public class AdminUserServiceImpl implements AdminUserService {
         var profile = profileRepository.findById(userId)
                 .orElseThrow(() -> new UserException(UserErrorCode.PROFILE_NOT_FOUND));
         profile.activate();
+        return AdminUserResponse.from(profileRepository.save(profile));
+    }
+
+    @Override
+    @Transactional
+    public AdminUserResponse updatePlan(String userId, PlanType planType) {
+        var profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.PROFILE_NOT_FOUND));
+        profile.updatePlanType(planType);
         return AdminUserResponse.from(profileRepository.save(profile));
     }
 }

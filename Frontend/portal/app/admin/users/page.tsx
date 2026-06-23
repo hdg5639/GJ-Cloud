@@ -33,6 +33,18 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handlePlanChange(user: AdminUserResponse, newPlan: string) {
+    if (!accessToken) return;
+    setActionLoading(user.userId);
+    try {
+      const updated = await api.admin.users.updatePlan(accessToken, user.userId, newPlan);
+      setUsers((prev) => prev.map((u) => (u.userId === updated.userId ? updated : u)));
+    } catch {
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -61,11 +73,19 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3 text-gray-200">{user.email}</td>
                   <td className="px-4 py-3 text-gray-400">{user.nickname ?? "-"}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                      user.planType === "PRO" ? "bg-violet-900 text-violet-300"
-                      : user.planType === "ADMIN" ? "bg-red-900 text-red-300"
-                      : "bg-gray-700 text-gray-400"
-                    }`}>{user.planType}</span>
+                    {user.planType === "ADMIN" ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-red-900 text-red-300">ADMIN</span>
+                    ) : (
+                      <select
+                        value={user.planType}
+                        onChange={(e) => handlePlanChange(user, e.target.value)}
+                        disabled={actionLoading === user.userId}
+                        className="text-xs px-2 py-1 rounded bg-gray-800 border border-gray-700 text-gray-300 disabled:opacity-50"
+                      >
+                        <option value="FREE">FREE</option>
+                        <option value="PRO">PRO</option>
+                      </select>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {user.suspended ? (
