@@ -35,9 +35,10 @@ export default function MetricsPage() {
   useEffect(() => {
     if (!accessToken) return;
 
-    const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream?token=${encodeURIComponent(accessToken)}`;
-    
-    const eventSource = new EventSource(url);
+    const eventSource = new EventSource(
+      `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream`,
+      { withCredentials: true }
+    );
 
     eventSource.onmessage = (event) => {
       try {
@@ -49,8 +50,8 @@ export default function MetricsPage() {
       }
     };
 
-    eventSource.onerror = (err) => {
-      console.error("SSE 연결 오류:", err);
+    eventSource.onerror = () => {
+      console.error("SSE 연결 오류");
       eventSource.close();
     };
 
