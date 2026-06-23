@@ -431,8 +431,11 @@ public class ProxmoxClient {
 
     public Mono<JsonNode> getVmMetricsHistory(int vmid, String timeframe) {
         return proxmoxWebClient.get()
-                .uri("/nodes/{node}/qemu/{vmid}/rrddata?timeframe={timeframe}&cf=average",
-                        props.getNode(), vmid, timeframe)
+                .uri(uriBuilder -> uriBuilder
+                        .path("/nodes/{node}/qemu/{vmid}/rrddata")
+                        .queryParam("timeframe", timeframe)
+                        .queryParam("cf", "average")
+                        .build(props.getNode(), vmid))
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
                 .retrieve()
                 .bodyToMono(String.class)
@@ -458,10 +461,17 @@ public class ProxmoxClient {
                 .map(body -> {
                     try {
                         JsonNode data = new ObjectMapper().readTree(body).path("data").path("result");
-                        return new ObjectMapper().convertValue(data, GuestAgentDiskInfo.class);
+                        if (data.isArray()) {
+                            var disks = new java.util.ArrayList<GuestAgentDiskInfo.DiskEntry>();
+                            for (JsonNode item : data) {
+                                disks.add(new ObjectMapper().convertValue(item, GuestAgentDiskInfo.DiskEntry.class));
+                            }
+                            return new GuestAgentDiskInfo(disks);
+                        }
+                        return new GuestAgentDiskInfo(java.util.List.of());
                     } catch (Exception e) {
                         log.error("게스트 에이전트 디스크 정보 파싱 실패: vmid={}, error={}", vmid, e.getMessage());
-                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+                        return new GuestAgentDiskInfo(java.util.List.of());
                     }
                 })
                 .onErrorReturn(new GuestAgentDiskInfo(java.util.List.of()))

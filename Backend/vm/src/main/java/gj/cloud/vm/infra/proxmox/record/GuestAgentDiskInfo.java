@@ -6,16 +6,19 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record GuestAgentDiskInfo(
-        @JsonProperty("disks")
-        List<DiskEntry> disks
+        List<DiskEntry> value
 ) {
+    public List<DiskEntry> disks() {
+        return value;
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record DiskEntry(
             @JsonProperty("name")
             String name,
-            @JsonProperty("used")
+            @JsonProperty("used-bytes")
             Long used,
-            @JsonProperty("total")
+            @JsonProperty("total-bytes")
             Long total
     ) {}
 }
