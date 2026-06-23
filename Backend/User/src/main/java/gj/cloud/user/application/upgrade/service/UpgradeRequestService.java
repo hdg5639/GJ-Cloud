@@ -14,4 +14,5 @@ public interface UpgradeRequestService {
     Page<UpgradeRequestResponse> getRequestsByStatus(UpgradeRequestStatus status, int page, int size);
     List<UpgradeRequestResponse> getUserRequests(String userId);
     UpgradeRequestResponse reviewRequest(String adminId, UUID requestId, ReviewUpgradeRequestRequest request);
+    void cancelRequest(UUID requestId, String userId);
 }

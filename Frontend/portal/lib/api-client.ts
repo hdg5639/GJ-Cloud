@@ -286,6 +286,11 @@ export const api = {
       }),
     getUpgradeRequests: (accessToken: string, userId: string) =>
       request<UpgradeRequestResponse[]>("user", `/users/${userId}/upgrade-requests`, { accessToken }),
+    cancelUpgradeRequest: (accessToken: string, userId: string, requestId: string) =>
+      request<void>("user", `/users/${userId}/upgrade-requests/${requestId}`, {
+        method: "DELETE",
+        accessToken,
+      }),
   },
   admin: {
     users: {

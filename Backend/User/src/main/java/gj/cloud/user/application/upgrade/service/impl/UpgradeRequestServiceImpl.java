@@ -127,4 +127,21 @@ public class UpgradeRequestServiceImpl implements UpgradeRequestService {
         String subject = approved ? "플랜 변경이 승인되었습니다" : "플랜 변경 요청이 거절되었습니다";
         log.info("플랜 변경 검토 알림: email={}, approved={}, subject={}", email, approved, subject);
     }
+
+    @Override
+    @Transactional
+    public void cancelRequest(UUID requestId, String userId) {
+        UpgradeRequestEntity request = upgradeRequestRepository.findById(requestId)
+                .orElseThrow(() -> new UserException(UserErrorCode.REQUEST_NOT_FOUND));
+
+        if (!request.getUserId().equals(userId)) {
+            throw new UserException(UserErrorCode.FORBIDDEN);
+        }
+
+        if (!request.getStatus().equals(UpgradeRequestStatus.PENDING)) {
+            throw new UserException(UserErrorCode.INVALID_REQUEST_STATUS);
+        }
+
+        upgradeRequestRepository.delete(request);
+    }
 }

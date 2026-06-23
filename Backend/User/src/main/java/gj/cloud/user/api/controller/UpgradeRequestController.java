@@ -72,4 +72,18 @@ public class UpgradeRequestController {
         UpgradeRequestResponse response = upgradeRequestService.reviewRequest(principal.userId(), requestId, request);
         return ApiResponse.ok(response);
     }
+
+    @Operation(summary = "플랜 변경 요청 취소")
+    @DeleteMapping("/{userId}/upgrade-requests/{requestId}")
+    public ApiResponse<Void> cancelUpgradeRequest(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String userId,
+            @PathVariable UUID requestId
+    ) {
+        if (!userId.equals(principal.userId())) {
+            throw new RuntimeException("Forbidden");
+        }
+        upgradeRequestService.cancelRequest(requestId, userId);
+        return ApiResponse.ok(null);
+    }
 }

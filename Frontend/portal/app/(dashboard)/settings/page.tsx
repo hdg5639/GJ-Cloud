@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [requestLoading, setRequestLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<"FREE" | "PRO" | null>(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -81,6 +82,20 @@ export default function SettingsPage() {
       console.error(err);
     } finally {
       setRequestLoading(false);
+    }
+  }
+
+  async function handleCancelRequest(requestId: string) {
+    if (!accessToken || !profile) return;
+    setCancelingId(requestId);
+    try {
+      await api.user.cancelUpgradeRequest(accessToken, profile.userId, requestId);
+      const updated = await api.user.getUpgradeRequests(accessToken, profile.userId);
+      setRequests(updated);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCancelingId(null);
     }
   }
 
@@ -306,6 +321,15 @@ export default function SettingsPage() {
                   )}
                   {req.status === "APPROVED" && req.reviewedAt && (
                     <p className="text-xs text-gray-500 mt-2">승인일: {new Date(req.reviewedAt).toLocaleString("ko-KR")}</p>
+                  )}
+                  {req.status === "PENDING" && (
+                    <button
+                      onClick={() => handleCancelRequest(req.id)}
+                      disabled={cancelingId === req.id}
+                      className="text-xs text-red-600 hover:text-red-700 mt-3 font-medium disabled:opacity-60"
+                    >
+                      {cancelingId === req.id ? "취소 중..." : "취소"}
+                    </button>
                   )}
                 </div>
               ))}
