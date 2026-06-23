@@ -85,7 +85,9 @@ export default function CreateInstancePage() {
         <div className="mb-5">
           <label className="text-xs text-gray-500 block mb-2">플랜</label>
           <div className="grid grid-cols-2 gap-2.5">
-            {(["FREE", "PRO"] as const).map((plan) => {
+            {(["FREE", "PRO"] as const)
+              .filter(plan => userPlan === "PRO" || plan === "FREE")
+              .map((plan) => {
               const info = PLAN_INFO[plan];
               const full = plan === "FREE" ? freeFull : proFull;
               const used = availability?.[plan.toLowerCase() as "free" | "pro"].used ?? 0;
