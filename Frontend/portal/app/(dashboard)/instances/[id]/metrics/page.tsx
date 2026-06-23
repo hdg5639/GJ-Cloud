@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { VmMetricsHistoryResponse } from "@/lib/types";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 interface SSEMetrics {
   vmId: string;
@@ -22,15 +22,23 @@ interface SSEMetrics {
   timestamp: number;
 }
 
+interface ChartPoint {
+  time: string;
+  cpu: number;
+  mem: number;
+  netin: number;
+  netout: number;
+}
+
 export default function MetricsPage() {
   const params = useParams();
   const vmId = params.id as string;
   const { accessToken } = useAuth();
 
   const [currentMetrics, setCurrentMetrics] = useState<SSEMetrics | null>(null);
-  const [historyMetrics, setHistoryMetrics] = useState<VmMetricsHistoryResponse | null>(null);
-  const [timeframe, setTimeframe] = useState<string>("hour");
+  const [chartData, setChartData] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -42,161 +50,142 @@ export default function MetricsPage() {
 
     eventSource.onmessage = (event) => {
       try {
-        const metrics = JSON.parse(event.data);
+        const metrics = JSON.parse(event.data) as SSEMetrics;
         setCurrentMetrics(metrics);
+        
+        setChartData(prev => {
+          const newPoint: ChartPoint = {
+            time: new Date(metrics.timestamp * 1000).toLocaleTimeString("ko-KR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            cpu: Math.round(metrics.cpuUsagePercent * 100),
+            mem: Math.round((metrics.memoryUsedBytes / metrics.memoryAllocatedBytes) * 100),
+            netin: Math.round(metrics.networkInBytes / (1024 * 1024)),
+            netout: Math.round(metrics.networkOutBytes / (1024 * 1024)),
+          };
+          
+          const updated = [...prev, newPoint];
+          return updated.slice(-12);
+        });
+        
         setLoading(false);
+        setError(null);
       } catch (err) {
         console.error("메트릭 파싱 실패:", err);
       }
     };
 
     eventSource.onerror = () => {
-      console.error("SSE 연결 오류");
+      setError("메트릭 수신 실패");
       eventSource.close();
     };
 
     return () => eventSource.close();
   }, [accessToken, vmId]);
 
-  useEffect(() => {
-    if (!accessToken) return;
-    api.vm.metricsHistory(accessToken, vmId, timeframe)
-      .then((history) => setHistoryMetrics(history))
-      .catch((err) => console.error("히스토리 조회 실패:", err));
-  }, [accessToken, vmId, timeframe]);
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return (bytes / Math.pow(k, i)).toFixed(2) + " " + sizes[i];
-  };
-
-  const formatUptime = (seconds: number) => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    return `${days}d ${hours}h ${mins}m`;
-  };
-
-  if (loading && !currentMetrics) {
-    return <div className="p-6 text-gray-400">메트릭 연결 중...</div>;
-  }
-
   if (!currentMetrics) {
-    return <div className="p-6 text-red-400">메트릭을 불러올 수 없습니다.</div>;
+    return (
+      <div className="p-8 text-center">
+        <p className="text-gray-400">메트릭 데이터 로딩 중...</p>
+      </div>
+    );
   }
 
-  const memPercent = (currentMetrics.memoryUsedBytes / currentMetrics.memoryAllocatedBytes) * 100;
+  const memoryGb = (currentMetrics.memoryUsedBytes / (1024 ** 3)).toFixed(1);
+  const maxMemoryGb = (currentMetrics.memoryAllocatedBytes / (1024 ** 3)).toFixed(1);
+  const memPercent = Math.round((currentMetrics.memoryUsedBytes / currentMetrics.memoryAllocatedBytes) * 100);
+  const cpuPercent = Math.round(currentMetrics.cpuUsagePercent * 100);
   const diskPercent = currentMetrics.diskAllocatedBytes > 0
-    ? (currentMetrics.diskUsedBytes / currentMetrics.diskAllocatedBytes) * 100
+    ? Math.round((currentMetrics.diskUsedBytes / currentMetrics.diskAllocatedBytes) * 100)
     : 0;
 
-  const chartData = historyMetrics?.dataPoints.map((point) => ({
-    time: new Date(point.timestamp * 1000).toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    cpu: (point.cpuPercent * 100).toFixed(1),
-    mem: (point.memoryUsedBytes / (1024 * 1024 * 1024)).toFixed(2),
-  })) || [];
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">VM 메트릭 (실시간)</h1>
-        <div className="flex gap-2">
-          {["hour", "day", "week", "month"].map((tf) => (
-            <button
-              key={tf}
-              onClick={() => setTimeframe(tf)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                timeframe === tf
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-              }`}
-            >
-              {tf === "hour" ? "1시간" : tf === "day" ? "1일" : tf === "week" ? "1주" : "1개월"}
-            </button>
-          ))}
-        </div>
+    <div className="p-6 bg-gray-950 min-h-screen">
+      <div className="mb-8">
+        <h1 className="text-2xl font-medium text-white mb-1">인스턴스 모니터링</h1>
+        <p className="text-sm text-gray-400">{vmId}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <div className="text-sm text-gray-500 mb-2">CPU 사용률</div>
-          <div className="text-3xl font-bold text-blue-400">
-            {(currentMetrics.cpuUsagePercent * 100).toFixed(1)}%
-          </div>
-          <div className="text-xs text-gray-500 mt-2">
-            {currentMetrics.allocatedCpu} vCPU 중 사용 중
-          </div>
-        </div>
-
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <div className="text-sm text-gray-500 mb-2">메모리</div>
-          <div className="text-3xl font-bold text-purple-400">
-            {memPercent.toFixed(1)}%
-          </div>
-          <div className="text-xs text-gray-500 mt-2">
-            {formatBytes(currentMetrics.memoryUsedBytes)} / {formatBytes(currentMetrics.memoryAllocatedBytes)}
-          </div>
-        </div>
-
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <div className="text-sm text-gray-500 mb-2">디스크</div>
-          <div className="text-3xl font-bold text-orange-400">
-            {diskPercent.toFixed(1)}%
-          </div>
-          <div className="text-xs text-gray-500 mt-2">
-            {formatBytes(currentMetrics.diskUsedBytes)} / {formatBytes(currentMetrics.diskAllocatedBytes)}
-          </div>
-        </div>
-
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <div className="text-sm text-gray-500 mb-2">가동 시간</div>
-          <div className="text-3xl font-bold text-green-400">
-            {formatUptime(currentMetrics.uptimeSeconds)}
-          </div>
-          <div className="text-xs text-gray-500 mt-2">상태: {currentMetrics.status}</div>
-        </div>
-      </div>
-
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-        <h2 className="text-lg font-semibold text-white mb-4">네트워크</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="text-sm text-gray-500 mb-1">수신</div>
-            <div className="text-2xl font-bold text-cyan-400">
-              {formatBytes(currentMetrics.networkInBytes)}
-            </div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-500 mb-1">송신</div>
-            <div className="text-2xl font-bold text-cyan-400">
-              {formatBytes(currentMetrics.networkOutBytes)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {chartData.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">시계열 데이터</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-              <XAxis dataKey="time" stroke="#999" />
-              <YAxis stroke="#999" />
-              <Tooltip contentStyle={{ backgroundColor: "#1f2937", borderColor: "#4b5563" }} />
-              <Legend />
-              <Line type="monotone" dataKey="cpu" stroke="#60a5fa" name="CPU (%)" isAnimationActive={false} />
-              <Line type="monotone" dataKey="mem" stroke="#a78bfa" name="메모리 (GB)" isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
+      {error && (
+        <div className="bg-red-900/20 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm">
+          {error}
         </div>
       )}
+
+      {/* 메트릭 카드 그리드 */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        <MetricCard label="CPU 사용률" value={`${cpuPercent}%`} subtext={`${currentMetrics.allocatedCpu} cores`} />
+        <MetricCard label="메모리" value={`${memPercent}%`} subtext={`${memoryGb} GB / ${maxMemoryGb} GB`} />
+        <MetricCard label="디스크" value={`${diskPercent}%`} subtext={`${(currentMetrics.diskUsedBytes / (1024 ** 3)).toFixed(1)} GB / ${(currentMetrics.diskAllocatedBytes / (1024 ** 3)).toFixed(1)} GB`} />
+        <MetricCard label="상태" value={currentMetrics.status.toUpperCase()} subtext="실시간" />
+      </div>
+
+      {/* 차트 그리드 */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <ChartCard title="CPU 사용률" dataKey="cpu" color="#60a5fa" data={chartData} />
+        <ChartCard title="메모리 사용률" dataKey="mem" color="#34d399" data={chartData} />
+      </div>
+
+      {/* 네트워크 차트 (풀 너비) */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <p className="text-sm font-medium text-white mb-4">네트워크 트래픽</p>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+            <XAxis dataKey="time" stroke="#999" style={{ fontSize: "12px" }} />
+            <YAxis stroke="#999" style={{ fontSize: "12px" }} />
+            <Tooltip
+              contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #4b5563", borderRadius: "6px" }}
+              labelStyle={{ color: "#fff" }}
+            />
+            <Line type="monotone" dataKey="netin" stroke="#3b82f6" name="In (MB)" dot={false} strokeWidth={2} />
+            <Line type="monotone" dataKey="netout" stroke="#f59e0b" name="Out (MB)" dot={false} strokeWidth={2} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, subtext }: { label: string; value: string; subtext: string }) {
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+      <p className="text-xs text-gray-500 mb-2 font-medium">{label}</p>
+      <p className="text-xl font-medium text-white">{value}</p>
+      <p className="text-xs text-gray-600 mt-1">{subtext}</p>
+    </div>
+  );
+}
+
+function ChartCard({ title, dataKey, color, data }: { title: string; dataKey: string; color: string; data: ChartPoint[] }) {
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+      <p className="text-sm font-medium text-white mb-4">{title}</p>
+      <ResponsiveContainer width="100%" height={250}>
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+          <XAxis dataKey="time" stroke="#999" style={{ fontSize: "12px" }} />
+          <YAxis stroke="#999" style={{ fontSize: "12px" }} domain={[0, 100]} />
+          <Tooltip
+            contentStyle={{ backgroundColor: "#1f2937", border: "1px solid #4b5563", borderRadius: "6px" }}
+            labelStyle={{ color: "#fff" }}
+          />
+          <Area
+            type="monotone"
+            dataKey={dataKey}
+            stroke={color}
+            strokeWidth={2}
+            fill={`url(#gradient-${dataKey})`}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
