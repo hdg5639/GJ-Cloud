@@ -437,19 +437,21 @@ public class ProxmoxClient {
                         .queryParam("cf", "average")
                         .build(props.getNode(), vmid))
                 .header(HttpHeaders.AUTHORIZATION, authHeader())
-                .retrieve()
-                .bodyToMono(String.class)
-                .map(body -> {
-                    try {
-                        return new ObjectMapper().readTree(body).path("data");
-                    } catch (Exception e) {
-                        log.error("메트릭 히스토리 파싱 실패: vmid={}, timeframe={}, error={}",
-                                vmid, timeframe, e.getMessage());
-                        throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
-                    }
-                })
-                .doOnError(e -> log.error("메트릭 히스토리 조회 실패: vmid={}, timeframe={}, error={}",
-                        vmid, timeframe, e.getMessage()));
+                .exchangeToMono(res -> res.bodyToMono(String.class)
+                        .flatMap(body -> {
+                            if (res.statusCode().is2xxSuccessful()) {
+                                try {
+                                    return Mono.just(new ObjectMapper().readTree(body).path("data"));
+                                } catch (Exception e) {
+                                    log.error("메트릭 히스토리 파싱 실패: vmid={}, timeframe={}, error={}",
+                                            vmid, timeframe, e.getMessage());
+                                    return Mono.just(new ObjectMapper().createArrayNode());
+                                }
+                            }
+                            log.warn("메트릭 히스토리 조회 실패 (Proxmox API): vmid={}, timeframe={}, status={}",
+                                    vmid, timeframe, res.statusCode());
+                            return Mono.just(new ObjectMapper().createArrayNode());
+                        }));
     }
 
     public Mono<GuestAgentDiskInfo> getVmDiskInfo(int vmid) {
