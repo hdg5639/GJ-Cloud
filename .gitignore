@@ -23,6 +23,7 @@ $RECYCLE.BIN/
 
 ### Local guides ###
 NEW_SERVICE_GUIDE.md
+Service_Info.md
 
 ### Local docker ###
 compose.yaml
