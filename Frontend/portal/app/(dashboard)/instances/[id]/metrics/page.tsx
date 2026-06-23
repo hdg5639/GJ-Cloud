@@ -7,39 +7,69 @@ import { api } from "@/lib/api-client";
 import type { VmMetricsCurrentResponse, VmMetricsHistoryResponse } from "@/lib/types";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
+interface SSEMetrics {
+  vmId: string;
+  cpuUsagePercent: number;
+  allocatedCpu: number;
+  memoryUsedBytes: number;
+  memoryAllocatedBytes: number;
+  diskUsedBytes: number;
+  diskAllocatedBytes: number;
+  networkInBytes: number;
+  networkOutBytes: number;
+  uptimeSeconds: number;
+  status: string;
+  timestamp: number;
+}
+
 export default function MetricsPage() {
   const params = useParams();
   const vmId = params.id as string;
   const { accessToken } = useAuth();
 
-  const [currentMetrics, setCurrentMetrics] = useState<VmMetricsCurrentResponse | null>(null);
+  const [currentMetrics, setCurrentMetrics] = useState<SSEMetrics | null>(null);
   const [historyMetrics, setHistoryMetrics] = useState<VmMetricsHistoryResponse | null>(null);
   const [timeframe, setTimeframe] = useState<string>("hour");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!accessToken) return;
-    setLoading(true);
 
-    const fetchMetrics = async () => {
+    // SSE 스트림 구독
+    const eventSource = new EventSource(
+      `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream`,
+      {
+        withCredentials: false,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      } as any
+    );
+
+    eventSource.onmessage = (event) => {
       try {
-        const [current, history] = await Promise.all([
-          api.vm.metricsCurrent(accessToken, vmId),
-          api.vm.metricsHistory(accessToken, vmId, timeframe),
-        ]);
-        setCurrentMetrics(current);
-        setHistoryMetrics(history);
-      } catch (err) {
-        console.error("메트릭 조회 실패:", err);
-      } finally {
+        const metrics = JSON.parse(event.data);
+        setCurrentMetrics(metrics);
         setLoading(false);
+      } catch (err) {
+        console.error("메트릭 파싱 실패:", err);
       }
     };
 
-    fetchMetrics();
+    eventSource.onerror = () => {
+      console.error("SSE 연결 오류");
+      eventSource.close();
+    };
 
-    const interval = setInterval(fetchMetrics, 5000);
-    return () => clearInterval(interval);
+    return () => eventSource.close();
+  }, [accessToken, vmId]);
+
+  // 히스토리는 timeframe 변경시에만 조회
+  useEffect(() => {
+    if (!accessToken) return;
+    api.vm.metricsHistory(accessToken, vmId, timeframe)
+      .then((history) => setHistoryMetrics(history))
+      .catch((err) => console.error("히스토리 조회 실패:", err));
   }, [accessToken, vmId, timeframe]);
 
   const formatBytes = (bytes: number) => {
@@ -58,7 +88,7 @@ export default function MetricsPage() {
   };
 
   if (loading && !currentMetrics) {
-    return <div className="p-6 text-gray-400">메트릭 로딩 중...</div>;
+    return <div className="p-6 text-gray-400">메트릭 연결 중...</div>;
   }
 
   if (!currentMetrics) {
@@ -82,7 +112,7 @@ export default function MetricsPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">VM 메트릭</h1>
+        <h1 className="text-2xl font-bold text-white">VM 메트릭 (실시간)</h1>
         <div className="flex gap-2">
           {["hour", "day", "week", "month"].map((tf) => (
             <button
