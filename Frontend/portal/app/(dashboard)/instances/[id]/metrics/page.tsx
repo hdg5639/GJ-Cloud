@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { getExchangedToken } from "@/lib/api-client";
 import type { VmMetricsHistoryResponse } from "@/lib/types";
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -46,7 +47,7 @@ export default function MetricsPage() {
     let closed = false;
 
     async function connect() {
-      if (closed) return;
+      if (closed || !accessToken) return;
       try {
         const vmToken = await getExchangedToken(accessToken, "vm-service");
         if (closed) return;
