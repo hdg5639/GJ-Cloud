@@ -6,23 +6,23 @@ import java.math.BigDecimal;
 public record VmMetricsCurrentResponse(
         String vmId,
         String status,
-        @JsonProperty("cpu")
+        @JsonProperty(value = "cpuUsagePercent")
         BigDecimal cpuUsagePercent,
-        @JsonProperty("maxCpu")
+        @JsonProperty(value = "allocatedCpu")
         int allocatedCpu,
-        @JsonProperty("mem")
+        @JsonProperty(value = "memoryUsedBytes")
         long memoryUsedBytes,
-        @JsonProperty("maxMem")
+        @JsonProperty(value = "memoryAllocatedBytes")
         long memoryAllocatedBytes,
-        @JsonProperty("diskUsedBytes")
+        @JsonProperty(value = "diskUsedBytes")
         long diskUsedBytes,
-        @JsonProperty("diskAllocatedBytes")
+        @JsonProperty(value = "diskAllocatedBytes")
         long diskAllocatedBytes,
-        @JsonProperty("netIn")
+        @JsonProperty(value = "networkInBytes")
         long networkInBytes,
-        @JsonProperty("netOut")
+        @JsonProperty(value = "networkOutBytes")
         long networkOutBytes,
-        @JsonProperty("uptime")
+        @JsonProperty(value = "uptimeSeconds")
         long uptimeSeconds,
         long timestamp
 ) {}
