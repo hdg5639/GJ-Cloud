@@ -211,53 +211,60 @@ export default function SettingsPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="text-sm font-medium text-gray-900 mb-4">요청 보내기</h2>
 
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-2">현재 플랜</p>
-              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <p className="text-sm font-medium text-gray-900">{profile.planType}</p>
-              </div>
+          {requests.some(r => r.status === "PENDING") ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-sm text-amber-800">진행 중인 요청이 있습니다</p>
+              <p className="text-xs text-amber-700 mt-1">기존 요청이 처리될 때까지 새 요청을 보낼 수 없습니다.</p>
             </div>
-
-            <div>
-              <p className="text-xs text-gray-500 mb-2">변경할 플랜</p>
-              <div className="space-y-2">
-                {profile.planType === "FREE" ? (
-                  <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="plan"
-                      value="PRO"
-                      checked={selectedPlan === "PRO"}
-                      onChange={() => setSelectedPlan("PRO")}
-                      className="w-4 h-4"
-                    />
-                    <span className="ml-3 text-sm font-medium text-gray-900">PRO</span>
-                  </label>
-                ) : (
-                  <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="plan"
-                      value="FREE"
-                      checked={selectedPlan === "FREE"}
-                      onChange={() => setSelectedPlan("FREE")}
-                      className="w-4 h-4"
-                    />
-                    <span className="ml-3 text-sm font-medium text-gray-900">FREE</span>
-                  </label>
-                )}
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs text-gray-500 mb-2">현재 플랜</p>
+                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <p className="text-sm font-medium text-gray-900">{profile.planType}</p>
+                </div>
               </div>
-            </div>
 
-            <button
-              onClick={handleCreateRequest}
-              disabled={requestLoading || !selectedPlan}
-              className="w-full h-9 bg-[#03C75A] text-white rounded-md text-sm font-medium disabled:opacity-60"
-            >
-              {requestLoading ? "요청 중..." : "변경 요청"}
-            </button>
-          </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-2">변경할 플랜</p>
+                <div className="space-y-2">
+                  {profile.planType === "FREE" ? (
+                    <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="plan"
+                        value="PRO"
+                        checked={selectedPlan === "PRO"}
+                        onChange={() => setSelectedPlan("PRO")}
+                        className="w-4 h-4"
+                      />
+                      <span className="ml-3 text-sm font-medium text-gray-900">PRO</span>
+                    </label>
+                  ) : (
+                    <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="plan"
+                        value="FREE"
+                        checked={selectedPlan === "FREE"}
+                        onChange={() => setSelectedPlan("FREE")}
+                        className="w-4 h-4"
+                      />
+                      <span className="ml-3 text-sm font-medium text-gray-900">FREE</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={handleCreateRequest}
+                disabled={requestLoading || !selectedPlan}
+                className="w-full h-9 bg-[#03C75A] text-white rounded-md text-sm font-medium disabled:opacity-60"
+              >
+                {requestLoading ? "요청 중..." : "변경 요청"}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 요청 현황 */}
