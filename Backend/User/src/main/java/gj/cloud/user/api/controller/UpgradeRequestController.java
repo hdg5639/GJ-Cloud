@@ -1,7 +1,6 @@
 package gj.cloud.user.api.controller;
 
 import gj.cloud.user.application.upgrade.dto.CreateUpgradeRequestRequest;
-import gj.cloud.user.application.upgrade.dto.PagedUpgradeRequestResponse;
 import gj.cloud.user.application.upgrade.dto.ReviewUpgradeRequestRequest;
 import gj.cloud.user.application.upgrade.dto.UpgradeRequestResponse;
 import gj.cloud.user.application.upgrade.service.UpgradeRequestService;
@@ -68,12 +67,12 @@ public class UpgradeRequestController {
 
     @Operation(summary = "대기 중인 플랜 변경 요청 목록 (관리자)")
     @GetMapping("/admin/upgrade-requests")
-    public ApiResponse<PagedUpgradeRequestResponse> getPendingUpgradeRequests(
+    public ApiResponse<Page<UpgradeRequestResponse>> getPendingUpgradeRequests(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         Page<UpgradeRequestResponse> responses = upgradeRequestService.getRequestsByStatus(UpgradeRequestStatus.PENDING, page, size);
-        return ApiResponse.ok(PagedUpgradeRequestResponse.from(responses));
+        return ApiResponse.ok(responses);
     }
 
     @Operation(summary = "플랜 변경 요청 검토 (관리자)")
