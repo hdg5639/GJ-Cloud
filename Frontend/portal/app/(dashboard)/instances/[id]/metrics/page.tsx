@@ -85,8 +85,10 @@ export default function MetricsPage() {
         };
 
         eventSource.onerror = () => {
-          setError("메트릭 수신 실패");
-          eventSource?.close();
+          if (!closed) {
+            setError("메트릭 수신 실패");
+            eventSource?.close();
+          }
         };
       } catch (err) {
         console.error("메트릭 연결 실패:", err);
@@ -97,7 +99,11 @@ export default function MetricsPage() {
 
     return () => {
       closed = true;
-      eventSource?.close();
+      if (eventSource) {
+        eventSource.onmessage = null;
+        eventSource.onerror = null;
+        eventSource.close();
+      }
     };
   }, [accessToken, vmId]);
 
