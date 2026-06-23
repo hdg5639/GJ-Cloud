@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { UpgradeRequestResponse } from "@/lib/types";
+import type { UpgradeRequestResponse, PagedResponse } from "@/lib/types";
 
 export default function AdminUpgradeRequestsPage() {
   const { accessToken } = useAuth();
   const [requests, setRequests] = useState<UpgradeRequestResponse[]>([]);
+  const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({});
@@ -23,7 +24,10 @@ export default function AdminUpgradeRequestsPage() {
     setLoading(true);
     api.admin.upgradeRequests
       .list(accessToken, page)
-      .then((data: any) => setRequests(data.content || data))
+      .then((data: PagedResponse<UpgradeRequestResponse>) => {
+        setRequests(data.content);
+        setTotalPages(data.totalPages);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }

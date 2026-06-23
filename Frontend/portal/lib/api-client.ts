@@ -11,6 +11,7 @@ import type {
   VmMetricsCurrentResponse,
   VmMetricsHistoryResponse,
   UpgradeRequestResponse,
+  PagedResponse,
 } from "./types";
 
 const API_BASE = {
@@ -319,7 +320,7 @@ export const api = {
     },
     upgradeRequests: {
       list: (accessToken: string, page: number = 1, size: number = 20) =>
-        request<{ content: UpgradeRequestResponse[]; totalPages: number; totalElements: number }>(
+        request<PagedResponse<UpgradeRequestResponse>>(
           "adminUser",
           `/admin/upgrade-requests?page=${page}&size=${size}`,
           { accessToken }

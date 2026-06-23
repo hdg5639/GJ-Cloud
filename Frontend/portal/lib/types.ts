@@ -141,3 +141,12 @@ export interface UpgradeRequestResponse {
   reviewedAt: string | null;
   reviewedBy: string | null;
 }
+
+export interface PagedResponse<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+  empty: boolean;
+}
