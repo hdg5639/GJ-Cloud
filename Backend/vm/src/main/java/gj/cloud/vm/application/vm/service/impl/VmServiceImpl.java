@@ -532,7 +532,7 @@ public class VmServiceImpl implements VmService {
                 currentData.path("netin").asLong(),
                 currentData.path("netout").asLong(),
                 currentData.path("uptime").asLong(),
-                System.currentTimeMillis()
+                System.currentTimeMillis() / 1000
         );
     }
 
