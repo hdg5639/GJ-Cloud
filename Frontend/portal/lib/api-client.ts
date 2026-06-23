@@ -322,11 +322,11 @@ export const api = {
       list: (accessToken: string, page: number = 1, size: number = 20) =>
         request<PagedResponse<UpgradeRequestResponse>>(
           "adminUser",
-          `/admin/upgrade-requests?page=${page}&size=${size}`,
+          `/admin/users/upgrade-requests?page=${page}&size=${size}`,
           { accessToken }
         ),
       review: (accessToken: string, requestId: string, approved: boolean, reason?: string) =>
-        request<UpgradeRequestResponse>("adminUser", `/admin/upgrade-requests/${requestId}`, {
+        request<UpgradeRequestResponse>("adminUser", `/admin/users/upgrade-requests/${requestId}`, {
           method: "PATCH",
           body: JSON.stringify({ approved, reason }),
           accessToken,

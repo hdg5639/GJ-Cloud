@@ -66,7 +66,7 @@ public class UpgradeRequestController {
     }
 
     @Operation(summary = "대기 중인 플랜 변경 요청 목록 (관리자)")
-    @GetMapping("/admin/upgrade-requests")
+    @GetMapping("/admin/users/upgrade-requests")
     public ApiResponse<Page<UpgradeRequestResponse>> getPendingUpgradeRequests(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size
@@ -76,7 +76,7 @@ public class UpgradeRequestController {
     }
 
     @Operation(summary = "플랜 변경 요청 검토 (관리자)")
-    @PatchMapping("/admin/upgrade-requests/{requestId}")
+    @PatchMapping("/admin/users/upgrade-requests/{requestId}")
     public ApiResponse<UpgradeRequestResponse> reviewUpgradeRequest(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,
