@@ -7,6 +7,7 @@ import { api } from "@/lib/api-client";
 import type { PortResponse } from "@/lib/api-client";
 import { useVmEvents } from "@/hooks/use-vm-events";
 import type { VmResponse, VmStatusEvent } from "@/lib/types";
+import UpgradeRequestModal from "@/components/upgrade-request-modal";
 
 function CodeBlock({
   id,
@@ -78,6 +79,7 @@ export default function InstanceDetailPage() {
   const [vm, setVm] = useState<VmResponse | null>(null);
   const [accordionOpen, setAccordionOpen] = useState(false);
   const [installTab, setInstallTab] = useState<"mac" | "win" | "linux">("mac");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [sshGuideTab, setSshGuideTab] = useState<"own" | "generated">("own");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -284,6 +286,12 @@ export default function InstanceDetailPage() {
             className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
           >
             메트릭
+          </button>
+          <button
+            onClick={() => setShowUpgradeModal(true)}
+            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            플랜 변경
           </button>
           <button
             onClick={() => setConfirmDelete(true)}
@@ -814,6 +822,17 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             </div>
           </div>
         </div>
+      )}
+
+      {/* 플랜 변경 모달 */}
+      {showUpgradeModal && vm && (
+        <UpgradeRequestModal
+          vm={vm}
+          onClose={() => setShowUpgradeModal(false)}
+          onSuccess={() => {
+            setShowUpgradeModal(false);
+          }}
+        />
       )}
     </div>
   );

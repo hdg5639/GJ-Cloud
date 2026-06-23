@@ -10,6 +10,7 @@ import type {
   AdminVmResponse,
   VmMetricsCurrentResponse,
   VmMetricsHistoryResponse,
+  UpgradeRequestResponse,
 } from "./types";
 
 const API_BASE = {
@@ -277,6 +278,14 @@ export const api = {
       }),
     deleteSshKey: (accessToken: string, keyId: string) =>
       request<void>("user", `/users/ssh-keys/${keyId}`, { method: "DELETE", accessToken }),
+    createUpgradeRequest: (accessToken: string, userId: string, targetPlanType: string) =>
+      request<UpgradeRequestResponse>("user", `/users/${userId}/upgrade-requests`, {
+        method: "POST",
+        body: JSON.stringify({ targetPlanType }),
+        accessToken,
+      }),
+    getUpgradeRequests: (accessToken: string, userId: string) =>
+      request<UpgradeRequestResponse[]>("user", `/users/${userId}/upgrade-requests`, { accessToken }),
   },
   admin: {
     users: {
@@ -302,6 +311,20 @@ export const api = {
         request<AdminVmResponse>("adminVm", `/admin/vms/${vmId}`, { accessToken }),
       forceDelete: (accessToken: string, vmId: string) =>
         request<void>("adminVm", `/admin/vms/${vmId}/force`, { method: "DELETE", accessToken }),
+    },
+    upgradeRequests: {
+      list: (accessToken: string, page: number = 1, size: number = 20) =>
+        request<{ content: UpgradeRequestResponse[]; totalPages: number; totalElements: number }>(
+          "adminUser",
+          `/admin/upgrade-requests?page=${page}&size=${size}`,
+          { accessToken }
+        ),
+      review: (accessToken: string, requestId: string, approved: boolean, reason?: string) =>
+        request<UpgradeRequestResponse>("adminUser", `/admin/upgrade-requests/${requestId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ approved, reason }),
+          accessToken,
+        }),
     },
   },
 };

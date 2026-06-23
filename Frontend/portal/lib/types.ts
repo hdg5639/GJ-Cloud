@@ -129,3 +129,15 @@ export interface VmMetricsHistoryResponse {
     diskWriteBytes: number;
   }>;
 }
+
+export interface UpgradeRequestResponse {
+  id: string;
+  userId: string;
+  type: "UPGRADE" | "DOWNGRADE";
+  targetPlanType: "FREE" | "PRO";
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+}
