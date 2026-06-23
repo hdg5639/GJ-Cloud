@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getExchangedToken } from "@/lib/api-client";
 import type { VmMetricsHistoryResponse } from "@/lib/types";
@@ -32,6 +32,7 @@ interface ChartPoint {
 
 export default function MetricsPage() {
   const params = useParams();
+  const router = useRouter();
   const vmId = params.id as string;
   const { accessToken } = useAuth();
 
@@ -61,11 +62,11 @@ export default function MetricsPage() {
             setCurrentMetrics(metrics);
             
             setChartData(prev => {
+              const date = new Date(metrics.timestamp * 1000);
+              const hours = String(date.getHours()).padStart(2, "0");
+              const minutes = String(date.getMinutes()).padStart(2, "0");
               const newPoint: ChartPoint = {
-                time: new Date(metrics.timestamp * 1000).toLocaleTimeString("ko-KR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
+                time: `${hours}:${minutes}`,
                 cpu: Math.round(metrics.cpuUsagePercent * 100),
                 mem: Math.round((metrics.memoryUsedBytes / metrics.memoryAllocatedBytes) * 100),
                 netin: Math.round(metrics.networkInBytes / (1024 * 1024)),
@@ -118,7 +119,16 @@ export default function MetricsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={() => router.back()}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          aria-label="뒤로가기"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
         <h1 className="text-lg font-medium text-gray-900">메트릭</h1>
       </div>
 
