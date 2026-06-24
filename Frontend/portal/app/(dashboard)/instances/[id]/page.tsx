@@ -7,7 +7,7 @@ import { api } from "@/lib/api-client";
 import type { PortResponse } from "@/lib/api-client";
 import { useVmEvents } from "@/hooks/use-vm-events";
 import type { VmResponse, VmStatusEvent } from "@/lib/types";
-import UpgradeRequestModal from "@/components/upgrade-request-modal";
+import VmSpecModal from "@/components/vm-spec-modal";
 
 function CodeBlock({
   id,
@@ -302,7 +302,7 @@ export default function InstanceDetailPage() {
             onClick={() => setShowUpgradeModal(true)}
             className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
           >
-            플랜 변경
+            스펙 변경
           </button>
           <div className="w-px h-5 bg-gray-200" />
           <button
@@ -841,12 +841,13 @@ sudo apt-get update && sudo apt-get install cloudflared`}
         </div>
       )}
 
-      {/* 플랜 변경 모달 */}
+      {/* 스펙 변경 모달 */}
       {showUpgradeModal && vm && (
-        <UpgradeRequestModal
+        <VmSpecModal
           vm={vm}
           onClose={() => setShowUpgradeModal(false)}
-          onSuccess={() => {
+          onSuccess={(updated) => {
+            setVm(updated);
             setShowUpgradeModal(false);
           }}
         />
