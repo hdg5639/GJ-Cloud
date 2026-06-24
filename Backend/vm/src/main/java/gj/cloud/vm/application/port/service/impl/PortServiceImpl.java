@@ -12,6 +12,7 @@ import gj.cloud.vm.domain.port.repository.VmPortRepository;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
+import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.infra.cloudflare.client.CloudflareClient;
 import gj.cloud.vm.infra.cloudflare.config.CloudflareProperties;
 import lombok.RequiredArgsConstructor;
