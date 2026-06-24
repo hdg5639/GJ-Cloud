@@ -364,6 +364,11 @@ export default function InstanceDetailPage() {
           </div>
         </div>
 
+        <div className="flex items-start gap-2 mt-3 mb-1 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+          <span className="text-amber-500 text-sm mt-0.5">⚠</span>
+          <p className="text-[11px] text-amber-800">VM 생성 직후에는 DNS 전파 속도로 인해 <strong>5~10분가량 SSH 접속이 되지 않을 수 있습니다.</strong> 잠시 후 다시 시도해주세요.</p>
+        </div>
+
         <button
           onClick={() => setAccordionOpen(!accordionOpen)}
           className={`flex items-center justify-between w-full mt-1 px-3 py-2.5 rounded-lg border transition-colors ${
