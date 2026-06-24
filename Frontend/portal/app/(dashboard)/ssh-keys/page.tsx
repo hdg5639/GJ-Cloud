@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { SshKeyResponse } from "@/lib/types";
+import { PageLoader } from "@/components/ui/loader";
 
 export default function SshKeysPage() {
   const { accessToken } = useAuth();
@@ -52,7 +53,7 @@ export default function SshKeysPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-400">불러오는 중...</p>
+        <PageLoader />
       ) : keys.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-sm">등록된 SSH 키가 없습니다.</p>

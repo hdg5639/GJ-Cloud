@@ -8,6 +8,7 @@ import type { PortResponse } from "@/lib/api-client";
 import { useVmEvents } from "@/hooks/use-vm-events";
 import type { VmResponse, VmStatusEvent, ProfileResponse } from "@/lib/types";
 import VmSpecModal from "@/components/vm-spec-modal";
+import { PageLoader } from "@/components/ui/loader";
 
 function CodeBlock({
   id,
@@ -283,7 +284,7 @@ export default function InstanceDetailPage() {
     }
   }
 
-  if (!vm) return <p className="text-sm text-gray-400">불러오는 중...</p>;
+  if (!vm) return <PageLoader />;
 
   const isRunning = vm.status === "RUNNING";
   const isStopped = vm.status === "STOPPED";

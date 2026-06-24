@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { ProfileResponse, UpgradeRequestResponse } from "@/lib/types";
+import { PageLoader, Spinner } from "@/components/ui/loader";
 
 type Tab = "profile" | "upgrade-requests";
 
@@ -100,7 +101,7 @@ export default function SettingsPage() {
   }
 
   if (!profile) {
-    return <p className="text-sm text-gray-400">불러오는 중...</p>;
+    return <PageLoader />;
   }
 
   return (
@@ -287,7 +288,10 @@ export default function SettingsPage() {
           <h2 className="text-sm font-medium text-gray-900 mb-4">요청 현황</h2>
 
           {loadingRequests ? (
-            <p className="text-sm text-gray-500">불러오는 중...</p>
+            <div className="flex items-center gap-2 py-6 text-gray-400">
+              <Spinner className="w-4 h-4 text-gray-300" />
+              <span className="text-sm">불러오는 중</span>
+            </div>
           ) : requests.length === 0 ? (
             <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
               <p className="text-sm text-gray-500">요청이 없습니다</p>

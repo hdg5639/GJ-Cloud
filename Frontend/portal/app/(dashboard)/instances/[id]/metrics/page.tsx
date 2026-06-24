@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getExchangedToken } from "@/lib/api-client";
 import type { VmMetricsHistoryResponse } from "@/lib/types";
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { PageLoader } from "@/components/ui/loader";
 
 interface SSEMetrics {
   vmId: string;
@@ -132,11 +133,7 @@ export default function MetricsPage() {
   const reconnect = useCallback(() => reconnectRef.current(), []);
 
   if (!currentMetrics) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-gray-500">메트릭 데이터 로딩 중...</p>
-      </div>
-    );
+    return <PageLoader label="성능 데이터 불러오는 중" />;
   }
 
   const memoryGb = (currentMetrics.memoryUsedBytes / (1024 ** 3)).toFixed(1);

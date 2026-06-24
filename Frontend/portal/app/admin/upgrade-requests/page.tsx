@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { UpgradeRequestResponse, PagedResponse } from "@/lib/types";
+import { PageLoader } from "@/components/ui/loader";
 
 export default function AdminUpgradeRequestsPage() {
   const { accessToken } = useAuth();
@@ -72,7 +73,7 @@ export default function AdminUpgradeRequestsPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-500">불러오는 중...</p>
+        <PageLoader dark />
       ) : requests.length === 0 ? (
         <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 text-center">
           <p className="text-gray-400">대기 중인 요청이 없습니다</p>

@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import { useVmEvents } from "@/hooks/use-vm-events";
 import type { VmResponse, VmStatusEvent, UsageResponse } from "@/lib/types";
+import { SkeletonCard } from "@/components/ui/loader";
 
 const STATUS_STYLE: Record<string, string> = {
   PENDING: "bg-amber-100 text-amber-700",
@@ -93,7 +94,9 @@ export default function InstancesPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-400">불러오는 중...</p>
+        <div className="grid grid-cols-1 gap-3">
+          {[0, 1, 2].map((i) => <SkeletonCard key={i} />)}
+        </div>
       ) : activeVms.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <p className="text-sm">인스턴스가 없습니다.</p>

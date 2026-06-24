@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { AdminUserResponse } from "@/lib/types";
+import { SkeletonRow } from "@/components/ui/loader";
 
 export default function AdminUsersPage() {
   const { accessToken } = useAuth();
@@ -52,12 +53,9 @@ export default function AdminUsersPage() {
         <span className="text-sm text-gray-500">{users.length}명</span>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-gray-500">불러오는 중...</p>
-      ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
+      <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
               <tr className="border-b border-gray-800">
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">이메일</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">닉네임</th>
@@ -68,7 +66,9 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {users.map((user) => (
+              {loading
+                ? [0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} cols={6} dark />)
+                : users.map((user) => (
                 <tr key={user.userId} className="hover:bg-gray-800/50">
                   <td className="px-4 py-3 text-gray-200">{user.email}</td>
                   <td className="px-4 py-3 text-gray-400">{user.nickname ?? "-"}</td>
@@ -117,7 +117,6 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
-      )}
     </div>
   );
 }

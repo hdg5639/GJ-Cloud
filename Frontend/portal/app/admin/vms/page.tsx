@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { AdminVmResponse, AdminUserResponse } from "@/lib/types";
+import { SkeletonRow } from "@/components/ui/loader";
 
 const STATUS_COLOR: Record<string, string> = {
   RUNNING: "bg-green-900 text-green-400",
@@ -55,12 +56,9 @@ export default function AdminVmsPage() {
         <span className="text-sm text-gray-500">{vms.length}대</span>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-gray-500">불러오는 중...</p>
-      ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
+      <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
               <tr className="border-b border-gray-800">
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">이름</th>
                 <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">소유자</th>
@@ -73,7 +71,9 @@ export default function AdminVmsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
-              {vms.map((vm) => (
+              {loading
+                ? [0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} cols={8} dark />)
+                : vms.map((vm) => (
                 <tr key={vm.id} className="hover:bg-gray-800/50">
                   <td className="px-4 py-3">
                     <p className="text-gray-200">{vm.name}</p>
@@ -112,7 +112,6 @@ export default function AdminVmsPage() {
             </tbody>
           </table>
         </div>
-      )}
 
       {/* 강제 삭제 확인 모달 */}
       {deleteTarget && (

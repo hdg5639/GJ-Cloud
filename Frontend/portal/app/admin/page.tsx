@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { AdminUserResponse, AdminVmResponse } from "@/lib/types";
+import { PageLoader } from "@/components/ui/loader";
 
 export default function AdminDashboardPage() {
   const { accessToken } = useAuth();
@@ -44,7 +45,7 @@ export default function AdminDashboardPage() {
       <h1 className="text-xl font-semibold text-white mb-6">대시보드</h1>
 
       {loading ? (
-        <p className="text-sm text-gray-500">불러오는 중...</p>
+        <PageLoader dark />
       ) : (
         <>
           <div className="grid grid-cols-3 gap-4 mb-8">
