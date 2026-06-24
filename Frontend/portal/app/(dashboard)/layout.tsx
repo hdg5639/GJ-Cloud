@@ -44,8 +44,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (isLoading) return null;
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-[200px] bg-gray-50 border-r border-gray-200 py-5 flex flex-col">
+    <div className="flex h-screen overflow-hidden">
+      <aside className="w-[200px] bg-gray-50 border-r border-gray-200 py-5 flex flex-col overflow-y-auto">
         <div className="flex items-center gap-2 px-5 mb-6">
           <div className="w-6 h-6 rounded-md bg-[#03C75A] flex items-center justify-center">
             <span className="text-white text-xs font-medium">G</span>
@@ -140,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="flex-1 p-6 overflow-auto">{children}</main>
+      <main className="flex-1 p-6 overflow-y-auto">{children}</main>
     </div>
   );
 }
