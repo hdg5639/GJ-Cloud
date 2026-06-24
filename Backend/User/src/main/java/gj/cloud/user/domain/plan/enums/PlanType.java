@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum PlanType {
-    FREE(4, 6, 5),
+    FREE(4, 6, 3),
     PRO(8, 16, 3);
 
     private final int vCpu;
