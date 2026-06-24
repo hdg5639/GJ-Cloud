@@ -768,7 +768,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   onChange={(e) => setPortForm((f) => ({ ...f, nickname: e.target.value.toLowerCase() }))}
                   placeholder="예: myapp (소문자·숫자·하이픈, 최대 20자)"
                   maxLength={20}
-                  pattern="^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+                  pattern="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
                   required
                   className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
                 />
@@ -791,7 +791,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                     onChange={(e) => handleCustomSubdomainChange(e.target.value)}
                     placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
                     maxLength={30}
-                    pattern="^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+                    pattern="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
                     className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
                   />
                   {portForm.customSubdomain && (
