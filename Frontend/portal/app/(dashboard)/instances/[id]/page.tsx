@@ -360,12 +360,12 @@ export default function InstanceDetailPage() {
             )}
           </div>
           <div className="w-px h-5 bg-gray-200" />
-          {/* 메트릭 / 스펙 변경 */}
+          {/* 성능 / 스펙 변경 */}
           <button
             onClick={() => router.push(`/instances/${id}/metrics`)}
             className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
           >
-            메트릭
+            성능
           </button>
           <button
             onClick={() => setShowUpgradeModal(true)}
