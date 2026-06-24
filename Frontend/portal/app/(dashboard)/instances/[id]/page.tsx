@@ -194,13 +194,14 @@ export default function InstanceDetailPage() {
     setSubdomainCheck("checking");
     subdomainTimer.current = setTimeout(async () => {
       try {
-        const available = await api.vm.checkSubdomain(accessToken, id, lower);
-        setSubdomainCheck(available ? "available" : "taken");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "";
-        if (msg.includes("예약")) setSubdomainCheck("reserved");
-        else if (msg.includes("PRO")) setSubdomainCheck("pro-only");
-        else setSubdomainCheck("taken");
+        const result = await api.vm.checkSubdomain(accessToken, id, lower);
+        if (result.available) {
+          setSubdomainCheck("available");
+        } else {
+          setSubdomainCheck((result.reason as "taken" | "reserved" | "pro-only") ?? "taken");
+        }
+      } catch {
+        setSubdomainCheck("taken");
       }
     }, 500);
   }
@@ -768,7 +769,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   onChange={(e) => setPortForm((f) => ({ ...f, nickname: e.target.value.toLowerCase() }))}
                   placeholder="예: myapp (소문자·숫자·하이픈, 최대 20자)"
                   maxLength={20}
-                  pattern="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                  pattern="^[a-z0-9]([a-z0-9\\-]*[a-z0-9])?$"
                   required
                   className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
                 />
@@ -791,7 +792,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                     onChange={(e) => handleCustomSubdomainChange(e.target.value)}
                     placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
                     maxLength={30}
-                    pattern="^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                    pattern="^[a-z0-9]([a-z0-9\\-]*[a-z0-9])?$"
                     className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
                   />
                   {portForm.customSubdomain && (

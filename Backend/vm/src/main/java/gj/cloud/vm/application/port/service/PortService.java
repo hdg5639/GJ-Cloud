@@ -3,6 +3,7 @@ package gj.cloud.vm.application.port.service;
 import gj.cloud.vm.application.port.dto.PortAccessAddRequest;
 import gj.cloud.vm.application.port.dto.PortAddRequest;
 import gj.cloud.vm.application.port.dto.PortResponse;
+import gj.cloud.vm.application.port.dto.SubdomainCheckResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -15,5 +16,5 @@ public interface PortService {
     Mono<PortResponse> addPortAccessEmail(String userId, UUID vmId, UUID portId, PortAccessAddRequest request);
     Mono<PortResponse> removePortAccessEmail(String userId, UUID vmId, UUID portId, String email);
     Mono<Void> teardownAllPortsForVm(UUID vmId);
-    Mono<Boolean> checkSubdomainAvailable(String bearerToken, String subdomain);
+    Mono<SubdomainCheckResponse> checkSubdomainAvailable(String bearerToken, String subdomain);
 }

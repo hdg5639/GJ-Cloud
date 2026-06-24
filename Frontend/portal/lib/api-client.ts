@@ -239,7 +239,7 @@ export const api = {
         accessToken,
       }),
     checkSubdomain: (accessToken: string, vmId: string, value: string) =>
-      request<boolean>("vm", `/vms/${vmId}/ports/subdomain/check?value=${encodeURIComponent(value)}`, { accessToken }),
+      request<{ available: boolean; reason: string | null }>("vm", `/vms/${vmId}/ports/subdomain/check?value=${encodeURIComponent(value)}`, { accessToken }),
     deletePort: (accessToken: string, id: string, portId: string) =>
       request<void>("vm", `/vms/${id}/ports/${portId}`, { method: "DELETE", accessToken }),
     addPortAccess: (accessToken: string, vmId: string, portId: string, email: string) =>

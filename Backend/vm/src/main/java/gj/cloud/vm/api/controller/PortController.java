@@ -3,6 +3,7 @@ package gj.cloud.vm.api.controller;
 import gj.cloud.vm.application.port.dto.PortAccessAddRequest;
 import gj.cloud.vm.application.port.dto.PortAddRequest;
 import gj.cloud.vm.application.port.dto.PortResponse;
+import gj.cloud.vm.application.port.dto.SubdomainCheckResponse;
 import gj.cloud.vm.application.port.service.PortService;
 import gj.cloud.vm.global.response.ApiResponse;
 import gj.cloud.vm.global.security.VmPrincipal;
@@ -50,9 +51,9 @@ public class PortController {
                 .map(ApiResponse::ok);
     }
 
-    @Operation(summary = "커스텀 서브도메인 사용 가능 여부 확인", description = "PRO 플랜 전용. 예약어 및 중복 여부를 확인합니다.")
+    @Operation(summary = "커스텀 서브도메인 사용 가능 여부 확인", description = "PRO 플랜 전용. 예약어 및 중복 여부를 확인합니다. 항상 200 반환.")
     @GetMapping("/subdomain/check")
-    public Mono<ApiResponse<Boolean>> checkSubdomain(
+    public Mono<ApiResponse<SubdomainCheckResponse>> checkSubdomain(
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId,
             @RequestParam String value,

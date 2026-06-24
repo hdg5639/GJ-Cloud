@@ -3,6 +3,7 @@ package gj.cloud.vm.application.port.service.impl;
 import gj.cloud.vm.application.port.dto.PortAccessAddRequest;
 import gj.cloud.vm.application.port.dto.PortAddRequest;
 import gj.cloud.vm.application.port.dto.PortResponse;
+import gj.cloud.vm.application.port.dto.SubdomainCheckResponse;
 import gj.cloud.vm.application.port.service.PortService;
 import gj.cloud.vm.domain.port.entity.VmPortAccessEmailEntity;
 import gj.cloud.vm.domain.port.entity.VmPortEntity;
@@ -116,20 +117,22 @@ public class PortServiceImpl implements PortService {
     }
 
     @Override
-    public Mono<Boolean> checkSubdomainAvailable(String bearerToken, String subdomain) {
+    public Mono<SubdomainCheckResponse> checkSubdomainAvailable(String bearerToken, String subdomain) {
         boolean reserved = cloudflareProperties.getReservedSubdomains().stream()
                 .anyMatch(r -> subdomain.equals(r) || subdomain.startsWith(r + "-"));
         if (reserved) {
-            return Mono.error(new VmException(VmErrorCode.SUBDOMAIN_RESERVED));
+            return Mono.just(SubdomainCheckResponse.unavailable("reserved"));
         }
         return userServiceClient.getUserPlan(bearerToken)
                 .flatMap(plan -> {
                     if (!"PRO".equals(plan)) {
-                        return Mono.error(new VmException(VmErrorCode.CUSTOM_SUBDOMAIN_PRO_ONLY));
+                        return Mono.just(SubdomainCheckResponse.unavailable("pro-only"));
                     }
-                    return vmPortRepository.countBySubdomain(subdomain);
-                })
-                .map(count -> count == 0);
+                    return vmPortRepository.countBySubdomain(subdomain)
+                            .map(count -> count == 0
+                                    ? SubdomainCheckResponse.available()
+                                    : SubdomainCheckResponse.unavailable("taken"));
+                });
     }
 
     private Mono<PortResponse> setupVisibility(UUID vmId, String subdomain, String dnsRecordId,
