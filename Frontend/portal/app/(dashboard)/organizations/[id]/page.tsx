@@ -274,7 +274,12 @@ export default function OrganizationDetailPage() {
             org.vms.map((vm) => (
               <div key={vm.id} className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{vm.name}</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-sm font-medium text-gray-900">{vm.name}</p>
+                    {vm.subdomain && (
+                      <span className="text-xs text-gray-400 font-mono">{vm.subdomain}.gamjabox.cloud</span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500">{vm.planType} · {vm.status}</p>
                 </div>
                 <div className="flex gap-2">

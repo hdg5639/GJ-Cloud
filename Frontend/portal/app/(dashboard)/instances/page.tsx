@@ -119,7 +119,12 @@ export default function InstancesPage() {
                   }`}
                 />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{vm.name}</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-sm font-medium text-gray-900">{vm.name}</p>
+                    {vm.subdomain && (
+                      <span className="text-xs text-gray-400 font-mono">{vm.subdomain}.gamjabox.cloud</span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500">
                     {vm.planType} · {vm.internalIp ?? "IP 할당 중"}
                   </p>
