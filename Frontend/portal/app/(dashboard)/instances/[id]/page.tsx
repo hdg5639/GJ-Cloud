@@ -266,7 +266,7 @@ export default function InstanceDetailPage() {
             {vm.status}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             onClick={reconnectSse}
             title="상태 동기화"
@@ -276,20 +276,22 @@ export default function InstanceDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
+          <div className="w-px h-5 bg-gray-200" />
           <button
             onClick={() => handlePower("REBOOT")}
             disabled={!isRunning}
-            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md disabled:opacity-40"
+            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
           >
             재시작
           </button>
           <button
             onClick={() => handlePower(isRunning ? "STOP" : "START")}
             disabled={isTransitioning || vm.status === "SUSPENDED" || vm.status === "DELETED"}
-            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md disabled:opacity-40"
+            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
           >
             {isRunning ? "정지" : "시작"}
           </button>
+          <div className="w-px h-5 bg-gray-200" />
           <button
             onClick={() => router.push(`/instances/${id}/metrics`)}
             className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
@@ -302,9 +304,10 @@ export default function InstanceDetailPage() {
           >
             플랜 변경
           </button>
+          <div className="w-px h-5 bg-gray-200" />
           <button
             onClick={() => setConfirmDelete(true)}
-            className="text-sm px-3.5 h-8 bg-red-50 text-red-600 rounded-md hover:bg-red-100"
+            className="text-sm px-3.5 h-8 border border-red-200 bg-red-50 text-red-600 rounded-md hover:bg-red-100"
           >
             삭제
           </button>
