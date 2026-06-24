@@ -781,35 +781,38 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                       : "—"}
                 </p>
               </div>
-              {profile?.planType === "PRO" && (
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">
-                    커스텀 서브도메인 <span className="text-[10px] text-blue-500 ml-1">PRO</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={portForm.customSubdomain}
-                    onChange={(e) => handleCustomSubdomainChange(e.target.value)}
-                    placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
-                    maxLength={30}
-                    pattern="^[a-z0-9]([a-z0-9\\-]*[a-z0-9])?$"
-                    className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
-                  />
-                  {portForm.customSubdomain && (
-                    <p className={`text-[11px] mt-1 ${
-                      subdomainCheck === "available" ? "text-green-600" :
-                      subdomainCheck === "checking" ? "text-gray-400" :
-                      "text-red-500"
-                    }`}>
-                      {subdomainCheck === "checking" && "확인 중..."}
-                      {subdomainCheck === "available" && "✓ 사용 가능"}
-                      {subdomainCheck === "taken" && "이미 사용 중인 서브도메인입니다"}
-                      {subdomainCheck === "reserved" && "예약된 서브도메인입니다"}
-                      {subdomainCheck === "pro-only" && "PRO 플랜 전용입니다"}
-                    </p>
-                  )}
-                </div>
-              )}
+              <div className={profile?.planType !== "PRO" ? "opacity-50 pointer-events-none select-none" : ""}>
+                <label className="text-xs text-gray-500 block mb-1">
+                  커스텀 서브도메인
+                  {profile?.planType !== "PRO"
+                    ? <span className="ml-1.5 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">PRO 전용</span>
+                    : <span className="text-[10px] text-blue-500 ml-1">PRO</span>
+                  }
+                </label>
+                <input
+                  type="text"
+                  value={portForm.customSubdomain}
+                  onChange={(e) => handleCustomSubdomainChange(e.target.value)}
+                  placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
+                  maxLength={30}
+                  pattern="^[a-z0-9]([a-z0-9\\-]*[a-z0-9])?$"
+                  disabled={profile?.planType !== "PRO"}
+                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm disabled:bg-gray-50"
+                />
+                {portForm.customSubdomain && (
+                  <p className={`text-[11px] mt-1 ${
+                    subdomainCheck === "available" ? "text-green-600" :
+                    subdomainCheck === "checking" ? "text-gray-400" :
+                    "text-red-500"
+                  }`}>
+                    {subdomainCheck === "checking" && "확인 중..."}
+                    {subdomainCheck === "available" && "✓ 사용 가능"}
+                    {subdomainCheck === "taken" && "이미 사용 중인 서브도메인입니다"}
+                    {subdomainCheck === "reserved" && "예약된 서브도메인입니다"}
+                    {subdomainCheck === "pro-only" && "PRO 플랜 전용입니다"}
+                  </p>
+                )}
+              </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">포트 번호</label>
                 <input
