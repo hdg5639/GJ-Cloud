@@ -94,7 +94,7 @@ public class CollaborationServiceImpl implements CollaborationService {
         return itemRepository.findById(id)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.COLLABORATION_NOT_FOUND)))
                 .flatMap(item -> checkPinPermission(item.getScopeType(), item.getScopeId(), userId, email)
-                        .flatMap(ignored -> {
+                        .then(Mono.defer(() -> {
                             boolean newPinned = !item.isPinned();
                             if (!newPinned) {
                                 return itemRepository.save(item.withPinned(false)).map(CollaborationResponse::from);
@@ -110,7 +110,7 @@ public class CollaborationServiceImpl implements CollaborationService {
                                     })
                                     .then(itemRepository.save(item.withPinned(true)))
                                     .map(CollaborationResponse::from);
-                        }));
+                        })));
     }
 
     @Override
@@ -177,26 +177,25 @@ public class CollaborationServiceImpl implements CollaborationService {
         return checkPinPermission(item.getScopeType(), item.getScopeId(), userId, email);
     }
 
-    private Mono<OrganizationMemberRepository> checkPinPermission(ScopeType scopeType, UUID scopeId,
-                                                                    String userId, String email) {
+    private Mono<Void> checkPinPermission(ScopeType scopeType, UUID scopeId, String userId, String email) {
         if (scopeType == ScopeType.INSTANCE) {
             return vmRepository.findById(scopeId)
                     .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                     .flatMap(vm -> {
-                        if (vm.getUserId().equals(userId)) return Mono.just(memberRepository);
+                        if (vm.getUserId().equals(userId)) return Mono.empty();
                         return orgVmRepository.findAllByVmId(scopeId)
                                 .flatMap(orgVm -> memberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), email))
                                 .filter(m -> m.getRole() == MemberRole.OWNER || m.getRole() == MemberRole.ADMIN)
                                 .next()
-                                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.COLLABORATION_PERMISSION_DENIED)))
-                                .thenReturn(memberRepository);
+                                .<Void>flatMap(m -> Mono.empty())
+                                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.COLLABORATION_PERMISSION_DENIED)));
                     });
         } else {
             return memberRepository.findAcceptedByOrgIdAndEmail(scopeId, email)
                     .switchIfEmpty(Mono.error(new VmException(VmErrorCode.NOT_ORGANIZATION_MEMBER)))
                     .flatMap(m -> {
                         if (m.getRole() == MemberRole.OWNER || m.getRole() == MemberRole.ADMIN) {
-                            return Mono.just(memberRepository);
+                            return Mono.<Void>empty();
                         }
                         return Mono.error(new VmException(VmErrorCode.COLLABORATION_PERMISSION_DENIED));
                     });
