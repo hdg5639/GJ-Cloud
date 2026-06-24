@@ -305,57 +305,57 @@ export const api = {
   },
   org: {
     list: (accessToken: string) =>
-      request<OrgResponse[]>("vm", "/organizations", { accessToken }),
+      request<OrgResponse[]>("vm", "/vms/organizations", { accessToken }),
     invitations: (accessToken: string) =>
-      request<OrgResponse[]>("vm", "/organizations/invitations", { accessToken }),
+      request<OrgResponse[]>("vm", "/vms/organizations/invitations", { accessToken }),
     get: (accessToken: string, orgId: string) =>
-      request<OrgDetailResponse>("vm", `/organizations/${orgId}`, { accessToken }),
+      request<OrgDetailResponse>("vm", `/vms/organizations/${orgId}`, { accessToken }),
     create: (accessToken: string, body: { name: string; invites?: { email: string; role: MemberRole }[]; vmIds?: string[] }) =>
-      request<OrgDetailResponse>("vm", "/organizations", { method: "POST", body: JSON.stringify(body), accessToken }),
+      request<OrgDetailResponse>("vm", "/vms/organizations", { method: "POST", body: JSON.stringify(body), accessToken }),
     update: (accessToken: string, orgId: string, name: string) =>
-      request<OrgDetailResponse>("vm", `/organizations/${orgId}`, { method: "PATCH", body: JSON.stringify({ name }), accessToken }),
+      request<OrgDetailResponse>("vm", `/vms/organizations/${orgId}`, { method: "PATCH", body: JSON.stringify({ name }), accessToken }),
     delete: (accessToken: string, orgId: string) =>
-      request<void>("vm", `/organizations/${orgId}`, { method: "DELETE", accessToken }),
+      request<void>("vm", `/vms/organizations/${orgId}`, { method: "DELETE", accessToken }),
     invite: (accessToken: string, orgId: string, email: string, role: MemberRole) =>
-      request<MemberResponse>("vm", `/organizations/${orgId}/members`, { method: "POST", body: JSON.stringify({ email, role }), accessToken }),
+      request<MemberResponse>("vm", `/vms/organizations/${orgId}/members`, { method: "POST", body: JSON.stringify({ email, role }), accessToken }),
     respond: (accessToken: string, orgId: string, memberId: string, accept: boolean) =>
-      request<MemberResponse>("vm", `/organizations/${orgId}/members/${memberId}/respond`, { method: "PATCH", body: JSON.stringify({ accept }), accessToken }),
+      request<MemberResponse>("vm", `/vms/organizations/${orgId}/members/${memberId}/respond`, { method: "PATCH", body: JSON.stringify({ accept }), accessToken }),
     removeMember: (accessToken: string, orgId: string, memberId: string) =>
-      request<void>("vm", `/organizations/${orgId}/members/${memberId}`, { method: "DELETE", accessToken }),
+      request<void>("vm", `/vms/organizations/${orgId}/members/${memberId}`, { method: "DELETE", accessToken }),
     updateRole: (accessToken: string, orgId: string, memberId: string, role: MemberRole) =>
-      request<MemberResponse>("vm", `/organizations/${orgId}/members/${memberId}/role`, { method: "PATCH", body: JSON.stringify({ role }), accessToken }),
+      request<MemberResponse>("vm", `/vms/organizations/${orgId}/members/${memberId}/role`, { method: "PATCH", body: JSON.stringify({ role }), accessToken }),
     addVm: (accessToken: string, orgId: string, vmId: string) =>
-      request<void>("vm", `/organizations/${orgId}/vms`, { method: "POST", body: JSON.stringify({ vmId }), accessToken }),
+      request<void>("vm", `/vms/organizations/${orgId}/vms`, { method: "POST", body: JSON.stringify({ vmId }), accessToken }),
     removeVm: (accessToken: string, orgId: string, vmId: string) =>
-      request<void>("vm", `/organizations/${orgId}/vms/${vmId}`, { method: "DELETE", accessToken }),
+      request<void>("vm", `/vms/organizations/${orgId}/vms/${vmId}`, { method: "DELETE", accessToken }),
   },
   collab: {
     list: (accessToken: string, scopeType: ScopeType, scopeId: string, type?: CollaborationType) => {
       const params = new URLSearchParams({ scopeType, scopeId });
       if (type) params.append("type", type);
-      return request<CollaborationResponse[]>("vm", `/collaborations?${params}`, { accessToken });
+      return request<CollaborationResponse[]>("vm", `/vms/collaborations?${params}`, { accessToken });
     },
     get: (accessToken: string, id: string) =>
-      request<CollaborationResponse>("vm", `/collaborations/${id}`, { accessToken }),
+      request<CollaborationResponse>("vm", `/vms/collaborations/${id}`, { accessToken }),
     create: (accessToken: string, body: { scopeType: ScopeType; scopeId: string; type: CollaborationType; tag?: string; title: string; content: string }) =>
-      request<CollaborationResponse>("vm", "/collaborations", { method: "POST", body: JSON.stringify(body), accessToken }),
+      request<CollaborationResponse>("vm", "/vms/collaborations", { method: "POST", body: JSON.stringify(body), accessToken }),
     update: (accessToken: string, id: string, body: { tag?: string; title: string; content: string }) =>
-      request<CollaborationResponse>("vm", `/collaborations/${id}`, { method: "PATCH", body: JSON.stringify(body), accessToken }),
+      request<CollaborationResponse>("vm", `/vms/collaborations/${id}`, { method: "PATCH", body: JSON.stringify(body), accessToken }),
     delete: (accessToken: string, id: string) =>
-      request<void>("vm", `/collaborations/${id}`, { method: "DELETE", accessToken }),
+      request<void>("vm", `/vms/collaborations/${id}`, { method: "DELETE", accessToken }),
     pin: (accessToken: string, id: string) =>
-      request<CollaborationResponse>("vm", `/collaborations/${id}/pin`, { method: "PATCH", accessToken }),
+      request<CollaborationResponse>("vm", `/vms/collaborations/${id}/pin`, { method: "PATCH", accessToken }),
     resolve: (accessToken: string, id: string) =>
-      request<CollaborationResponse>("vm", `/collaborations/${id}/resolve`, { method: "PATCH", accessToken }),
+      request<CollaborationResponse>("vm", `/vms/collaborations/${id}/resolve`, { method: "PATCH", accessToken }),
     searchTags: (accessToken: string, scopeType: ScopeType, scopeId: string, query?: string) => {
       const params = new URLSearchParams({ scopeType, scopeId });
       if (query) params.append("query", query);
-      return request<TagResponse[]>("vm", `/collaboration-tags?${params}`, { accessToken });
+      return request<TagResponse[]>("vm", `/vms/collaboration-tags?${params}`, { accessToken });
     },
     listTags: (accessToken: string, scopeType: ScopeType, scopeId: string) =>
-      request<TagResponse[]>("vm", `/collaboration-tags/all?scopeType=${scopeType}&scopeId=${scopeId}`, { accessToken }),
+      request<TagResponse[]>("vm", `/vms/collaboration-tags/all?scopeType=${scopeType}&scopeId=${scopeId}`, { accessToken }),
     deleteTag: (accessToken: string, tagId: string) =>
-      request<void>("vm", `/collaboration-tags/${tagId}`, { method: "DELETE", accessToken }),
+      request<void>("vm", `/vms/collaboration-tags/${tagId}`, { method: "DELETE", accessToken }),
   },
   admin: {
     users: {

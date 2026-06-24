@@ -18,7 +18,7 @@ import java.util.UUID;
 
 @Tag(name = "Organization", description = "조직 관리 API")
 @RestController
-@RequestMapping("/organizations")
+@RequestMapping("/vms/organizations")
 @RequiredArgsConstructor
 public class OrganizationController {
 
