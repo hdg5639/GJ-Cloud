@@ -324,26 +324,34 @@ export default function InstanceDetailPage() {
             <button
               onClick={() => setShowPowerMenu((v) => !v)}
               disabled={isTransitioning || vm.status === "DELETED"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
+              className={`flex items-center gap-1.5 text-sm px-3.5 h-8 border rounded-md disabled:opacity-40 transition-colors ${
+                showPowerMenu
+                  ? "border-gray-400 bg-gray-100"
+                  : "border-gray-300 hover:bg-gray-50"
+              }`}
             >
               전원
-              <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className={`w-3 h-3 text-gray-500 transition-transform ${showPowerMenu ? "rotate-180" : ""}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
             {showPowerMenu && (
-              <div className="absolute right-0 mt-1 w-28 bg-white border border-gray-200 rounded-md shadow-lg z-20 py-1">
+              <div className="absolute left-0 mt-1 min-w-full bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
                 {isRunning ? (
                   <>
                     <button
                       onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }}
-                      className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-50"
+                      className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700"
                     >
                       정지
                     </button>
+                    <div className="h-px bg-gray-100 mx-2" />
                     <button
                       onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }}
-                      className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-50"
+                      className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700"
                     >
                       재시작
                     </button>
@@ -351,7 +359,7 @@ export default function InstanceDetailPage() {
                 ) : (
                   <button
                     onClick={() => { handlePower("START"); setShowPowerMenu(false); }}
-                    className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-50"
+                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700"
                   >
                     시작
                   </button>
