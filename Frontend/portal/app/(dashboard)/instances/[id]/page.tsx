@@ -84,6 +84,18 @@ export default function InstanceDetailPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showPowerMenu, setShowPowerMenu] = useState(false);
+  const powerMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (powerMenuRef.current && !powerMenuRef.current.contains(e.target as Node)) {
+        setShowPowerMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
 
   // SSH 접근 이메일
   const [sshEmails, setSshEmails] = useState<string[]>([]);
@@ -296,6 +308,7 @@ export default function InstanceDetailPage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* 동기화 */}
           <button
             onClick={reconnectSse}
             title="상태 동기화"
@@ -306,21 +319,48 @@ export default function InstanceDetailPage() {
             </svg>
           </button>
           <div className="w-px h-5 bg-gray-200" />
-          <button
-            onClick={() => handlePower("REBOOT")}
-            disabled={!isRunning}
-            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
-          >
-            재시작
-          </button>
-          <button
-            onClick={() => handlePower(isRunning ? "STOP" : "START")}
-            disabled={isTransitioning || vm.status === "SUSPENDED" || vm.status === "DELETED"}
-            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
-          >
-            {isRunning ? "정지" : "시작"}
-          </button>
+          {/* 전원 드롭다운 */}
+          <div className="relative" ref={powerMenuRef}>
+            <button
+              onClick={() => setShowPowerMenu((v) => !v)}
+              disabled={isTransitioning || vm.status === "DELETED"}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40"
+            >
+              전원
+              <svg className="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showPowerMenu && (
+              <div className="absolute right-0 mt-1 w-28 bg-white border border-gray-200 rounded-md shadow-lg z-20 py-1">
+                {isRunning ? (
+                  <>
+                    <button
+                      onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }}
+                      className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-50"
+                    >
+                      정지
+                    </button>
+                    <button
+                      onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }}
+                      className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-50"
+                    >
+                      재시작
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { handlePower("START"); setShowPowerMenu(false); }}
+                    className="w-full text-left text-sm px-3 py-1.5 hover:bg-gray-50"
+                  >
+                    시작
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <div className="w-px h-5 bg-gray-200" />
+          {/* 메트릭 / 스펙 변경 */}
           <button
             onClick={() => router.push(`/instances/${id}/metrics`)}
             className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
@@ -334,6 +374,7 @@ export default function InstanceDetailPage() {
             스펙 변경
           </button>
           <div className="w-px h-5 bg-gray-200" />
+          {/* 삭제 */}
           <button
             onClick={() => setConfirmDelete(true)}
             className="text-sm px-3.5 h-8 border border-red-200 bg-red-50 text-red-600 rounded-md hover:bg-red-100"
