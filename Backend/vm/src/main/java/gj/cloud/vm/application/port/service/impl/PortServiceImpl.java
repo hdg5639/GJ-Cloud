@@ -121,17 +121,17 @@ public class PortServiceImpl implements PortService {
         boolean reserved = cloudflareProperties.getReservedSubdomains().stream()
                 .anyMatch(r -> subdomain.equals(r) || subdomain.startsWith(r + "-"));
         if (reserved) {
-            return Mono.just(SubdomainCheckResponse.unavailable("reserved"));
+            return Mono.just(SubdomainCheckResponse.denied("reserved"));
         }
         return userServiceClient.getUserPlan(bearerToken)
                 .flatMap(plan -> {
                     if (!"PRO".equals(plan)) {
-                        return Mono.just(SubdomainCheckResponse.unavailable("pro-only"));
+                        return Mono.just(SubdomainCheckResponse.denied("pro-only"));
                     }
                     return vmPortRepository.countBySubdomain(subdomain)
                             .map(count -> count == 0
-                                    ? SubdomainCheckResponse.available()
-                                    : SubdomainCheckResponse.unavailable("taken"));
+                                    ? SubdomainCheckResponse.ok()
+                                    : SubdomainCheckResponse.denied("taken"));
                 });
     }
 
