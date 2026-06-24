@@ -130,7 +130,7 @@ export default function InstanceDetailPage() {
     [id]
   );
 
-  useVmEvents(accessToken ?? "", handleVmEvent, !!accessToken, refresh);
+  const { reconnect: reconnectSse } = useVmEvents(accessToken ?? "", handleVmEvent, !!accessToken, refresh);
 
   async function handlePower(action: "START" | "STOP" | "REBOOT" | "SUSPEND") {
     if (!accessToken) return;
@@ -267,6 +267,15 @@ export default function InstanceDetailPage() {
           </span>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={reconnectSse}
+            title="상태 동기화"
+            className="h-8 w-8 flex items-center justify-center border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
           <button
             onClick={() => handlePower("REBOOT")}
             disabled={!isRunning}
@@ -728,7 +737,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   onChange={(e) => setPortForm((f) => ({ ...f, nickname: e.target.value.toLowerCase() }))}
                   placeholder="예: myapp (소문자·숫자·하이픈, 최대 20자)"
                   maxLength={20}
-                  pattern="^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$"
+                  pattern="^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
                   required
                   className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
                 />

@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import type { VmStatusEvent } from "@/lib/types";
 import { getExchangedToken, invalidateExchangeCache } from "@/lib/api-client";
 
 const MAX_RETRIES = 5;
+const AUTO_CLOSE_MS = 99_000;
 
 export function useVmEvents(
   accessToken: string,
   onEvent: (event: VmStatusEvent) => void,
   enabled = true,
   onRefreshToken?: () => Promise<string | null>
-) {
+): { reconnect: () => void } {
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
@@ -21,12 +22,21 @@ export function useVmEvents(
   const onRefreshRef = useRef(onRefreshToken);
   onRefreshRef.current = onRefreshToken;
 
+  const reconnectRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     if (!accessToken || !enabled) return;
 
     let es: EventSource | null = null;
     let closed = false;
     let retries = 0;
+    let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function closeEs() {
+      if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
+      es?.close();
+      es = null;
+    }
 
     async function connect() {
       if (closed) return;
@@ -39,25 +49,27 @@ export function useVmEvents(
         const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/events/subscribe?token=${vmToken}`;
         es = new EventSource(url);
 
+        autoCloseTimer = setTimeout(() => {
+          es?.close();
+          es = null;
+          autoCloseTimer = null;
+        }, AUTO_CLOSE_MS);
+
         es.addEventListener("VM_STATUS_CHANGED", (e) => {
           retries = 0;
           onEventRef.current(JSON.parse((e as MessageEvent).data));
         });
 
         es.onerror = async () => {
-          es?.close();
-          es = null;
+          closeEs();
           if (closed || retries >= MAX_RETRIES) return;
           retries++;
 
-          // 만료된 캐시 날리고, 필요 시 access token 갱신 시도
           const tok = accessTokenRef.current;
           invalidateExchangeCache(tok);
 
           if (onRefreshRef.current) {
             const newToken = await onRefreshRef.current().catch(() => null);
-            // 새 토큰이 있으면 accessTokenRef는 useAuth가 state 갱신 → 다음 effect에서 반영
-            // 짧은 delay 후 재연결
             if (!closed) setTimeout(connect, newToken ? 1000 : 5000);
           } else {
             if (!closed) setTimeout(connect, 5000);
@@ -70,11 +82,22 @@ export function useVmEvents(
       }
     }
 
+    reconnectRef.current = () => {
+      closeEs();
+      retries = 0;
+      connect();
+    };
+
     connect();
 
     return () => {
       closed = true;
-      es?.close();
+      reconnectRef.current = () => {};
+      closeEs();
     };
   }, [accessToken, enabled]);
+
+  const reconnect = useCallback(() => reconnectRef.current(), []);
+
+  return { reconnect };
 }

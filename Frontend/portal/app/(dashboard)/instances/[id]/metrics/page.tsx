@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getExchangedToken } from "@/lib/api-client";
@@ -41,11 +41,24 @@ export default function MetricsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const reconnectRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     if (!accessToken) return;
 
     let eventSource: EventSource | null = null;
     let closed = false;
+    let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function closeEs() {
+      if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
+      if (eventSource) {
+        eventSource.onmessage = null;
+        eventSource.onerror = null;
+        eventSource.close();
+        eventSource = null;
+      }
+    }
 
     async function connect() {
       if (closed || !accessToken) return;
@@ -56,11 +69,17 @@ export default function MetricsPage() {
         const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream?token=${vmToken}`;
         eventSource = new EventSource(url);
 
+        autoCloseTimer = setTimeout(() => {
+          eventSource?.close();
+          eventSource = null;
+          autoCloseTimer = null;
+        }, 99_000);
+
         eventSource.onmessage = (event) => {
           try {
             const metrics = JSON.parse(event.data) as SSEMetrics;
             setCurrentMetrics(metrics);
-            
+
             setChartData(prev => {
               const date = new Date(metrics.timestamp * 1000);
               const hours = String(date.getHours()).padStart(2, "0");
@@ -72,11 +91,11 @@ export default function MetricsPage() {
                 netin: Math.round(metrics.networkInBytes / (1024 * 1024)),
                 netout: Math.round(metrics.networkOutBytes / (1024 * 1024)),
               };
-              
+
               const updated = [...prev, newPoint];
               return updated.slice(-12);
             });
-            
+
             setLoading(false);
             setError(null);
           } catch (err) {
@@ -87,7 +106,7 @@ export default function MetricsPage() {
         eventSource.onerror = () => {
           if (!closed) {
             setError("메트릭 수신 실패");
-            eventSource?.close();
+            closeEs();
           }
         };
       } catch (err) {
@@ -95,17 +114,22 @@ export default function MetricsPage() {
       }
     }
 
+    reconnectRef.current = () => {
+      closeEs();
+      setError(null);
+      connect();
+    };
+
     connect();
 
     return () => {
       closed = true;
-      if (eventSource) {
-        eventSource.onmessage = null;
-        eventSource.onerror = null;
-        eventSource.close();
-      }
+      reconnectRef.current = () => {};
+      closeEs();
     };
   }, [accessToken, vmId]);
+
+  const reconnect = useCallback(() => reconnectRef.current(), []);
 
   if (!currentMetrics) {
     return (
@@ -125,17 +149,28 @@ export default function MetricsPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="뒤로가기"
+          >
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="text-lg font-medium text-gray-900">메트릭</h1>
+        </div>
         <button
-          onClick={() => router.back()}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          aria-label="뒤로가기"
+          onClick={reconnect}
+          title="동기화"
+          className="h-8 w-8 flex items-center justify-center border border-gray-300 rounded-md hover:bg-gray-50"
         >
-          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
-        <h1 className="text-lg font-medium text-gray-900">메트릭</h1>
       </div>
 
       {error && (
