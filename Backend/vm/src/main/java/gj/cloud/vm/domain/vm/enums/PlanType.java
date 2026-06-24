@@ -13,7 +13,7 @@ public enum PlanType {
             20, 50),
     PRO(9100, 8, "12288", "14-37",
             List.of("192.168.0.110", "192.168.0.111", "192.168.0.112"),
-            50, 500);
+            20, 100);
 
     private final int templateVmid;
     private final int cores;

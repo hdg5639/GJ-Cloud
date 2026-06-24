@@ -8,7 +8,7 @@ import type { VmAvailabilityResponse, SshKeyResponse } from "@/lib/types";
 
 const PLAN_INFO = {
   FREE: { cores: 4, memory: "5GB", diskMin: 20, diskMax: 50 },
-  PRO: { cores: 8, memory: "12GB", diskMin: 50, diskMax: 500 },
+  PRO: { cores: 8, memory: "12GB", diskMin: 20, diskMax: 100 },
 };
 
 export default function CreateInstancePage() {

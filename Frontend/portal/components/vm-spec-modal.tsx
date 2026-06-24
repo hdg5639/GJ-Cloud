@@ -6,8 +6,8 @@ import { api } from "@/lib/api-client";
 import type { VmResponse } from "@/lib/types";
 
 const PLAN_DISK = {
-  FREE: { min: 20, max: 50, step: 5 },
-  PRO:  { min: 50, max: 500, step: 5 },
+  FREE: { min: 20, max: 50,  step: 5 },
+  PRO:  { min: 20, max: 100, step: 5 },
 } as const;
 
 interface Props {
@@ -93,7 +93,7 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
                   </p>
                   {disabled && (
                     <p className="text-[10px] text-red-500 mt-1">
-                      디스크 {vm.diskSizeGb}GB → FREE 최대 {PLAN_DISK.FREE.max}GB 초과
+                      현재 디스크 {vm.diskSizeGb}GB가 FREE 최대 {PLAN_DISK.FREE.max}GB 초과
                     </p>
                   )}
                 </button>
