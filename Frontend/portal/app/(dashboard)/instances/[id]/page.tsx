@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { PortResponse } from "@/lib/api-client";
 import { useVmEvents } from "@/hooks/use-vm-events";
-import type { VmResponse, VmStatusEvent } from "@/lib/types";
+import type { VmResponse, VmStatusEvent, ProfileResponse } from "@/lib/types";
 import VmSpecModal from "@/components/vm-spec-modal";
 
 function CodeBlock({
@@ -91,6 +91,7 @@ export default function InstanceDetailPage() {
   const [sshEmailLoading, setSshEmailLoading] = useState(false);
 
   // 포트 관리
+  const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [ports, setPorts] = useState<PortResponse[]>([]);
   const [showPortModal, setShowPortModal] = useState(false);
   const [portForm, setPortForm] = useState({
@@ -99,7 +100,10 @@ export default function InstanceDetailPage() {
     visibility: "PUBLIC" as "PUBLIC" | "PRIVATE",
     nickname: "",
     initialEmails: "",
+    customSubdomain: "",
   });
+  const [subdomainCheck, setSubdomainCheck] = useState<"idle" | "checking" | "available" | "taken" | "reserved" | "pro-only">("idle");
+  const subdomainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [portLoading, setPortLoading] = useState(false);
   const [expandedPortId, setExpandedPortId] = useState<string | null>(null);
   const [newPortEmail, setNewPortEmail] = useState<Record<string, string>>({});
@@ -110,6 +114,7 @@ export default function InstanceDetailPage() {
     api.vm.get(accessToken, id).then(setVm).catch(() => {});
     api.vm.getSshAccess(accessToken, id).then(setSshEmails).catch(() => {});
     api.vm.getPorts(accessToken, id).then(setPorts).catch(() => {});
+    api.user.profile(accessToken).then(setProfile).catch(() => {});
   }, [accessToken, id]);
 
   const handleVmEvent = useCallback(
@@ -180,9 +185,30 @@ export default function InstanceDetailPage() {
     }
   }
 
+  function handleCustomSubdomainChange(value: string) {
+    const lower = value.toLowerCase();
+    setPortForm((f) => ({ ...f, customSubdomain: lower }));
+    setSubdomainCheck("idle");
+    if (subdomainTimer.current) clearTimeout(subdomainTimer.current);
+    if (!lower || !accessToken) return;
+    setSubdomainCheck("checking");
+    subdomainTimer.current = setTimeout(async () => {
+      try {
+        const available = await api.vm.checkSubdomain(accessToken, id, lower);
+        setSubdomainCheck(available ? "available" : "taken");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (msg.includes("예약")) setSubdomainCheck("reserved");
+        else if (msg.includes("PRO")) setSubdomainCheck("pro-only");
+        else setSubdomainCheck("taken");
+      }
+    }, 500);
+  }
+
   async function handleAddPort(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
+    if (portForm.customSubdomain && subdomainCheck !== "available") return;
     setPortLoading(true);
     try {
       const emails =
@@ -195,10 +221,12 @@ export default function InstanceDetailPage() {
         visibility: portForm.visibility,
         nickname: portForm.nickname,
         ...(emails ? { initialEmails: emails } : {}),
+        ...(portForm.customSubdomain ? { customSubdomain: portForm.customSubdomain } : {}),
       });
       setPorts((prev) => [...prev, port]);
       setShowPortModal(false);
-      setPortForm({ port: "", protocol: "HTTP", visibility: "PUBLIC", nickname: "", initialEmails: "" });
+      setPortForm({ port: "", protocol: "HTTP", visibility: "PUBLIC", nickname: "", initialEmails: "", customSubdomain: "" });
+      setSubdomainCheck("idle");
     } catch (err) {
       alert(err instanceof Error ? err.message : "포트 추가에 실패했습니다");
     } finally {
@@ -729,7 +757,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       {/* 포트 추가 모달 */}
       {showPortModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[380px]">
+          <div className="bg-white rounded-xl p-6 w-[420px]">
             <h2 className="text-base font-medium text-gray-900 mb-4">포트 추가</h2>
             <form onSubmit={handleAddPort} className="flex flex-col gap-3">
               <div>
@@ -744,8 +772,43 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   required
                   className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">서브도메인: {portForm.nickname ? `${vm.subdomain}-${portForm.nickname}.gamjabox.cloud` : "—"}</p>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  서브도메인: {portForm.customSubdomain
+                    ? `${portForm.customSubdomain}.gamjabox.cloud`
+                    : portForm.nickname
+                      ? `${vm.subdomain}-${portForm.nickname}.gamjabox.cloud`
+                      : "—"}
+                </p>
               </div>
+              {profile?.planType === "PRO" && (
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">
+                    커스텀 서브도메인 <span className="text-[10px] text-blue-500 ml-1">PRO</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={portForm.customSubdomain}
+                    onChange={(e) => handleCustomSubdomainChange(e.target.value)}
+                    placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
+                    maxLength={30}
+                    pattern="^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+                    className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
+                  />
+                  {portForm.customSubdomain && (
+                    <p className={`text-[11px] mt-1 ${
+                      subdomainCheck === "available" ? "text-green-600" :
+                      subdomainCheck === "checking" ? "text-gray-400" :
+                      "text-red-500"
+                    }`}>
+                      {subdomainCheck === "checking" && "확인 중..."}
+                      {subdomainCheck === "available" && "✓ 사용 가능"}
+                      {subdomainCheck === "taken" && "이미 사용 중인 서브도메인입니다"}
+                      {subdomainCheck === "reserved" && "예약된 서브도메인입니다"}
+                      {subdomainCheck === "pro-only" && "PRO 플랜 전용입니다"}
+                    </p>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="text-xs text-gray-500 block mb-1">포트 번호</label>
                 <input
@@ -803,7 +866,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 </button>
                 <button
                   type="submit"
-                  disabled={portLoading || !portForm.port || !portForm.nickname}
+                  disabled={portLoading || !portForm.port || !portForm.nickname || (!!portForm.customSubdomain && subdomainCheck !== "available")}
                   className="flex-1 h-9 bg-[#03C75A] text-white rounded-md text-sm disabled:opacity-60"
                 >
                   {portLoading ? "추가 중..." : "추가"}

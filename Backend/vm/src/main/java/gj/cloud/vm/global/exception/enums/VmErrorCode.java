@@ -28,7 +28,10 @@ public enum VmErrorCode {
     PORT_NICKNAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     PORT_NOT_FOUND(HttpStatus.NOT_FOUND, "포트를 찾을 수 없습니다."),
     OWNER_EMAIL_REMOVAL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "소유자 이메일은 삭제할 수 없습니다."),
-    VM_NOT_RUNNING(HttpStatus.BAD_REQUEST, "VM이 실행 중이 아니므로 메트릭을 조회할 수 없습니다.");
+    VM_NOT_RUNNING(HttpStatus.BAD_REQUEST, "VM이 실행 중이 아니므로 메트릭을 조회할 수 없습니다."),
+    CUSTOM_SUBDOMAIN_PRO_ONLY(HttpStatus.FORBIDDEN, "커스텀 서브도메인은 PRO 플랜 사용자만 이용할 수 있습니다."),
+    SUBDOMAIN_RESERVED(HttpStatus.BAD_REQUEST, "예약된 서브도메인입니다."),
+    SUBDOMAIN_ALREADY_TAKEN(HttpStatus.CONFLICT, "이미 사용 중인 서브도메인입니다.");
 
     private final HttpStatus status;
     private final String message;

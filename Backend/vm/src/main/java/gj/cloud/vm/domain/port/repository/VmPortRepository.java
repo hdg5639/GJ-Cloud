@@ -20,4 +20,7 @@ public interface VmPortRepository extends ReactiveCrudRepository<VmPortEntity, U
 
     @Query("SELECT COUNT(*) FROM vm_ports WHERE vm_id = :vmId AND nickname = :nickname")
     Mono<Long> countByVmIdAndNickname(UUID vmId, String nickname);
+
+    @Query("SELECT COUNT(*) FROM vm_ports WHERE subdomain = :subdomain")
+    Mono<Long> countBySubdomain(String subdomain);
 }

@@ -28,6 +28,9 @@ proxmox:
   vmid-range-start: ${PROXMOX_VMID_START:1000}
   vmid-range-end: ${PROXMOX_VMID_END:8999}
 
+cloudflare:
+  reserved-subdomains: ${RESERVED_SUBDOMAINS:}
+
 springdoc:
   api-docs:
     enabled: false

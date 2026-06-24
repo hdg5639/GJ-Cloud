@@ -36,48 +36,99 @@ public class PortServiceImpl implements PortService {
     private final VmPortAccessEmailRepository portAccessEmailRepository;
     private final CloudflareClient cloudflareClient;
     private final CloudflareProperties cloudflareProperties;
+    private final UserServiceClient userServiceClient;
 
     @Override
-    public Mono<PortResponse> addPort(String userId, String ownerEmail, UUID vmId, PortAddRequest request) {
-        return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
-                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> vmPortRepository.countByVmId(vmId)
-                        .flatMap(count -> {
-                            if (count >= PORT_MAX_COUNT) {
-                                return Mono.error(new VmException(VmErrorCode.PORT_LIMIT_EXCEEDED));
-                            }
-                            return vmPortRepository.countByVmIdAndPort(vmId, request.port());
-                        })
-                        .flatMap(existing -> {
-                            if (existing > 0) {
-                                return Mono.error(new VmException(VmErrorCode.PORT_ALREADY_EXISTS));
-                            }
-                            return vmPortRepository.countByVmIdAndNickname(vmId, request.nickname());
-                        })
-                        .flatMap(nickExists -> {
-                            if (nickExists > 0) {
-                                return Mono.error(new VmException(VmErrorCode.PORT_NICKNAME_ALREADY_EXISTS));
-                            }
-                            return Mono.just(vm);
-                        })
-                )
-                .flatMap(vm -> {
-                    String portSubdomain = vm.getSubdomain() + "-" + request.nickname();
-                    return cloudflareClient.registerCname(portSubdomain)
-                            .flatMap(dnsRecordId ->
-                                    cloudflareClient.addIngressRule(
-                                                    portSubdomain, vm.getInternalIp(),
-                                                    request.port(), request.protocol().name())
-                                            .then(setupVisibility(vm.getId(), portSubdomain, dnsRecordId,
-                                                    request, ownerEmail, request.nickname()))
-                            )
-                            .onErrorResume(e -> {
-                                log.error("포트 Cloudflare 설정 실패: vmId={}, port={}, error={}",
-                                        vmId, request.port(), e.getMessage());
-                                return Mono.error(e);
-                            });
+    public Mono<PortResponse> addPort(String userId, String ownerEmail, UUID vmId, PortAddRequest request, String bearerToken) {
+        Mono<String> subdomainMono;
+
+        if (request.customSubdomain() != null && !request.customSubdomain().isBlank()) {
+            subdomainMono = validateCustomSubdomain(bearerToken, request.customSubdomain())
+                    .thenReturn(request.customSubdomain());
+        } else {
+            subdomainMono = vmRepository.findById(vmId)
+                    .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                    .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                    .map(vm -> vm.getSubdomain() + "-" + request.nickname());
+        }
+
+        return subdomainMono.flatMap(portSubdomain ->
+                vmRepository.findById(vmId)
+                        .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                        .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                        .flatMap(vm -> vmPortRepository.countByVmId(vmId)
+                                .flatMap(count -> {
+                                    if (count >= PORT_MAX_COUNT) {
+                                        return Mono.error(new VmException(VmErrorCode.PORT_LIMIT_EXCEEDED));
+                                    }
+                                    return vmPortRepository.countByVmIdAndPort(vmId, request.port());
+                                })
+                                .flatMap(existing -> {
+                                    if (existing > 0) {
+                                        return Mono.error(new VmException(VmErrorCode.PORT_ALREADY_EXISTS));
+                                    }
+                                    return vmPortRepository.countByVmIdAndNickname(vmId, request.nickname());
+                                })
+                                .flatMap(nickExists -> {
+                                    if (nickExists > 0) {
+                                        return Mono.error(new VmException(VmErrorCode.PORT_NICKNAME_ALREADY_EXISTS));
+                                    }
+                                    return Mono.just(vm);
+                                })
+                        )
+                        .flatMap(vm -> cloudflareClient.registerCname(portSubdomain)
+                                .flatMap(dnsRecordId ->
+                                        cloudflareClient.addIngressRule(
+                                                        portSubdomain, vm.getInternalIp(),
+                                                        request.port(), request.protocol().name())
+                                                .then(setupVisibility(vm.getId(), portSubdomain, dnsRecordId,
+                                                        request, ownerEmail, request.nickname()))
+                                )
+                                .onErrorResume(e -> {
+                                    log.error("포트 Cloudflare 설정 실패: vmId={}, port={}, error={}",
+                                            vmId, request.port(), e.getMessage());
+                                    return Mono.error(e);
+                                })
+                        )
+        );
+    }
+
+    private Mono<Void> validateCustomSubdomain(String bearerToken, String subdomain) {
+        boolean reserved = cloudflareProperties.getReservedSubdomains().stream()
+                .anyMatch(r -> subdomain.equals(r) || subdomain.startsWith(r + "-"));
+        if (reserved) {
+            return Mono.error(new VmException(VmErrorCode.SUBDOMAIN_RESERVED));
+        }
+        return userServiceClient.getUserPlan(bearerToken)
+                .flatMap(plan -> {
+                    if (!"PRO".equals(plan)) {
+                        return Mono.error(new VmException(VmErrorCode.CUSTOM_SUBDOMAIN_PRO_ONLY));
+                    }
+                    return vmPortRepository.countBySubdomain(subdomain);
+                })
+                .flatMap(count -> {
+                    if (count > 0) {
+                        return Mono.error(new VmException(VmErrorCode.SUBDOMAIN_ALREADY_TAKEN));
+                    }
+                    return Mono.empty();
                 });
+    }
+
+    @Override
+    public Mono<Boolean> checkSubdomainAvailable(String bearerToken, String subdomain) {
+        boolean reserved = cloudflareProperties.getReservedSubdomains().stream()
+                .anyMatch(r -> subdomain.equals(r) || subdomain.startsWith(r + "-"));
+        if (reserved) {
+            return Mono.error(new VmException(VmErrorCode.SUBDOMAIN_RESERVED));
+        }
+        return userServiceClient.getUserPlan(bearerToken)
+                .flatMap(plan -> {
+                    if (!"PRO".equals(plan)) {
+                        return Mono.error(new VmException(VmErrorCode.CUSTOM_SUBDOMAIN_PRO_ONLY));
+                    }
+                    return vmPortRepository.countBySubdomain(subdomain);
+                })
+                .map(count -> count == 0);
     }
 
     private Mono<PortResponse> setupVisibility(UUID vmId, String subdomain, String dnsRecordId,

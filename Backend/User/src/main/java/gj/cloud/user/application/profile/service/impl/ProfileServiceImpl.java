@@ -24,6 +24,14 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public String getPlanType(String userId) {
+        return profileRepository.findById(userId)
+                .map(p -> p.getPlanType().name())
+                .orElse("FREE");
+    }
+
+    @Override
     @Transactional
     public ProfileResponse updateProfile(String userId, String email, ProfileUpdateRequest request) {
         UserProfileEntity profile = profileRepository.findById(userId)

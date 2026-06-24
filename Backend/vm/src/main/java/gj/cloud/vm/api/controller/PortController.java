@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,8 +19,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -39,10 +42,30 @@ public class PortController {
     public Mono<ApiResponse<PortResponse>> addPort(
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId,
-            @Valid @RequestBody PortAddRequest request
+            @Valid @RequestBody PortAddRequest request,
+            ServerWebExchange exchange
     ) {
-        return portService.addPort(principal.userId(), principal.email(), vmId, request)
+        String token = extractToken(exchange);
+        return portService.addPort(principal.userId(), principal.email(), vmId, request, token)
                 .map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "커스텀 서브도메인 사용 가능 여부 확인", description = "PRO 플랜 전용. 예약어 및 중복 여부를 확인합니다.")
+    @GetMapping("/subdomain/check")
+    public Mono<ApiResponse<Boolean>> checkSubdomain(
+            @AuthenticationPrincipal VmPrincipal principal,
+            @PathVariable UUID vmId,
+            @RequestParam String value,
+            ServerWebExchange exchange
+    ) {
+        String token = extractToken(exchange);
+        return portService.checkSubdomainAvailable(token, value)
+                .map(ApiResponse::ok);
+    }
+
+    private String extractToken(ServerWebExchange exchange) {
+        String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        return (header != null && header.startsWith("Bearer ")) ? header.substring(7) : "";
     }
 
     @Operation(summary = "포트 목록 조회")

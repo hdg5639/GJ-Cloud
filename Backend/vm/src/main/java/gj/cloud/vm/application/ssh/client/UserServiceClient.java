@@ -18,6 +18,9 @@ public class UserServiceClient {
     private static final ParameterizedTypeReference<ApiResponse<SshKeyInternalResponse>> SSH_KEY_RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
 
+    private static final ParameterizedTypeReference<ApiResponse<String>> STRING_RESPONSE_TYPE =
+            new ParameterizedTypeReference<>() {};
+
     private final WebClient webClient;
 
     public UserServiceClient(@Value("${user.service-url}") String userServiceUrl) {
@@ -34,6 +37,19 @@ public class UserServiceClient {
                 .onErrorResume(e -> {
                     log.error("SSH 키 조회 실패: keyId={}, error={}", sshKeyId, e.getMessage());
                     return Mono.error(new VmException(VmErrorCode.SSH_KEY_FETCH_FAILED));
+                });
+    }
+
+    public Mono<String> getUserPlan(String bearerToken) {
+        return webClient.get()
+                .uri("/internal/users/plan")
+                .header("Authorization", "Bearer " + bearerToken)
+                .retrieve()
+                .bodyToMono(STRING_RESPONSE_TYPE)
+                .map(ApiResponse::data)
+                .onErrorResume(e -> {
+                    log.error("플랜 조회 실패: error={}", e.getMessage());
+                    return Mono.just("FREE");
                 });
     }
 }
