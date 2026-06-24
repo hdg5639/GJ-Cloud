@@ -9,6 +9,9 @@ import { useVmEvents } from "@/hooks/use-vm-events";
 import type { VmResponse, VmStatusEvent, ProfileResponse } from "@/lib/types";
 import VmSpecModal from "@/components/vm-spec-modal";
 import { PageLoader } from "@/components/ui/loader";
+import CollaborationWriteModal from "@/components/collaboration-write-modal";
+import CollaborationCard from "@/components/collaboration-card";
+import type { CollaborationResponse, CollaborationType } from "@/lib/types";
 
 function CodeBlock({
   id,
@@ -103,6 +106,12 @@ export default function InstanceDetailPage() {
   const [newSshEmail, setNewSshEmail] = useState("");
   const [sshEmailLoading, setSshEmailLoading] = useState(false);
 
+  // 협업
+  const [collabItems, setCollabItems] = useState<CollaborationResponse[]>([]);
+  const [collabTypeFilter, setCollabTypeFilter] = useState<CollaborationType | undefined>();
+  const [showCollabWrite, setShowCollabWrite] = useState(false);
+  const [editingCollab, setEditingCollab] = useState<CollaborationResponse | undefined>();
+
   // 포트 관리
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [ports, setPorts] = useState<PortResponse[]>([]);
@@ -128,6 +137,7 @@ export default function InstanceDetailPage() {
     api.vm.getSshAccess(accessToken, id).then(setSshEmails).catch(() => {});
     api.vm.getPorts(accessToken, id).then(setPorts).catch(() => {});
     api.user.profile(accessToken).then(setProfile).catch(() => {});
+    api.collab.list(accessToken, "INSTANCE", id).then(setCollabItems).catch(() => {});
   }, [accessToken, id]);
 
   const handleVmEvent = useCallback(
@@ -804,6 +814,79 @@ sudo apt-get update && sudo apt-get install cloudflared`}
           </div>
         )}
       </div>
+
+      {/* 협업 */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-medium text-gray-500">협업</p>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              {([undefined, "NOTE", "NOTICE", "REQUEST"] as (CollaborationType | undefined)[]).map((t) => (
+                <button
+                  key={t ?? "all"}
+                  onClick={() => setCollabTypeFilter(t)}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                    collabTypeFilter === t
+                      ? "border-gray-400 bg-gray-100 text-gray-800"
+                      : "border-gray-200 text-gray-500 hover:border-gray-300"
+                  }`}
+                >
+                  {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => { setEditingCollab(undefined); setShowCollabWrite(true); }}
+              className="text-xs px-2.5 h-6 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351]"
+            >
+              + 작성
+            </button>
+          </div>
+        </div>
+        {(() => {
+          const filtered = collabTypeFilter
+            ? collabItems.filter((i) => i.type === collabTypeFilter)
+            : collabItems;
+          return filtered.length === 0 ? (
+            <p className="text-xs text-gray-400 py-6 text-center">협업 항목이 없습니다.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {filtered.map((item) => (
+                <CollaborationCard
+                  key={item.id}
+                  item={item}
+                  accessToken={accessToken!}
+                  isOwnerOrAdmin={vm.userId === profile?.userId}
+                  currentUserId={profile?.userId}
+                  onEdit={(i) => { setEditingCollab(i); setShowCollabWrite(true); }}
+                  onUpdate={(updated) => setCollabItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))}
+                  onDelete={(deletedId) => setCollabItems((prev) => prev.filter((i) => i.id !== deletedId))}
+                />
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* 협업 작성/수정 모달 */}
+      {showCollabWrite && (
+        <CollaborationWriteModal
+          accessToken={accessToken!}
+          scopeType="INSTANCE"
+          scopeId={id}
+          editing={editingCollab}
+          onClose={() => { setShowCollabWrite(false); setEditingCollab(undefined); }}
+          onSuccess={(item) => {
+            if (editingCollab) {
+              setCollabItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
+              setEditingCollab(undefined);
+            } else {
+              setCollabItems((prev) => [item, ...prev]);
+            }
+            setShowCollabWrite(false);
+          }}
+        />
+      )}
 
       {/* 포트 추가 모달 */}
       {showPortModal && (

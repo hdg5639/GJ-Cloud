@@ -150,3 +150,71 @@ export interface PagedResponse<T> {
   size: number;
   empty: boolean;
 }
+
+// ── Organization ──────────────────────────────────────────────────────────────
+
+export type MemberRole = "OWNER" | "ADMIN" | "MEMBER";
+export type MemberStatus = "PENDING" | "ACCEPTED" | "REJECTED";
+
+export interface MemberResponse {
+  id: string;
+  email: string;
+  userId: string | null;
+  role: MemberRole;
+  status: MemberStatus;
+  invitedAt: string;
+  joinedAt: string | null;
+}
+
+export interface OrgResponse {
+  id: string;
+  name: string;
+  ownerId: string;
+  myRole: MemberRole;
+  memberCount: number;
+  vmCount: number;
+  createdAt: string;
+  pendingMemberId?: string;
+}
+
+export interface OrgDetailResponse {
+  id: string;
+  name: string;
+  ownerId: string;
+  myRole: MemberRole;
+  members: MemberResponse[];
+  vms: VmResponse[];
+  createdAt: string;
+}
+
+// ── Collaboration ─────────────────────────────────────────────────────────────
+
+export type ScopeType = "ORGANIZATION" | "INSTANCE";
+export type CollaborationType = "NOTE" | "NOTICE" | "REQUEST";
+export type CollaborationStatus = "UNSOLVED" | "SOLVED";
+
+export interface CollaborationResponse {
+  id: string;
+  scopeType: ScopeType;
+  scopeId: string;
+  type: CollaborationType;
+  tag: string | null;
+  title: string;
+  content: string;
+  status: CollaborationStatus | null;
+  pinned: boolean;
+  createdById: string;
+  createdByEmail: string;
+  resolvedById: string | null;
+  resolvedByEmail: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TagResponse {
+  id: string;
+  scopeType: ScopeType;
+  scopeId: string;
+  name: string;
+  usageCount: number;
+}

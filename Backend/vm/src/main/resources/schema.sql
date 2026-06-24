@@ -66,3 +66,84 @@ CREATE TABLE IF NOT EXISTS vm_ssh_access_emails (
 
     CONSTRAINT uq_vm_ssh_email UNIQUE (vm_id, email)
 );
+
+-- ── Organization ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS organizations (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       VARCHAR(100) NOT NULL,
+    owner_id   VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_organizations_owner_id ON organizations(owner_id);
+
+CREATE TABLE IF NOT EXISTS organization_members (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    email           VARCHAR(255) NOT NULL,
+    user_id         VARCHAR(255),
+    role            VARCHAR(20) NOT NULL DEFAULT 'MEMBER',
+    status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    invited_at      TIMESTAMP NOT NULL DEFAULT now(),
+    joined_at       TIMESTAMP,
+
+    CONSTRAINT chk_member_role   CHECK (role   IN ('OWNER', 'ADMIN', 'MEMBER')),
+    CONSTRAINT chk_member_status CHECK (status IN ('PENDING', 'ACCEPTED', 'REJECTED')),
+    CONSTRAINT uq_org_member_email UNIQUE (organization_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_members_org_id ON organization_members(organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_email  ON organization_members(email);
+
+CREATE TABLE IF NOT EXISTS organization_vms (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    vm_id           UUID NOT NULL,
+    added_at        TIMESTAMP NOT NULL DEFAULT now(),
+
+    CONSTRAINT uq_org_vm UNIQUE (organization_id, vm_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_vms_org_id ON organization_vms(organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_vms_vm_id  ON organization_vms(vm_id);
+
+-- ── Collaboration ─────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS collaboration_items (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    scope_type        VARCHAR(20) NOT NULL,
+    scope_id          UUID NOT NULL,
+    type              VARCHAR(20) NOT NULL,
+    tag               VARCHAR(50),
+    title             VARCHAR(200) NOT NULL,
+    content           TEXT NOT NULL,
+    status            VARCHAR(20),
+    pinned            BOOLEAN NOT NULL DEFAULT false,
+    created_by_id     VARCHAR(255) NOT NULL,
+    created_by_email  VARCHAR(255) NOT NULL,
+    resolved_by_id    VARCHAR(255),
+    resolved_by_email VARCHAR(255),
+    created_at        TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMP NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_collab_scope_type CHECK (scope_type IN ('ORGANIZATION', 'INSTANCE')),
+    CONSTRAINT chk_collab_type       CHECK (type IN ('NOTE', 'NOTICE', 'REQUEST')),
+    CONSTRAINT chk_collab_status     CHECK (status IS NULL OR status IN ('UNSOLVED', 'SOLVED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_collab_scope ON collaboration_items(scope_type, scope_id);
+
+CREATE TABLE IF NOT EXISTS collaboration_tags (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    scope_type   VARCHAR(20) NOT NULL,
+    scope_id     UUID NOT NULL,
+    name         VARCHAR(50) NOT NULL,
+    usage_count  INTEGER NOT NULL DEFAULT 1,
+    last_used_at TIMESTAMP NOT NULL DEFAULT now(),
+    created_by   VARCHAR(255) NOT NULL,
+    created_at   TIMESTAMP NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_tag_scope_type CHECK (scope_type IN ('ORGANIZATION', 'INSTANCE')),
+    CONSTRAINT uq_tag_scope_name  UNIQUE (scope_type, scope_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collab_tags_scope ON collaboration_tags(scope_type, scope_id);

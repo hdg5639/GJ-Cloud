@@ -1,5 +1,10 @@
 package gj.cloud.vm.global.config;
 
+import gj.cloud.vm.domain.collab.enums.CollaborationStatus;
+import gj.cloud.vm.domain.collab.enums.CollaborationType;
+import gj.cloud.vm.domain.collab.enums.ScopeType;
+import gj.cloud.vm.domain.org.enums.MemberRole;
+import gj.cloud.vm.domain.org.enums.MemberStatus;
 import gj.cloud.vm.domain.port.enums.Protocol;
 import gj.cloud.vm.domain.port.enums.Visibility;
 import gj.cloud.vm.domain.vm.enums.PlanType;
@@ -30,7 +35,17 @@ public class R2dbcConfig {
                 new StringToProtocolConverter(),
                 new ProtocolToStringConverter(),
                 new StringToVisibilityConverter(),
-                new VisibilityToStringConverter()
+                new VisibilityToStringConverter(),
+                new StringToMemberRoleConverter(),
+                new MemberRoleToStringConverter(),
+                new StringToMemberStatusConverter(),
+                new MemberStatusToStringConverter(),
+                new StringToScopeTypeConverter(),
+                new ScopeTypeToStringConverter(),
+                new StringToCollaborationTypeConverter(),
+                new CollaborationTypeToStringConverter(),
+                new StringToCollaborationStatusConverter(),
+                new CollaborationStatusToStringConverter()
         ));
     }
 
@@ -72,5 +87,55 @@ public class R2dbcConfig {
     @WritingConverter
     static class VisibilityToStringConverter implements Converter<Visibility, String> {
         public String convert(Visibility source) { return source.name(); }
+    }
+
+    @ReadingConverter
+    static class StringToMemberRoleConverter implements Converter<String, MemberRole> {
+        public MemberRole convert(String source) { return MemberRole.valueOf(source); }
+    }
+
+    @WritingConverter
+    static class MemberRoleToStringConverter implements Converter<MemberRole, String> {
+        public String convert(MemberRole source) { return source.name(); }
+    }
+
+    @ReadingConverter
+    static class StringToMemberStatusConverter implements Converter<String, MemberStatus> {
+        public MemberStatus convert(String source) { return MemberStatus.valueOf(source); }
+    }
+
+    @WritingConverter
+    static class MemberStatusToStringConverter implements Converter<MemberStatus, String> {
+        public String convert(MemberStatus source) { return source.name(); }
+    }
+
+    @ReadingConverter
+    static class StringToScopeTypeConverter implements Converter<String, ScopeType> {
+        public ScopeType convert(String source) { return ScopeType.valueOf(source); }
+    }
+
+    @WritingConverter
+    static class ScopeTypeToStringConverter implements Converter<ScopeType, String> {
+        public String convert(ScopeType source) { return source.name(); }
+    }
+
+    @ReadingConverter
+    static class StringToCollaborationTypeConverter implements Converter<String, CollaborationType> {
+        public CollaborationType convert(String source) { return CollaborationType.valueOf(source); }
+    }
+
+    @WritingConverter
+    static class CollaborationTypeToStringConverter implements Converter<CollaborationType, String> {
+        public String convert(CollaborationType source) { return source.name(); }
+    }
+
+    @ReadingConverter
+    static class StringToCollaborationStatusConverter implements Converter<String, CollaborationStatus> {
+        public CollaborationStatus convert(String source) { return source == null ? null : CollaborationStatus.valueOf(source); }
+    }
+
+    @WritingConverter
+    static class CollaborationStatusToStringConverter implements Converter<CollaborationStatus, String> {
+        public String convert(CollaborationStatus source) { return source == null ? null : source.name(); }
     }
 }

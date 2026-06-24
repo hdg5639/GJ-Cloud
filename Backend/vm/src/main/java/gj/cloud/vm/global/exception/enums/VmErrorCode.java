@@ -31,7 +31,24 @@ public enum VmErrorCode {
     VM_NOT_RUNNING(HttpStatus.BAD_REQUEST, "VM이 실행 중이 아니므로 메트릭을 조회할 수 없습니다."),
     CUSTOM_SUBDOMAIN_PRO_ONLY(HttpStatus.FORBIDDEN, "커스텀 서브도메인은 PRO 플랜 사용자만 이용할 수 있습니다."),
     SUBDOMAIN_RESERVED(HttpStatus.BAD_REQUEST, "예약된 서브도메인입니다."),
-    SUBDOMAIN_ALREADY_TAKEN(HttpStatus.CONFLICT, "이미 사용 중인 서브도메인입니다.");
+    SUBDOMAIN_ALREADY_TAKEN(HttpStatus.CONFLICT, "이미 사용 중인 서브도메인입니다."),
+
+    // Organization
+    ORGANIZATION_NOT_FOUND(HttpStatus.NOT_FOUND, "조직을 찾을 수 없습니다."),
+    NOT_ORGANIZATION_MEMBER(HttpStatus.FORBIDDEN, "해당 조직의 멤버가 아닙니다."),
+    ORGANIZATION_PERMISSION_DENIED(HttpStatus.FORBIDDEN, "권한이 없습니다."),
+    MEMBER_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 초대된 사용자입니다."),
+    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "멤버를 찾을 수 없습니다."),
+    VM_ALREADY_IN_ORGANIZATION(HttpStatus.CONFLICT, "이미 조직에 추가된 VM입니다."),
+    ORGANIZATION_VM_NOT_FOUND(HttpStatus.NOT_FOUND, "조직에 연결된 VM을 찾을 수 없습니다."),
+    CANNOT_REMOVE_OWNER(HttpStatus.BAD_REQUEST, "조직 소유자는 제거할 수 없습니다."),
+    INVITATION_NOT_PENDING(HttpStatus.BAD_REQUEST, "대기 중인 초대가 아닙니다."),
+
+    // Collaboration
+    COLLABORATION_NOT_FOUND(HttpStatus.NOT_FOUND, "협업 항목을 찾을 수 없습니다."),
+    COLLABORATION_PERMISSION_DENIED(HttpStatus.FORBIDDEN, "협업 항목에 대한 권한이 없습니다."),
+    COLLABORATION_NOT_REQUEST_TYPE(HttpStatus.BAD_REQUEST, "요청(REQUEST) 타입에만 해결 처리가 가능합니다."),
+    TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "태그를 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;
