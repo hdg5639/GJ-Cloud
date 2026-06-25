@@ -8,7 +8,7 @@ import gj.cloud.auth.domain.user.enums.UserRole;
 
 public interface TokenService {
     String issueAccessToken(String userId, String email, UserRole role, ServiceAudience audience);
-    String issueRefreshToken(String userId);
+    String issueRefreshToken(String userId, boolean rememberMe);
     RefreshResult refresh(String tokenId);
     TokenResponse exchange(String accessToken, TokenExchangeRequest request);
     void deleteAllUserTokens(String userId);

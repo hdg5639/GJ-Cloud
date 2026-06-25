@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +25,10 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 public class TokenServiceImpl implements TokenService {
+
+    private static final String PREFIX_REFRESH = "refresh:";
+    private static final String PREFIX_USED    = "used:";
+    private static final String PREFIX_EXCHANGE = "exchange:";
 
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
@@ -36,30 +41,62 @@ public class TokenServiceImpl implements TokenService {
     }
 
     @Override
-    public String issueRefreshToken(String userId) {
+    public String issueRefreshToken(String userId, boolean rememberMe) {
         String tokenId = UUID.randomUUID().toString();
-        String key = "refresh:" + userId + ":" + tokenId;
-        redisTemplate.opsForValue().set(key, tokenId, jwtProperties.getRefreshTokenExpiry(), TimeUnit.MILLISECONDS);
+        long ttlMs = rememberMe
+                ? jwtProperties.getRememberMeRefreshTokenExpiry()
+                : jwtProperties.getRefreshTokenExpiry();
+        long now = Instant.now().toEpochMilli();
+        String metadata = buildMetadata(userId, rememberMe, now, now);
+        redisTemplate.opsForValue().set(PREFIX_REFRESH + tokenId, metadata, ttlMs, TimeUnit.MILLISECONDS);
         return tokenId;
     }
 
     @Override
     public RefreshResult refresh(String tokenId) {
-        Set<String> keys = redisTemplate.keys("refresh:*:" + tokenId);
-        if (keys == null || keys.isEmpty()) {
+        String metadataJson = redisTemplate.opsForValue().get(PREFIX_REFRESH + tokenId);
+
+        if (metadataJson == null) {
+            // 탈취 감지: 이미 rotation으로 소비된 tokenId인지 확인
+            String stolenUserId = redisTemplate.opsForValue().get(PREFIX_USED + tokenId);
+            if (stolenUserId != null) {
+                deleteAllUserTokens(stolenUserId);
+                throw new AuthException(AuthErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
+            }
             throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
         }
-        String key = keys.iterator().next();
-        String userId = key.split(":")[1];
 
-        redisTemplate.delete(key);
+        String userId    = parseField(metadataJson, "userId");
+        boolean rememberMe = "true".equals(parseField(metadataJson, "rememberMe"));
+        long issuedAt  = Long.parseLong(parseField(metadataJson, "issuedAt"));
+        long now       = Instant.now().toEpochMilli();
+
+        // 기존 토큰 삭제 + 사용 이력 블랙리스트 등록 (탈취 감지용)
+        redisTemplate.delete(PREFIX_REFRESH + tokenId);
+        long blacklistTtlMs = rememberMe
+                ? jwtProperties.getRememberMeRefreshTokenExpiry()
+                : jwtProperties.getRefreshTokenExpiry();
+        redisTemplate.opsForValue().set(PREFIX_USED + tokenId, userId, blacklistTtlMs, TimeUnit.MILLISECONDS);
 
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
 
-        String newAccessToken = issueAccessToken(userId, user.getEmail(), user.getRole(), ServiceAudience.AUTH);
-        String newRefreshToken = issueRefreshToken(userId);
-        return new RefreshResult(newAccessToken, newRefreshToken);
+        // rememberMe=true → sliding (30일 리셋), false → 남은 TTL 유지
+        long newTtlMs;
+        if (rememberMe) {
+            newTtlMs = jwtProperties.getRememberMeRefreshTokenExpiry();
+        } else {
+            long elapsed = now - issuedAt;
+            newTtlMs = Math.max(jwtProperties.getRefreshTokenExpiry() - elapsed, 0);
+        }
+
+        String newAccessToken  = issueAccessToken(userId, user.getEmail(), user.getRole(), ServiceAudience.AUTH);
+        String newTokenId      = UUID.randomUUID().toString();
+        String newMetadata     = buildMetadata(userId, rememberMe, issuedAt, now);
+        redisTemplate.opsForValue().set(PREFIX_REFRESH + newTokenId, newMetadata, newTtlMs, TimeUnit.MILLISECONDS);
+
+        long cookieMaxAgeSeconds = newTtlMs / 1000;
+        return new RefreshResult(newAccessToken, newTokenId, cookieMaxAgeSeconds);
     }
 
     @Override
@@ -73,7 +110,7 @@ public class TokenServiceImpl implements TokenService {
 
         ServiceAudience targetAudience = ServiceAudience.from(request.targetService());
         String userId = claims.getSubject();
-        String cacheKey = "exchange:" + userId + ":" + targetAudience.getValue();
+        String cacheKey = PREFIX_EXCHANGE + userId + ":" + targetAudience.getValue();
 
         String cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
@@ -83,27 +120,27 @@ public class TokenServiceImpl implements TokenService {
             }
         }
 
-        String email = (String) claims.getClaim("email");
+        String email   = (String) claims.getClaim("email");
         String roleStr = (String) claims.getClaim("role");
-        UserRole role = UserRole.valueOf(roleStr);
+        UserRole role  = UserRole.valueOf(roleStr);
 
         String newToken = jwtProvider.issueAccessToken(userId, email, role, targetAudience.getValue());
-        redisTemplate.opsForValue().set(
-                cacheKey,
-                newToken,
-                jwtProperties.getExchangeTokenExpiry(),
-                TimeUnit.MILLISECONDS
-        );
+        redisTemplate.opsForValue().set(cacheKey, newToken, jwtProperties.getExchangeTokenExpiry(), TimeUnit.MILLISECONDS);
         return new TokenResponse(newToken, "Bearer", jwtProperties.getExchangeTokenExpiry() / 1000);
     }
 
     @Override
     public void deleteAllUserTokens(String userId) {
-        Set<String> refreshKeys = redisTemplate.keys("refresh:" + userId + ":*");
-        if (refreshKeys != null && !refreshKeys.isEmpty()) {
-            redisTemplate.delete(refreshKeys);
+        Set<String> refreshKeys = redisTemplate.keys(PREFIX_REFRESH + "*");
+        if (refreshKeys != null) {
+            refreshKeys.stream()
+                    .filter(k -> {
+                        String val = redisTemplate.opsForValue().get(k);
+                        return val != null && userId.equals(parseField(val, "userId"));
+                    })
+                    .forEach(redisTemplate::delete);
         }
-        Set<String> exchangeKeys = redisTemplate.keys("exchange:" + userId + ":*");
+        Set<String> exchangeKeys = redisTemplate.keys(PREFIX_EXCHANGE + userId + ":*");
         if (exchangeKeys != null && !exchangeKeys.isEmpty()) {
             redisTemplate.delete(exchangeKeys);
         }
@@ -112,5 +149,29 @@ public class TokenServiceImpl implements TokenService {
     @Override
     public String getJwks() {
         return jwtProvider.getJwks();
+    }
+
+    // ── 메타데이터 JSON 직렬화/역직렬화 ──────────────────────────────
+
+    private String buildMetadata(String userId, boolean rememberMe, long issuedAt, long lastUsedAt) {
+        return "{\"userId\":\"" + userId + "\""
+                + ",\"rememberMe\":" + rememberMe
+                + ",\"issuedAt\":" + issuedAt
+                + ",\"lastUsedAt\":" + lastUsedAt
+                + "}";
+    }
+
+    private String parseField(String json, String field) {
+        String key = "\"" + field + "\":";
+        int start = json.indexOf(key);
+        if (start == -1) return "";
+        start += key.length();
+        if (json.charAt(start) == '"') {
+            int end = json.indexOf('"', start + 1);
+            return json.substring(start + 1, end);
+        }
+        int end = json.indexOf(',', start);
+        if (end == -1) end = json.indexOf('}', start);
+        return json.substring(start, end).trim();
     }
 }

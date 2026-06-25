@@ -73,9 +73,10 @@ public class AuthServiceImpl implements AuthService {
 
         String accessToken = tokenService.issueAccessToken(
                 user.getId(), user.getEmail(), user.getRole(), ServiceAudience.AUTH);
-        String refreshToken = tokenService.issueRefreshToken(user.getId());
+        String refreshToken = tokenService.issueRefreshToken(user.getId(), request.rememberMe());
+        long cookieMaxAgeSeconds = request.rememberMe() ? 2592000L : 604800L;
 
-        return new LoginResult(accessToken, refreshToken);
+        return new LoginResult(accessToken, refreshToken, cookieMaxAgeSeconds);
     }
 
     @Override

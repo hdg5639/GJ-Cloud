@@ -162,11 +162,11 @@ async function request<T>(
 
 export const api = {
   auth: {
-    login: (email: string, password: string) =>
+    login: (email: string, password: string, rememberMe = false) =>
       request<{ accessToken: string; tokenType: string; expiresIn: number }>(
         "auth",
         "/auth/login",
-        { method: "POST", body: JSON.stringify({ email, password }) }
+        { method: "POST", body: JSON.stringify({ email, password, rememberMe }) }
       ),
     register: (email: string, password: string) =>
       request<void>("auth", "/auth/register", {

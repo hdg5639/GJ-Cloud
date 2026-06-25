@@ -10,6 +10,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +19,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await api.auth.login(email, password);
+      const result = await api.auth.login(email, password, rememberMe);
       login(result.accessToken, { email });
       router.push("/instances");
     } catch (err) {
@@ -69,6 +70,19 @@ export default function LoginPage() {
               required
               className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
             />
+          </div>
+
+          <div className="flex items-center gap-2 mt-3">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-3.5 h-3.5 accent-[#03C75A] cursor-pointer"
+            />
+            <label htmlFor="rememberMe" className="text-xs text-gray-500 cursor-pointer select-none">
+              로그인 유지 (30일)
+            </label>
           </div>
 
           {error && <p className="text-xs text-red-600 mt-2">{error}</p>}

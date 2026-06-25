@@ -34,7 +34,7 @@ public class AuthController implements AuthApi {
     @Override
     public ApiResponse<LoginResponse> login(LoginRequest request, HttpServletResponse response) {
         LoginResult result = authService.login(request);
-        setRefreshTokenCookie(response, result.refreshToken());
+        setRefreshTokenCookie(response, result.refreshToken(), result.cookieMaxAgeSeconds());
         return ApiResponse.ok(new LoginResponse(result.accessToken(), "Bearer", 900L));
     }
 
@@ -63,10 +63,10 @@ public class AuthController implements AuthApi {
         return ApiResponse.ok();
     }
 
-    private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
+    private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken, long maxAgeSeconds) {
         response.addHeader("Set-Cookie",
                 "refreshToken=" + refreshToken
-                        + "; HttpOnly; Secure; SameSite=Strict; Path=/auth/token; Max-Age=604800");
+                        + "; HttpOnly; Secure; SameSite=Strict; Path=/auth/token; Max-Age=" + maxAgeSeconds);
     }
 
     private void clearRefreshTokenCookie(HttpServletResponse response) {

@@ -29,7 +29,7 @@ public class TokenController implements TokenApi {
         RefreshResult result = tokenService.refresh(refreshToken);
         response.addHeader("Set-Cookie",
                 "refreshToken=" + result.newRefreshToken()
-                        + "; HttpOnly; Secure; SameSite=Strict; Path=/auth/token; Max-Age=604800");
+                        + "; HttpOnly; Secure; SameSite=Strict; Path=/auth/token; Max-Age=" + result.cookieMaxAgeSeconds());
         return ApiResponse.ok(new LoginResponse(result.accessToken(), "Bearer", 900L));
     }
 
