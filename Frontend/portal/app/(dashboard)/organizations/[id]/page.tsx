@@ -544,11 +544,13 @@ export default function OrganizationDetailPage() {
                   {availableVms.map((vm) => (
                     <label
                       key={vm.id}
+                      htmlFor={`org-collab-vm-${vm.id}`}
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
                         selectedVmId === vm.id ? "border-[#03C75A] bg-[#03C75A]/5" : "border-gray-200 hover:border-gray-300"
                       }`}
                     >
                       <input
+                        id={`org-collab-vm-${vm.id}`}
                         type="radio"
                         name="vm"
                         value={vm.id}
@@ -613,7 +615,7 @@ export default function OrganizationDetailPage() {
 
                 {/* 플랜 */}
                 <div>
-                  <label className="text-xs text-gray-500 block mb-2">플랜</label>
+                  <span className="text-xs text-gray-500 block mb-2">플랜</span>
                   <div className="grid grid-cols-2 gap-2">
                     {(["FREE", "PRO"] as const).map((plan) => {
                       const info = PLAN_INFO[plan];

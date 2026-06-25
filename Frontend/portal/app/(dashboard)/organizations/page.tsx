@@ -174,7 +174,7 @@ export default function OrganizationsPage() {
               </div>
               {vms.length > 0 && (
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">연결할 VM <span className="text-gray-400">(선택)</span></label>
+                  <span className="text-xs text-gray-500 block mb-1">연결할 VM <span className="text-gray-400">(선택)</span></span>
                   <div className="space-y-1.5 max-h-40 overflow-y-auto">
                     {vms.map((vm) => (
                       <label key={vm.id} htmlFor={`org-vm-${vm.id}`} className="flex items-center gap-2 text-sm cursor-pointer">

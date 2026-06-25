@@ -93,7 +93,7 @@ export default function CreateInstancePage() {
         </div>
 
         <div className="mb-5">
-          <label className="text-xs text-gray-500 block mb-2">플랜</label>
+          <span className="text-xs text-gray-500 block mb-2">플랜</span>
           <div className="grid grid-cols-2 gap-2.5">
             {(["FREE", "PRO"] as const).map((plan) => {
               const info = PLAN_INFO[plan];

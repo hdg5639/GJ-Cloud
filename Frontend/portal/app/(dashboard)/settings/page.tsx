@@ -138,7 +138,7 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-4">
           {/* 이메일 (읽기 전용) */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">이메일</label>
+            <span className="text-xs text-gray-500">이메일</span>
             <div className="h-9 px-3 flex items-center bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-500 select-all">
               {profile.email}
             </div>
@@ -160,7 +160,7 @@ export default function SettingsPage() {
 
           {/* 플랜 (읽기 전용) */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">플랜</label>
+            <span className="text-xs text-gray-500">플랜</span>
             <div className="flex items-center gap-2">
               <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
                 profile.planType === "PRO"

@@ -65,8 +65,9 @@ export default function UpgradeRequestModal({ vm, onClose, onSuccess }: Props) {
             <p className="text-xs text-gray-500 mb-2">변경할 플랜</p>
             <div className="space-y-2">
               {availablePlans.map((plan) => (
-                <label key={plan} className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                <label key={plan} htmlFor={`modal-plan-${plan}`} className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                   <input
+                    id={`modal-plan-${plan}`}
                     type="radio"
                     name="plan"
                     value={plan}
