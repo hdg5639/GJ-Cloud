@@ -250,13 +250,15 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
-    public Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request) {
+    public Mono<VmResponse> changePower(String userId, String email, UUID vmId, VmPowerRequest request) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .flatMap(vm -> {
                     if (vm.getDeletedAt() != null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
-                    if (!vm.getUserId().equals(userId)) return Mono.error(new VmException(VmErrorCode.FORBIDDEN));
                     if (vm.getVmid() == null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    return checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm);
+                })
+                .flatMap(vm -> {
                     return switch (request.action()) {
                         case START -> updateStatus(vm, VmStatus.STARTING)
                                 .flatMap(v -> proxmoxClient.startVm(v.getVmid())
@@ -378,8 +380,10 @@ public class VmServiceImpl implements VmService {
     @Override
     public Mono<List<String>> addSshAccessEmail(String userId, String ownerEmail, UUID vmId, String email) {
         return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, ownerEmail).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getCfAppId() == null || vm.getCfPolicyId() == null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
@@ -409,8 +413,10 @@ public class VmServiceImpl implements VmService {
             return Mono.error(new VmException(VmErrorCode.OWNER_EMAIL_REMOVAL_NOT_ALLOWED));
         }
         return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, ownerEmail).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getCfAppId() == null || vm.getCfPolicyId() == null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
@@ -586,6 +592,16 @@ public class VmServiceImpl implements VmService {
         if (ownerId.equals(requesterId)) return Mono.empty();
         return orgVmRepository.findAllByVmId(vmId)
                 .flatMap(orgVm -> orgMemberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
+                .next()
+                .<Void>flatMap(m -> Mono.empty())
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)));
+    }
+
+    // 소유자이거나 해당 VM이 연결된 org의 ACCEPTED ADMIN/OWNER 멤버면 통과
+    private Mono<Void> checkVmAdminAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
+        if (ownerId.equals(requesterId)) return Mono.empty();
+        return orgVmRepository.findAllByVmId(vmId)
+                .flatMap(orgVm -> orgMemberRepository.findAcceptedAdminByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
                 .next()
                 .<Void>flatMap(m -> Mono.empty())
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)));

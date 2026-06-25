@@ -12,9 +12,9 @@ import java.util.UUID;
 public interface PortService {
     Mono<PortResponse> addPort(String userId, String ownerEmail, UUID vmId, PortAddRequest request, String bearerToken);
     Flux<PortResponse> getPorts(String userId, String email, UUID vmId);
-    Mono<Void> deletePort(String userId, UUID vmId, UUID portId);
-    Mono<PortResponse> addPortAccessEmail(String userId, UUID vmId, UUID portId, PortAccessAddRequest request);
-    Mono<PortResponse> removePortAccessEmail(String userId, UUID vmId, UUID portId, String email);
+    Mono<Void> deletePort(String userId, String userEmail, UUID vmId, UUID portId);
+    Mono<PortResponse> addPortAccessEmail(String userId, String userEmail, UUID vmId, UUID portId, PortAccessAddRequest request);
+    Mono<PortResponse> removePortAccessEmail(String userId, String userEmail, UUID vmId, UUID portId, String targetEmail);
     Mono<Void> teardownAllPortsForVm(UUID vmId);
     Mono<SubdomainCheckResponse> checkSubdomainAvailable(String bearerToken, String subdomain);
 }

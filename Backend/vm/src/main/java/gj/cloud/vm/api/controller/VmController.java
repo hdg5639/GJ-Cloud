@@ -88,7 +88,7 @@ public class VmController {
             @PathVariable UUID vmId,
             @Valid @RequestBody VmPowerRequest request
     ) {
-        return vmService.changePower(principal.userId(), vmId, request)
+        return vmService.changePower(principal.userId(), principal.email(), vmId, request)
                 .map(ApiResponse::ok);
     }
 

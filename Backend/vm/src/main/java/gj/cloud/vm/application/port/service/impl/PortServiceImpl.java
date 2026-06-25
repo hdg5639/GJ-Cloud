@@ -46,57 +46,55 @@ public class PortServiceImpl implements PortService {
 
     @Override
     public Mono<PortResponse> addPort(String userId, String ownerEmail, UUID vmId, PortAddRequest request, String bearerToken) {
-        Mono<String> subdomainMono;
-
-        if (request.customSubdomain() != null && !request.customSubdomain().isBlank()) {
-            subdomainMono = validateCustomSubdomain(bearerToken, request.customSubdomain())
-                    .thenReturn(request.customSubdomain());
-        } else {
-            subdomainMono = vmRepository.findById(vmId)
-                    .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
-                    .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                    .map(vm -> vm.getSubdomain() + "-" + request.nickname());
-        }
-
-        return subdomainMono.flatMap(portSubdomain ->
-                vmRepository.findById(vmId)
-                        .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
-                        .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                        .flatMap(vm -> vmPortRepository.countByVmId(vmId)
-                                .flatMap(count -> {
-                                    if (count >= PORT_MAX_COUNT) {
-                                        return Mono.error(new VmException(VmErrorCode.PORT_LIMIT_EXCEEDED));
-                                    }
-                                    return vmPortRepository.countByVmIdAndPort(vmId, request.port());
-                                })
-                                .flatMap(existing -> {
-                                    if (existing > 0) {
-                                        return Mono.error(new VmException(VmErrorCode.PORT_ALREADY_EXISTS));
-                                    }
-                                    return vmPortRepository.countByVmIdAndNickname(vmId, request.nickname());
-                                })
-                                .flatMap(nickExists -> {
-                                    if (nickExists > 0) {
-                                        return Mono.error(new VmException(VmErrorCode.PORT_NICKNAME_ALREADY_EXISTS));
-                                    }
-                                    return Mono.just(vm);
-                                })
-                        )
-                        .flatMap(vm -> cloudflareClient.registerCname(portSubdomain)
-                                .flatMap(dnsRecordId ->
-                                        cloudflareClient.addIngressRule(
-                                                        portSubdomain, vm.getInternalIp(),
-                                                        request.port(), request.protocol().name())
-                                                .then(setupVisibility(vm.getId(), portSubdomain, dnsRecordId,
-                                                        request, ownerEmail, request.nickname()))
-                                )
-                                .onErrorResume(e -> {
-                                    log.error("포트 Cloudflare 설정 실패: vmId={}, port={}, error={}",
-                                            vmId, request.port(), e.getMessage());
-                                    return Mono.error(e);
-                                })
-                        )
-        );
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, ownerEmail).thenReturn(vm))
+                .flatMap(vm -> {
+                    Mono<String> subdomainMono;
+                    if (request.customSubdomain() != null && !request.customSubdomain().isBlank()) {
+                        subdomainMono = validateCustomSubdomain(bearerToken, request.customSubdomain())
+                                .thenReturn(request.customSubdomain());
+                    } else {
+                        subdomainMono = Mono.just(vm.getSubdomain() + "-" + request.nickname());
+                    }
+                    return subdomainMono.flatMap(portSubdomain ->
+                            vmPortRepository.countByVmId(vmId)
+                                    .flatMap(count -> {
+                                        if (count >= PORT_MAX_COUNT) {
+                                            return Mono.error(new VmException(VmErrorCode.PORT_LIMIT_EXCEEDED));
+                                        }
+                                        return vmPortRepository.countByVmIdAndPort(vmId, request.port());
+                                    })
+                                    .flatMap(existing -> {
+                                        if (existing > 0) {
+                                            return Mono.error(new VmException(VmErrorCode.PORT_ALREADY_EXISTS));
+                                        }
+                                        return vmPortRepository.countByVmIdAndNickname(vmId, request.nickname());
+                                    })
+                                    .flatMap(nickExists -> {
+                                        if (nickExists > 0) {
+                                            return Mono.error(new VmException(VmErrorCode.PORT_NICKNAME_ALREADY_EXISTS));
+                                        }
+                                        return Mono.just(vm);
+                                    })
+                                    .flatMap(v -> cloudflareClient.registerCname(portSubdomain)
+                                            .flatMap(dnsRecordId ->
+                                                    cloudflareClient.addIngressRule(
+                                                                    portSubdomain, v.getInternalIp(),
+                                                                    request.port(), request.protocol().name())
+                                                            .then(setupVisibility(v.getId(), portSubdomain, dnsRecordId,
+                                                                    request, ownerEmail, request.nickname()))
+                                            )
+                                            .onErrorResume(e -> {
+                                                log.error("포트 Cloudflare 설정 실패: vmId={}, port={}, error={}",
+                                                        vmId, request.port(), e.getMessage());
+                                                return Mono.error(e);
+                                            })
+                                    )
+                    );
+                });
     }
 
     private Mono<Void> validateCustomSubdomain(String bearerToken, String subdomain) {
@@ -196,11 +194,22 @@ public class PortServiceImpl implements PortService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)));
     }
 
+    private Mono<Void> checkVmAdminAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
+        if (ownerId.equals(requesterId)) return Mono.empty();
+        return orgVmRepository.findAllByVmId(vmId)
+                .flatMap(orgVm -> orgMemberRepository.findAcceptedAdminByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
+                .next()
+                .<Void>flatMap(m -> Mono.empty())
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)));
+    }
+
     @Override
-    public Mono<Void> deletePort(String userId, UUID vmId, UUID portId) {
+    public Mono<Void> deletePort(String userId, String userEmail, UUID vmId, UUID portId) {
         return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail))
                 .then(vmPortRepository.findById(portId))
                 .filter(port -> port.getVmId().equals(vmId))
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
@@ -211,11 +220,13 @@ public class PortServiceImpl implements PortService {
     }
 
     @Override
-    public Mono<PortResponse> addPortAccessEmail(String userId, UUID vmId, UUID portId,
+    public Mono<PortResponse> addPortAccessEmail(String userId, String userEmail, UUID vmId, UUID portId,
                                                   PortAccessAddRequest request) {
         return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail).thenReturn(vm))
                 .then(vmPortRepository.findById(portId))
                 .filter(port -> port.getVmId().equals(vmId) && port.getVisibility() == Visibility.PRIVATE)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
@@ -239,14 +250,16 @@ public class PortServiceImpl implements PortService {
     }
 
     @Override
-    public Mono<PortResponse> removePortAccessEmail(String userId, UUID vmId, UUID portId, String email) {
+    public Mono<PortResponse> removePortAccessEmail(String userId, String userEmail, UUID vmId, UUID portId, String targetEmail) {
         return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail).thenReturn(vm))
                 .then(vmPortRepository.findById(portId))
                 .filter(port -> port.getVmId().equals(vmId) && port.getVisibility() == Visibility.PRIVATE)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
-                .flatMap(port -> portAccessEmailRepository.findByVmPortIdAndEmail(portId, email)
+                .flatMap(port -> portAccessEmailRepository.findByVmPortIdAndEmail(portId, targetEmail)
                         .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
                         .flatMap(entry -> portAccessEmailRepository.delete(entry))
                         .then(portAccessEmailRepository.findAllByVmPortId(portId)

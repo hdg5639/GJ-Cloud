@@ -22,7 +22,7 @@ public interface VmService {
     Flux<VmResponse> getAllVms();
     Mono<VmResponse> getVmAdmin(UUID vmId);
     Mono<Void> forceDeleteVm(UUID vmId);
-    Mono<VmResponse> changePower(String userId, UUID vmId, VmPowerRequest request);
+    Mono<VmResponse> changePower(String userId, String email, UUID vmId, VmPowerRequest request);
     Mono<VmResponse> updatePlan(String userId, UUID vmId, VmPlanUpdateRequest request);
     Mono<VmAvailabilityResponse> getAvailability();
     Mono<List<String>> getSshAccessEmails(String userId, String email, UUID vmId);

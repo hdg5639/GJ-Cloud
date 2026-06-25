@@ -17,6 +17,9 @@ public interface OrganizationMemberRepository extends ReactiveCrudRepository<Org
     @Query("SELECT * FROM organization_members WHERE organization_id = :orgId AND email = :email AND status = 'ACCEPTED'")
     Mono<OrganizationMemberEntity> findAcceptedByOrgIdAndEmail(UUID orgId, String email);
 
+    @Query("SELECT * FROM organization_members WHERE organization_id = :orgId AND email = :email AND status = 'ACCEPTED' AND role IN ('OWNER', 'ADMIN')")
+    Mono<OrganizationMemberEntity> findAcceptedAdminByOrgIdAndEmail(UUID orgId, String email);
+
     @Query("SELECT * FROM organization_members WHERE organization_id = :orgId AND email = :email AND status = 'PENDING'")
     Mono<OrganizationMemberEntity> findPendingByOrgIdAndEmail(UUID orgId, String email);
 

@@ -88,7 +88,7 @@ public class PortController {
             @PathVariable UUID vmId,
             @PathVariable UUID portId
     ) {
-        return portService.deletePort(principal.userId(), vmId, portId);
+        return portService.deletePort(principal.userId(), principal.email(), vmId, portId);
     }
 
     @Operation(summary = "비공개 포트 접근 이메일 추가")
@@ -100,7 +100,7 @@ public class PortController {
             @PathVariable UUID portId,
             @Valid @RequestBody PortAccessAddRequest request
     ) {
-        return portService.addPortAccessEmail(principal.userId(), vmId, portId, request)
+        return portService.addPortAccessEmail(principal.userId(), principal.email(), vmId, portId, request)
                 .map(ApiResponse::ok);
     }
 
@@ -112,7 +112,7 @@ public class PortController {
             @PathVariable UUID portId,
             @PathVariable String email
     ) {
-        return portService.removePortAccessEmail(principal.userId(), vmId, portId, email)
+        return portService.removePortAccessEmail(principal.userId(), principal.email(), vmId, portId, email)
                 .map(ApiResponse::ok);
     }
 }
