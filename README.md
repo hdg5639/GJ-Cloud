@@ -3,7 +3,7 @@
 > 개인 Proxmox 서버 위에 구축한 셀프호스팅 IaaS 서비스.  
 > VM 생성부터 SSH 접속, 포트 노출, 팀 협업까지 — AWS EC2와 유사한 경험을 직접 만든 인프라 위에서.
 
-**라이브 서비스** → 운영 중 (비공개)
+**라이브 서비스** → [gamjabox.cloud](https://portal.gamjabox.cloud)
 
 ---
 
@@ -121,14 +121,13 @@ POST /vms  →  PENDING (즉시 202 응답)
 ## 프로젝트 구조
 
 ```
-GJ-Cloud/
+v2/
 ├── Backend/
-│   ├── Auth/          Spring MVC — 인증·JWT·Refresh Token·이메일 인증
-│   ├── User/          Spring MVC — 프로필·SSH 키·플랜
-│   └── vm/            Spring WebFlux — VM·포트·조직·협업·메트릭
-├── Frontend/
-│   └── portal/        Next.js — 사용자 포털
-└── compose.yaml       로컬 개발 환경 Docker Compose
+│   ├── Auth/    Spring MVC — 인증·JWT·Refresh Token·이메일 인증
+│   ├── User/    Spring MVC — 프로필·SSH 키·플랜
+│   └── vm/      Spring WebFlux — VM·포트·조직·협업·메트릭
+└── Frontend/
+    └── portal/  Next.js — 사용자 포털
 ```
 
 ---
