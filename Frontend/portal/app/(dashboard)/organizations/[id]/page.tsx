@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { CollaborationResponse, CollaborationType, MemberResponse, MemberRole, OrgDetailResponse } from "@/lib/types";
+import type { CollaborationResponse, CollaborationType, MemberResponse, MemberRole, OrgDetailResponse, VmResponse } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import CollaborationWriteModal from "@/components/collaboration-write-modal";
 import CollaborationCard from "@/components/collaboration-card";
@@ -18,19 +18,53 @@ const ROLE_STYLE: Record<MemberRole, string> = {
 
 type Tab = "collab" | "members" | "vms";
 
+// ── SVG 아이콘 ──────────────────────────────────────────
+function IconMessages() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[15px] h-[15px]"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
+}
+function IconUsers() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[15px] h-[15px]"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+}
+function IconServer() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[15px] h-[15px]"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>;
+}
+function IconPlus() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[14px] h-[14px]"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+}
+function IconTrash() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[15px] h-[15px]"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>;
+}
+function IconMessagePlus() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="10" y1="11" x2="14" y2="11"/></svg>;
+}
+
+// ── 뱃지 ─────────────────────────────────────────────────
+function CountBadge({ n }: { n: number }) {
+  return <span className="bg-gray-100 text-gray-500 text-[11px] font-medium px-1.5 py-0.5 rounded-full">{n}</span>;
+}
+
 export default function OrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { accessToken, user } = useAuth();
+  const { accessToken } = useAuth();
   const router = useRouter();
+
   const [org, setOrg] = useState<OrgDetailResponse | null>(null);
   const [tab, setTab] = useState<Tab>("collab");
   const [items, setItems] = useState<CollaborationResponse[]>([]);
   const [typeFilter, setTypeFilter] = useState<CollaborationType | undefined>();
   const [showWrite, setShowWrite] = useState(false);
   const [editingItem, setEditingItem] = useState<CollaborationResponse | undefined>();
+
+  // 멤버 초대
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<MemberRole>("MEMBER");
   const [inviting, setInviting] = useState(false);
+
+  // VM 연결
+  const [showAddVm, setShowAddVm] = useState(false);
+  const [allVms, setAllVms] = useState<VmResponse[]>([]);
+  const [selectedVmId, setSelectedVmId] = useState("");
+  const [addingVm, setAddingVm] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -42,22 +76,26 @@ export default function OrganizationDetailPage() {
     api.collab.list(accessToken, "ORGANIZATION", id, typeFilter).then(setItems).catch(() => {});
   }, [accessToken, id, typeFilter, org]);
 
+  // VM 탭 진입 시 사용자 VM 목록 로드
+  useEffect(() => {
+    if (tab !== "vms" || !accessToken) return;
+    api.vm.list(accessToken).then(setAllVms).catch(() => {});
+  }, [tab, accessToken]);
+
   const myRole = org?.myRole;
   const isOwnerOrAdmin = myRole === "OWNER" || myRole === "ADMIN";
+  const connectedVmIds = new Set(org?.vms.map((v) => v.id) ?? []);
+  const availableVms = allVms.filter((v) => !connectedVmIds.has(v.id) && v.status !== "DELETED");
 
+  // ── 협업 핸들러 ──
   function handleItemUpdated(updated: CollaborationResponse) {
     setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
   }
-
   function handleItemDeleted(itemId: string) {
     setItems((prev) => prev.filter((i) => i.id !== itemId));
   }
 
-  function handleCreated(item: CollaborationResponse) {
-    setItems((prev) => [item, ...prev]);
-    setShowWrite(false);
-  }
-
+  // ── 멤버 핸들러 ──
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken || !inviteEmail.trim()) return;
@@ -74,8 +112,7 @@ export default function OrganizationDetailPage() {
   }
 
   async function handleRemoveMember(member: MemberResponse) {
-    if (!accessToken) return;
-    if (!confirm(`${member.email}을 제거하시겠습니까?`)) return;
+    if (!accessToken || !confirm(`${member.email}을 제거하시겠습니까?`)) return;
     try {
       await api.org.removeMember(accessToken, id, member.id);
       setOrg((prev) => prev ? { ...prev, members: prev.members.filter((m) => m.id !== member.id) } : prev);
@@ -94,9 +131,36 @@ export default function OrganizationDetailPage() {
     }
   }
 
+  // ── VM 핸들러 ──
+  async function handleAddVm(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accessToken || !selectedVmId) return;
+    setAddingVm(true);
+    try {
+      await api.org.addVm(accessToken, id, selectedVmId);
+      const vm = allVms.find((v) => v.id === selectedVmId)!;
+      setOrg((prev) => prev ? { ...prev, vms: [...prev.vms, vm] } : prev);
+      setShowAddVm(false);
+      setSelectedVmId("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "VM 연결에 실패했습니다");
+    } finally {
+      setAddingVm(false);
+    }
+  }
+
+  async function handleRemoveVm(vmId: string) {
+    if (!accessToken || !confirm("VM 연결을 해제하시겠습니까?")) return;
+    try {
+      await api.org.removeVm(accessToken, id, vmId);
+      setOrg((prev) => prev ? { ...prev, vms: prev.vms.filter((v) => v.id !== vmId) } : prev);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "해제에 실패했습니다");
+    }
+  }
+
   async function handleDeleteOrg() {
-    if (!accessToken) return;
-    if (!confirm(`"${org?.name}" Organization을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
+    if (!accessToken || !confirm(`"${org?.name}" Organization을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
     try {
       await api.org.delete(accessToken, id);
       router.push("/organizations");
@@ -107,54 +171,69 @@ export default function OrganizationDetailPage() {
 
   if (!org) return <PageLoader />;
 
+  const acceptedCount = org.members.filter((m) => m.status === "ACCEPTED").length;
+
+  // ── 탭 정의 ──
+  const TABS: { key: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { key: "collab",   label: "협업", icon: <IconMessages /> },
+    { key: "members",  label: "멤버", icon: <IconUsers />,  badge: acceptedCount },
+    { key: "vms",      label: "VM",   icon: <IconServer />, badge: org.vms.length },
+  ];
+
   return (
     <div>
       {/* 헤더 */}
-      <div className="flex items-center gap-2 mb-1">
-        <button onClick={() => router.push("/organizations")} className="text-xs text-gray-500 hover:text-gray-700">협업</button>
-        <span className="text-xs text-gray-400">/</span>
-        <span className="text-xs text-gray-700">{org.name}</span>
-      </div>
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-medium text-gray-900">{org.name}</h1>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded ${ROLE_STYLE[org.myRole]}`}>{ROLE_LABEL[org.myRole]}</span>
+      <div className="mb-1">
+        <p className="text-[13px] text-gray-500 mb-1">협업 / {org.name}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[22px] font-medium text-gray-900">{org.name}</h1>
+            <span className={`text-xs font-medium px-2.5 py-0.5 rounded-md ${ROLE_STYLE[org.myRole]}`}>{ROLE_LABEL[org.myRole]}</span>
+          </div>
+          {myRole === "OWNER" && (
+            <button
+              onClick={handleDeleteOrg}
+              className="flex items-center gap-1.5 text-sm px-3 h-8 border border-red-200 text-red-600 rounded-md hover:bg-red-50"
+            >
+              <IconTrash />삭제
+            </button>
+          )}
         </div>
-        {myRole === "OWNER" && (
-          <button onClick={handleDeleteOrg} className="text-sm px-3 h-8 border border-red-200 bg-red-50 text-red-600 rounded-md hover:bg-red-100">
-            삭제
-          </button>
-        )}
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 border-b border-gray-200 mb-5">
-        {([["collab", "협업"], ["members", "멤버"], ["vms", "VM"]] as [Tab, string][]).map(([key, label]) => (
+      <div className="flex gap-0.5 border-b border-gray-200/70 mt-4 mb-6">
+        {TABS.map(({ key, label, icon, badge }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === key ? "border-[#03C75A] text-[#03C75A]" : "border-transparent text-gray-500 hover:text-gray-700"
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-[14px] border-b-2 transition-colors -mb-px ${
+              tab === key
+                ? "border-gray-900 text-gray-900 font-medium"
+                : "border-transparent text-gray-400 hover:text-gray-600"
             }`}
           >
+            {icon}
             {label}
-            {key === "members" && <span className="ml-1.5 text-xs text-gray-400">{org.members.filter(m => m.status === "ACCEPTED").length}</span>}
-            {key === "vms" && <span className="ml-1.5 text-xs text-gray-400">{org.vms.length}</span>}
+            {badge !== undefined && <CountBadge n={badge} />}
           </button>
         ))}
       </div>
 
-      {/* 협업 탭 */}
+      {/* ── 협업 탭 ── */}
       {tab === "collab" && (
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <div className="flex gap-1.5">
               {([undefined, "NOTE", "NOTICE", "REQUEST"] as (CollaborationType | undefined)[]).map((t) => (
                 <button
                   key={t ?? "all"}
                   onClick={() => setTypeFilter(t)}
-                  className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                    typeFilter === t ? "border-gray-400 bg-gray-100 text-gray-800" : "border-gray-200 text-gray-500 hover:border-gray-300"
+                  style={{ width: "auto", padding: "0 14px", height: 32, fontSize: 13 }}
+                  className={`rounded-md transition-colors ${
+                    typeFilter === t
+                      ? "bg-gray-100 border border-gray-300 text-gray-800"
+                      : "bg-transparent border-0 text-gray-500 hover:text-gray-700"
                   }`}
                 >
                   {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
@@ -163,15 +242,28 @@ export default function OrganizationDetailPage() {
             </div>
             <button
               onClick={() => { setEditingItem(undefined); setShowWrite(true); }}
-              className="text-sm px-3 h-8 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351]"
+              className="flex items-center gap-1 text-[13px] px-4 h-8 bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+              style={{ width: "auto" }}
             >
-              + 작성
+              <IconPlus />작성
             </button>
           </div>
+
           {items.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 text-sm">협업 항목이 없습니다.</div>
+            <div className="flex flex-col items-center justify-center py-16 bg-gray-50 rounded-xl">
+              <span className="text-gray-300 mb-3"><IconMessagePlus /></span>
+              <p className="text-sm font-medium text-gray-700 mb-1">아직 협업 항목이 없어요</p>
+              <p className="text-[13px] text-gray-400 mb-4">메모, 공지, 요청을 작성해서 팀원과 공유해보세요</p>
+              <button
+                onClick={() => { setEditingItem(undefined); setShowWrite(true); }}
+                className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+                style={{ width: "auto" }}
+              >
+                <IconPlus />첫 항목 작성하기
+              </button>
+            </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2.5">
               {items.map((item) => (
                 <CollaborationCard
                   key={item.id}
@@ -188,7 +280,7 @@ export default function OrganizationDetailPage() {
         </div>
       )}
 
-      {/* 멤버 탭 */}
+      {/* ── 멤버 탭 ── */}
       {tab === "members" && (
         <div className="space-y-4">
           {isOwnerOrAdmin && (
@@ -209,7 +301,7 @@ export default function OrganizationDetailPage() {
                 <option value="MEMBER">멤버</option>
                 <option value="ADMIN">관리자</option>
               </select>
-              <button type="submit" disabled={inviting} className="text-sm px-4 h-9 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] disabled:opacity-50">
+              <button type="submit" disabled={inviting} className="text-sm px-4 h-9 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] disabled:opacity-50" style={{ width: "auto" }}>
                 {inviting ? "초대 중..." : "초대"}
               </button>
             </form>
@@ -265,11 +357,45 @@ export default function OrganizationDetailPage() {
         </div>
       )}
 
-      {/* VM 탭 */}
+      {/* ── VM 탭 ── */}
       {tab === "vms" && (
         <div className="space-y-3">
+          {isOwnerOrAdmin && (
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => router.push("/instances")}
+                className="flex items-center gap-1.5 text-sm px-3 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
+                style={{ width: "auto" }}
+              >
+                <IconPlus />새 VM 생성
+              </button>
+              <button
+                onClick={() => setShowAddVm(true)}
+                className="flex items-center gap-1.5 text-sm px-3 h-8 bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 border-0 font-medium"
+                style={{ width: "auto" }}
+              >
+                <IconPlus />기존 VM 연결
+              </button>
+            </div>
+          )}
+
           {org.vms.length === 0 ? (
-            <p className="text-sm text-gray-400 py-12 text-center">연결된 VM이 없습니다.</p>
+            <div className="flex flex-col items-center justify-center py-16 bg-gray-50 rounded-xl">
+              <span className="text-gray-300 mb-3">
+                <IconServer />
+              </span>
+              <p className="text-sm font-medium text-gray-700 mb-1">연결된 VM이 없어요</p>
+              <p className="text-[13px] text-gray-400 mb-4">VM을 연결하면 팀원과 함께 협업할 수 있어요</p>
+              {isOwnerOrAdmin && (
+                <button
+                  onClick={() => setShowAddVm(true)}
+                  className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+                  style={{ width: "auto" }}
+                >
+                  <IconPlus />VM 연결하기
+                </button>
+              )}
+            </div>
           ) : (
             org.vms.map((vm) => (
               <div key={vm.id} className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
@@ -280,24 +406,17 @@ export default function OrganizationDetailPage() {
                       <span className="text-xs text-gray-400 font-mono">{vm.subdomain}.gamjabox.cloud</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">{vm.planType} · {vm.status}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{vm.planType} · {vm.status}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => router.push(`/instances/${vm.id}`)} className="text-xs px-3 h-7 border border-gray-300 rounded-md hover:bg-gray-50">
+                  <button onClick={() => router.push(`/instances/${vm.id}`)} className="text-xs px-3 h-7 border border-gray-300 rounded-md hover:bg-gray-50" style={{ width: "auto" }}>
                     상세
                   </button>
                   {myRole === "OWNER" && (
                     <button
-                      onClick={async () => {
-                        if (!accessToken || !confirm("VM 연결을 해제하시겠습니까?")) return;
-                        try {
-                          await api.org.removeVm(accessToken, id, vm.id);
-                          setOrg((prev) => prev ? { ...prev, vms: prev.vms.filter((v) => v.id !== vm.id) } : prev);
-                        } catch (err) {
-                          alert(err instanceof Error ? err.message : "해제에 실패했습니다");
-                        }
-                      }}
+                      onClick={() => handleRemoveVm(vm.id)}
                       className="text-xs px-3 h-7 border border-red-200 text-red-600 rounded-md hover:bg-red-50"
+                      style={{ width: "auto" }}
                     >
                       연결 해제
                     </button>
@@ -309,7 +428,7 @@ export default function OrganizationDetailPage() {
         </div>
       )}
 
-      {/* 작성/수정 모달 */}
+      {/* ── 협업 작성/수정 모달 ── */}
       {showWrite && (
         <CollaborationWriteModal
           accessToken={accessToken!}
@@ -322,11 +441,66 @@ export default function OrganizationDetailPage() {
               handleItemUpdated(item);
               setEditingItem(undefined);
             } else {
-              handleCreated(item);
+              setItems((prev) => [item, ...prev]);
             }
             setShowWrite(false);
           }}
         />
+      )}
+
+      {/* ── VM 연결 모달 ── */}
+      {showAddVm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-medium text-gray-900">기존 VM 연결</h2>
+              <button onClick={() => setShowAddVm(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+            </div>
+            <form onSubmit={handleAddVm} className="p-5 space-y-4">
+              {availableVms.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-sm text-gray-500">연결 가능한 VM이 없습니다.</p>
+                  <p className="text-xs text-gray-400 mt-1">이미 모든 VM이 연결됐거나 VM이 없어요.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {availableVms.map((vm) => (
+                    <label
+                      key={vm.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                        selectedVmId === vm.id ? "border-[#03C75A] bg-[#03C75A]/5" : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="vm"
+                        value={vm.id}
+                        checked={selectedVmId === vm.id}
+                        onChange={() => setSelectedVmId(vm.id)}
+                        className="accent-[#03C75A]"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{vm.name}</p>
+                        {vm.subdomain && <p className="text-xs text-gray-400 font-mono truncate">{vm.subdomain}.gamjabox.cloud</p>}
+                        <p className="text-xs text-gray-400">{vm.planType} · {vm.status}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 justify-end pt-1">
+                <button type="button" onClick={() => setShowAddVm(false)} className="text-sm px-4 h-8 border border-gray-300 rounded-md hover:bg-gray-50" style={{ width: "auto" }}>
+                  취소
+                </button>
+                {availableVms.length > 0 && (
+                  <button type="submit" disabled={!selectedVmId || addingVm} className="text-sm px-4 h-8 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] disabled:opacity-50" style={{ width: "auto" }}>
+                    {addingVm ? "연결 중..." : "연결"}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
