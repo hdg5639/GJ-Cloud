@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { CollaborationResponse, CollaborationType, MemberResponse, MemberRole, OrgDetailResponse, VmResponse } from "@/lib/types";
+import type { CollaborationResponse, CollaborationType, MemberResponse, MemberRole, OrgDetailResponse, VmAvailabilityResponse, SshKeyResponse, VmResponse } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import CollaborationWriteModal from "@/components/collaboration-write-modal";
 import CollaborationCard from "@/components/collaboration-card";
@@ -67,6 +67,18 @@ export default function OrganizationDetailPage() {
   const [selectedVmId, setSelectedVmId] = useState("");
   const [addingVm, setAddingVm] = useState(false);
 
+  // VM 생성
+  const [showCreateVm, setShowCreateVm] = useState(false);
+  const [createVmName, setCreateVmName] = useState("");
+  const [createVmPlan, setCreateVmPlan] = useState<"FREE" | "PRO">("FREE");
+  const [createVmDisk, setCreateVmDisk] = useState(20);
+  const [createVmSshKeyId, setCreateVmSshKeyId] = useState("");
+  const [createVmLoading, setCreateVmLoading] = useState(false);
+  const [createVmError, setCreateVmError] = useState<string | null>(null);
+  const [vmAvailability, setVmAvailability] = useState<VmAvailabilityResponse | null>(null);
+  const [sshKeys, setSshKeys] = useState<SshKeyResponse[]>([]);
+  const [userPlan, setUserPlan] = useState<string | null>(null);
+
   useEffect(() => {
     if (!accessToken) return;
     api.org.get(accessToken, id).then(setOrg).catch(() => router.push("/organizations"));
@@ -82,6 +94,21 @@ export default function OrganizationDetailPage() {
     if (tab !== "vms" || !accessToken) return;
     api.vm.list(accessToken).then(setAllVms).catch(() => {});
   }, [tab, accessToken]);
+
+  // VM 생성 모달 열릴 때 필요 데이터 로드
+  useEffect(() => {
+    if (!showCreateVm || !accessToken) return;
+    Promise.all([
+      api.vm.availability(accessToken),
+      api.user.profile(accessToken),
+      api.user.sshKeys(accessToken),
+    ]).then(([avail, profile, keys]) => {
+      setVmAvailability(avail);
+      setUserPlan(profile.planType);
+      setSshKeys(keys);
+      if (keys.length > 0) setCreateVmSshKeyId(keys[0].id);
+    }).catch(() => {});
+  }, [showCreateVm, accessToken]);
 
   const myRole = org?.myRole;
   const isOwnerOrAdmin = myRole === "OWNER" || myRole === "ADMIN";
@@ -157,6 +184,37 @@ export default function OrganizationDetailPage() {
       setOrg((prev) => prev ? { ...prev, vms: prev.vms.filter((v) => v.id !== vmId) } : prev);
     } catch (err) {
       alert(err instanceof Error ? err.message : "해제에 실패했습니다");
+    }
+  }
+
+  function handleCreateVmPlanChange(plan: "FREE" | "PRO") {
+    setCreateVmPlan(plan);
+    setCreateVmDisk(plan === "FREE" ? 20 : 20);
+  }
+
+  async function handleCreateVm(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accessToken) return;
+    setCreateVmError(null);
+    setCreateVmLoading(true);
+    try {
+      const vm = await api.vm.create(accessToken, {
+        name: createVmName,
+        planType: createVmPlan,
+        diskSizeGb: createVmDisk,
+        sshKeyId: createVmSshKeyId,
+      });
+      await api.org.addVm(accessToken, id, vm.id);
+      setOrg((prev) => prev ? { ...prev, vms: [...prev.vms, vm] } : prev);
+      setShowCreateVm(false);
+      setCreateVmName("");
+      setCreateVmPlan("FREE");
+      setCreateVmDisk(20);
+      setCreateVmError(null);
+    } catch (err) {
+      setCreateVmError(err instanceof Error ? err.message : "생성에 실패했습니다");
+    } finally {
+      setCreateVmLoading(false);
     }
   }
 
@@ -372,7 +430,7 @@ export default function OrganizationDetailPage() {
           {isOwnerOrAdmin && (
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => router.push("/instances")}
+                onClick={() => { setCreateVmName(""); setCreateVmPlan("FREE"); setCreateVmDisk(20); setCreateVmError(null); setShowCreateVm(true); }}
                 className="flex items-center gap-1.5 text-sm px-3 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
                 style={{ width: "auto" }}
               >
@@ -511,6 +569,137 @@ export default function OrganizationDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── VM 생성 모달 ── */}
+      {showCreateVm && (() => {
+        const PLAN_INFO = {
+          FREE: { cores: 4, memory: "5GB", diskMin: 20, diskMax: 50 },
+          PRO: { cores: 8, memory: "12GB", diskMin: 20, diskMax: 100 },
+        };
+        const freeFull = vmAvailability?.free.isFull ?? false;
+        const proFull = vmAvailability?.pro.isFull ?? false;
+        const planInfo = PLAN_INFO[createVmPlan];
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <h2 className="text-sm font-medium text-gray-900">새 VM 생성 후 협업에 추가</h2>
+                <button onClick={() => setShowCreateVm(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+              </div>
+              <form onSubmit={handleCreateVm} className="p-5 space-y-4">
+                {/* 이름 */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-500">인스턴스 이름</label>
+                  <input
+                    value={createVmName}
+                    onChange={(e) => setCreateVmName(e.target.value)}
+                    placeholder="my-server"
+                    required
+                    className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
+                  />
+                </div>
+
+                {/* 플랜 */}
+                <div>
+                  <label className="text-xs text-gray-500 block mb-2">플랜</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(["FREE", "PRO"] as const).map((plan) => {
+                      const info = PLAN_INFO[plan];
+                      const full = plan === "FREE" ? freeFull : proFull;
+                      const planLocked = plan === "PRO" && userPlan === "FREE";
+                      const used = vmAvailability?.[plan.toLowerCase() as "free" | "pro"].used ?? 0;
+                      const total = vmAvailability?.[plan.toLowerCase() as "free" | "pro"].total ?? 0;
+                      const selected = createVmPlan === plan;
+                      return (
+                        <button
+                          key={plan}
+                          type="button"
+                          disabled={full || planLocked}
+                          onClick={() => handleCreateVmPlanChange(plan)}
+                          className={`relative border rounded-lg p-3 text-left transition-colors ${selected ? "border-2 border-[#03C75A]" : "border-gray-200 hover:border-gray-300"} ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          {selected && <span className="absolute -top-2 left-2.5 bg-[#e6faf0] text-[#03C75A] text-[10px] font-medium px-1.5 py-0.5 rounded">선택됨</span>}
+                          {planLocked && <span className="absolute -top-2 right-2.5 bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5 rounded">프로 플랜만</span>}
+                          <p className="text-sm font-medium text-gray-900 mb-0.5">{plan}</p>
+                          <p className="text-xs text-gray-500 mb-1.5">{info.cores} vCPU · {info.memory} RAM</p>
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex gap-0.5">
+                              {Array.from({ length: total }).map((_, i) => (
+                                <span key={i} className={`w-1.5 h-1.5 rounded-full ${i < used ? (full ? "bg-red-500" : "bg-[#03C75A]") : "bg-gray-200"}`} />
+                              ))}
+                            </div>
+                            <span className={`text-[11px] ${full ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                              {full ? `자리 없음 (${used}/${total})` : `${used}/${total} 사용 중`}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 디스크 */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-gray-500">디스크 크기</label>
+                    <span className="text-sm font-medium text-gray-900">{createVmDisk}GB</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={planInfo.diskMin}
+                    max={planInfo.diskMax}
+                    step={5}
+                    value={createVmDisk}
+                    onChange={(e) => setCreateVmDisk(Number(e.target.value))}
+                    className="w-full accent-[#03C75A]"
+                  />
+                  <div className="flex justify-between text-[11px] text-gray-400 mt-0.5">
+                    <span>{planInfo.diskMin}GB</span>
+                    <span>{planInfo.diskMax}GB</span>
+                  </div>
+                </div>
+
+                {/* SSH 키 */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-500">SSH 키</label>
+                  {sshKeys.length === 0 ? (
+                    <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-md px-3 py-2.5">
+                      등록된 SSH 키가 없습니다.{" "}
+                      <a href="/ssh-keys" className="text-[#03C75A] font-medium">SSH 키 등록하기</a>
+                    </div>
+                  ) : (
+                    <select
+                      value={createVmSshKeyId}
+                      onChange={(e) => setCreateVmSshKeyId(e.target.value)}
+                      className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
+                    >
+                      {sshKeys.map((key) => (
+                        <option key={key.id} value={key.id}>{key.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {createVmError && <p className="text-xs text-red-600">{createVmError}</p>}
+
+                <div className="flex gap-2 justify-end pt-1">
+                  <button type="button" onClick={() => setShowCreateVm(false)} className="text-sm px-4 h-9 border border-gray-300 rounded-md hover:bg-gray-50" style={{ width: "auto" }}>
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createVmLoading || !createVmName || !createVmSshKeyId}
+                    className="text-sm px-4 h-9 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] disabled:opacity-50"
+                    style={{ width: "auto" }}
+                  >
+                    {createVmLoading ? "생성 중..." : "생성 및 추가"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
