@@ -482,6 +482,28 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
+    public Mono<Void> deleteVmInternal(UUID vmId) {
+        return vmRepository.findById(vmId)
+                .filter(vm -> vm.getDeletedAt() == null)
+                .flatMap(vm -> updateStatus(vm, VmStatus.DELETING))
+                .flatMap(vm -> {
+                    Mono<Void> teardown = teardownCloudflare(vm);
+                    if (vm.getVmid() == null) {
+                        return teardown.then(vmRepository.save(vm.withDeleted())).then();
+                    }
+                    return teardown
+                            .then(proxmoxClient.deleteVm(vm.getVmid()))
+                            .then(vmRepository.save(vm.withDeleted()))
+                            .onErrorResume(e -> {
+                                log.warn("탈퇴 처리 VM 삭제 실패 (무시): vmId={}, error={}", vmId, e.getMessage());
+                                return Mono.empty();
+                            })
+                            .then();
+                })
+                .then();
+    }
+
+    @Override
     public Mono<VmAvailabilityResponse> getAvailability() {
         int freeTotal = PlanType.FREE.getIpPool().size();
         int proTotal = PlanType.PRO.getIpPool().size();

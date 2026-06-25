@@ -20,4 +20,7 @@ public interface CollaborationTagRepository extends ReactiveCrudRepository<Colla
 
     @Query("SELECT * FROM collaboration_tags WHERE scope_type = :scopeType AND scope_id = :scopeId AND name = :name")
     Mono<CollaborationTagEntity> findByScopeAndName(String scopeType, UUID scopeId, String name);
+
+    @Query("DELETE FROM collaboration_tags WHERE scope_type = :scopeType AND scope_id = :scopeId")
+    Mono<Void> deleteAllByScope(String scopeType, UUID scopeId);
 }

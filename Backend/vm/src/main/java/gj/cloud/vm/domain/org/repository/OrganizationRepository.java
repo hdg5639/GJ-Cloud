@@ -18,4 +18,7 @@ public interface OrganizationRepository extends ReactiveCrudRepository<Organizat
            "JOIN organization_members m ON o.id = m.organization_id " +
            "WHERE m.email = :email AND m.status = 'PENDING'")
     Flux<OrganizationEntity> findAllPendingByEmail(String email);
+
+    @Query("SELECT * FROM organizations WHERE owner_id = :ownerId")
+    Flux<OrganizationEntity> findAllByOwnerId(String ownerId);
 }

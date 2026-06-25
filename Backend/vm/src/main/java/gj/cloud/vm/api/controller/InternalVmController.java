@@ -1,14 +1,12 @@
 package gj.cloud.vm.api.controller;
 
+import gj.cloud.vm.application.user.service.UserCleanupService;
 import gj.cloud.vm.application.vm.dto.VmUsageStats;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 @Hidden
@@ -18,6 +16,7 @@ import reactor.core.publisher.Mono;
 public class InternalVmController {
 
     private final VmRepository vmRepository;
+    private final UserCleanupService userCleanupService;
 
     @GetMapping("/vms/count")
     public Mono<ApiResponse<Long>> countVms(@RequestParam String userId) {
@@ -33,5 +32,11 @@ public class InternalVmController {
                 vmRepository.countActiveByPlanTypeFree(),
                 vmRepository.countActiveByPlanTypePro()
         ).map(t -> ApiResponse.ok(new VmUsageStats(t.getT1(), t.getT2(), t.getT3(), t.getT4())));
+    }
+
+    @DeleteMapping("/users")
+    public Mono<ApiResponse<Void>> deleteUserData(@RequestParam String userId, @RequestParam String email) {
+        return userCleanupService.deleteUserData(userId, email)
+                .thenReturn(ApiResponse.<Void>ok(null));
     }
 }

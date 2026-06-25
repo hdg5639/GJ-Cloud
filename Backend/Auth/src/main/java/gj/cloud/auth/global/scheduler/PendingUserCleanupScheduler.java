@@ -20,9 +20,19 @@ public class PendingUserCleanupScheduler {
     @Transactional
     public void cleanupExpiredPendingUsers() {
         LocalDateTime threshold = LocalDateTime.now().minusHours(24);
-        int deletedCount = userRepository.deleteExpiredPendingUsers(threshold);
-        if (deletedCount > 0) {
-            log.info("미인증 계정 {}건 정리 완료 (24시간 초과)", deletedCount);
+        int count = userRepository.deleteExpiredPendingUsers(threshold);
+        if (count > 0) {
+            log.info("미인증 계정 {}건 정리 완료 (24시간 초과)", count);
+        }
+    }
+
+    @Scheduled(cron = "0 0 3 * * *")
+    @Transactional
+    public void cleanupDeletedUsers() {
+        LocalDateTime threshold = LocalDateTime.now().minusDays(30);
+        int count = userRepository.deleteExpiredDeletedUsers(threshold);
+        if (count > 0) {
+            log.info("탈퇴 계정 {}건 영구 삭제 완료 (30일 초과)", count);
         }
     }
 }

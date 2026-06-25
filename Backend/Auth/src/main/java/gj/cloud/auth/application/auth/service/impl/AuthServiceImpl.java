@@ -39,6 +39,9 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.services.user-service-url:http://user:8080}")
     private String userServiceUrl;
 
+    @Value("${app.services.vm-service-url:http://vm:8080}")
+    private String vmServiceUrl;
+
     @Override
     @Transactional
     public void register(RegisterRequest request) {
@@ -102,8 +105,29 @@ public class AuthServiceImpl implements AuthService {
     public void withdraw(String userId) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
-        user.softDelete();
+        String originalEmail = user.getEmail();
+        user.anonymizeAndDelete();
         logout(userId);
+        deleteUserDataFromServices(userId, originalEmail);
+    }
+
+    private void deleteUserDataFromServices(String userId, String email) {
+        try {
+            restClient.delete()
+                    .uri(userServiceUrl + "/internal/users/" + userId)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.warn("User 서비스 데이터 삭제 실패 (userId={}): {}", userId, e.getMessage());
+        }
+        try {
+            restClient.delete()
+                    .uri(vmServiceUrl + "/internal/users?userId=" + userId + "&email=" + email)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.warn("VM 서비스 데이터 삭제 실패 (userId={}): {}", userId, e.getMessage());
+        }
     }
 
     private void createUserProfile(String userId, String email) {

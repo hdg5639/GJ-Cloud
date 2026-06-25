@@ -16,4 +16,8 @@ public interface UserRepository extends JpaRepository<UserEntity, String> {
     @Modifying
     @Query("DELETE FROM UserEntity u WHERE u.status = 'PENDING_VERIFICATION' AND u.createdAt < :threshold")
     int deleteExpiredPendingUsers(@Param("threshold") LocalDateTime threshold);
+
+    @Modifying
+    @Query("DELETE FROM UserEntity u WHERE u.status = 'DELETED' AND u.deletedAt < :threshold")
+    int deleteExpiredDeletedUsers(@Param("threshold") LocalDateTime threshold);
 }

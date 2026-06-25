@@ -26,6 +26,9 @@ public interface OrganizationMemberRepository extends ReactiveCrudRepository<Org
     @Query("DELETE FROM organization_members WHERE organization_id = :orgId")
     Mono<Void> deleteAllByOrganizationId(UUID orgId);
 
+    @Query("DELETE FROM organization_members WHERE email = :email")
+    Mono<Void> deleteAllByEmail(String email);
+
     @Query("SELECT COUNT(*) FROM organization_members WHERE organization_id = :orgId AND status = 'ACCEPTED'")
     Mono<Long> countAcceptedByOrganizationId(UUID orgId);
 

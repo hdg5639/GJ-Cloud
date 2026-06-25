@@ -63,7 +63,9 @@ public class UserEntity {
         this.status = UserStatus.ACTIVE;
     }
 
-    public void softDelete() {
+    public void anonymizeAndDelete() {
+        this.email = "deleted_" + this.id + "@deleted";
+        this.password = "DELETED";
         this.status = UserStatus.DELETED;
         this.deletedAt = LocalDateTime.now();
     }

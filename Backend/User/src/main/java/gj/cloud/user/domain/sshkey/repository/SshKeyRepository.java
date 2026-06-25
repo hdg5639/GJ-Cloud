@@ -9,6 +9,8 @@ public interface SshKeyRepository extends JpaRepository<SshKeyEntity, String> {
 
     List<SshKeyEntity> findAllByUserId(String userId);
 
+    void deleteAllByUserId(String userId);
+
     boolean existsByFingerprint(String fingerprint);
 
     long countByUserId(String userId);

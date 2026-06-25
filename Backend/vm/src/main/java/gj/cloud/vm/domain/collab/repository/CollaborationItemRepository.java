@@ -25,4 +25,10 @@ public interface CollaborationItemRepository extends ReactiveCrudRepository<Coll
 
     @Query("SELECT COUNT(*) FROM collaboration_items WHERE scope_type = :scopeType AND scope_id = :scopeId AND pinned = true")
     Mono<Long> countPinnedByScope(String scopeType, UUID scopeId);
+
+    @Query("UPDATE collaboration_items SET created_by_email = '탈퇴한 사용자' WHERE created_by_id = :userId")
+    Mono<Void> anonymizeByUserId(String userId);
+
+    @Query("DELETE FROM collaboration_items WHERE scope_type = :scopeType AND scope_id = :scopeId")
+    Mono<Void> deleteAllByScope(String scopeType, UUID scopeId);
 }
