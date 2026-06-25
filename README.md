@@ -121,7 +121,7 @@ POST /vms  →  PENDING (즉시 202 응답)
 ## 프로젝트 구조
 
 ```
-v2/
+GJ-Cloud/
 ├── Backend/
 │   ├── Auth/    Spring MVC — 인증·JWT·Refresh Token·이메일 인증
 │   ├── User/    Spring MVC — 프로필·SSH 키·플랜
