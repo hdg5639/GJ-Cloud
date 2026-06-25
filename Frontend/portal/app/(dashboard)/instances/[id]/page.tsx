@@ -447,8 +447,13 @@ export default function InstanceDetailPage() {
         </div>
       </div>
 
+      {/* 2단 레이아웃 */}
+      <div className="flex gap-5 items-start">
+      {/* ── 좌측: SSH / 이메일 / 포트 ── */}
+      <div className="flex-[55] min-w-0 space-y-4">
+
       {/* SSH 접속 정보 */}
-      <div className="bg-gray-50 rounded-lg p-5 mb-4">
+      <div className="bg-gray-50 rounded-lg p-5">
         <p className="text-xs font-medium text-gray-500 mb-3">SSH 접속 정보</p>
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="bg-white border border-gray-200 rounded-md p-2.5">
@@ -688,7 +693,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       </div>
 
       {/* SSH 접근 이메일 관리 */}
-      <div className="bg-gray-50 rounded-lg p-5 mb-4">
+      <div className="bg-gray-50 rounded-lg p-5">
         <p className="text-xs font-medium text-gray-500 mb-3">SSH 접근 허용 이메일</p>
         <div className="flex flex-col gap-1.5 mb-3">
           {sshEmails.map((email) => (
@@ -815,58 +820,68 @@ sudo apt-get update && sudo apt-get install cloudflared`}
         )}
       </div>
 
-      {/* 협업 */}
-      <div className="mt-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-medium text-gray-500">협업</p>
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              {([undefined, "NOTE", "NOTICE", "REQUEST"] as (CollaborationType | undefined)[]).map((t) => (
-                <button
-                  key={t ?? "all"}
-                  onClick={() => setCollabTypeFilter(t)}
-                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-                    collabTypeFilter === t
-                      ? "border-gray-400 bg-gray-100 text-gray-800"
-                      : "border-gray-200 text-gray-500 hover:border-gray-300"
-                  }`}
-                >
-                  {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
-                </button>
-              ))}
-            </div>
+      </div>{/* end left col */}
+
+      {/* ── 우측: 협업 패널 (sticky) ── */}
+      <div className="flex-[45] min-w-0">
+        <div className="sticky top-6 bg-white border border-gray-200 rounded-xl overflow-hidden">
+          {/* 패널 헤더 */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <span className="text-sm font-semibold text-gray-800">협업</span>
             <button
               onClick={() => { setEditingCollab(undefined); setShowCollabWrite(true); }}
-              className="text-xs px-2.5 h-6 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351]"
+              className="text-xs px-3 h-7 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] font-medium"
             >
               + 작성
             </button>
           </div>
+          {/* 필터 */}
+          <div className="flex gap-1 px-4 py-2.5 border-b border-gray-100">
+            {([undefined, "NOTE", "NOTICE", "REQUEST"] as (CollaborationType | undefined)[]).map((t) => (
+              <button
+                key={t ?? "all"}
+                onClick={() => setCollabTypeFilter(t)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  collabTypeFilter === t
+                    ? "border-gray-400 bg-gray-100 text-gray-800 font-medium"
+                    : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                }`}
+              >
+                {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
+              </button>
+            ))}
+          </div>
+          {/* 카드 목록 */}
+          <div className="overflow-y-auto max-h-[calc(100vh-280px)]">
+            {(() => {
+              const filtered = collabTypeFilter
+                ? collabItems.filter((i) => i.type === collabTypeFilter)
+                : collabItems;
+              return filtered.length === 0 ? (
+                <p className="text-xs text-gray-400 py-10 text-center">협업 항목이 없습니다.</p>
+              ) : (
+                <div className="flex flex-col divide-y divide-gray-100">
+                  {filtered.map((item) => (
+                    <div key={item.id} className="px-1 py-1">
+                      <CollaborationCard
+                        item={item}
+                        accessToken={accessToken!}
+                        isOwnerOrAdmin={vm.userId === profile?.userId}
+                        currentUserId={profile?.userId}
+                        onEdit={(i) => { setEditingCollab(i); setShowCollabWrite(true); }}
+                        onUpdate={(updated) => setCollabItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))}
+                        onDelete={(deletedId) => setCollabItems((prev) => prev.filter((i) => i.id !== deletedId))}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
         </div>
-        {(() => {
-          const filtered = collabTypeFilter
-            ? collabItems.filter((i) => i.type === collabTypeFilter)
-            : collabItems;
-          return filtered.length === 0 ? (
-            <p className="text-xs text-gray-400 py-6 text-center">협업 항목이 없습니다.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {filtered.map((item) => (
-                <CollaborationCard
-                  key={item.id}
-                  item={item}
-                  accessToken={accessToken!}
-                  isOwnerOrAdmin={vm.userId === profile?.userId}
-                  currentUserId={profile?.userId}
-                  onEdit={(i) => { setEditingCollab(i); setShowCollabWrite(true); }}
-                  onUpdate={(updated) => setCollabItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))}
-                  onDelete={(deletedId) => setCollabItems((prev) => prev.filter((i) => i.id !== deletedId))}
-                />
-              ))}
-            </div>
-          );
-        })()}
       </div>
+
+      </div>{/* end 2-col */}
 
       {/* 협업 작성/수정 모달 */}
       {showCollabWrite && (
