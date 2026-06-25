@@ -128,7 +128,6 @@ GJ-Cloud/
 │   └── vm/            Spring WebFlux — VM·포트·조직·협업·메트릭
 ├── Frontend/
 │   └── portal/        Next.js — 사용자 포털
-├── nginx/             로컬 통합 Swagger 프록시 설정
 └── compose.yaml       로컬 개발 환경 Docker Compose
 ```
 
