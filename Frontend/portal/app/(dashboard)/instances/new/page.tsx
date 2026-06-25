@@ -81,8 +81,10 @@ export default function CreateInstancePage() {
         <p className="text-sm text-gray-500 mb-5">플랜과 디스크 크기를 선택하세요</p>
 
         <div className="flex flex-col gap-1.5 mb-5">
-          <label className="text-xs text-gray-500">인스턴스 이름</label>
+          <label htmlFor="new-instance-name" className="text-xs text-gray-500">인스턴스 이름</label>
           <input
+            id="new-instance-name"
+            name="new-instance-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="my-server"
@@ -149,10 +151,12 @@ export default function CreateInstancePage() {
 
         <div className="mb-5">
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs text-gray-500">디스크 크기</label>
+            <label htmlFor="new-instance-disk" className="text-xs text-gray-500">디스크 크기</label>
             <span className="text-sm font-medium text-gray-900">{diskSizeGb}GB</span>
           </div>
           <input
+            id="new-instance-disk"
+            name="new-instance-disk"
             type="range"
             min={planInfo.diskMin}
             max={planInfo.diskMax}
@@ -168,7 +172,7 @@ export default function CreateInstancePage() {
         </div>
 
         <div className="flex flex-col gap-1.5 mb-5">
-          <label className="text-xs text-gray-500">SSH 키</label>
+          <label htmlFor="new-instance-ssh-key" className="text-xs text-gray-500">SSH 키</label>
           {sshKeys.length === 0 ? (
             <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-md px-3 py-2.5">
               등록된 SSH 키가 없습니다.{" "}
@@ -178,6 +182,8 @@ export default function CreateInstancePage() {
             </div>
           ) : (
             <select
+              id="new-instance-ssh-key"
+              name="new-instance-ssh-key"
               value={sshKeyId}
               onChange={(e) => setSshKeyId(e.target.value)}
               className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"

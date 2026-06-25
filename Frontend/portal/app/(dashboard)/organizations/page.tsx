@@ -159,8 +159,10 @@ export default function OrganizationsPage() {
             </div>
             <form onSubmit={handleCreate} className="p-5 space-y-4">
               <div>
-                <label className="text-xs text-gray-500 block mb-1">이름</label>
+                <label htmlFor="org-name" className="text-xs text-gray-500 block mb-1">이름</label>
                 <input
+                  id="org-name"
+                  name="org-name"
                   type="text"
                   value={orgName}
                   onChange={(e) => setOrgName(e.target.value)}
@@ -175,8 +177,10 @@ export default function OrganizationsPage() {
                   <label className="text-xs text-gray-500 block mb-1">연결할 VM <span className="text-gray-400">(선택)</span></label>
                   <div className="space-y-1.5 max-h-40 overflow-y-auto">
                     {vms.map((vm) => (
-                      <label key={vm.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <label key={vm.id} htmlFor={`org-vm-${vm.id}`} className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
+                          id={`org-vm-${vm.id}`}
+                          name={`org-vm-${vm.id}`}
                           type="checkbox"
                           checked={selectedVmIds.includes(vm.id)}
                           onChange={(e) => setSelectedVmIds((prev) =>

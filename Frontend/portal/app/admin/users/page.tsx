@@ -77,6 +77,8 @@ export default function AdminUsersPage() {
                       <span className="text-[11px] px-2 py-0.5 rounded font-medium bg-red-900 text-red-300">ADMIN</span>
                     ) : (
                       <select
+                        id={`user-plan-${user.userId}`}
+                        name={`user-plan-${user.userId}`}
                         value={user.planType}
                         onChange={(e) => handlePlanChange(user, e.target.value)}
                         disabled={actionLoading === user.userId}

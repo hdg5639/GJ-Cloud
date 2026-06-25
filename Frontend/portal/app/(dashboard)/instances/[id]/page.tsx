@@ -720,6 +720,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
         {sshEmails.length < 10 && (
           <form onSubmit={handleAddSshEmail} className="flex gap-2 mt-2">
             <input
+              id="instance-ssh-email"
+              name="instance-ssh-email"
               type="email"
               value={newSshEmail}
               onChange={(e) => setNewSshEmail(e.target.value)}
@@ -803,6 +805,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                     {port.accessEmails.length < 10 && (
                       <div className="flex gap-2">
                         <input
+                          id={`port-email-${port.id}`}
+                          name={`port-email-${port.id}`}
                           type="email"
                           value={newPortEmail[port.id] ?? ""}
                           onChange={(e) => setNewPortEmail((prev) => ({ ...prev, [port.id]: e.target.value }))}
@@ -917,8 +921,10 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             <h2 className="text-base font-medium text-gray-900 mb-4">포트 추가</h2>
             <form onSubmit={handleAddPort} className="flex flex-col gap-3">
               <div>
-                <label className="text-xs text-gray-500 block mb-1">닉네임</label>
+                <label htmlFor="port-nickname" className="text-xs text-gray-500 block mb-1">닉네임</label>
                 <input
+                  id="port-nickname"
+                  name="port-nickname"
                   type="text"
                   value={portForm.nickname}
                   onChange={(e) => setPortForm((f) => ({ ...f, nickname: e.target.value.toLowerCase() }))}
@@ -937,7 +943,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 </p>
               </div>
               <div className={profile?.planType !== "PRO" ? "opacity-50 pointer-events-none select-none" : ""}>
-                <label className="text-xs text-gray-500 block mb-1">
+                <label htmlFor="port-custom-subdomain" className="text-xs text-gray-500 block mb-1">
                   커스텀 서브도메인
                   {profile?.planType !== "PRO"
                     ? <span className="ml-1.5 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">PRO 전용</span>
@@ -945,6 +951,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   }
                 </label>
                 <input
+                  id="port-custom-subdomain"
+                  name="port-custom-subdomain"
                   type="text"
                   value={portForm.customSubdomain}
                   onChange={(e) => handleCustomSubdomainChange(e.target.value)}
@@ -969,8 +977,10 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 )}
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">포트 번호</label>
+                <label htmlFor="port-number" className="text-xs text-gray-500 block mb-1">포트 번호</label>
                 <input
+                  id="port-number"
+                  name="port-number"
                   type="number"
                   min={1}
                   max={65535}
@@ -982,8 +992,10 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">프로토콜</label>
+                <label htmlFor="port-protocol" className="text-xs text-gray-500 block mb-1">프로토콜</label>
                 <select
+                  id="port-protocol"
+                  name="port-protocol"
                   value={portForm.protocol}
                   onChange={(e) => setPortForm((f) => ({ ...f, protocol: e.target.value as "HTTP" | "TCP" }))}
                   className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
@@ -993,8 +1005,10 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500 block mb-1">공개 설정</label>
+                <label htmlFor="port-visibility" className="text-xs text-gray-500 block mb-1">공개 설정</label>
                 <select
+                  id="port-visibility"
+                  name="port-visibility"
                   value={portForm.visibility}
                   onChange={(e) => setPortForm((f) => ({ ...f, visibility: e.target.value as "PUBLIC" | "PRIVATE" }))}
                   className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
@@ -1005,8 +1019,10 @@ sudo apt-get update && sudo apt-get install cloudflared`}
               </div>
               {portForm.visibility === "PRIVATE" && (
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">초기 허용 이메일 (쉼표로 구분, 미입력 시 본인 자동 추가)</label>
+                  <label htmlFor="port-initial-emails" className="text-xs text-gray-500 block mb-1">초기 허용 이메일 (쉼표로 구분, 미입력 시 본인 자동 추가)</label>
                   <input
+                    id="port-initial-emails"
+                    name="port-initial-emails"
                     type="text"
                     value={portForm.initialEmails}
                     onChange={(e) => setPortForm((f) => ({ ...f, initialEmails: e.target.value }))}

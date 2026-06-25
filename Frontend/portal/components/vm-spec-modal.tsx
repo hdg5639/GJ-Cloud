@@ -105,10 +105,12 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
         {/* 디스크 슬라이더 */}
         <div className="mb-5">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-gray-500">디스크</p>
+            <label htmlFor="vm-spec-disk" className="text-xs text-gray-500">디스크</label>
             <p className="text-sm font-medium text-gray-900">{diskSizeGb} GB</p>
           </div>
           <input
+            id="vm-spec-disk"
+            name="vm-spec-disk"
             type="range"
             min={diskMin}
             max={diskMax}

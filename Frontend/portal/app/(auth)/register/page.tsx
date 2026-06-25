@@ -60,8 +60,10 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit}>
           <div className="flex flex-col gap-1.5 mb-3.5">
-            <label className="text-xs text-gray-500">이메일</label>
+            <label htmlFor="register-email" className="text-xs text-gray-500">이메일</label>
             <input
+              id="register-email"
+              name="register-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -72,8 +74,10 @@ export default function RegisterPage() {
           </div>
 
           <div className="flex flex-col gap-1.5 mb-3.5">
-            <label className="text-xs text-gray-500">비밀번호</label>
+            <label htmlFor="register-password" className="text-xs text-gray-500">비밀번호</label>
             <input
+              id="register-password"
+              name="register-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -85,8 +89,10 @@ export default function RegisterPage() {
           </div>
 
           <div className="flex flex-col gap-1.5 mb-5">
-            <label className="text-xs text-gray-500">비밀번호 확인</label>
+            <label htmlFor="register-password-confirm" className="text-xs text-gray-500">비밀번호 확인</label>
             <input
+              id="register-password-confirm"
+              name="register-password-confirm"
               type="password"
               value={passwordConfirm}
               onChange={(e) => setPasswordConfirm(e.target.value)}

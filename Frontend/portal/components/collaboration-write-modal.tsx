@@ -83,8 +83,10 @@ export default function CollaborationWriteModal({ accessToken, scopeType, scopeI
           )}
 
           <div className="relative">
-            <label className="text-xs text-gray-500 block mb-1">태그 <span className="text-gray-400">(선택)</span></label>
+            <label htmlFor="collab-tag" className="text-xs text-gray-500 block mb-1">태그 <span className="text-gray-400">(선택)</span></label>
             <input
+              id="collab-tag"
+              name="collab-tag"
               type="text"
               value={tag}
               onChange={(e) => { setTag(e.target.value); setShowSuggestions(true); }}
@@ -111,8 +113,10 @@ export default function CollaborationWriteModal({ accessToken, scopeType, scopeI
           </div>
 
           <div>
-            <label className="text-xs text-gray-500 block mb-1">제목</label>
+            <label htmlFor="collab-title" className="text-xs text-gray-500 block mb-1">제목</label>
             <input
+              id="collab-title"
+              name="collab-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -124,8 +128,10 @@ export default function CollaborationWriteModal({ accessToken, scopeType, scopeI
           </div>
 
           <div>
-            <label className="text-xs text-gray-500 block mb-1">내용</label>
+            <label htmlFor="collab-content" className="text-xs text-gray-500 block mb-1">내용</label>
             <textarea
+              id="collab-content"
+              name="collab-content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="내용을 입력하세요"

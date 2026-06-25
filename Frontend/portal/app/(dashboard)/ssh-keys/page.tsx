@@ -171,6 +171,8 @@ function GenerateKeyForm({
           </p>
         </div>
         <textarea
+          id="ssh-private-key-display"
+          name="ssh-private-key-display"
           readOnly
           value={privateKey}
           className="w-full h-32 font-mono text-xs border border-gray-300 rounded-md p-2 mb-3 resize-none"
@@ -191,6 +193,8 @@ function GenerateKeyForm({
   return (
     <div>
       <input
+        id="ssh-generate-name"
+        name="ssh-generate-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="키 이름 (예: macbook)"
@@ -235,6 +239,8 @@ function RegisterKeyForm({
   return (
     <form onSubmit={handleSubmit}>
       <input
+        id="ssh-register-name"
+        name="ssh-register-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="키 이름"
@@ -242,6 +248,8 @@ function RegisterKeyForm({
         className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm mb-3 focus:outline-none focus:border-[#03C75A]"
       />
       <textarea
+        id="ssh-register-public-key"
+        name="ssh-register-public-key"
         value={publicKey}
         onChange={(e) => setPublicKey(e.target.value)}
         placeholder="ssh-ed25519 AAAA..."

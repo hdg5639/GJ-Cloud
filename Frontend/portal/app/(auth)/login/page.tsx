@@ -49,8 +49,10 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit}>
           <div className="flex flex-col gap-1.5 mb-3.5">
-            <label className="text-xs text-gray-500">이메일</label>
+            <label htmlFor="login-email" className="text-xs text-gray-500">이메일</label>
             <input
+              id="login-email"
+              name="login-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -61,8 +63,10 @@ export default function LoginPage() {
           </div>
 
           <div className="flex flex-col gap-1.5 mb-2">
-            <label className="text-xs text-gray-500">비밀번호</label>
+            <label htmlFor="login-password" className="text-xs text-gray-500">비밀번호</label>
             <input
+              id="login-password"
+              name="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

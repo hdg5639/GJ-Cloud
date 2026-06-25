@@ -100,6 +100,8 @@ export default function AdminUpgradeRequestsPage() {
               {request.status === "PENDING" && (
                 <div className="space-y-3 pt-3 border-t border-gray-800">
                   <input
+                    id={`reject-reason-${request.id}`}
+                    name={`reject-reason-${request.id}`}
                     type="text"
                     placeholder="거절 사유 (선택)"
                     value={rejectReason[request.id] || ""}

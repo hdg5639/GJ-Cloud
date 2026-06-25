@@ -75,8 +75,10 @@ function VerifyForm() {
 
       <form onSubmit={handleSubmit}>
         <div className="flex flex-col gap-1.5 mb-5">
-          <label className="text-xs text-gray-500">인증 코드</label>
+          <label htmlFor="verify-code" className="text-xs text-gray-500">인증 코드</label>
           <input
+            id="verify-code"
+            name="verify-code"
             type="text"
             value={code}
             onChange={(e) => setCode(e.target.value)}

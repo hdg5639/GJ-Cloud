@@ -146,8 +146,10 @@ export default function SettingsPage() {
 
           {/* 닉네임 */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">닉네임</label>
+            <label htmlFor="settings-nickname" className="text-xs text-gray-500">닉네임</label>
             <input
+              id="settings-nickname"
+              name="settings-nickname"
               value={nickname}
               onChange={(e) => { setNickname(e.target.value); setSaveMsg(null); }}
               placeholder="닉네임 입력"
@@ -245,8 +247,9 @@ export default function SettingsPage() {
                 <p className="text-xs text-gray-500 mb-2">변경할 플랜</p>
                 <div className="space-y-2">
                   {profile.planType === "FREE" ? (
-                    <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label htmlFor="settings-plan-pro" className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                       <input
+                        id="settings-plan-pro"
                         type="radio"
                         name="plan"
                         value="PRO"
@@ -257,8 +260,9 @@ export default function SettingsPage() {
                       <span className="ml-3 text-sm font-medium text-gray-900">PRO</span>
                     </label>
                   ) : (
-                    <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <label htmlFor="settings-plan-free" className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                       <input
+                        id="settings-plan-free"
                         type="radio"
                         name="plan"
                         value="FREE"

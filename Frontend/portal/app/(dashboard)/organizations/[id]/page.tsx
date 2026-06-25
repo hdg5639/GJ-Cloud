@@ -357,6 +357,8 @@ export default function OrganizationDetailPage() {
           {isOwnerOrAdmin && (
             <form onSubmit={handleInvite} className="flex gap-2">
               <input
+                id="org-invite-email"
+                name="org-invite-email"
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
@@ -365,6 +367,8 @@ export default function OrganizationDetailPage() {
                 className="flex-1 h-9 px-3 border border-gray-300 rounded-md text-sm"
               />
               <select
+                id="org-invite-role"
+                name="org-invite-role"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as MemberRole)}
                 className="h-9 px-2 border border-gray-300 rounded-md text-sm"
@@ -394,6 +398,8 @@ export default function OrganizationDetailPage() {
                     <td className="px-4 py-3">
                       {myRole === "OWNER" && m.role !== "OWNER" ? (
                         <select
+                          id={`org-member-role-${m.id}`}
+                          name={`org-member-role-${m.id}`}
                           value={m.role}
                           onChange={(e) => handleRoleChange(m, e.target.value as MemberRole)}
                           className="text-xs px-2 py-1 rounded border border-gray-200"
@@ -593,8 +599,10 @@ export default function OrganizationDetailPage() {
               <form onSubmit={handleCreateVm} className="p-5 space-y-4">
                 {/* 이름 */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-gray-500">인스턴스 이름</label>
+                  <label htmlFor="org-create-vm-name" className="text-xs text-gray-500">인스턴스 이름</label>
                   <input
+                    id="org-create-vm-name"
+                    name="org-create-vm-name"
                     value={createVmName}
                     onChange={(e) => setCreateVmName(e.target.value)}
                     placeholder="my-server"
@@ -645,10 +653,12 @@ export default function OrganizationDetailPage() {
                 {/* 디스크 */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs text-gray-500">디스크 크기</label>
+                    <label htmlFor="org-create-vm-disk" className="text-xs text-gray-500">디스크 크기</label>
                     <span className="text-sm font-medium text-gray-900">{createVmDisk}GB</span>
                   </div>
                   <input
+                    id="org-create-vm-disk"
+                    name="org-create-vm-disk"
                     type="range"
                     min={planInfo.diskMin}
                     max={planInfo.diskMax}
@@ -665,7 +675,7 @@ export default function OrganizationDetailPage() {
 
                 {/* SSH 키 */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-gray-500">SSH 키</label>
+                  <label htmlFor="org-create-vm-ssh-key" className="text-xs text-gray-500">SSH 키</label>
                   {sshKeys.length === 0 ? (
                     <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-md px-3 py-2.5">
                       등록된 SSH 키가 없습니다.{" "}
@@ -673,6 +683,8 @@ export default function OrganizationDetailPage() {
                     </div>
                   ) : (
                     <select
+                      id="org-create-vm-ssh-key"
+                      name="org-create-vm-ssh-key"
                       value={createVmSshKeyId}
                       onChange={(e) => setCreateVmSshKeyId(e.target.value)}
                       className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
