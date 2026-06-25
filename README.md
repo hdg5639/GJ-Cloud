@@ -7,6 +7,14 @@
 
 ---
 
+## 왜 만들었나
+
+AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고 싶었다. 단순히 VM을 띄우는 것에 그치지 않고, 접속 도메인 발급·접근 제어·포트 노출까지 매번 수동으로 반복하던 인프라 작업을 자동화하는 것이 목표였다. 결과적으로 VM 하나를 생성하면 SSH 접속용 서브도메인, Zero Trust 접근 정책, Cloudflare Tunnel ingress 설정이 모두 자동으로 만들어진다.
+
+서비스를 Auth · User · VM 세 개로 나눈 건 변경 주기가 다르기 때문이다. 인증 로직(토큰 발급·갱신·탈취 감지)과 VM 제어 로직(Proxmox/Cloudflare 연동)은 독립적으로 배포·변경되어야 하고, 실제로도 VM 서비스만 WebFlux 기반 비동기 구조로 구현하는 등 기술적 선택지가 달라졌다.
+
+---
+
 ## 주요 기능
 
 | 기능 | 설명 |
@@ -16,7 +24,7 @@
 | **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. PUBLIC(누구나) / PRIVATE(이메일 허용 목록) 구분 |
 | **플랜 관리** | FREE / PRO 플랜 전환, 디스크 온라인 확장. 플랜 변경은 관리자 승인 후 반영 |
 | **협업 (Organization)** | 팀 단위로 VM 공유. 메모·공지·요청 게시판, 역할별 권한(OWNER / ADMIN / MEMBER) |
-| **실시간 메트릭** | CPU·메모리·네트워크·디스크 사용량을 SSE 스트림으로 라이브 시각화 |
+| **실시간 메트릭** | CPU·메모리·네트워크·디스크 사용량을 Proxmox API로 수집, SSE 스트림으로 라이브 시각화. 디스크 used는 QEMU Guest Agent로 별도 조회 |
 
 ---
 
@@ -31,15 +39,15 @@
     ├── User 서비스      — 프로필/SSH 키 관리/플랜 변경 요청
     └── VM 서비스        — VM CRUD/전원제어/Cloudflare 연동/조직 관리/협업
             │
-            ├── Proxmox API          (VM 생성·삭제·전원·리소스 변경)
+            ├── Proxmox API          (VM 생성·삭제·전원·리소스 변경·메트릭)
             └── Cloudflare API       (CNAME·Tunnel ingress·Zero Trust Access)
 ```
 
 **데이터베이스**
 
 ```
-Auth → MySQL   (Spring MVC + JPA)
-User → MySQL   (Spring MVC + JPA)
+Auth → MySQL       (Spring MVC + JPA)
+User → MySQL       (Spring MVC + JPA)
 VM   → PostgreSQL  (Spring WebFlux + R2DBC)
 ```
 
