@@ -448,27 +448,29 @@ export default function InstanceDetailPage() {
       </div>
 
       {/* 2단 레이아웃 */}
-      <div className="flex gap-5 items-start">
+      <div className="flex gap-4 items-start">
       {/* ── 좌측: SSH / 이메일 / 포트 ── */}
-      <div className="flex-[55] min-w-0 space-y-4">
+      <div className="flex-[11] min-w-0 space-y-3">
 
       {/* SSH 접속 정보 */}
-      <div className="bg-gray-50 rounded-lg p-5">
-        <p className="text-xs font-medium text-gray-500 mb-3">SSH 접속 정보</p>
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="bg-white border border-gray-200 rounded-md p-2.5">
-            <p className="text-[11px] text-gray-400 mb-1">호스트네임</p>
-            <p className="font-mono text-sm text-gray-900">{vm.subdomain}.gamjabox.cloud</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-md p-2.5">
-            <p className="text-[11px] text-gray-400 mb-1">사용자</p>
-            <p className="font-mono text-sm text-gray-900">ubuntu</p>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-md p-2.5">
-            <p className="text-[11px] text-gray-400 mb-1">인증 방식</p>
-            <p className="font-mono text-sm text-gray-900">등록한 SSH 키</p>
-          </div>
-        </div>
+      <div className="bg-white border border-gray-200/70 rounded-xl p-4 px-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">SSH 접속 정보</p>
+        <table className="w-full text-[13px]">
+          <tbody>
+            <tr>
+              <td className="text-gray-500 py-1.5 w-24">호스트네임</td>
+              <td className="text-right font-mono text-gray-900">{vm.subdomain}.gamjabox.cloud</td>
+            </tr>
+            <tr>
+              <td className="text-gray-500 py-1.5">사용자</td>
+              <td className="text-right font-mono text-gray-900">ubuntu</td>
+            </tr>
+            <tr>
+              <td className="text-gray-500 py-1.5">인증 방식</td>
+              <td className="text-right text-gray-900">등록한 SSH 키</td>
+            </tr>
+          </tbody>
+        </table>
 
         <button
           onClick={() => setAccordionOpen(!accordionOpen)}
@@ -693,26 +695,29 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       </div>
 
       {/* SSH 접근 이메일 관리 */}
-      <div className="bg-gray-50 rounded-lg p-5">
-        <p className="text-xs font-medium text-gray-500 mb-3">SSH 접근 허용 이메일</p>
-        <div className="flex flex-col gap-1.5 mb-3">
+      <div className="bg-white border border-gray-200/70 rounded-xl p-4 px-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">SSH 접근 허용 이메일</p>
+        <div className="mb-2">
+          {sshEmails.length === 0 && (
+            <p className="text-[13px] text-gray-400 py-1">허용된 이메일이 없습니다.</p>
+          )}
           {sshEmails.map((email) => (
-            <div key={email} className="flex items-center justify-between bg-white border border-gray-200 rounded-md px-3 py-2">
-              <span className="text-sm text-gray-900">{email}</span>
+            <div key={email} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+              <span className="text-[13px] text-gray-800">{email}</span>
               <button
                 onClick={() => handleRemoveSshEmail(email)}
-                className="text-xs text-gray-400 hover:text-red-500"
+                className="text-gray-400 hover:text-red-500 p-0.5"
+                title="삭제"
               >
-                삭제
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
               </button>
             </div>
           ))}
-          {sshEmails.length === 0 && (
-            <p className="text-xs text-gray-400">허용된 이메일이 없습니다.</p>
-          )}
         </div>
         {sshEmails.length < 10 && (
-          <form onSubmit={handleAddSshEmail} className="flex gap-2">
+          <form onSubmit={handleAddSshEmail} className="flex gap-2 mt-2">
             <input
               type="email"
               value={newSshEmail}
@@ -723,7 +728,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             <button
               type="submit"
               disabled={sshEmailLoading || !newSshEmail}
-              className="h-8 px-3 bg-[#03C75A] text-white rounded-md text-sm disabled:opacity-60"
+              className="h-8 px-4 bg-[#03C75A] text-white rounded-md text-sm disabled:opacity-60"
             >
               추가
             </button>
@@ -732,9 +737,9 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       </div>
 
       {/* 포트 관리 */}
-      <div className="bg-gray-50 rounded-lg p-5">
+      <div className="bg-white border border-gray-200/70 rounded-xl p-4 px-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-medium text-gray-500">포트 노출</p>
+          <p className="text-sm font-medium text-gray-900">포트 노출</p>
           {ports.length < 5 && (
             <button onClick={() => setShowPortModal(true)} className="text-xs text-[#03C75A] font-medium">
               + 포트 추가
@@ -823,28 +828,30 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       </div>{/* end left col */}
 
       {/* ── 우측: 협업 패널 (sticky) ── */}
-      <div className="flex-[45] min-w-0">
-        <div className="sticky top-6 bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="flex-[10] min-w-0">
+        <div className="sticky top-0 bg-gray-50 rounded-xl p-4">
           {/* 패널 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-800">협업</span>
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[15px] font-medium text-gray-900">협업</span>
             <button
               onClick={() => { setEditingCollab(undefined); setShowCollabWrite(true); }}
-              className="text-xs px-3 h-7 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] font-medium"
+              className="text-[13px] px-3 h-[30px] bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+              style={{ width: "auto" }}
             >
               + 작성
             </button>
           </div>
           {/* 필터 */}
-          <div className="flex gap-1 px-4 py-2.5 border-b border-gray-100">
+          <div className="flex gap-1.5 mb-3.5">
             {([undefined, "NOTE", "NOTICE", "REQUEST"] as (CollaborationType | undefined)[]).map((t) => (
               <button
                 key={t ?? "all"}
                 onClick={() => setCollabTypeFilter(t)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                style={{ width: "auto", padding: "0 12px", height: 28, fontSize: 12 }}
+                className={`rounded-md transition-colors ${
                   collabTypeFilter === t
-                    ? "border-gray-400 bg-gray-100 text-gray-800 font-medium"
-                    : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                    ? "bg-white border border-gray-300 text-gray-800"
+                    : "bg-transparent border-0 text-gray-500 hover:text-gray-700"
                 }`}
               >
                 {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
@@ -852,27 +859,26 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             ))}
           </div>
           {/* 카드 목록 */}
-          <div className="overflow-y-auto max-h-[calc(100vh-280px)]">
+          <div className="overflow-y-auto max-h-[calc(100vh-260px)]">
             {(() => {
               const filtered = collabTypeFilter
                 ? collabItems.filter((i) => i.type === collabTypeFilter)
                 : collabItems;
               return filtered.length === 0 ? (
-                <p className="text-xs text-gray-400 py-10 text-center">협업 항목이 없습니다.</p>
+                <p className="text-[13px] text-gray-400 py-10 text-center">협업 항목이 없습니다.</p>
               ) : (
-                <div className="flex flex-col divide-y divide-gray-100">
+                <div className="flex flex-col gap-2">
                   {filtered.map((item) => (
-                    <div key={item.id} className="px-1 py-1">
-                      <CollaborationCard
-                        item={item}
-                        accessToken={accessToken!}
-                        isOwnerOrAdmin={vm.userId === profile?.userId}
-                        currentUserId={profile?.userId}
-                        onEdit={(i) => { setEditingCollab(i); setShowCollabWrite(true); }}
-                        onUpdate={(updated) => setCollabItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))}
-                        onDelete={(deletedId) => setCollabItems((prev) => prev.filter((i) => i.id !== deletedId))}
-                      />
-                    </div>
+                    <CollaborationCard
+                      key={item.id}
+                      item={item}
+                      accessToken={accessToken!}
+                      isOwnerOrAdmin={vm.userId === profile?.userId}
+                      currentUserId={profile?.userId}
+                      onEdit={(i) => { setEditingCollab(i); setShowCollabWrite(true); }}
+                      onUpdate={(updated) => setCollabItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))}
+                      onDelete={(deletedId) => setCollabItems((prev) => prev.filter((i) => i.id !== deletedId))}
+                    />
                   ))}
                 </div>
               );
