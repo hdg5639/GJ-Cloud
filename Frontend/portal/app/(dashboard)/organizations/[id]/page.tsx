@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
@@ -182,9 +183,17 @@ export default function OrganizationDetailPage() {
 
   return (
     <div>
+      {/* 브레드크럼 */}
+      <div className="flex items-center gap-2 mb-1">
+        <button onClick={() => router.push("/organizations")} className="text-xs text-gray-500 hover:text-gray-700">
+          협업
+        </button>
+        <span className="text-xs text-gray-400">/</span>
+        <span className="text-xs text-gray-700">{org.name}</span>
+      </div>
+
       {/* 헤더 */}
       <div className="mb-1">
-        <p className="text-[13px] text-gray-500 mb-1">협업 / {org.name}</p>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <h1 className="text-[22px] font-medium text-gray-900">{org.name}</h1>
@@ -398,30 +407,30 @@ export default function OrganizationDetailPage() {
             </div>
           ) : (
             org.vms.map((vm) => (
-              <div key={vm.id} className="border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between">
-                <div>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-sm font-medium text-gray-900">{vm.name}</p>
-                    {vm.subdomain && (
-                      <span className="text-xs text-gray-400 font-mono">{vm.subdomain}.gamjabox.cloud</span>
-                    )}
+              <div key={vm.id} className="relative border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
+                <Link
+                  href={`/instances/${vm.id}`}
+                  className="flex items-center justify-between px-4 py-3"
+                >
+                  <div>
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-sm font-medium text-gray-900">{vm.name}</p>
+                      {vm.subdomain && (
+                        <span className="text-xs text-gray-400 font-mono">{vm.subdomain}.gamjabox.cloud</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{vm.planType} · {vm.status}</p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{vm.planType} · {vm.status}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => router.push(`/instances/${vm.id}`)} className="text-xs px-3 h-7 border border-gray-300 rounded-md hover:bg-gray-50" style={{ width: "auto" }}>
-                    상세
+                </Link>
+                {myRole === "OWNER" && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); handleRemoveVm(vm.id); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs px-3 h-7 border border-red-200 text-red-600 rounded-md hover:bg-red-50"
+                    style={{ width: "auto" }}
+                  >
+                    연결 해제
                   </button>
-                  {myRole === "OWNER" && (
-                    <button
-                      onClick={() => handleRemoveVm(vm.id)}
-                      className="text-xs px-3 h-7 border border-red-200 text-red-600 rounded-md hover:bg-red-50"
-                      style={{ width: "auto" }}
-                    >
-                      연결 해제
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             ))
           )}
