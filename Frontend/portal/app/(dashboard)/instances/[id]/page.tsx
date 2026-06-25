@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { PortResponse } from "@/lib/api-client";
@@ -79,6 +79,11 @@ const STATUS_STYLE: Record<string, string> = {
 export default function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromOrg = searchParams.get("from") === "org";
+  const fromOrgId = searchParams.get("orgId");
+  const backPath = fromOrg && fromOrgId ? `/organizations/${fromOrgId}` : "/instances";
+  const backLabel = fromOrg ? "협업" : "인스턴스";
   const { accessToken, refresh } = useAuth();
   const [vm, setVm] = useState<VmResponse | null>(null);
   const [accordionOpen, setAccordionOpen] = useState(false);
@@ -175,7 +180,7 @@ export default function InstanceDetailPage() {
     setDeleting(true);
     try {
       await api.vm.delete(accessToken, id);
-      router.push("/instances");
+      router.push(backPath);
     } catch (err) {
       alert(err instanceof Error ? err.message : "삭제에 실패했습니다");
       setDeleting(false);
@@ -304,8 +309,8 @@ export default function InstanceDetailPage() {
     <div>
       {/* 헤더 */}
       <div className="flex items-center gap-2 mb-1">
-        <button onClick={() => router.push("/instances")} className="text-xs text-gray-500 hover:text-gray-700">
-          인스턴스
+        <button onClick={() => router.push(backPath)} className="text-xs text-gray-500 hover:text-gray-700">
+          {backLabel}
         </button>
         <span className="text-xs text-gray-400">/</span>
         <span className="text-xs text-gray-700">{vm.name}</span>

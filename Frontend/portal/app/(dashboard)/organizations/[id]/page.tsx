@@ -78,10 +78,12 @@ export default function OrganizationDetailPage() {
   const [vmAvailability, setVmAvailability] = useState<VmAvailabilityResponse | null>(null);
   const [sshKeys, setSshKeys] = useState<SshKeyResponse[]>([]);
   const [userPlan, setUserPlan] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | undefined>();
 
   useEffect(() => {
     if (!accessToken) return;
     api.org.get(accessToken, id).then(setOrg).catch(() => router.push("/organizations"));
+    api.user.profile(accessToken).then((p) => setCurrentUserId(p.userId)).catch(() => {});
   }, [accessToken, id]);
 
   useEffect(() => {
@@ -105,6 +107,7 @@ export default function OrganizationDetailPage() {
     ]).then(([avail, profile, keys]) => {
       setVmAvailability(avail);
       setUserPlan(profile.planType);
+      setCurrentUserId(profile.userId);
       setSshKeys(keys);
       if (keys.length > 0) setCreateVmSshKeyId(keys[0].id);
     }).catch(() => {});
@@ -337,6 +340,7 @@ export default function OrganizationDetailPage() {
                   item={item}
                   accessToken={accessToken!}
                   isOwnerOrAdmin={isOwnerOrAdmin}
+                  currentUserId={currentUserId}
                   onEdit={(i) => { setEditingItem(i); setShowWrite(true); }}
                   onUpdate={handleItemUpdated}
                   onDelete={handleItemDeleted}
@@ -467,7 +471,7 @@ export default function OrganizationDetailPage() {
             org.vms.map((vm) => (
               <div key={vm.id} className="relative border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
                 <Link
-                  href={`/instances/${vm.id}`}
+                  href={`/instances/${vm.id}?from=org&orgId=${id}`}
                   className="flex items-center justify-between px-4 py-3"
                 >
                   <div>
