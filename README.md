@@ -118,34 +118,10 @@ POST /vms  →  PENDING (즉시 202 응답)
 
 ---
 
-## 로컬 실행
-
-**사전 준비**
-
-- Docker, Docker Compose
-- 루트의 `.env` 파일 (아래 템플릿 참고)
-
-```bash
-git clone <repo-url>
-cd GJ-Cloud/v2
-cp .env.example .env   # 값 채운 뒤
-docker compose up -d --build
-```
-
-| 서비스 | 주소 |
-|---|---|
-| Auth | http://localhost:8080 |
-| User | http://localhost:8081 |
-| VM | http://localhost:8082 |
-| 통합 Swagger UI | http://localhost:9000 |
-| 포털 (dev) | http://localhost:3000 |
-
----
-
 ## 프로젝트 구조
 
 ```
-v2/
+GJ-Cloud/
 ├── Backend/
 │   ├── Auth/          Spring MVC — 인증·JWT·Refresh Token·이메일 인증
 │   ├── User/          Spring MVC — 프로필·SSH 키·플랜
