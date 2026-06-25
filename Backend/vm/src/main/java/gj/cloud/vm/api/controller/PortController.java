@@ -75,7 +75,7 @@ public class PortController {
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId
     ) {
-        return portService.getPorts(principal.userId(), vmId)
+        return portService.getPorts(principal.userId(), principal.email(), vmId)
                 .collectList()
                 .map(ApiResponse::ok);
     }

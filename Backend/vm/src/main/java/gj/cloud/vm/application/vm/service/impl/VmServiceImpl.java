@@ -17,6 +17,8 @@ import gj.cloud.vm.domain.port.repository.VmSshAccessEmailRepository;
 import gj.cloud.vm.domain.vm.entity.VmEntity;
 import gj.cloud.vm.domain.vm.enums.PlanType;
 import gj.cloud.vm.domain.vm.enums.VmStatus;
+import gj.cloud.vm.domain.org.repository.OrganizationMemberRepository;
+import gj.cloud.vm.domain.org.repository.OrganizationVmRepository;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
@@ -56,6 +58,8 @@ public class VmServiceImpl implements VmService {
     private final VmSshAccessEmailRepository sshAccessEmailRepository;
     private final PortService portService;
     private final MetricsCache metricsCache;
+    private final OrganizationVmRepository orgVmRepository;
+    private final OrganizationMemberRepository orgMemberRepository;
 
     @Override
     public Mono<VmResponse> createVm(String userId, String bearerToken, VmCreateRequest request) {
@@ -169,21 +173,21 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
-    public Mono<VmResponse> getVm(String userId, UUID vmId) {
+    public Mono<VmResponse> getVm(String userId, String email, UUID vmId) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .flatMap(vm -> {
                     if (vm.getDeletedAt() != null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
                     }
-                    if (!vm.getUserId().equals(userId)) {
-                        return Mono.error(new VmException(VmErrorCode.FORBIDDEN));
-                    }
-                    if (vm.getStatus() != VmStatus.RUNNING || vm.getVmid() == null) {
-                        return Mono.just(VmResponse.from(vm, null));
-                    }
-                    return proxmoxClient.needsReboot(vm.getVmid())
-                            .map(needsReboot -> VmResponse.from(vm, needsReboot));
+                    return checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email)
+                            .then(Mono.defer(() -> {
+                                if (vm.getStatus() != VmStatus.RUNNING || vm.getVmid() == null) {
+                                    return Mono.just(VmResponse.from(vm, null));
+                                }
+                                return proxmoxClient.needsReboot(vm.getVmid())
+                                        .map(needsReboot -> VmResponse.from(vm, needsReboot));
+                            }));
                 });
     }
 
@@ -359,10 +363,12 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
-    public Mono<List<String>> getSshAccessEmails(String userId, UUID vmId) {
+    public Mono<List<String>> getSshAccessEmails(String userId, String email, UUID vmId) {
         return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email))
                 .then(sshAccessEmailRepository.findAllByVmId(vmId)
                         .map(VmSshAccessEmailEntity::getEmail)
                         .collectList()
@@ -488,11 +494,12 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
-    public Mono<VmMetricsCurrentResponse> getVmMetricsCurrent(String userId, UUID vmId) {
+    public Mono<VmMetricsCurrentResponse> getVmMetricsCurrent(String userId, String email, UUID vmId) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getVmid() == null || !vm.getStatus().equals(VmStatus.RUNNING)) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_RUNNING));
@@ -537,11 +544,12 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
-    public Mono<VmMetricsHistoryResponse> getVmMetricsHistory(String userId, UUID vmId, String timeframe) {
+    public Mono<VmMetricsHistoryResponse> getVmMetricsHistory(String userId, String email, UUID vmId, String timeframe) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
+                .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getVmid() == null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
@@ -571,5 +579,15 @@ public class VmServiceImpl implements VmService {
                                 return new VmMetricsHistoryResponse(vmId.toString(), timeframe, dataPoints);
                             });
                 });
+    }
+
+    // 소유자이거나 해당 VM이 연결된 org의 ACCEPTED 멤버면 통과
+    private Mono<Void> checkVmReadAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
+        if (ownerId.equals(requesterId)) return Mono.empty();
+        return orgVmRepository.findAllByVmId(vmId)
+                .flatMap(orgVm -> orgMemberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
+                .next()
+                .<Void>flatMap(m -> Mono.empty())
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)));
     }
 }

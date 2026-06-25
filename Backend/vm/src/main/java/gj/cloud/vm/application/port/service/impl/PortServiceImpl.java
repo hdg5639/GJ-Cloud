@@ -10,6 +10,8 @@ import gj.cloud.vm.domain.port.entity.VmPortEntity;
 import gj.cloud.vm.domain.port.enums.Visibility;
 import gj.cloud.vm.domain.port.repository.VmPortAccessEmailRepository;
 import gj.cloud.vm.domain.port.repository.VmPortRepository;
+import gj.cloud.vm.domain.org.repository.OrganizationMemberRepository;
+import gj.cloud.vm.domain.org.repository.OrganizationVmRepository;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
@@ -39,6 +41,8 @@ public class PortServiceImpl implements PortService {
     private final CloudflareClient cloudflareClient;
     private final CloudflareProperties cloudflareProperties;
     private final UserServiceClient userServiceClient;
+    private final OrganizationVmRepository orgVmRepository;
+    private final OrganizationMemberRepository orgMemberRepository;
 
     @Override
     public Mono<PortResponse> addPort(String userId, String ownerEmail, UUID vmId, PortAddRequest request, String bearerToken) {
@@ -169,16 +173,27 @@ public class PortServiceImpl implements PortService {
     }
 
     @Override
-    public Flux<PortResponse> getPorts(String userId, UUID vmId) {
+    public Flux<PortResponse> getPorts(String userId, String email, UUID vmId) {
         return vmRepository.findById(vmId)
-                .filter(vm -> vm.getUserId().equals(userId) && vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> checkVmReadAccess(vmId, vm.getUserId(), userId, email).thenReturn(vm))
                 .flatMapMany(vm -> vmPortRepository.findAllByVmId(vmId))
                 .flatMap(port -> portAccessEmailRepository.findAllByVmPortId(port.getId())
                         .map(VmPortAccessEmailEntity::getEmail)
                         .collectList()
                         .map(emails -> PortResponse.of(port, emails, cloudflareProperties.getBaseDomain()))
                 );
+    }
+
+    private Mono<Void> checkVmReadAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
+        if (ownerId.equals(requesterId)) return Mono.empty();
+        return orgVmRepository.findAllByVmId(vmId)
+                .flatMap(orgVm -> orgMemberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
+                .next()
+                .<Void>flatMap(m -> Mono.empty())
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)));
     }
 
     @Override

@@ -67,7 +67,7 @@ public class VmController {
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId
     ) {
-        return vmService.getVm(principal.userId(), vmId)
+        return vmService.getVm(principal.userId(), principal.email(), vmId)
                 .map(ApiResponse::ok);
     }
 
@@ -117,7 +117,7 @@ public class VmController {
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId
     ) {
-        return vmService.getSshAccessEmails(principal.userId(), vmId)
+        return vmService.getSshAccessEmails(principal.userId(), principal.email(), vmId)
                 .map(ApiResponse::ok);
     }
 
@@ -150,7 +150,7 @@ public class VmController {
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId
     ) {
-        return vmService.getVmMetricsCurrent(principal.userId(), vmId)
+        return vmService.getVmMetricsCurrent(principal.userId(), principal.email(), vmId)
                 .map(ApiResponse::ok);
     }
 
@@ -161,7 +161,7 @@ public class VmController {
             @PathVariable UUID vmId,
             @RequestParam(defaultValue = "hour") String timeframe
     ) {
-        return vmService.getVmMetricsHistory(principal.userId(), vmId, timeframe)
+        return vmService.getVmMetricsHistory(principal.userId(), principal.email(), vmId, timeframe)
                 .map(ApiResponse::ok);
     }
 }
