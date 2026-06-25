@@ -72,7 +72,10 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex items-center justify-end gap-2 mt-3">
+            <label htmlFor="rememberMe" className="text-xs text-gray-500 cursor-pointer select-none">
+              로그인 유지
+            </label>
             <input
               id="rememberMe"
               type="checkbox"
@@ -80,9 +83,6 @@ export default function LoginPage() {
               onChange={(e) => setRememberMe(e.target.checked)}
               className="w-3.5 h-3.5 accent-[#03C75A] cursor-pointer"
             />
-            <label htmlFor="rememberMe" className="text-xs text-gray-500 cursor-pointer select-none">
-              로그인 유지 (30일)
-            </label>
           </div>
 
           {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
