@@ -162,8 +162,8 @@ public class CollaborationServiceImpl implements CollaborationService {
                         return orgVmRepository.findAllByVmId(scopeId)
                                 .flatMap(orgVm -> memberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), email))
                                 .next()
-                                .<Void>flatMap(m -> Mono.empty())
-                                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.COLLABORATION_PERMISSION_DENIED)));
+                                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.COLLABORATION_PERMISSION_DENIED)))
+                                .then();
                     });
         } else {
             return memberRepository.findAcceptedByOrgIdAndEmail(scopeId, email)
@@ -187,8 +187,8 @@ public class CollaborationServiceImpl implements CollaborationService {
                                 .flatMap(orgVm -> memberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), email))
                                 .filter(m -> m.getRole() == MemberRole.OWNER || m.getRole() == MemberRole.ADMIN)
                                 .next()
-                                .<Void>flatMap(m -> Mono.empty())
-                                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.COLLABORATION_PERMISSION_DENIED)));
+                                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.COLLABORATION_PERMISSION_DENIED)))
+                                .then();
                     });
         } else {
             return memberRepository.findAcceptedByOrgIdAndEmail(scopeId, email)

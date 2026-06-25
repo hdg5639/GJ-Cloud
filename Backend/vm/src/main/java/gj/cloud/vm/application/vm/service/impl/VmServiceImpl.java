@@ -593,8 +593,8 @@ public class VmServiceImpl implements VmService {
         return orgVmRepository.findAllByVmId(vmId)
                 .flatMap(orgVm -> orgMemberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
                 .next()
-                .<Void>flatMap(m -> Mono.empty())
-                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)));
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)))
+                .then();
     }
 
     // 소유자이거나 해당 VM이 연결된 org의 ACCEPTED ADMIN/OWNER 멤버면 통과
@@ -603,7 +603,7 @@ public class VmServiceImpl implements VmService {
         return orgVmRepository.findAllByVmId(vmId)
                 .flatMap(orgVm -> orgMemberRepository.findAcceptedAdminByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
                 .next()
-                .<Void>flatMap(m -> Mono.empty())
-                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)));
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)))
+                .then();
     }
 }
