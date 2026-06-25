@@ -32,6 +32,9 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private final UserRepository userRepository;
     private final RestClient restClient;
 
+    @Value("${spring.mail.from}")
+    private String mailFrom;
+
     @Value("${services.user-service.url:http://user:8080}")
     private String userServiceUrl;
 
@@ -44,6 +47,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         redisTemplate.opsForValue().set(KEY_PREFIX + email, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
 
         SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFrom);
         message.setTo(email);
         message.setSubject("[GJ Cloud] 이메일 인증 코드");
         message.setText("인증 코드: " + code + "\n\n5분 내에 입력해주세요.");
