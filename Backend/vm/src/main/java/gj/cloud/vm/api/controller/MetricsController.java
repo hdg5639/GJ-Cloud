@@ -51,7 +51,7 @@ public class MetricsController {
         log.info("메트릭 SSE 구독: userId={}, vmId={}", principal.userId(), vmId);
 
         return Flux.interval(Duration.ofSeconds(5))
-                .flatMap(tick -> vmService.getVmMetricsCurrent(principal.userId(), vmId)
+                .flatMap(tick -> vmService.getVmMetricsCurrent(principal.userId(), principal.email(), vmId)
                         .doOnSuccess(metrics -> log.debug("메트릭 발행: vmId={}, cpu={}", vmId, metrics.cpuUsagePercent()))
                         .doOnError(e -> log.warn("메트릭 조회 실패: vmId={}, error={}", vmId, e.getMessage())))
                 .map(metrics -> ServerSentEvent.<VmMetricsCurrentResponse>builder()
