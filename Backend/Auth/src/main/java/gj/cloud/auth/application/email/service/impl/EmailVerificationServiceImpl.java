@@ -5,16 +5,19 @@ import gj.cloud.auth.domain.user.entity.UserEntity;
 import gj.cloud.auth.domain.user.repository.UserRepository;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -46,12 +49,22 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
         redisTemplate.opsForValue().set(KEY_PREFIX + email, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(mailFrom);
-        message.setTo(email);
-        message.setSubject("[GJ Cloud] 이메일 인증 코드");
-        message.setText("인증 코드: " + code + "\n\n5분 내에 입력해주세요.");
-        mailSender.send(message);
+        try {
+            String template = new ClassPathResource("templates/email-verification.html")
+                    .getContentAsString(StandardCharsets.UTF_8)
+                    .replace("{{CODE}}", code);
+
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+            helper.setFrom(mailFrom);
+            helper.setTo(email);
+            helper.setSubject("[gamjabox] 이메일 인증 코드");
+            helper.setText(template, true);
+            mailSender.send(message);
+        } catch (Exception e) {
+            log.error("이메일 발송 실패 (email={}): {}", email, e.getMessage());
+            throw new AuthException(AuthErrorCode.EMAIL_SEND_FAILED);
+        }
     }
 
     @Override
