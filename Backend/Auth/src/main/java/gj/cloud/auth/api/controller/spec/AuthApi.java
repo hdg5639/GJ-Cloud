@@ -8,6 +8,7 @@ import gj.cloud.auth.application.email.dto.EmailVerifyRequest;
 import gj.cloud.auth.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,7 +26,7 @@ public interface AuthApi {
 
     @Operation(summary = "로그인", description = "accessToken(Body) + refreshToken(httpOnly Cookie) 발급")
     @PostMapping("/login")
-    ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletResponse response);
+    ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse response);
 
     @Operation(summary = "로그아웃", description = "Redis refreshToken 삭제 + 쿠키 만료")
     @PostMapping("/logout")

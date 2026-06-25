@@ -19,7 +19,8 @@ public enum AuthErrorCode {
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다."),
     INVALID_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "인증 코드가 일치하지 않습니다."),
     VERIFICATION_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증 코드가 만료되었습니다."),
-    REFRESH_TOKEN_REUSE_DETECTED(HttpStatus.UNAUTHORIZED, "이미 사용된 Refresh Token입니다. 보안을 위해 전체 로그아웃 처리되었습니다.");
+    REFRESH_TOKEN_REUSE_DETECTED(HttpStatus.UNAUTHORIZED, "이미 사용된 Refresh Token입니다. 보안을 위해 전체 로그아웃 처리되었습니다."),
+    LOGIN_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.");
 
     private final HttpStatus status;
     private final String message;

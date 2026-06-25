@@ -122,7 +122,12 @@ public class TokenServiceImpl implements TokenService {
 
         String email   = (String) claims.getClaim("email");
         String roleStr = (String) claims.getClaim("role");
-        UserRole role  = UserRole.valueOf(roleStr);
+        UserRole role;
+        try {
+            role = UserRole.valueOf(roleStr);
+        } catch (IllegalArgumentException e) {
+            throw new AuthException(AuthErrorCode.INVALID_ACCESS_TOKEN);
+        }
 
         String newToken = jwtProvider.issueAccessToken(userId, email, role, targetAudience.getValue());
         redisTemplate.opsForValue().set(cacheKey, newToken, jwtProperties.getExchangeTokenExpiry(), TimeUnit.MILLISECONDS);

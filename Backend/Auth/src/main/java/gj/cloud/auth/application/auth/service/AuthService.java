@@ -6,7 +6,7 @@ import gj.cloud.auth.application.auth.dto.RegisterRequest;
 
 public interface AuthService {
     void register(RegisterRequest request);
-    LoginResult login(LoginRequest request);
+    LoginResult login(LoginRequest request, String clientIp);
     void logout(String userId);
     void withdraw(String userId);
 }

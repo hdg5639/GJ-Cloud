@@ -9,9 +9,8 @@ import gj.cloud.auth.application.auth.service.AuthService;
 import gj.cloud.auth.application.email.dto.EmailVerifyConfirmRequest;
 import gj.cloud.auth.application.email.dto.EmailVerifyRequest;
 import gj.cloud.auth.application.email.service.EmailVerificationService;
-import gj.cloud.auth.global.exception.AuthException;
-import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import gj.cloud.auth.global.response.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -32,8 +31,9 @@ public class AuthController implements AuthApi {
     }
 
     @Override
-    public ApiResponse<LoginResponse> login(LoginRequest request, HttpServletResponse response) {
-        LoginResult result = authService.login(request);
+    public ApiResponse<LoginResponse> login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse response) {
+        String clientIp = resolveClientIp(httpRequest);
+        LoginResult result = authService.login(request, clientIp);
         setRefreshTokenCookie(response, result.refreshToken(), result.cookieMaxAgeSeconds());
         return ApiResponse.ok(new LoginResponse(result.accessToken(), "Bearer", 900L));
     }
@@ -61,6 +61,14 @@ public class AuthController implements AuthApi {
     public ApiResponse<Void> confirmVerifyCode(EmailVerifyConfirmRequest request) {
         emailVerificationService.confirmCode(request.email(), request.code());
         return ApiResponse.ok();
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken, long maxAgeSeconds) {
