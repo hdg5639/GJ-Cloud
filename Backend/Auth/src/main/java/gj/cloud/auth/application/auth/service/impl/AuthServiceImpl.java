@@ -45,7 +45,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
+        if (userRepository.existsByEmailAndStatusNot(request.email(), UserStatus.DELETED)) {
             throw new AuthException(AuthErrorCode.EMAIL_ALREADY_EXISTS);
         }
         UserEntity user = UserEntity.create(request.email(), passwordEncoder.encode(request.password()));

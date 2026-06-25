@@ -1,6 +1,7 @@
 package gj.cloud.auth.domain.user.repository;
 
 import gj.cloud.auth.domain.user.entity.UserEntity;
+import gj.cloud.auth.domain.user.enums.UserStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,7 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<UserEntity, String> {
     Optional<UserEntity> findByEmail(String email);
     boolean existsByEmail(String email);
+    boolean existsByEmailAndStatusNot(String email, UserStatus status);
 
     @Modifying
     @Query("DELETE FROM UserEntity u WHERE u.status = 'PENDING_VERIFICATION' AND u.createdAt < :threshold")
