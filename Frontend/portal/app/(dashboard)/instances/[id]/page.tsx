@@ -325,8 +325,8 @@ export default function InstanceDetailPage() {
             title="상태 동기화"
             className="h-8 w-8 flex items-center justify-center border border-gray-300 rounded-md hover:bg-gray-50"
           >
-            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <svg className="w-[15px] h-[15px] text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
           <div className="w-px h-5 bg-gray-200" />
@@ -336,16 +336,14 @@ export default function InstanceDetailPage() {
               onClick={() => setShowPowerMenu((v) => !v)}
               disabled={isTransitioning || vm.status === "DELETED"}
               className={`flex items-center gap-1.5 text-sm px-3.5 h-8 border rounded-md disabled:opacity-40 transition-colors ${
-                showPowerMenu
-                  ? "border-gray-400 bg-gray-100"
-                  : "border-gray-300 hover:bg-gray-50"
+                showPowerMenu ? "border-gray-400 bg-gray-100" : "border-gray-300 hover:bg-gray-50"
               }`}
             >
+              <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+              </svg>
               전원
-              <svg
-                className={`w-3 h-3 text-gray-500 transition-transform ${showPowerMenu ? "rotate-180" : ""}`}
-                fill="none" stroke="currentColor" viewBox="0 0 24 24"
-              >
+              <svg className={`w-3 h-3 text-gray-400 transition-transform ${showPowerMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
@@ -353,51 +351,46 @@ export default function InstanceDetailPage() {
               <div className="absolute left-0 mt-1 min-w-full bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
                 {isRunning ? (
                   <>
-                    <button
-                      onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }}
-                      className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700"
-                    >
-                      정지
-                    </button>
+                    <button onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700">정지</button>
                     <div className="h-px bg-gray-100 mx-2" />
-                    <button
-                      onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }}
-                      className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700"
-                    >
-                      재시작
-                    </button>
+                    <button onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700">재시작</button>
                   </>
                 ) : (
-                  <button
-                    onClick={() => { handlePower("START"); setShowPowerMenu(false); }}
-                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700"
-                  >
-                    시작
-                  </button>
+                  <button onClick={() => { handlePower("START"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700">시작</button>
                 )}
               </div>
             )}
           </div>
           <div className="w-px h-5 bg-gray-200" />
-          {/* 성능 / 스펙 변경 */}
+          {/* 성능 */}
           <button
             onClick={() => router.push(`/instances/${id}/metrics`)}
-            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
+            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
           >
+            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+              <rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/>
+            </svg>
             성능
           </button>
+          {/* 스펙 변경 */}
           <button
             onClick={() => setShowUpgradeModal(true)}
-            className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
+            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
           >
+            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
             스펙 변경
           </button>
           <div className="w-px h-5 bg-gray-200" />
           {/* 삭제 */}
           <button
             onClick={() => setConfirmDelete(true)}
-            className="text-sm px-3.5 h-8 border border-red-200 bg-red-50 text-red-600 rounded-md hover:bg-red-100"
+            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-red-200 bg-red-50 text-red-600 rounded-md hover:bg-red-100"
           >
+            <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
             삭제
           </button>
         </div>
@@ -474,18 +467,21 @@ export default function InstanceDetailPage() {
 
         <button
           onClick={() => setAccordionOpen(!accordionOpen)}
-          className={`flex items-center justify-between w-full mt-1 px-3 py-2.5 rounded-lg border transition-colors ${
-            accordionOpen
-              ? "bg-gray-900 border-gray-900 text-white"
-              : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
-          }`}
+          className="flex items-center justify-between w-full mt-3 pt-3 border-t border-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
         >
-          <span className="text-sm font-medium">🔌 SSH 접속 방법 보기</span>
-          <span className={`text-xs transition-transform duration-200 ${accordionOpen ? "rotate-180" : ""}`}>▾</span>
+          <span className="flex items-center gap-1.5 text-[13px]">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+            SSH 접속 방법 보기
+          </span>
+          <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${accordionOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
         </button>
 
         {accordionOpen && (
-          <div className="mt-4 space-y-6">
+          <div className="mt-4 space-y-6 text-gray-700">
 
             <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
               <span className="text-amber-500 text-sm mt-0.5">⚠</span>
