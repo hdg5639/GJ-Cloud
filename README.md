@@ -134,7 +134,7 @@ GJ-Cloud/
 │   ├── Auth/    Spring MVC — 인증·JWT·Refresh Token·이메일 인증
 │   ├── User/    Spring MVC — 프로필·SSH 키·플랜
 │   ├── vm/      Spring WebFlux — VM·포트·조직·협업·메트릭
-│   └── Ops/     Spring MVC — 웹 SSH 콘솔·파일 브라우저·배포 파이프라인 (신규, 진행 중)
+│   └── Ops/     Spring MVC — 웹 SSH 콘솔·파일 브라우저·배포 파이프라인 (신규)
 └── Frontend/
     └── portal/  Next.js — 사용자 포털
 ```
@@ -158,11 +158,14 @@ VM을 만든 뒤 "그 안에서 뭔가 하는" 영역(터미널 접속, 파일 �
 - **수동 DB 백업 (백엔드)** — postgresql/mysql/mongodb/redis 온디맨드 덤프, VM의 backups/ 디렉토리에 저장 후 기존 파일 브라우저로 다운로드(자동/정기 백업은 범위 밖)
 - **웹 SSH 콘솔 (프론트엔드)** — `@xterm/xterm` + WebSocket, 인스턴스 상세 페이지에서 별도 라우트(`/instances/{id}/console`)로 진입, 일회용 티켓 발급 → WS 핸드셰이크 → 리사이즈 동기화까지 연동
 - **파일 브라우저 (프론트엔드)** — 디렉토리 탐색/브레드크럼/`..` 상위 이동, 업로드·새 폴더·삭제, 텍스트 파일 편집(바이너리/용량 초과 시 편집 대신 다운로드 안내), 이미지/오디오/비디오 미리보기(HTTP Range 지원 스트리밍 — 짧은 TTL 재사용 티켓으로 인증, seek/버퍼링 가능)
+- **Docker 관리 (프론트엔드)** — 설치 확인/설치, 컨테이너 제어(시작/정지/재시작/삭제/로그), 이미지/네트워크/Compose 스택 조회, 네트워크 생성/삭제
+- **배포 파이프라인 (프론트엔드)** — Raw Compose 배포(환경변수·라우트·헬스체크 고급설정), AI 스펙 자동생성+검수 연동, 배포 이력 조회, 배포 상세 페이지의 SSE 실시간 진행 로그(EventSource의 커스텀 헤더 제약을 fetch 스트리밍 직접 파싱 + afterSequence 기반 재연결로 해결)
+- **DB 백업 (프론트엔드)** — 수동 백업 트리거 + 이력 조회 + 파일 브라우저 재사용 다운로드
+- **서비스 간 인증 강화 (OPS-SEC-002)** — VM→Ops 내부 API(`/internal/vms/{vmId}/management-key`) 호출을 로그인 사용자의 토큰을 그대로 전달하는 방식에서 client-credentials 기반 서비스 신원 인증으로 전환. 기존에는 임의의 로그인 사용자가 `/auth/token/exchange`로 `vm-service` 오디언스 토큰을 스스로 발급받아 Ops의 관리 키 발급/폐기 API를 직접 호출할 수 있는 권한 상승 취약점이 있었음. Auth에 서비스 전용 토큰 발급 엔드포인트(`/auth/token/service`, client_id/secret 기반)를 추가하고 VM 서비스가 여기서 받은 자체 서비스 토큰을 캐싱해 사용하도록 변경, Ops의 `InternalJwtValidator`는 `token_type=service` + `client_id` 클레임까지 검증하도록 강화
+- **Ops 서버 보안 강화 (OPS-SEC-001, 003~006)** — 배포 조회/이벤트 엔드포인트 권한 체크, compose 서비스명·git 브랜치명 허용목록 검증, 관리 키 상태 재사용 차단, 스트리밍 티켓 요청 시점 재검증, HTTP Range 파서 버그 수정
 
 ### 진행 중인 작업
 
-- 배포 · Docker 관리 · AI 스펙 생성/검수 · DB 백업 화면 프론트엔드 (배포 진행 화면, 컨테이너 목록/로그 뷰, 서비스 카드 입력 폼)
-- 배포 이력 조회 UI
 - 실제 VM 대상 종단간(end-to-end) 동작 검증 — 로컬 환경 제약으로 코드 레벨 검증까지만 완료, 실기 배포 테스트 필요
 
 ---

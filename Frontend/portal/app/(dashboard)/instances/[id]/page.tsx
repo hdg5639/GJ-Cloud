@@ -95,11 +95,16 @@ export default function InstanceDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showPowerMenu, setShowPowerMenu] = useState(false);
   const powerMenuRef = useRef<HTMLDivElement>(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (powerMenuRef.current && !powerMenuRef.current.contains(e.target as Node)) {
         setShowPowerMenu(false);
+      }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
       }
     }
     document.addEventListener("mousedown", onClickOutside);
@@ -316,144 +321,199 @@ export default function InstanceDetailPage() {
         <span className="text-xs text-gray-700">{vm.name}</span>
       </div>
 
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-medium text-gray-900">{vm.name}</h1>
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-md ${STATUS_STYLE[vm.status] ?? "bg-gray-100 text-gray-600"}`}>
-            {vm.status}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* 동기화 */}
-          <button
-            onClick={reconnectSse}
-            title="상태 동기화"
-            className="h-8 w-8 flex items-center justify-center border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-600" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-          <div className="w-px h-5 bg-gray-200" />
-          {/* 전원 드롭다운 */}
-          <div className="relative" ref={powerMenuRef}>
+      <div className="mb-5">
+        <div className="flex items-center w-full bg-white border border-gray-200 rounded-lg overflow-x-auto">
+          {/* 그룹 1: 이름 · 상태 · 새로고침 */}
+          <div className="flex items-center gap-2.5 pl-4 pr-3.5 h-10 shrink-0">
+            <h1 className="text-[15px] font-medium text-gray-900 whitespace-nowrap">{vm.name}</h1>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${STATUS_STYLE[vm.status] ?? "bg-gray-100 text-gray-600"}`}>
+              {vm.status}
+            </span>
             <button
-              onClick={() => setShowPowerMenu((v) => !v)}
-              disabled={isTransitioning || vm.status === "DELETED"}
-              className={`flex items-center gap-1.5 text-sm px-3.5 h-8 border rounded-md disabled:opacity-40 transition-colors ${
-                showPowerMenu ? "border-gray-400 bg-gray-100" : "border-gray-300 hover:bg-gray-50"
-              }`}
+              onClick={reconnectSse}
+              title="상태 동기화"
+              className="flex items-center justify-center w-7 h-7 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors shrink-0"
             >
-              <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
-              </svg>
-              전원
-              <svg className={`w-3 h-3 text-gray-400 transition-transform ${showPowerMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
-            {showPowerMenu && (
-              <div className="absolute left-0 mt-1 min-w-full bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
-                {isRunning ? (
-                  <>
-                    <button onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700">정지</button>
-                    <div className="h-px bg-gray-100 mx-2" />
-                    <button onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700">재시작</button>
-                  </>
-                ) : (
-                  <button onClick={() => { handlePower("START"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700">시작</button>
-                )}
-              </div>
-            )}
           </div>
-          <div className="w-px h-5 bg-gray-200" />
-          {/* 콘솔 */}
-          <button
-            onClick={() => router.push(`/instances/${id}/console`)}
-            disabled={!isRunning}
-            title={isRunning ? undefined : "VM이 실행 중일 때만 콘솔에 접속할 수 있어요"}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-            </svg>
-            콘솔
-          </button>
-          {/* 파일 브라우저 */}
-          <button
-            onClick={() => router.push(`/instances/${id}/files`)}
-            disabled={!isRunning}
-            title={isRunning ? undefined : "VM이 실행 중일 때만 파일 브라우저를 이용할 수 있어요"}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"/>
-            </svg>
-            파일
-          </button>
-          {/* Docker 관리 */}
-          <button
-            onClick={() => router.push(`/instances/${id}/docker`)}
-            disabled={!isRunning}
-            title={isRunning ? undefined : "VM이 실행 중일 때만 Docker 관리를 이용할 수 있어요"}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2"/><line x1="8" y1="12" x2="16" y2="12"/>
-            </svg>
-            Docker
-          </button>
-          {/* 배포 */}
-          <button
-            onClick={() => router.push(`/instances/${id}/deployments`)}
-            disabled={!isRunning}
-            title={isRunning ? undefined : "VM이 실행 중일 때만 배포를 이용할 수 있어요"}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
-            </svg>
-            배포
-          </button>
-          {/* DB 백업 */}
-          <button
-            onClick={() => router.push(`/instances/${id}/backups`)}
-            disabled={!isRunning}
-            title={isRunning ? undefined : "VM이 실행 중일 때만 DB 백업을 이용할 수 있어요"}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
-            </svg>
-            백업
-          </button>
-          {/* 성능 */}
-          <button
-            onClick={() => router.push(`/instances/${id}/metrics`)}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/>
-            </svg>
-            성능
-          </button>
-          {/* 스펙 변경 */}
-          <button
-            onClick={() => setShowUpgradeModal(true)}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            스펙 변경
-          </button>
-          <div className="w-px h-5 bg-gray-200" />
-          {/* 삭제 */}
+
+          <div className="w-px h-5 bg-gray-200 shrink-0" />
+
+          {/* 그룹 2: 접속 · 조작 */}
+          <div className="flex items-center h-10 shrink-0">
+            <div className="relative" ref={powerMenuRef}>
+              <button
+                onClick={() => setShowPowerMenu((v) => !v)}
+                disabled={isTransitioning || vm.status === "DELETED"}
+                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
+                  showPowerMenu ? "bg-gray-100" : ""
+                }`}
+              >
+                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+                </svg>
+                전원
+                <svg className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${showPowerMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showPowerMenu && (
+                <div className="absolute left-0 mt-1 min-w-full bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
+                  {isRunning ? (
+                    <>
+                      <button onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap">정지</button>
+                      <div className="h-px bg-gray-100 mx-2" />
+                      <button onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap">재시작</button>
+                    </>
+                  ) : (
+                    <button onClick={() => { handlePower("START"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap">시작</button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => router.push(`/instances/${id}/console`)}
+              disabled={!isRunning}
+              title={isRunning ? undefined : "VM이 실행 중일 때만 콘솔에 접속할 수 있어요"}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+            >
+              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+              콘솔
+            </button>
+            <button
+              onClick={() => router.push(`/instances/${id}/files`)}
+              disabled={!isRunning}
+              title={isRunning ? undefined : "VM이 실행 중일 때만 파일 브라우저를 이용할 수 있어요"}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+            >
+              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"/>
+              </svg>
+              파일
+            </button>
+            <button
+              onClick={() => router.push(`/instances/${id}/docker`)}
+              disabled={!isRunning}
+              title={isRunning ? undefined : "VM이 실행 중일 때만 Docker 관리를 이용할 수 있어요"}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+            >
+              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2"/><line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+              Docker
+            </button>
+          </div>
+
+          <div className="w-px h-5 bg-gray-200 shrink-0 hidden lg:block" />
+
+          {/* 그룹 3: 관리 (넓은 화면) */}
+          <div className="hidden lg:flex items-center h-10 shrink-0">
+            <button
+              onClick={() => router.push(`/instances/${id}/deployments`)}
+              disabled={!isRunning}
+              title={isRunning ? undefined : "VM이 실행 중일 때만 배포를 이용할 수 있어요"}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+            >
+              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              배포
+            </button>
+            <button
+              onClick={() => router.push(`/instances/${id}/backups`)}
+              disabled={!isRunning}
+              title={isRunning ? undefined : "VM이 실행 중일 때만 DB 백업을 이용할 수 있어요"}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+            >
+              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+              </svg>
+              백업
+            </button>
+            <button
+              onClick={() => router.push(`/instances/${id}/metrics`)}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/>
+              </svg>
+              성능
+            </button>
+            <button
+              onClick={() => setShowUpgradeModal(true)}
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              스펙 변경
+            </button>
+          </div>
+
+          {/* 그룹 3 축약: 좁은 화면에서는 "더보기" 드롭다운으로 대체 */}
+          <div className="lg:hidden flex items-center h-10 shrink-0">
+            <div className="w-px h-5 bg-gray-200 shrink-0" />
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                onClick={() => setShowMoreMenu((v) => !v)}
+                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 transition-colors ${
+                  showMoreMenu ? "bg-gray-100" : ""
+                }`}
+              >
+                더보기
+                <svg className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${showMoreMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showMoreMenu && (
+                <div className="absolute right-0 mt-1 min-w-[160px] bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
+                  <button
+                    onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/deployments`); }}
+                    disabled={!isRunning}
+                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                  >
+                    배포
+                  </button>
+                  <button
+                    onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/backups`); }}
+                    disabled={!isRunning}
+                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                  >
+                    백업
+                  </button>
+                  <button
+                    onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/metrics`); }}
+                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                  >
+                    성능
+                  </button>
+                  <button
+                    onClick={() => { setShowMoreMenu(false); setShowUpgradeModal(true); }}
+                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                  >
+                    스펙 변경
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-3" />
+
+          <div className="w-px h-5 bg-gray-200 shrink-0" />
+
+          {/* 그룹 4: 삭제 */}
           <button
             onClick={() => setConfirmDelete(true)}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-red-200 bg-red-50 text-red-600 rounded-md hover:bg-red-100"
+            className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-red-600 hover:bg-red-50 rounded-r-lg transition-colors shrink-0"
           >
-            <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+            <svg className="w-[15px] h-[15px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
               <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
             </svg>
             삭제
