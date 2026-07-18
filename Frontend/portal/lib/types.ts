@@ -236,3 +236,126 @@ export interface FileContentResponse {
   path: string;
   content: string;
 }
+
+// Docker 관리 — Ops가 `docker ps/images/network/compose ls --format json` 결과를 그대로 파싱해
+// 응답하므로, 필드명이 camelCase가 아니라 docker CLI의 원본 JSON 키(PascalCase)와 동일함.
+export interface ContainerInfo {
+  ID: string;
+  Image: string;
+  Names: string;
+  Command: string;
+  Status: string;
+  State: string;
+  Ports: string;
+  CreatedAt: string;
+}
+
+export interface ImageInfo {
+  ID: string;
+  Repository: string;
+  Tag: string;
+  Size: string;
+  CreatedAt: string;
+}
+
+export interface NetworkInfo {
+  ID: string;
+  Name: string;
+  Driver: string;
+  Scope: string;
+}
+
+export interface ComposeStackInfo {
+  Name: string;
+  Status: string;
+  ConfigFiles: string;
+}
+
+export interface DockerStatusResponse {
+  installed: boolean;
+}
+
+// 배포 파이프라인 (D-2 Raw Compose / D-1·D-3 DeploymentSpec 공용)
+export interface DeploymentResponse {
+  id: string;
+  vmId: string;
+  status: string;
+  sourceType: "TEMPLATE_SPEC" | "AI_SPEC" | "RAW_COMPOSE";
+  sourceRevision: string | null;
+  releaseDir: string | null;
+  previousDeploymentId: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deployedAt: string | null;
+}
+
+export interface EnvironmentFile {
+  vmPath: string;
+  content: string;
+}
+
+export interface ExposedRoute {
+  serviceName: string;
+  port: number;
+  protocol: string;
+  visibility: string;
+  nickname: string;
+}
+
+export interface HealthCheck {
+  serviceName: string;
+  path: string;
+  hostPort?: number;
+  containerPort?: number;
+}
+
+export interface ServiceCard {
+  name: string;
+  runtime: string;
+  context: string;
+  containerPort: number;
+  javaVersion?: number;
+  buildTool?: string;
+  nodeVersion?: number;
+  buildCommand?: string;
+  startCommand?: string;
+  pythonVersion?: string;
+  pythonFramework?: string;
+  expose: boolean;
+}
+
+export interface InfraSelection {
+  type: string;
+  version?: string;
+}
+
+// services/infrastructure는 D-1/D-3 렌더러 전용 세부 스키마라 프론트에서는 구조화하지 않고
+// 생성된 JSON을 그대로 보여주고 편집 후 그대로 되돌려보내는 용도로만 사용함
+export interface DeploymentSpec {
+  schemaVersion: string;
+  services: unknown[];
+  infrastructure?: unknown[];
+  network: string;
+}
+
+export interface DeploymentEventPayload {
+  sequence: number;
+  eventType: "STAGE_CHANGE" | "BUILD_LOG" | "ERROR" | "DONE";
+  message: string;
+  payload: string | null;
+  createdAt: string;
+}
+
+// 11절 수동 DB 백업 — 덤프 파일은 VM 파일시스템에 저장되고 다운로드는 파일 브라우저 API를 재사용함
+export interface DbBackupResponse {
+  id: string;
+  vmId: string;
+  serviceName: string;
+  dbType: string;
+  filePath: string | null;
+  fileSizeBytes: number | null;
+  succeeded: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+}

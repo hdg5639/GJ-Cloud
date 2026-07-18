@@ -22,6 +22,20 @@ import type {
   MemberRole,
   FileListResponse,
   FileContentResponse,
+  ContainerInfo,
+  ImageInfo,
+  NetworkInfo,
+  ComposeStackInfo,
+  DockerStatusResponse,
+  DeploymentResponse,
+  DeploymentSpec,
+  EnvironmentFile,
+  ExposedRoute,
+  HealthCheck,
+  ServiceCard,
+  InfraSelection,
+  DeploymentEventPayload,
+  DbBackupResponse,
 } from "./types";
 
 const API_BASE = {
@@ -422,6 +436,208 @@ export const api = {
       );
       if (!res.ok) throw new Error("파일 다운로드에 실패했습니다");
       return res.blob();
+    },
+    docker: {
+      status: (accessToken: string, vmId: string) =>
+        request<DockerStatusResponse>("ops", `/ops/${vmId}/docker/status`, { accessToken }),
+      install: (accessToken: string, vmId: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/install`, { method: "POST", accessToken }),
+      listContainers: (accessToken: string, vmId: string) =>
+        request<ContainerInfo[]>("ops", `/ops/${vmId}/docker/containers`, { accessToken }),
+      containerLogs: (accessToken: string, vmId: string, containerId: string, tail = 200) =>
+        request<{ logs: string }>(
+          "ops",
+          `/ops/${vmId}/docker/containers/${containerId}/logs?tail=${tail}`,
+          { accessToken }
+        ),
+      startContainer: (accessToken: string, vmId: string, containerId: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/containers/${containerId}/start`, {
+          method: "POST",
+          accessToken,
+        }),
+      stopContainer: (accessToken: string, vmId: string, containerId: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/containers/${containerId}/stop`, {
+          method: "POST",
+          accessToken,
+        }),
+      restartContainer: (accessToken: string, vmId: string, containerId: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/containers/${containerId}/restart`, {
+          method: "POST",
+          accessToken,
+        }),
+      removeContainer: (accessToken: string, vmId: string, containerId: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/containers/${containerId}`, {
+          method: "DELETE",
+          accessToken,
+        }),
+      listImages: (accessToken: string, vmId: string) =>
+        request<ImageInfo[]>("ops", `/ops/${vmId}/docker/images`, { accessToken }),
+      removeImage: (accessToken: string, vmId: string, imageId: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/images/${imageId}`, {
+          method: "DELETE",
+          accessToken,
+        }),
+      listNetworks: (accessToken: string, vmId: string) =>
+        request<NetworkInfo[]>("ops", `/ops/${vmId}/docker/networks`, { accessToken }),
+      createNetwork: (accessToken: string, vmId: string, name: string, driver?: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/networks`, {
+          method: "POST",
+          body: JSON.stringify({ name, driver }),
+          accessToken,
+        }),
+      removeNetwork: (accessToken: string, vmId: string, networkId: string) =>
+        request<void>("ops", `/ops/${vmId}/docker/networks/${networkId}`, {
+          method: "DELETE",
+          accessToken,
+        }),
+      listComposeStacks: (accessToken: string, vmId: string) =>
+        request<ComposeStackInfo[]>("ops", `/ops/${vmId}/docker/compose`, { accessToken }),
+    },
+    deployments: {
+      list: (accessToken: string, vmId: string) =>
+        request<DeploymentResponse[]>("ops", `/ops/${vmId}/deployments`, { accessToken }),
+      get: (accessToken: string, vmId: string, deploymentId: string) =>
+        request<DeploymentResponse>("ops", `/ops/${vmId}/deployments/${deploymentId}`, { accessToken }),
+      create: (
+        accessToken: string,
+        vmId: string,
+        body: {
+          repoUrl: string;
+          branch: string;
+          patToken?: string;
+          composeContent: string;
+          environmentFiles?: EnvironmentFile[];
+          exposedRoutes?: ExposedRoute[];
+          healthChecks?: HealthCheck[];
+        }
+      ) =>
+        request<DeploymentResponse>("ops", `/ops/${vmId}/deployments`, {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      createFromSpec: (
+        accessToken: string,
+        vmId: string,
+        body: { repoUrl: string; branch: string; patToken?: string; spec: DeploymentSpec }
+      ) =>
+        request<DeploymentResponse>("ops", `/ops/${vmId}/deployments/from-spec`, {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      generateSpec: (
+        accessToken: string,
+        vmId: string,
+        body: { services: ServiceCard[]; infrastructure?: InfraSelection[] }
+      ) =>
+        request<DeploymentSpec>("ops", `/ops/${vmId}/deployments/ai-spec/generate`, {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      reviewSpec: (accessToken: string, vmId: string, spec: DeploymentSpec) =>
+        request<string[]>("ops", `/ops/${vmId}/deployments/ai-spec/review`, {
+          method: "POST",
+          body: JSON.stringify(spec),
+          accessToken,
+        }),
+      // SSE는 EventSource로 커스텀 Authorization 헤더를 못 붙여서(백엔드도 알고 있는 기존 갭),
+      // fetch 스트리밍으로 직접 SSE 프레임을 파싱함. afterSequence로 끊겼을 때 이어받기도 직접 구현.
+      streamEvents: (
+        accessToken: string,
+        vmId: string,
+        deploymentId: string,
+        onEvent: (event: DeploymentEventPayload) => void,
+        onError?: (err: Error) => void
+      ): (() => void) => {
+        let stopped = false;
+        let lastSequence = 0;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
+        let abortController: AbortController | null = null;
+
+        async function connect() {
+          if (stopped) return;
+          abortController = new AbortController();
+          try {
+            const token = await getExchangedToken(accessToken, "ops-service");
+            const res = await fetch(
+              `${API_BASE.ops}/ops/${vmId}/deployments/${deploymentId}/events?afterSequence=${lastSequence}`,
+              {
+                headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
+                credentials: "include",
+                signal: abortController.signal,
+              }
+            );
+            if (!res.ok || !res.body) throw new Error("배포 이벤트 스트림 연결에 실패했습니다");
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            while (!stopped) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+
+              let boundary: number;
+              while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+                const rawEvent = buffer.slice(0, boundary);
+                buffer = buffer.slice(boundary + 2);
+
+                const dataLines = rawEvent
+                  .split("\n")
+                  .filter((line) => line.startsWith("data:"))
+                  .map((line) => line.slice(5).trimStart());
+                if (dataLines.length === 0) continue;
+
+                try {
+                  const payload: DeploymentEventPayload = JSON.parse(dataLines.join("\n"));
+                  lastSequence = payload.sequence;
+                  onEvent(payload);
+                  if (payload.eventType === "DONE") {
+                    stopped = true;
+                    return;
+                  }
+                } catch {
+                  // 파싱 불가능한 프레임은 무시
+                }
+              }
+            }
+
+            // 스트림이 끝났는데 아직 DONE을 못 받았으면(재시작 등) 잠시 후 afterSequence로 재연결
+            if (!stopped) {
+              retryTimer = setTimeout(connect, 3000);
+            }
+          } catch (err) {
+            if (stopped) return;
+            onError?.(err instanceof Error ? err : new Error("배포 이벤트 스트림 오류"));
+            retryTimer = setTimeout(connect, 3000);
+          }
+        }
+
+        connect();
+
+        return () => {
+          stopped = true;
+          if (retryTimer) clearTimeout(retryTimer);
+          abortController?.abort();
+        };
+      },
+    },
+    backups: {
+      list: (accessToken: string, vmId: string) =>
+        request<DbBackupResponse[]>("ops", `/ops/${vmId}/backups`, { accessToken }),
+      trigger: (
+        accessToken: string,
+        vmId: string,
+        body: { serviceName: string; dbType: string; database: string; username?: string; password?: string }
+      ) =>
+        request<DbBackupResponse>("ops", `/ops/${vmId}/backups`, {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
     },
   },
   admin: {
