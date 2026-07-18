@@ -59,16 +59,18 @@ public class VmAccessService {
                 });
     }
 
-    // 셸 접근(TERMINAL_ACCESS)은 Docker 제어와 마찬가지로 VM root 권한과 동급이므로 Owner/Admin만 허용, Member는 조회(FILE_READ)만
+    // 셸 접근(TERMINAL_ACCESS)·Docker 제어(DOCKER_ADMIN)는 VM root 권한과 동급이므로 Owner/Admin만 허용.
+    // Member는 조회(FILE_READ, DOCKER_READ)만 — Docker 컨테이너/이미지 목록은 볼 수 있지만 시작/정지/삭제는 불가 (C.5)
     private Set<VmPermission> permissionsFor(MemberRole role) {
         if (role == MemberRole.MEMBER) {
-            return EnumSet.of(VmPermission.FILE_READ);
+            return EnumSet.of(VmPermission.FILE_READ, VmPermission.DOCKER_READ);
         }
         return EnumSet.of(
                 VmPermission.TERMINAL_ACCESS,
                 VmPermission.FILE_READ,
                 VmPermission.FILE_WRITE,
                 VmPermission.DEPLOY,
+                VmPermission.DOCKER_READ,
                 VmPermission.DOCKER_ADMIN
         );
     }
