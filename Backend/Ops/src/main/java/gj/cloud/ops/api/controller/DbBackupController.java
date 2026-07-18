@@ -19,7 +19,7 @@ import java.util.UUID;
 // 11절 수동 DB 백업 — 덤프 파일은 VM 파일시스템(backups/)에 저장되며, 다운로드는 기존 파일 브라우저를 그대로 사용
 @Tag(name = "DbBackup", description = "수동 DB 백업")
 @RestController
-@RequestMapping("/api/ops/{vmId}/backups")
+@RequestMapping("/ops/{vmId}/backups")
 @RequiredArgsConstructor
 public class DbBackupController {
 

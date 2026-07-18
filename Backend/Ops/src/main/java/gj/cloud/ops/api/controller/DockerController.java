@@ -23,7 +23,7 @@ import java.util.UUID;
 // C절 Docker 관리 UI — 조회는 DOCKER_READ, 제어(시작/정지/삭제/설치/네트워크 생성)는 DOCKER_ADMIN 권한 필요 (C.5)
 @Tag(name = "Docker", description = "VM 내부 Docker 컨테이너/이미지/네트워크 관리")
 @RestController
-@RequestMapping("/api/ops/{vmId}/docker")
+@RequestMapping("/ops/{vmId}/docker")
 @RequiredArgsConstructor
 public class DockerController {
 

@@ -27,7 +27,7 @@ import java.util.UUID;
 // 일반 JWT(aud=ops-service) 기반 REST API — 콘솔과 달리 티켓이 필요 없음 (WebSocket이 아닌 일반 HTTP 요청)
 @Tag(name = "FileBrowser", description = "VM 내부 파일 브라우저 (SFTP)")
 @RestController
-@RequestMapping("/api/ops/{vmId}/files")
+@RequestMapping("/ops/{vmId}/files")
 @RequiredArgsConstructor
 public class FileBrowserController {
 

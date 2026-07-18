@@ -36,7 +36,7 @@ import java.util.UUID;
 
 @Tag(name = "Deployment", description = "D-2 사용자 지정 배포 파이프라인")
 @RestController
-@RequestMapping("/api/ops/{vmId}/deployments")
+@RequestMapping("/ops/{vmId}/deployments")
 @RequiredArgsConstructor
 public class DeploymentController {
 

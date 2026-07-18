@@ -361,7 +361,7 @@ export const api = {
   },
   ops: {
     issueTerminalTicket: (accessToken: string, vmId: string) =>
-      request<{ ticket: string }>("ops", `/api/ops/${vmId}/terminal-ticket`, {
+      request<{ ticket: string }>("ops", `/ops/${vmId}/terminal-ticket`, {
         method: "POST",
         accessToken,
       }),

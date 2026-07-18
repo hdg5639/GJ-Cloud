@@ -4,7 +4,7 @@ import gj.cloud.ops.domain.backup.entity.DbBackupEntity;
 
 import java.time.LocalDateTime;
 
-// filePath는 VM 파일시스템 절대경로 — 파일 브라우저(/api/ops/{vmId}/files/download?path=...)로 그대로 다운로드 가능
+// filePath는 VM 파일시스템 절대경로 — 파일 브라우저(/ops/{vmId}/files/download?path=...)로 그대로 다운로드 가능
 public record DbBackupResponse(
         String id,
         String vmId,
