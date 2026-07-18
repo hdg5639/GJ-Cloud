@@ -1,0 +1,22 @@
+name: Deploy Ops to ops-01
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'Backend/Ops/**'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest code in production directory
+        run: |
+          cd ~/GJ-Cloud
+          git fetch origin develop
+          git reset --hard origin/develop
+
+      - name: Build and deploy
+        run: |
+          docker compose down ops --rmi local
+          docker compose up ops -d --build
