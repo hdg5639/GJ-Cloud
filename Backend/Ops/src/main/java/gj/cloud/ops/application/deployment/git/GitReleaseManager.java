@@ -114,8 +114,10 @@ public class GitReleaseManager {
         }
     }
 
+    // OPS-SEC-003: SAFE_BRANCH_NAME은 셸 메타문자는 막지만 '-'가 허용 문자 집합에 포함돼 있어 선행 위치 검사가 없으면
+    // "-oProxyCommand=..." 같은 git/ssh 옵션 인젝션 브랜치명이 그대로 통과함 — 첫 글자가 '-'인 경우 별도로 차단
     private void validateBranch(String branch) {
-        if (branch == null || !SAFE_BRANCH_NAME.matcher(branch).matches()) {
+        if (branch == null || !SAFE_BRANCH_NAME.matcher(branch).matches() || branch.startsWith("-")) {
             throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
         }
     }

@@ -29,15 +29,13 @@ public class InternalJwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token)) {
             try {
                 JWTClaimsSet claims = internalJwtValidator.validate(token);
-                String userId = claims.getSubject();
-                String email = (String) claims.getClaim("email");
-                String role = (String) claims.getClaim("role");
+                String clientId = claims.getSubject();
 
-                OpsPrincipal principal = new OpsPrincipal(userId, email);
+                OpsPrincipal principal = new OpsPrincipal(clientId, null);
                 var auth = new UsernamePasswordAuthenticationToken(
                         principal,
                         null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                        List.of(new SimpleGrantedAuthority("ROLE_SERVICE"))
                 );
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (OpsException ignored) {

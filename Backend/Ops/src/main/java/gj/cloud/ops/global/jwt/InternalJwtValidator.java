@@ -16,12 +16,18 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
 import java.util.List;
 
-// /internal/** 전용 — VM 서비스가 (aud=vm-service 토큰으로) 관리 키 발급/폐기를 요청할 때 검증
+// /internal/** 전용 — VM 서비스가 관리 키 발급/폐기를 요청할 때 검증.
+// OPS-SEC-002: 예전에는 aud=vm-service(사용자가 자기 토큰을 재교환해 자가 발급 가능)만 확인해서,
+// 임의의 로그인 사용자가 /auth/token/exchange로 vm-service 토큰을 스스로 발급받아 이 내부 API를 직접
+// 호출할 수 있었음(권한 상승). 지금은 Auth의 client-credentials(/auth/token/service)로 VM 서비스만
+// 발급받을 수 있는 aud=ops-service + token_type=service + client_id=vm-service 토큰만 인정함.
 @Component
 @RequiredArgsConstructor
 public class InternalJwtValidator {
 
-    private static final String EXPECTED_AUDIENCE = "vm-service";
+    private static final String EXPECTED_AUDIENCE = "ops-service";
+    private static final String EXPECTED_TOKEN_TYPE = "service";
+    private static final String EXPECTED_CLIENT_ID = "vm-service";
 
     private final AuthProperties authProperties;
     private final RestClient restClient = RestClient.create();
@@ -47,6 +53,16 @@ public class InternalJwtValidator {
             List<String> audience = claims.getAudience();
             if (audience == null || !audience.contains(EXPECTED_AUDIENCE)) {
                 throw new OpsException(OpsErrorCode.INVALID_AUDIENCE);
+            }
+
+            String tokenType = claims.getStringClaim("token_type");
+            if (!EXPECTED_TOKEN_TYPE.equals(tokenType)) {
+                throw new OpsException(OpsErrorCode.INVALID_TOKEN);
+            }
+
+            String clientId = claims.getStringClaim("client_id");
+            if (!EXPECTED_CLIENT_ID.equals(clientId)) {
+                throw new OpsException(OpsErrorCode.INVALID_TOKEN);
             }
 
             return claims;

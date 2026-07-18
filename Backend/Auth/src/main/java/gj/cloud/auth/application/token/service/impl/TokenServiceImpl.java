@@ -3,6 +3,7 @@ package gj.cloud.auth.application.token.service.impl;
 import com.nimbusds.jwt.JWTClaimsSet;
 import gj.cloud.auth.application.auth.dto.TokenExchangeRequest;
 import gj.cloud.auth.application.token.dto.RefreshResult;
+import gj.cloud.auth.application.token.dto.ServiceTokenRequest;
 import gj.cloud.auth.application.token.dto.TokenResponse;
 import gj.cloud.auth.application.token.service.TokenService;
 import gj.cloud.auth.domain.token.enums.ServiceAudience;
@@ -13,10 +14,13 @@ import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import gj.cloud.auth.global.jwt.JwtProperties;
 import gj.cloud.auth.global.jwt.JwtProvider;
+import gj.cloud.auth.global.jwt.ServiceClientProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -32,6 +36,7 @@ public class TokenServiceImpl implements TokenService {
 
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
+    private final ServiceClientProperties serviceClientProperties;
     private final StringRedisTemplate redisTemplate;
     private final UserRepository userRepository;
 
@@ -132,6 +137,23 @@ public class TokenServiceImpl implements TokenService {
         String newToken = jwtProvider.issueAccessToken(userId, email, role, targetAudience.getValue());
         redisTemplate.opsForValue().set(cacheKey, newToken, jwtProperties.getExchangeTokenExpiry(), TimeUnit.MILLISECONDS);
         return new TokenResponse(newToken, "Bearer", jwtProperties.getExchangeTokenExpiry() / 1000);
+    }
+
+    // OPS-SEC-002: client_id/client_secret으로 서비스 자신의 신원을 증명하는 client-credentials 발급.
+    // audience/scope는 요청자가 지정할 수 없고 등록된 클라이언트 설정에서만 결정됨(자기 audience/scope 확대 불가).
+    // 시크릿 비교는 타이밍 공격을 막기 위해 MessageDigest.isEqual(상수 시간 비교)을 사용.
+    @Override
+    public TokenResponse issueServiceToken(ServiceTokenRequest request) {
+        ServiceClientProperties.ServiceClient config = serviceClientProperties.getClients().get(request.clientId());
+        if (config == null || config.getSecret() == null || config.getSecret().isBlank()
+                || !MessageDigest.isEqual(
+                        request.clientSecret().getBytes(StandardCharsets.UTF_8),
+                        config.getSecret().getBytes(StandardCharsets.UTF_8))) {
+            throw new AuthException(AuthErrorCode.INVALID_SERVICE_CLIENT);
+        }
+
+        String token = jwtProvider.issueServiceToken(request.clientId(), config.getAudience(), config.getScope());
+        return new TokenResponse(token, "Bearer", jwtProperties.getServiceTokenExpiry() / 1000);
     }
 
     @Override

@@ -29,6 +29,9 @@ public class ComposeImageBuilder {
     // 컴포즈 YAML은 사용자가 제출한 값이므로, docker build 커맨드 문자열에 그대로 꽂아 넣기 전에
     // 셸 메타문자·따옴표·경로 탈출(..)을 반드시 걸러냄 (명령 인젝션/디렉토리 탈출 방지)
     private static final Pattern UNSAFE_PATH_SEGMENT = Pattern.compile("[;&`|$'\"\\\\]|\\.\\.");
+    // OPS-SEC-003: serviceName은 ComposeValidator에서 이미 검증되지만, 이 클래스가 그 검증에 의존하지 않고
+    // 자체적으로도 확인함 — 여기서 바로 docker build -t 셸 문자열에 꽂히기 때문
+    private static final Pattern SAFE_SERVICE_NAME = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,62}$");
 
     // 로그 전체를 한 번에 담기엔 이벤트 payload가 너무 커질 수 있어 마지막 일부만 발행 (D.8 "로그 펼치기" 데이터 소스)
     private static final int BUILD_LOG_TAIL_CHARS = 4000;
@@ -48,6 +51,9 @@ public class ComposeImageBuilder {
 
         for (Map.Entry<?, ?> entry : services.entrySet()) {
             String serviceName = String.valueOf(entry.getKey());
+            if (!SAFE_SERVICE_NAME.matcher(serviceName).matches()) {
+                throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+            }
             if (!(entry.getValue() instanceof Map<?, ?> serviceDefRaw)) {
                 continue;
             }

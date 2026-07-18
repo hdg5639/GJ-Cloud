@@ -76,12 +76,9 @@ public class VmController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public Mono<Void> deleteVm(
             @AuthenticationPrincipal VmPrincipal principal,
-            ServerWebExchange exchange,
             @PathVariable UUID vmId
     ) {
-        String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
-        String token = authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
-        return vmService.deleteVm(principal.userId(), vmId, token);
+        return vmService.deleteVm(principal.userId(), vmId);
     }
 
     @Operation(summary = "VM 전원 제어", description = "START(시작) · STOP(정지) · SUSPEND(일시정지) · REBOOT(재시작)")

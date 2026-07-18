@@ -18,6 +18,9 @@ import java.util.regex.Pattern;
 public class ComposeValidator {
 
     private static final Pattern DANGEROUS_CHARS = Pattern.compile("[;&`|]|\\$\\(");
+    // OPS-SEC-003: 서비스명은 이후 ComposeImageBuilder에서 `docker build -t '<tag>'` 셸 문자열에 그대로 들어가므로
+    // DANGEROUS_CHARS 블랙리스트(', ", \ 누락)가 아니라 허용목록으로 검증해야 함
+    private static final Pattern SAFE_SERVICE_NAME = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,62}$");
     private static final String DOCKER_SOCK_PATH = "/var/run/docker.sock";
     private static final Set<Integer> SENSITIVE_DB_PORTS = Set.of(5432, 3306, 6379, 27017);
 
@@ -47,8 +50,9 @@ public class ComposeValidator {
         Set<Integer> seenHostPorts = new HashSet<>();
         for (Map.Entry<?, ?> entry : services.entrySet()) {
             String serviceName = String.valueOf(entry.getKey());
-            if (DANGEROUS_CHARS.matcher(serviceName).find()) {
-                errors.add(new ValidationError("서비스명에 허용되지 않는 문자가 포함되어 있습니다: " + serviceName));
+            if (!SAFE_SERVICE_NAME.matcher(serviceName).matches()) {
+                errors.add(new ValidationError(
+                        "서비스명은 소문자/숫자로 시작하고 소문자, 숫자, '_', '-'만 포함할 수 있습니다: " + serviceName));
             }
             if (!(entry.getValue() instanceof Map<?, ?> serviceDef)) {
                 continue;

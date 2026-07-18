@@ -34,6 +34,14 @@ jwt:
   access-token-expiry: 900000
   refresh-token-expiry: 604800000
   exchange-token-expiry: 900000
+  service-token-expiry: 300000
+
+auth:
+  service-clients:
+    vm-service:
+      secret: ${VM_SERVICE_CLIENT_SECRET}
+      audience: ops-service
+      scope: internal:management-key
 
 app:
   email-verification:

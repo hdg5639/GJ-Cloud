@@ -12,4 +12,6 @@ import org.springframework.stereotype.Component;
 public class AuthProperties {
     private String serverUrl;
     private long jwksCacheTtl;
+    private String serviceClientId;
+    private String serviceClientSecret;
 }

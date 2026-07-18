@@ -4,6 +4,7 @@ import gj.cloud.auth.api.controller.spec.TokenApi;
 import gj.cloud.auth.application.auth.dto.LoginResponse;
 import gj.cloud.auth.application.auth.dto.TokenExchangeRequest;
 import gj.cloud.auth.application.token.dto.RefreshResult;
+import gj.cloud.auth.application.token.dto.ServiceTokenRequest;
 import gj.cloud.auth.application.token.dto.TokenResponse;
 import gj.cloud.auth.application.token.service.TokenService;
 import gj.cloud.auth.global.exception.AuthException;
@@ -38,6 +39,11 @@ public class TokenController implements TokenApi {
         String authHeader = httpRequest.getHeader("Authorization");
         String token = authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
         return ApiResponse.ok(tokenService.exchange(token, request));
+    }
+
+    @Override
+    public ApiResponse<TokenResponse> issueServiceToken(ServiceTokenRequest request) {
+        return ApiResponse.ok(tokenService.issueServiceToken(request));
     }
 
     @Override

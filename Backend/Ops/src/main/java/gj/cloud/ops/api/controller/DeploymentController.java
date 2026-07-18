@@ -126,7 +126,8 @@ public class DeploymentController {
 
     @Operation(summary = "배포 이력 조회")
     @GetMapping
-    public ApiResponse<List<DeploymentResponse>> list(@PathVariable UUID vmId) {
+    public ApiResponse<List<DeploymentResponse>> list(HttpServletRequest request, @PathVariable UUID vmId) {
+        requireDeployPermission(request, vmId);
         List<DeploymentResponse> responses = deploymentRepository.findAllByVmIdOrderByCreatedAtDesc(vmId.toString())
                 .stream()
                 .map(DeploymentResponse::from)
@@ -136,20 +137,38 @@ public class DeploymentController {
 
     @Operation(summary = "배포 현재 상태 조회", description = "SSE 연결 전 초기 상태 확인용 REST 엔드포인트")
     @GetMapping("/{deploymentId}")
-    public ApiResponse<DeploymentResponse> get(@PathVariable UUID vmId, @PathVariable String deploymentId) {
+    public ApiResponse<DeploymentResponse> get(
+            HttpServletRequest request, @PathVariable UUID vmId, @PathVariable String deploymentId
+    ) {
+        requireDeployPermission(request, vmId);
         DeploymentEntity entity = findOwned(vmId, deploymentId);
         return ApiResponse.ok(DeploymentResponse.from(entity));
     }
 
-    @Operation(summary = "배포 진행 상황 SSE 스트림", description = "afterSequence로 재연결 시 누락된 이벤트부터 재생합니다. EventSource는 Authorization 헤더를 못 붙이므로 ?token= 쿼리 파라미터 사용")
+    // 주의: EventSource는 커스텀 Authorization 헤더를 못 붙이지만, 이 엔드포인트는 아직 ?token= 같은
+    // 쿼리 파라미터 인증 경로가 없음 — 배포 SSE 프론트엔드를 실제로 붙일 때 별도로 해결해야 하는
+    // 기존 갭이며, 이번 IDOR 수정 범위에는 포함하지 않음(다른 3개 엔드포인트와 동일하게 Authorization 헤더로만 검증).
+    @Operation(summary = "배포 진행 상황 SSE 스트림", description = "afterSequence로 재연결 시 누락된 이벤트부터 재생합니다.")
     @GetMapping("/{deploymentId}/events")
     public SseEmitter events(
+            HttpServletRequest request,
             @PathVariable UUID vmId,
             @PathVariable String deploymentId,
             @RequestParam(defaultValue = "0") long afterSequence
     ) {
+        requireDeployPermission(request, vmId);
         findOwned(vmId, deploymentId);
         return eventPublisher.subscribe(deploymentId, afterSequence);
+    }
+
+    // OPS-SEC-001: list/get/events는 기존에 vmId 소유 여부만 확인하고 VM 권한 조회를 하지 않아
+    // 다른 VM의 deploymentId를 알아내면 조회 가능한 IDOR였음 — 다른 엔드포인트와 동일하게 DEPLOY 권한을 요구하도록 통일
+    private void requireDeployPermission(HttpServletRequest request, UUID vmId) {
+        String bearerToken = extractToken(request);
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId.toString());
+        if (!context.hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
     }
 
     private DeploymentEntity findOwned(UUID vmId, String deploymentId) {

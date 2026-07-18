@@ -54,4 +54,14 @@ public class VmManagementKeyEntity {
     public VmManagementKeyEntity withStatus(KeyStatus status) {
         return this.toBuilder().status(status).updatedAt(LocalDateTime.now()).build();
     }
+
+    // OPS-SEC-004: REVOKE_PENDING/REVOKED/ORPHANED 상태의 키는 재사용하지 않고 새 키쌍으로 교체할 때 사용 (재프로비저닝 대응)
+    public VmManagementKeyEntity withRotatedKey(String publicKey, String encryptedPrivateKey) {
+        return this.toBuilder()
+                .publicKey(publicKey)
+                .encryptedPrivateKey(encryptedPrivateKey)
+                .status(KeyStatus.ACTIVE)
+                .updatedAt(LocalDateTime.now())
+                .build();
+    }
 }

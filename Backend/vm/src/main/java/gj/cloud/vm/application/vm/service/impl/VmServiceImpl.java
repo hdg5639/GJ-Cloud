@@ -91,7 +91,7 @@ public class VmServiceImpl implements VmService {
                 .flatMap(creating ->
                         Mono.zip(
                                 userServiceClient.getSshKey(bearerToken, creating.getSshKeyId()),
-                                opsServiceClient.issueManagementKey(bearerToken, creating.getId()),
+                                opsServiceClient.issueManagementKey(creating.getId()),
                                 allocateVmId(),
                                 allocateIp(creating.getPlanType())
                         )
@@ -194,7 +194,7 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
-    public Mono<Void> deleteVm(String userId, UUID vmId, String bearerToken) {
+    public Mono<Void> deleteVm(String userId, UUID vmId) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .flatMap(vm -> {
@@ -209,7 +209,7 @@ public class VmServiceImpl implements VmService {
                 .flatMap(vm -> updateStatus(vm, VmStatus.DELETING))
                 .flatMap(vm -> {
                     // Ops 관리 키 폐기는 강결합 금지: 실패해도 VM 삭제는 계속 진행 (best-effort)
-                    Mono<Void> opsKeyRevoke = opsServiceClient.revokeManagementKey(bearerToken, vm.getId());
+                    Mono<Void> opsKeyRevoke = opsServiceClient.revokeManagementKey(vm.getId());
                     Mono<Void> cloudflareTeardown = teardownCloudflare(vm);
                     if (vm.getVmid() == null) {
                         return opsKeyRevoke.then(cloudflareTeardown)

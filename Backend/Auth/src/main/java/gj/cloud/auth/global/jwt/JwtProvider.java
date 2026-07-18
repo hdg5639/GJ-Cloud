@@ -73,6 +73,33 @@ public class JwtProvider {
         }
     }
 
+    // OPS-SEC-002: 사용자 토큰(sub=userId, email/role 클레임)과 구분되는 서비스 신원 토큰.
+    // token_type=service + client_id 클레임으로 수신측(Ops)이 "진짜 서비스가 발급받은 토큰"인지
+    // "사용자가 자기 토큰을 재교환한 것"인지 구분할 수 있게 함.
+    public String issueServiceToken(String clientId, String audience, String scope) {
+        try {
+            Instant now = Instant.now();
+            JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                    .subject(clientId)
+                    .audience(audience)
+                    .issueTime(Date.from(now))
+                    .expirationTime(Date.from(now.plusMillis(jwtProperties.getServiceTokenExpiry())))
+                    .claim("client_id", clientId)
+                    .claim("token_type", "service")
+                    .claim("scope", scope)
+                    .build();
+
+            SignedJWT signedJWT = new SignedJWT(
+                    new JWSHeader.Builder(JWSAlgorithm.RS256).build(),
+                    claims
+            );
+            signedJWT.sign(new RSASSASigner(privateKey));
+            return signedJWT.serialize();
+        } catch (JOSEException e) {
+            throw new RuntimeException("JWT signing failed", e);
+        }
+    }
+
     public JWTClaimsSet validateAndParseClaims(String token) {
         try {
             SignedJWT signedJWT = SignedJWT.parse(token);

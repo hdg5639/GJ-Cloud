@@ -3,6 +3,7 @@ package gj.cloud.ops.application.filebrowser;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SftpATTRS;
 import com.jcraft.jsch.SftpException;
 import gj.cloud.ops.application.filebrowser.dto.FileStreamTicketPayload;
 import gj.cloud.ops.global.exception.OpsException;
@@ -33,7 +34,7 @@ public class FileStreamService {
 
     private static final int SFTP_CONNECT_TIMEOUT_MS = 10_000;
     private static final int COPY_BUFFER_SIZE = 8192;
-    private static final Pattern RANGE_PATTERN = Pattern.compile("bytes=(\\d*)-(\\d*)");
+    private static final Pattern RANGE_PATTERN = Pattern.compile("^bytes=(\\d*)-(\\d*)$");
 
     private static final Map<String, String> CONTENT_TYPES = Map.ofEntries(
             Map.entry("jpg", "image/jpeg"), Map.entry("jpeg", "image/jpeg"),
@@ -49,42 +50,64 @@ public class FileStreamService {
     );
 
     private final VmSshSessionFactory sshSessionFactory;
+    private final SftpPathResolver pathResolver;
 
     public void stream(FileStreamTicketPayload payload, HttpServletRequest request, HttpServletResponse response)
             throws IOException {
-        long fileSize = payload.size();
-        long start = 0;
-        long end = fileSize - 1;
-        boolean partial = false;
-
-        String rangeHeader = request.getHeader(HttpHeaders.RANGE);
-        if (rangeHeader != null) {
-            Matcher matcher = RANGE_PATTERN.matcher(rangeHeader);
-            if (matcher.matches()) {
-                partial = true;
-                if (!matcher.group(1).isEmpty()) {
-                    start = Long.parseLong(matcher.group(1));
-                }
-                if (!matcher.group(2).isEmpty()) {
-                    end = Long.parseLong(matcher.group(2));
-                }
-                end = Math.min(end, fileSize - 1);
-                if (start < 0 || start > end) {
-                    response.setStatus(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value());
-                    response.setHeader(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize);
-                    return;
-                }
-            }
-        }
-        long length = end - start + 1;
-
         Session session = sshSessionFactory.createSession(payload.vmId(), payload.internalIp());
         ChannelSftp sftp = null;
         try {
             sftp = (ChannelSftp) session.openChannel("sftp");
             sftp.connect(SFTP_CONNECT_TIMEOUT_MS);
-            try (InputStream in = sftp.get(payload.path(), null, start)) {
-                response.setContentType(contentTypeFor(payload.path()));
+
+            // OPS-SEC-005: 발급 시점에 확정해둔 경로/크기를 그대로 신뢰하지 않고, 매 요청마다 realpath로 재해석하고
+            // lstat으로 현재 상태를 다시 확인한다. TTL(10분) 동안 대상이 심볼릭 링크로 교체되거나 다른 파일로
+            // 바뀌었을 가능성을 차단하기 위함 — 대상이 바뀐 것으로 판단되면 티켓을 거부하고 재발급을 요구한다.
+            String realPath;
+            try {
+                realPath = pathResolver.resolveExisting(sftp, payload.path());
+            } catch (OpsException e) {
+                throw new OpsException(OpsErrorCode.INVALID_TICKET);
+            }
+            if (!realPath.equals(payload.path())) {
+                // 발급 시점의 실경로와 지금 다시 해석한 실경로가 다름 — 중간에 심볼릭 링크 등으로 대상이 바뀐 것
+                throw new OpsException(OpsErrorCode.INVALID_TICKET);
+            }
+            SftpATTRS attrs;
+            try {
+                attrs = sftp.lstat(realPath);
+            } catch (SftpException e) {
+                throw new OpsException(OpsErrorCode.FILE_NOT_FOUND);
+            }
+            if (attrs.isDir()) {
+                throw new OpsException(OpsErrorCode.INVALID_PATH);
+            }
+            if (attrs.getSize() != payload.size()) {
+                // 발급 시점 이후 파일 내용이 바뀜(재업로드 등) — 안전하게 재발급을 요구
+                throw new OpsException(OpsErrorCode.INVALID_TICKET);
+            }
+            long fileSize = attrs.getSize();
+
+            long start = 0;
+            long end = fileSize - 1;
+            boolean partial = false;
+
+            String rangeHeader = request.getHeader(HttpHeaders.RANGE);
+            if (rangeHeader != null) {
+                RangeResult range = parseRange(rangeHeader, fileSize);
+                if (range == null) {
+                    response.setStatus(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value());
+                    response.setHeader(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize);
+                    return;
+                }
+                partial = true;
+                start = range.start();
+                end = range.end();
+            }
+            long length = end - start + 1;
+
+            try (InputStream in = sftp.get(realPath, null, start)) {
+                response.setContentType(contentTypeFor(realPath));
                 response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
                 response.setContentLengthLong(length);
                 if (partial) {
@@ -106,6 +129,50 @@ public class FileStreamService {
                 session.disconnect();
             }
         }
+    }
+
+    // OPS-SEC-006: 단일 range(`bytes=start-end`, `bytes=start-`, `bytes=-suffixLength`)만 지원.
+    // 다중 range·빈 range·오버플로/음수·start>=fileSize·end<start·알 수 없는 단위는 전부 null(=416)로 명시 거부 —
+    // 예전에는 다중 range가 조용히 무시되어 파일 전체가 200으로 나가고, `bytes=-N`(끝에서 N바이트)이
+    // `start=0,end=N`(처음 N+1바이트)으로 잘못 해석되는 버그가 있었음.
+    private RangeResult parseRange(String rangeHeader, long fileSize) {
+        if (rangeHeader.contains(",")) {
+            return null;
+        }
+        Matcher matcher = RANGE_PATTERN.matcher(rangeHeader.trim());
+        if (!matcher.matches()) {
+            return null;
+        }
+        String startGroup = matcher.group(1);
+        String endGroup = matcher.group(2);
+        if (startGroup.isEmpty() && endGroup.isEmpty()) {
+            return null;
+        }
+        try {
+            long start;
+            long end;
+            if (startGroup.isEmpty()) {
+                // suffix range: bytes=-N → 파일 끝에서 N바이트
+                long suffixLength = Long.parseLong(endGroup);
+                if (suffixLength <= 0) {
+                    return null;
+                }
+                start = Math.max(0, fileSize - suffixLength);
+                end = fileSize - 1;
+            } else {
+                start = Long.parseLong(startGroup);
+                end = endGroup.isEmpty() ? fileSize - 1 : Math.min(Long.parseLong(endGroup), fileSize - 1);
+            }
+            if (start < 0 || start >= fileSize || start > end) {
+                return null;
+            }
+            return new RangeResult(start, end);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private record RangeResult(long start, long end) {
     }
 
     private void copyExactly(InputStream in, OutputStream out, long length) throws IOException {

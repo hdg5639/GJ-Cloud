@@ -14,6 +14,8 @@ server:
 auth:
   server-url: ${AUTH_SERVER_URL}
   jwks-cache-ttl: 3600000
+  service-client-id: vm-service
+  service-client-secret: ${VM_SERVICE_CLIENT_SECRET}
 
 user:
   service-url: ${USER_SERVICE_URL}

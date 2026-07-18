@@ -45,6 +45,7 @@ public class SecurityConfig {
                                 "/auth/register",
                                 "/auth/login",
                                 "/auth/token/refresh",
+                                "/auth/token/service",
                                 "/auth/email/verify/send",
                                 "/auth/email/verify/confirm",
                                 "/auth/.well-known/jwks.json",
