@@ -54,6 +54,10 @@ public class VmPortEntity implements Persistable<UUID> {
     @Column("created_at")
     private LocalDateTime createdAt;
 
+    // 배포(Ops)가 생성한 포트인지 추적 — null이면 사용자가 수동으로 추가한 포트 (배포 라우트 동기화 대상 아님)
+    @Column("deployment_id")
+    private String deploymentId;
+
     public static VmPortEntity createPublic(UUID vmId, int port, Protocol protocol,
                                             String nickname, String subdomain, String cfDnsRecordId) {
         return VmPortEntity.builder()
@@ -72,5 +76,9 @@ public class VmPortEntity implements Persistable<UUID> {
                 .nickname(nickname).subdomain(subdomain).cfDnsRecordId(cfDnsRecordId)
                 .cfAppId(cfAppId).cfPolicyId(cfPolicyId)
                 .createdAt(LocalDateTime.now()).build();
+    }
+
+    public VmPortEntity withDeploymentId(String deploymentId) {
+        return this.toBuilder().deploymentId(deploymentId).build();
     }
 }

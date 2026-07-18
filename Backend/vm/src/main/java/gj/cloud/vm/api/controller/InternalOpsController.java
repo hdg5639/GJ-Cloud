@@ -1,5 +1,7 @@
 package gj.cloud.vm.api.controller;
 
+import gj.cloud.vm.application.port.dto.DeploymentRoutesSyncRequest;
+import gj.cloud.vm.application.port.service.PortService;
 import gj.cloud.vm.application.vm.dto.VmContextResponse;
 import gj.cloud.vm.application.vm.service.VmAccessService;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
@@ -8,10 +10,13 @@ import gj.cloud.vm.global.exception.enums.VmErrorCode;
 import gj.cloud.vm.global.response.ApiResponse;
 import gj.cloud.vm.global.security.VmPrincipal;
 import io.swagger.v3.oas.annotations.Hidden;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -28,6 +33,7 @@ public class InternalOpsController {
 
     private final VmRepository vmRepository;
     private final VmAccessService vmAccessService;
+    private final PortService portService;
 
     @GetMapping("/vms/{vmId}/context")
     public Mono<ApiResponse<VmContextResponse>> getContext(
@@ -44,5 +50,17 @@ public class InternalOpsController {
                             .map(access -> VmContextResponse.from(vm, access));
                 })
                 .map(ApiResponse::ok);
+    }
+
+    // 1.5절 규칙1 — 배포마다 포트를 누적 추가하는 게 아니라, 현재 배포가 원하는 route 집합으로 동기화(PUT)
+    @PutMapping("/vms/{vmId}/deployment-routes")
+    public Mono<ApiResponse<Void>> syncDeploymentRoutes(
+            @PathVariable UUID vmId,
+            @AuthenticationPrincipal VmPrincipal principal,
+            @Valid @RequestBody DeploymentRoutesSyncRequest request
+    ) {
+        return portService.syncDeploymentRoutes(principal.userId(), principal.email(), vmId,
+                        request.deploymentId(), request.routes())
+                .thenReturn(ApiResponse.<Void>ok(null));
     }
 }

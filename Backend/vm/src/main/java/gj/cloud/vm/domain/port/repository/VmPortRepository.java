@@ -12,6 +12,9 @@ public interface VmPortRepository extends ReactiveCrudRepository<VmPortEntity, U
 
     Flux<VmPortEntity> findAllByVmId(UUID vmId);
 
+    // 배포(Ops)가 생성한 포트만 대상으로 함 — 사용자가 수동으로 추가한 포트는 배포 라우트 동기화에서 건드리지 않음
+    Flux<VmPortEntity> findAllByVmIdAndDeploymentIdIsNotNull(UUID vmId);
+
     @Query("SELECT COUNT(*) FROM vm_ports WHERE vm_id = :vmId")
     Mono<Long> countByVmId(UUID vmId);
 

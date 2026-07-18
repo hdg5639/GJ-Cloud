@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS vm_ports (
 ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS nickname VARCHAR(20);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_vm_port_nickname ON vm_ports(vm_id, nickname);
 
+-- 배포(Ops)가 생성한 포트와 사용자가 수동으로 추가한 포트를 구분하기 위한 태그.
+-- NULL이면 수동 추가 — 배포 라우트 동기화(sync)는 이 값이 있는 행만 add/remove 대상으로 삼음.
+ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS deployment_id VARCHAR(36);
+CREATE INDEX IF NOT EXISTS idx_vm_ports_deployment_id ON vm_ports(vm_id, deployment_id);
+
 CREATE TABLE IF NOT EXISTS vm_port_access_emails (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     vm_port_id UUID NOT NULL REFERENCES vm_ports(id),
