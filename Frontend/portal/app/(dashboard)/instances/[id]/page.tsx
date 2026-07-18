@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
@@ -76,6 +76,13 @@ const STATUS_STYLE: Record<string, string> = {
   DELETED: "bg-gray-100 text-gray-400",
 };
 
+// 툴바 축소 우선순위: 앞에 있을수록 공간이 부족할 때 먼저 "더보기"로 이동
+const TOOLBAR_COLLAPSE_ORDER = ["specChange", "performance", "backup", "docker", "deploy"] as const;
+type ToolbarCollapsibleId = (typeof TOOLBAR_COLLAPSE_ORDER)[number];
+type ToolbarMeasureId = ToolbarCollapsibleId | "power" | "console" | "files" | "more" | "delete" | "divider";
+// 브라우저 줌/폰트 렌더링/스크롤바 폭 오차를 흡수하기 위한 여유 폭
+const TOOLBAR_SAFETY_MARGIN = 28;
+
 export default function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -110,6 +117,76 @@ export default function InstanceDetailPage() {
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  // ── 툴바 반응형 축소: 실제 DOM 폭을 측정해서 들어갈 수 있는 만큼만 보여주고
+  //    나머지는 "더보기"로 이동 (고정 브레이크포인트가 아니라 컨테이너 실측 기반)
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const leftSectionRef = useRef<HTMLDivElement>(null);
+  const toolbarMeasureRefs = useRef<Partial<Record<ToolbarMeasureId, HTMLElement | null>>>({});
+  const [toolbarWidth, setToolbarWidth] = useState(0);
+  const [leftSectionWidth, setLeftSectionWidth] = useState(0);
+  const [toolbarActionWidths, setToolbarActionWidths] = useState<Partial<Record<ToolbarMeasureId, number>> | null>(null);
+
+  useLayoutEffect(() => {
+    function measure() {
+      const widths: Partial<Record<ToolbarMeasureId, number>> = {};
+      (Object.keys(toolbarMeasureRefs.current) as ToolbarMeasureId[]).forEach((key) => {
+        const el = toolbarMeasureRefs.current[key];
+        if (el) widths[key] = el.getBoundingClientRect().width;
+      });
+      setToolbarActionWidths(widths);
+    }
+    measure();
+    if (typeof document !== "undefined" && "fonts" in document) {
+      document.fonts.ready.then(measure).catch(() => {});
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    const toolbarEl = toolbarRef.current;
+    const leftEl = leftSectionRef.current;
+    if (!toolbarEl || !leftEl) return;
+    const measure = () => {
+      setToolbarWidth(toolbarEl.getBoundingClientRect().width);
+      setLeftSectionWidth(leftEl.getBoundingClientRect().width);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(toolbarEl);
+    ro.observe(leftEl);
+    return () => ro.disconnect();
+  }, []);
+
+  // 측정된 폭을 바탕으로 몇 개까지 접을지 매 렌더링마다 순수 계산 (effect로 동기화하지 않음)
+  const { toolbarCollapsedCount, toolbarDeleteCollapsed } = (() => {
+    if (!toolbarActionWidths) return { toolbarCollapsedCount: 0, toolbarDeleteCollapsed: false };
+    const available = toolbarWidth - leftSectionWidth - TOOLBAR_SAFETY_MARGIN;
+    const dividerWidth = toolbarActionWidths.divider ?? 1;
+
+    function widthFor(collapsedCount: number, deleteCollapsed: boolean) {
+      const hidden = new Set(TOOLBAR_COLLAPSE_ORDER.slice(0, collapsedCount));
+      let total =
+        (toolbarActionWidths!.power ?? 0) + (toolbarActionWidths!.console ?? 0) + (toolbarActionWidths!.files ?? 0);
+      if (!hidden.has("docker")) total += toolbarActionWidths!.docker ?? 0;
+      const restIds: ToolbarCollapsibleId[] = ["deploy", "backup", "performance", "specChange"];
+      const restVisible = restIds.filter((rid) => !hidden.has(rid));
+      const moreVisible = hidden.size > 0 || deleteCollapsed;
+      if (restVisible.length > 0 || moreVisible) total += dividerWidth;
+      restVisible.forEach((rid) => {
+        total += toolbarActionWidths![rid] ?? 0;
+      });
+      if (moreVisible) total += toolbarActionWidths!.more ?? 0;
+      if (!deleteCollapsed) total += dividerWidth + (toolbarActionWidths!.delete ?? 0);
+      return total;
+    }
+
+    for (let n = 0; n <= TOOLBAR_COLLAPSE_ORDER.length; n++) {
+      if (widthFor(n, false) <= available) {
+        return { toolbarCollapsedCount: n, toolbarDeleteCollapsed: false };
+      }
+    }
+    return { toolbarCollapsedCount: TOOLBAR_COLLAPSE_ORDER.length, toolbarDeleteCollapsed: true };
+  })();
 
   // SSH 접근 이메일
   const [sshEmails, setSshEmails] = useState<string[]>([]);
@@ -310,6 +387,15 @@ export default function InstanceDetailPage() {
   const isStopped = vm.status === "STOPPED";
   const isTransitioning = ["PENDING", "CREATING", "BOOTING", "STARTING", "STOPPING", "SUSPENDING", "DELETING"].includes(vm.status);
 
+  const hiddenToolbarIds = new Set(TOOLBAR_COLLAPSE_ORDER.slice(0, toolbarCollapsedCount));
+  const showDocker = !hiddenToolbarIds.has("docker");
+  const showDeploy = !hiddenToolbarIds.has("deploy");
+  const showBackup = !hiddenToolbarIds.has("backup");
+  const showPerformance = !hiddenToolbarIds.has("performance");
+  const showSpecChange = !hiddenToolbarIds.has("specChange");
+  const restVisibleAny = showDeploy || showBackup || showPerformance || showSpecChange;
+  const showMoreButton = hiddenToolbarIds.size > 0 || toolbarDeleteCollapsed;
+
   return (
     <div>
       {/* 헤더 */}
@@ -322,10 +408,10 @@ export default function InstanceDetailPage() {
       </div>
 
       <div className="mb-5">
-        <div className="flex items-center w-full bg-white border border-gray-200 rounded-lg overflow-x-auto">
-          {/* 그룹 1: 이름 · 상태 · 새로고침 */}
-          <div className="flex items-center gap-2.5 pl-4 pr-3.5 h-10 shrink-0">
-            <h1 className="text-[15px] font-medium text-gray-900 whitespace-nowrap">{vm.name}</h1>
+        <div ref={toolbarRef} className="relative flex items-center w-full bg-white border border-gray-200 rounded-lg">
+          {/* 왼쪽: 이름 · 상태 · 새로고침 */}
+          <div ref={leftSectionRef} className="flex items-center gap-2.5 pl-4 pr-3.5 h-10 shrink-0">
+            <h1 className="text-[15px] font-medium text-gray-900 truncate max-w-[200px]" title={vm.name}>{vm.name}</h1>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${STATUS_STYLE[vm.status] ?? "bg-gray-100 text-gray-600"}`}>
               {vm.status}
             </span>
@@ -340,15 +426,14 @@ export default function InstanceDetailPage() {
             </button>
           </div>
 
-          <div className="w-px h-5 bg-gray-200 shrink-0" />
-
-          {/* 그룹 2: 접속 · 조작 */}
-          <div className="flex items-center h-10 shrink-0">
+          {/* 오른쪽: 전체 액션 영역 (margin-left: auto 로 우측 정렬) */}
+          <div className="ml-auto flex items-center h-10 shrink-0">
+            {/* 전원 */}
             <div className="relative" ref={powerMenuRef}>
               <button
                 onClick={() => setShowPowerMenu((v) => !v)}
                 disabled={isTransitioning || vm.status === "DELETED"}
-                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
+                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
                   showPowerMenu ? "bg-gray-100" : ""
                 }`}
               >
@@ -375,149 +460,243 @@ export default function InstanceDetailPage() {
               )}
             </div>
 
+            {/* 콘솔 */}
             <button
               onClick={() => router.push(`/instances/${id}/console`)}
               disabled={!isRunning}
               title={isRunning ? undefined : "VM이 실행 중일 때만 콘솔에 접속할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
             >
               <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                 <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
               </svg>
               콘솔
             </button>
+
+            {/* 파일 */}
             <button
               onClick={() => router.push(`/instances/${id}/files`)}
               disabled={!isRunning}
               title={isRunning ? undefined : "VM이 실행 중일 때만 파일 브라우저를 이용할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
             >
               <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                 <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"/>
               </svg>
               파일
             </button>
-            <button
-              onClick={() => router.push(`/instances/${id}/docker`)}
-              disabled={!isRunning}
-              title={isRunning ? undefined : "VM이 실행 중일 때만 Docker 관리를 이용할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-            >
-              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-                <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2"/><line x1="8" y1="12" x2="16" y2="12"/>
-              </svg>
+
+            {/* Docker */}
+            {showDocker && (
+              <button
+                onClick={() => router.push(`/instances/${id}/docker`)}
+                disabled={!isRunning}
+                title={isRunning ? undefined : "VM이 실행 중일 때만 Docker 관리를 이용할 수 있어요"}
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              >
+                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                  <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2"/><line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+                Docker
+              </button>
+            )}
+
+            {(restVisibleAny || showMoreButton) && <div className="w-px h-5 bg-gray-200 shrink-0" />}
+
+            {/* 배포 */}
+            {showDeploy && (
+              <button
+                onClick={() => router.push(`/instances/${id}/deployments`)}
+                disabled={!isRunning}
+                title={isRunning ? undefined : "VM이 실행 중일 때만 배포를 이용할 수 있어요"}
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              >
+                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+                </svg>
+                배포
+              </button>
+            )}
+
+            {/* 백업 */}
+            {showBackup && (
+              <button
+                onClick={() => router.push(`/instances/${id}/backups`)}
+                disabled={!isRunning}
+                title={isRunning ? undefined : "VM이 실행 중일 때만 DB 백업을 이용할 수 있어요"}
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              >
+                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+                </svg>
+                백업
+              </button>
+            )}
+
+            {/* 성능 */}
+            {showPerformance && (
+              <button
+                onClick={() => router.push(`/instances/${id}/metrics`)}
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                  <rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/>
+                </svg>
+                성능
+              </button>
+            )}
+
+            {/* 스펙 변경 */}
+            {showSpecChange && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                  <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                스펙 변경
+              </button>
+            )}
+
+            {/* 더보기 */}
+            {showMoreButton && (
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  onClick={() => setShowMoreMenu((v) => !v)}
+                  className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 transition-colors ${
+                    showMoreMenu ? "bg-gray-100" : ""
+                  }`}
+                >
+                  더보기
+                  <svg className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${showMoreMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showMoreMenu && (
+                  <div className="absolute right-0 mt-1 min-w-[160px] bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
+                    {!showDocker && (
+                      <button
+                        onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/docker`); }}
+                        disabled={!isRunning}
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                      >
+                        Docker
+                      </button>
+                    )}
+                    {!showDeploy && (
+                      <button
+                        onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/deployments`); }}
+                        disabled={!isRunning}
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                      >
+                        배포
+                      </button>
+                    )}
+                    {!showBackup && (
+                      <button
+                        onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/backups`); }}
+                        disabled={!isRunning}
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                      >
+                        백업
+                      </button>
+                    )}
+                    {!showPerformance && (
+                      <button
+                        onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/metrics`); }}
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                      >
+                        성능
+                      </button>
+                    )}
+                    {!showSpecChange && (
+                      <button
+                        onClick={() => { setShowMoreMenu(false); setShowUpgradeModal(true); }}
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                      >
+                        스펙 변경
+                      </button>
+                    )}
+                    {toolbarDeleteCollapsed && (
+                      <>
+                        <div className="h-px bg-gray-100 mx-2 my-1" />
+                        <button
+                          onClick={() => { setShowMoreMenu(false); setConfirmDelete(true); }}
+                          className="w-full text-left text-sm px-4 py-2 hover:bg-red-50 text-red-600 whitespace-nowrap"
+                        >
+                          삭제
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 삭제 */}
+            {!toolbarDeleteCollapsed && (
+              <>
+                <div className="w-px h-5 bg-gray-200 shrink-0" />
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-red-600 hover:bg-red-50 rounded-r-lg transition-colors"
+                >
+                  <svg className="w-[15px] h-[15px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                  삭제
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* 측정 전용 숨김 레이어 — w-0 + overflow-hidden으로 자체 오버플로우를 차단해
+              부모/조상 요소의 scrollWidth에 영향을 주지 않으면서 자식 버튼의 실제 폭만 측정 */}
+          <div className="absolute top-0 left-0 w-0 h-10 overflow-hidden invisible pointer-events-none flex items-center" aria-hidden="true">
+            <button ref={(el) => { toolbarMeasureRefs.current.power = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
+              전원
+              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" />
+            </button>
+            <button ref={(el) => { toolbarMeasureRefs.current.console = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
+              콘솔
+            </button>
+            <button ref={(el) => { toolbarMeasureRefs.current.files = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
+              파일
+            </button>
+            <button ref={(el) => { toolbarMeasureRefs.current.docker = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
               Docker
             </button>
-          </div>
-
-          <div className="w-px h-5 bg-gray-200 shrink-0 hidden lg:block" />
-
-          {/* 그룹 3: 관리 (넓은 화면) */}
-          <div className="hidden lg:flex items-center h-10 shrink-0">
-            <button
-              onClick={() => router.push(`/instances/${id}/deployments`)}
-              disabled={!isRunning}
-              title={isRunning ? undefined : "VM이 실행 중일 때만 배포를 이용할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-            >
-              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-                <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
-              </svg>
+            <button ref={(el) => { toolbarMeasureRefs.current.deploy = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
               배포
             </button>
-            <button
-              onClick={() => router.push(`/instances/${id}/backups`)}
-              disabled={!isRunning}
-              title={isRunning ? undefined : "VM이 실행 중일 때만 DB 백업을 이용할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-            >
-              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-                <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
-              </svg>
+            <button ref={(el) => { toolbarMeasureRefs.current.backup = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
               백업
             </button>
-            <button
-              onClick={() => router.push(`/instances/${id}/metrics`)}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-                <rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/>
-              </svg>
+            <button ref={(el) => { toolbarMeasureRefs.current.performance = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
               성능
             </button>
-            <button
-              onClick={() => setShowUpgradeModal(true)}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-                <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-              </svg>
+            <button ref={(el) => { toolbarMeasureRefs.current.specChange = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
               스펙 변경
             </button>
+            <button ref={(el) => { toolbarMeasureRefs.current.more = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              더보기
+              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" />
+            </button>
+            <button ref={(el) => { toolbarMeasureRefs.current.delete = el; }} tabIndex={-1} className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap">
+              <svg className="w-[15px] h-[15px] shrink-0" viewBox="0 0 24 24" />
+              삭제
+            </button>
+            <div ref={(el) => { toolbarMeasureRefs.current.divider = el; }} className="w-px h-5 bg-gray-200 shrink-0" />
           </div>
-
-          {/* 그룹 3 축약: 좁은 화면에서는 "더보기" 드롭다운으로 대체 */}
-          <div className="lg:hidden flex items-center h-10 shrink-0">
-            <div className="w-px h-5 bg-gray-200 shrink-0" />
-            <div className="relative" ref={moreMenuRef}>
-              <button
-                onClick={() => setShowMoreMenu((v) => !v)}
-                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-gray-600 hover:bg-gray-50 transition-colors ${
-                  showMoreMenu ? "bg-gray-100" : ""
-                }`}
-              >
-                더보기
-                <svg className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${showMoreMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showMoreMenu && (
-                <div className="absolute right-0 mt-1 min-w-[160px] bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
-                  <button
-                    onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/deployments`); }}
-                    disabled={!isRunning}
-                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
-                  >
-                    배포
-                  </button>
-                  <button
-                    onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/backups`); }}
-                    disabled={!isRunning}
-                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
-                  >
-                    백업
-                  </button>
-                  <button
-                    onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/metrics`); }}
-                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
-                  >
-                    성능
-                  </button>
-                  <button
-                    onClick={() => { setShowMoreMenu(false); setShowUpgradeModal(true); }}
-                    className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
-                  >
-                    스펙 변경
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-3" />
-
-          <div className="w-px h-5 bg-gray-200 shrink-0" />
-
-          {/* 그룹 4: 삭제 */}
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap text-red-600 hover:bg-red-50 rounded-r-lg transition-colors shrink-0"
-          >
-            <svg className="w-[15px] h-[15px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-            </svg>
-            삭제
-          </button>
         </div>
       </div>
 
