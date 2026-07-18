@@ -43,7 +43,11 @@ public enum OpsErrorCode {
 
     // AI 배포 스펙 생성 (D-3)
     AI_SPEC_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "AI 배포 스펙 생성 요청에 실패했습니다."),
-    AI_SPEC_INVALID_RESPONSE(HttpStatus.INTERNAL_SERVER_ERROR, "AI가 생성한 스펙이 올바르지 않습니다.");
+    AI_SPEC_INVALID_RESPONSE(HttpStatus.INTERNAL_SERVER_ERROR, "AI가 생성한 스펙이 올바르지 않습니다."),
+
+    // 수동 DB 백업 (11절)
+    INVALID_DB_IDENTIFIER(HttpStatus.BAD_REQUEST, "유효하지 않은 DB 식별자입니다."),
+    DB_BACKUP_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "DB 백업에 실패했습니다.");
 
     private final HttpStatus status;
     private final String message;

@@ -72,3 +72,20 @@ CREATE TABLE IF NOT EXISTS ai_spec_generation_log (
 ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'GENERATION';
 
 CREATE INDEX IF NOT EXISTS idx_ai_spec_generation_log_vm_id ON ai_spec_generation_log(vm_id);
+
+CREATE TABLE IF NOT EXISTS db_backups (
+    id                  VARCHAR(36)  PRIMARY KEY,
+    vm_id               VARCHAR(36)  NOT NULL,
+    service_name        VARCHAR(100) NOT NULL,
+    db_type             VARCHAR(20)  NOT NULL,
+    file_path           TEXT,
+    file_size_bytes     BIGINT,
+    succeeded           BOOLEAN      NOT NULL,
+    error_message       TEXT,
+    created_at          TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_db_backups_db_type CHECK (db_type IN ('postgresql', 'mysql', 'redis', 'mongodb'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_db_backups_vm_id ON db_backups(vm_id);
+CREATE INDEX IF NOT EXISTS idx_db_backups_vm_id_created_at ON db_backups(vm_id, created_at DESC);
