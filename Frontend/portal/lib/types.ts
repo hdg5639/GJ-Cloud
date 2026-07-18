@@ -218,3 +218,21 @@ export interface TagResponse {
   name: string;
   usageCount: number;
 }
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  directory: boolean;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface FileListResponse {
+  path: string;
+  entries: FileEntry[];
+}
+
+export interface FileContentResponse {
+  path: string;
+  content: string;
+}

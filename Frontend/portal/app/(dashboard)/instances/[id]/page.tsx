@@ -379,6 +379,18 @@ export default function InstanceDetailPage() {
             </svg>
             콘솔
           </button>
+          {/* 파일 브라우저 */}
+          <button
+            onClick={() => router.push(`/instances/${id}/files`)}
+            disabled={!isRunning}
+            title={isRunning ? undefined : "VM이 실행 중일 때만 파일 브라우저를 이용할 수 있어요"}
+            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
+          >
+            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+              <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"/>
+            </svg>
+            파일
+          </button>
           {/* 성능 */}
           <button
             onClick={() => router.push(`/instances/${id}/metrics`)}

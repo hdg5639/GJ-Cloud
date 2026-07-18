@@ -20,6 +20,8 @@ import type {
   ScopeType,
   CollaborationType,
   MemberRole,
+  FileListResponse,
+  FileContentResponse,
 } from "./types";
 
 const API_BASE = {
@@ -120,11 +122,14 @@ async function request<T>(
     token = await getExchangedToken(accessToken, targetAudience);
   }
 
+  // FormData는 브라우저가 boundary 포함 Content-Type을 직접 설정해야 하므로 기본값을 강제하지 않음
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
+
   const res = await fetch(`${API_BASE[service]}${path}`, {
     ...init,
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.headers as Record<string, string> | undefined),
     },
@@ -365,6 +370,52 @@ export const api = {
         method: "POST",
         accessToken,
       }),
+    listFiles: (accessToken: string, vmId: string, path?: string) =>
+      request<FileListResponse>(
+        "ops",
+        `/ops/${vmId}/files${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+        { accessToken }
+      ),
+    readFileContent: (accessToken: string, vmId: string, path: string) =>
+      request<FileContentResponse>("ops", `/ops/${vmId}/files/content?path=${encodeURIComponent(path)}`, {
+        accessToken,
+      }),
+    saveFileContent: (accessToken: string, vmId: string, path: string, content: string) =>
+      request<void>("ops", `/ops/${vmId}/files/content?path=${encodeURIComponent(path)}`, {
+        method: "PUT",
+        body: JSON.stringify({ content }),
+        accessToken,
+      }),
+    createDirectory: (accessToken: string, vmId: string, parentPath: string, name: string) =>
+      request<void>("ops", `/ops/${vmId}/files/directories`, {
+        method: "POST",
+        body: JSON.stringify({ parentPath, name }),
+        accessToken,
+      }),
+    uploadFile: (accessToken: string, vmId: string, path: string, file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return request<void>("ops", `/ops/${vmId}/files/upload?path=${encodeURIComponent(path)}`, {
+        method: "POST",
+        body: form,
+        accessToken,
+      });
+    },
+    deleteFile: (accessToken: string, vmId: string, path: string) =>
+      request<void>("ops", `/ops/${vmId}/files?path=${encodeURIComponent(path)}`, {
+        method: "DELETE",
+        accessToken,
+      }),
+    // 다운로드는 ApiResponse 포맷이 아닌 원문 바이트 스트림이라 request<T>()를 못 쓰고 직접 fetch
+    downloadFile: async (accessToken: string, vmId: string, path: string): Promise<Blob> => {
+      const token = await getExchangedToken(accessToken, "ops-service");
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_OPS_API}/ops/${vmId}/files/download?path=${encodeURIComponent(path)}`,
+        { headers: { Authorization: `Bearer ${token}` }, credentials: "include" }
+      );
+      if (!res.ok) throw new Error("파일 다운로드에 실패했습니다");
+      return res.blob();
+    },
   },
   admin: {
     users: {
