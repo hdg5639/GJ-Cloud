@@ -80,6 +80,9 @@ const STATUS_STYLE: Record<string, string> = {
 const TOOLBAR_COLLAPSE_ORDER = ["specChange", "performance", "backup", "docker", "deploy"] as const;
 type ToolbarCollapsibleId = (typeof TOOLBAR_COLLAPSE_ORDER)[number];
 type ToolbarMeasureId = ToolbarCollapsibleId | "power" | "console" | "files" | "more" | "delete" | "divider";
+const TOOLBAR_MEASURE_IDS: ToolbarMeasureId[] = [
+  "power", "console", "files", "docker", "deploy", "backup", "performance", "specChange", "more", "delete", "divider",
+];
 // 브라우저 줌/폰트 렌더링/스크롤바 폭 오차를 흡수하기 위한 여유 폭
 const TOOLBAR_SAFETY_MARGIN = 28;
 
@@ -125,22 +128,44 @@ export default function InstanceDetailPage() {
   const toolbarMeasureRefs = useRef<Partial<Record<ToolbarMeasureId, HTMLElement | null>>>({});
   const [toolbarWidth, setToolbarWidth] = useState(0);
   const [leftSectionWidth, setLeftSectionWidth] = useState(0);
-  const [toolbarActionWidths, setToolbarActionWidths] = useState<Partial<Record<ToolbarMeasureId, number>> | null>(null);
+  const [toolbarActionWidths, setToolbarActionWidths] = useState<Record<ToolbarMeasureId, number> | null>(null);
 
   useLayoutEffect(() => {
+    let cancelled = false;
+
     function measure() {
-      const widths: Partial<Record<ToolbarMeasureId, number>> = {};
-      (Object.keys(toolbarMeasureRefs.current) as ToolbarMeasureId[]).forEach((key) => {
+      const widths = {} as Record<ToolbarMeasureId, number>;
+      for (const key of TOOLBAR_MEASURE_IDS) {
         const el = toolbarMeasureRefs.current[key];
-        if (el) widths[key] = el.getBoundingClientRect().width;
-      });
+        const width = el?.getBoundingClientRect().width ?? 0;
+        if (width <= 0) {
+          if (!cancelled) setToolbarActionWidths(null);
+          return;
+        }
+        widths[key] = width;
+      }
+      if (cancelled) return;
       setToolbarActionWidths(widths);
     }
+
     measure();
-    if (typeof document !== "undefined" && "fonts" in document) {
-      document.fonts.ready.then(measure).catch(() => {});
-    }
-  }, []);
+    const ro = new ResizeObserver(measure);
+    TOOLBAR_MEASURE_IDS.forEach((key) => {
+      const el = toolbarMeasureRefs.current[key];
+      if (el) ro.observe(el);
+    });
+
+    const fonts = typeof document !== "undefined" && "fonts" in document ? document.fonts : null;
+    const handleFontsChanged = () => measure();
+    fonts?.addEventListener("loadingdone", handleFontsChanged);
+    fonts?.ready.then(measure).catch(() => {});
+
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+      fonts?.removeEventListener("loadingdone", handleFontsChanged);
+    };
+  }, [vm?.id]);
 
   useLayoutEffect(() => {
     const toolbarEl = toolbarRef.current;
@@ -155,28 +180,36 @@ export default function InstanceDetailPage() {
     ro.observe(toolbarEl);
     ro.observe(leftEl);
     return () => ro.disconnect();
-  }, []);
+  }, [vm?.id]);
 
   // 측정된 폭을 바탕으로 몇 개까지 접을지 매 렌더링마다 순수 계산 (effect로 동기화하지 않음)
   const { toolbarCollapsedCount, toolbarDeleteCollapsed } = (() => {
-    if (!toolbarActionWidths) return { toolbarCollapsedCount: 0, toolbarDeleteCollapsed: false };
+    if (
+      toolbarWidth <= 0 ||
+      leftSectionWidth <= 0 ||
+      !toolbarActionWidths ||
+      !TOOLBAR_MEASURE_IDS.every((key) => toolbarActionWidths[key] > 0)
+    ) {
+      return { toolbarCollapsedCount: 0, toolbarDeleteCollapsed: false };
+    }
+    const actionWidths = toolbarActionWidths;
     const available = toolbarWidth - leftSectionWidth - TOOLBAR_SAFETY_MARGIN;
-    const dividerWidth = toolbarActionWidths.divider ?? 1;
+    const dividerWidth = actionWidths.divider;
 
     function widthFor(collapsedCount: number, deleteCollapsed: boolean) {
       const hidden = new Set(TOOLBAR_COLLAPSE_ORDER.slice(0, collapsedCount));
       let total =
-        (toolbarActionWidths!.power ?? 0) + (toolbarActionWidths!.console ?? 0) + (toolbarActionWidths!.files ?? 0);
-      if (!hidden.has("docker")) total += toolbarActionWidths!.docker ?? 0;
+        actionWidths.power + actionWidths.console + actionWidths.files;
+      if (!hidden.has("docker")) total += actionWidths.docker;
       const restIds: ToolbarCollapsibleId[] = ["deploy", "backup", "performance", "specChange"];
       const restVisible = restIds.filter((rid) => !hidden.has(rid));
       const moreVisible = hidden.size > 0 || deleteCollapsed;
       if (restVisible.length > 0 || moreVisible) total += dividerWidth;
       restVisible.forEach((rid) => {
-        total += toolbarActionWidths![rid] ?? 0;
+        total += actionWidths[rid];
       });
-      if (moreVisible) total += toolbarActionWidths!.more ?? 0;
-      if (!deleteCollapsed) total += dividerWidth + (toolbarActionWidths!.delete ?? 0);
+      if (moreVisible) total += actionWidths.more;
+      if (!deleteCollapsed) total += dividerWidth + actionWidths.delete;
       return total;
     }
 
