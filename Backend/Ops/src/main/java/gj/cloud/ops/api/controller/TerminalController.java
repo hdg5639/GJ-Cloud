@@ -18,7 +18,7 @@ import java.util.UUID;
 
 @Tag(name = "Terminal", description = "웹 SSH 콘솔 티켓 발급")
 @RestController
-@RequestMapping("/api/vms")
+@RequestMapping("/api/ops")
 @RequiredArgsConstructor
 public class TerminalController {
 
