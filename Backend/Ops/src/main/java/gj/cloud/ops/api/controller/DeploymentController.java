@@ -2,10 +2,13 @@ package gj.cloud.ops.api.controller;
 
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
 import gj.cloud.ops.application.deployment.dto.DeploymentCreateRequest;
+import gj.cloud.ops.application.deployment.dto.DeploymentFromSpecRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
+import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderer;
+import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
@@ -34,6 +37,8 @@ public class DeploymentController {
     private final DeploymentExecutor deploymentExecutor;
     private final DeploymentRepository deploymentRepository;
     private final DeploymentEventPublisher eventPublisher;
+    private final DeploymentSpecValidator deploymentSpecValidator;
+    private final DeploymentSpecRenderer deploymentSpecRenderer;
 
     @Operation(summary = "배포 생성 (Raw Compose)", description = "체크아웃~라우트 등록까지 비동기로 진행됩니다. 즉시 202를 반환하고 SSE로 진행 상황을 수신하세요.")
     @PostMapping
@@ -52,6 +57,23 @@ public class DeploymentController {
                 body.healthChecks() != null ? body.healthChecks() : List.of(),
                 SourceType.RAW_COMPOSE
         );
+        RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken());
+
+        DeploymentEntity deployment = deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact);
+        return ApiResponse.ok(DeploymentResponse.from(deployment));
+    }
+
+    @Operation(summary = "배포 생성 (기본 템플릿)", description = "DeploymentSpec을 compose로 렌더링한 뒤 Raw Compose와 동일한 파이프라인(공통 Validator 포함)으로 진행합니다.")
+    @PostMapping("/from-spec")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<DeploymentResponse> createFromSpec(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody DeploymentFromSpecRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        deploymentSpecValidator.validate(body.spec());
+        ComposeArtifact artifact = deploymentSpecRenderer.render(body.spec());
         RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken());
 
         DeploymentEntity deployment = deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact);
