@@ -367,6 +367,18 @@ export default function InstanceDetailPage() {
             )}
           </div>
           <div className="w-px h-5 bg-gray-200" />
+          {/* 콘솔 */}
+          <button
+            onClick={() => router.push(`/instances/${id}/console`)}
+            disabled={!isRunning}
+            title={isRunning ? undefined : "VM이 실행 중일 때만 콘솔에 접속할 수 있어요"}
+            className="flex items-center gap-1.5 text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-white"
+          >
+            <svg className="w-[15px] h-[15px] text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+              <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            콘솔
+          </button>
           {/* 성능 */}
           <button
             onClick={() => router.push(`/instances/${id}/metrics`)}

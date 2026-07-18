@@ -359,6 +359,13 @@ export const api = {
     deleteTag: (accessToken: string, tagId: string) =>
       request<void>("vm", `/vms/collaboration-tags/${tagId}`, { method: "DELETE", accessToken }),
   },
+  ops: {
+    issueTerminalTicket: (accessToken: string, vmId: string) =>
+      request<{ ticket: string }>("ops", `/api/ops/${vmId}/terminal-ticket`, {
+        method: "POST",
+        accessToken,
+      }),
+  },
   admin: {
     users: {
       list: (accessToken: string) =>
