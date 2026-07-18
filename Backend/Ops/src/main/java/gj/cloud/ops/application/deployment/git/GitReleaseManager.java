@@ -17,6 +17,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 // D.7 Release 디렉토리 구조 그대로 구현: bare mirror(최초 1회) + 배포별 git worktree + current 심볼릭 링크.
 // 빈 release 디렉토리에서는 git fetch가 안 되므로(Git 저장소가 아님) 반드시 이 순서(bare 먼저, worktree는 그 산출물)를 지켜야 함.
@@ -27,6 +28,12 @@ public class GitReleaseManager {
 
     private static final long GIT_TIMEOUT_MS = 120_000; // clone/fetch는 레포 크기에 따라 오래 걸릴 수 있음
     private static final String BASE_DIR_TEMPLATE = "/home/%s/gamjabox/apps/%s";
+
+    // repoUrl/branch는 사용자 입력이 그대로 셸 커맨드 문자열에 꽂히므로 반드시 사전 검증함.
+    // https:// 로만 제한하는 이유: git의 ext:: 트랜스포트는 임의 셸 명령을 실행할 수 있는 알려진 벡터라
+    // 스킴을 아예 화이트리스트로 막아야 함 (D.3도 HTTPS + PAT 흐름만 다룸, ssh://·file:// 등은 스코프 밖)
+    private static final Pattern SAFE_REPO_URL = Pattern.compile("^https://[A-Za-z0-9._/:@-]+$");
+    private static final Pattern SAFE_BRANCH_NAME = Pattern.compile("^[A-Za-z0-9._/-]+$");
 
     private final SshCommandExecutor sshCommandExecutor;
     private final VmSshSessionFactory sshSessionFactory;
@@ -45,6 +52,7 @@ public class GitReleaseManager {
 
     // bare mirror가 이미 있으면 그대로 재사용 (매번 전체 clone 방지)
     public void ensureBareRepo(Session session, String appId, String repoUrl, String patToken) {
+        validateRepoUrl(repoUrl);
         String baseDir = appBaseDir(appId);
         String bareDir = bareRepoDir(appId);
 
@@ -65,6 +73,7 @@ public class GitReleaseManager {
     // fetch 후 브랜치의 HEAD commit SHA를 고정해 반환 (worktree add에 사용).
     // --mirror clone은 refs/heads/*가 원격과 1:1 매핑되므로 origin/{branch}가 아니라 {branch}로 직접 resolve.
     public String fetchAndResolveCommit(Session session, String appId, String branch, String patToken) {
+        validateBranch(branch);
         String bareDir = bareRepoDir(appId);
 
         withAskpass(session, patToken, askpassPath -> {
@@ -97,6 +106,18 @@ public class GitReleaseManager {
         String current = appBaseDir(appId) + "/current";
         String target = releaseDir(appId, deploymentId);
         sshCommandExecutor.execOrThrow(session, "ln -sfn '" + target + "' '" + current + "'", 10_000);
+    }
+
+    private void validateRepoUrl(String repoUrl) {
+        if (repoUrl == null || !SAFE_REPO_URL.matcher(repoUrl).matches()) {
+            throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+        }
+    }
+
+    private void validateBranch(String branch) {
+        if (branch == null || !SAFE_BRANCH_NAME.matcher(branch).matches()) {
+            throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+        }
     }
 
     // GIT_ASKPASS 스크립트: PAT는 SFTP로 파일 내용만 전송(ps aux에 노출되지 않음), exec 커맨드 라인에는 경로만 등장시킴.

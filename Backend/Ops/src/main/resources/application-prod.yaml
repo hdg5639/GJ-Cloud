@@ -41,6 +41,10 @@ ops:
   file-browser-max-edit-size-bytes: 1048576
   file-browser-max-upload-size-bytes: 26214400
   deployment-lock-ttl-seconds: 1800
+  deployment-executor:
+    core-pool-size: 2
+    max-pool-size: 4
+    queue-capacity: 20
 
 springdoc:
   api-docs:

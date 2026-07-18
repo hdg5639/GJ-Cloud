@@ -38,3 +38,18 @@ CREATE TABLE IF NOT EXISTS deployments (
 
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id_created_at ON deployments(vm_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS deployment_events (
+    id              VARCHAR(36) PRIMARY KEY,
+    deployment_id   VARCHAR(36) NOT NULL,
+    sequence        BIGINT      NOT NULL,
+    event_type      VARCHAR(20) NOT NULL,
+    message         TEXT,
+    payload         TEXT,
+    created_at      TIMESTAMP   NOT NULL DEFAULT now(),
+
+    CONSTRAINT uq_deployment_events_deployment_sequence UNIQUE (deployment_id, sequence),
+    CONSTRAINT chk_deployment_event_type CHECK (event_type IN ('STAGE_CHANGE', 'BUILD_LOG', 'ERROR', 'DONE'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id_sequence ON deployment_events(deployment_id, sequence);

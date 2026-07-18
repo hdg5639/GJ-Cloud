@@ -52,6 +52,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
             return header.substring(7);
         }
+        // SSE(EventSource)는 헤더 설정이 불가능하므로 쿼리 파라미터 fallback (VM 서비스와 동일한 관례).
+        // 이 파라미터가 access log에 남지 않도록 리버스 프록시 로그 설정에서 제외 처리 필요 (D.8)
+        String queryToken = request.getParameter("token");
+        if (StringUtils.hasText(queryToken)) {
+            return queryToken;
+        }
         return null;
     }
 }

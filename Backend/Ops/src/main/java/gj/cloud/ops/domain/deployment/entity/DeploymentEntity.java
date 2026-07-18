@@ -119,4 +119,12 @@ public class DeploymentEntity {
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
+
+    public DeploymentEntity withStatus(DeploymentStatus status, String message) {
+        return this.toBuilder().status(status).errorMessage(message).updatedAt(LocalDateTime.now()).build();
+    }
+
+    public DeploymentEntity withRolledBack() {
+        return this.toBuilder().status(DeploymentStatus.ROLLED_BACK).updatedAt(LocalDateTime.now()).build();
+    }
 }

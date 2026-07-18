@@ -1,0 +1,315 @@
+package gj.cloud.ops.application.deployment.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.JSchException;
+import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SftpException;
+import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
+import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
+import gj.cloud.ops.application.deployment.dto.EnvironmentFile;
+import gj.cloud.ops.application.deployment.dto.HealthCheck;
+import gj.cloud.ops.application.deployment.dto.RepoConfig;
+import gj.cloud.ops.application.deployment.dto.ResolvedCompose;
+import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.deployment.git.GitReleaseManager;
+import gj.cloud.ops.application.deployment.validation.ComposeValidator;
+import gj.cloud.ops.application.deployment.validation.ValidationResult;
+import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
+import gj.cloud.ops.application.vmclient.VmServiceClient;
+import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
+import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
+import gj.cloud.ops.domain.deployment.enums.DeploymentEventType;
+import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
+import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
+import gj.cloud.ops.global.crypto.AesGcmCipher;
+import gj.cloud.ops.global.exception.OpsException;
+import gj.cloud.ops.global.exception.enums.OpsErrorCode;
+import gj.cloud.ops.global.ssh.CommandResult;
+import gj.cloud.ops.global.ssh.SshCommandExecutor;
+import gj.cloud.ops.global.ssh.VmSshSessionFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Component;
+
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.function.UnaryOperator;
+import java.util.regex.Pattern;
+
+// D.7 실행 파이프라인 — HTTP 요청 스레드가 아니라 전용 deploymentTaskExecutor에서 실행됨(I절 체크리스트).
+// 배포 하나당 SSH 세션 1개를 처음부터 끝까지 재사용(git→업로드→검증→빌드→교체→헬스체크).
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class DeploymentExecutor {
+
+    private static final String PERMISSION_DEPLOY = "DEPLOY";
+    private static final String COMPOSE_FILE_NAME = "docker-compose.yml";
+    private static final String RESOLVED_COMPOSE_FILE_NAME = "resolved-compose.yml";
+    private static final long DOCKER_COMPOSE_TIMEOUT_MS = 300_000;
+    private static final long HEALTH_CHECK_INTERVAL_MS = 3_000;
+    private static final int HEALTH_CHECK_MAX_ATTEMPTS = 10;
+    // vmPath가 mkdir -p '...' 셸 커맨드에 그대로 꽂히므로 따옴표/셸 메타문자를 차단 (명령 인젝션 방지)
+    private static final Pattern UNSAFE_SHELL_CHARS = Pattern.compile("[;&`|$'\"\\\\]");
+
+    private final DeploymentRepository deploymentRepository;
+    private final DeploymentLockService lockService;
+    private final DeploymentEventPublisher eventPublisher;
+    private final VmServiceClient vmServiceClient;
+    private final VmDeploymentRoutesClient routesClient;
+    private final VmSshSessionFactory sshSessionFactory;
+    private final SshCommandExecutor sshCommandExecutor;
+    private final GitReleaseManager gitReleaseManager;
+    private final ComposeValidator composeValidator;
+    private final ComposeImageBuilder composeImageBuilder;
+    private final HealthCheckExecutor healthCheckExecutor;
+    private final RollbackService rollbackService;
+    private final AesGcmCipher cipher;
+    private final ObjectMapper objectMapper;
+
+    private final TaskExecutor deploymentTaskExecutor;
+
+    // 권한/실행상태 확인 + D.5 Validator 통과 + 락 획득까지는 호출 스레드(HTTP 요청 스레드)에서 동기 수행하고,
+    // 실제 파이프라인(runPipeline)만 전용 워커에 위임함 — 잘못된 요청은 즉시 4xx로 응답 가능해야 하므로.
+    public DeploymentEntity enqueue(String bearerToken, String vmId, RepoConfig repoConfig, ComposeArtifact artifact) {
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
+        if (!context.hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+        if (context.internalIp() == null || !"RUNNING".equals(context.status())) {
+            throw new OpsException(OpsErrorCode.VM_NOT_RUNNING);
+        }
+
+        ValidationResult validation = composeValidator.validate(artifact.composeContent());
+        if (!validation.valid()) {
+            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        }
+
+        String previousDeploymentId = deploymentRepository
+                .findTopByVmIdAndStatusOrderByCreatedAtDesc(vmId, DeploymentStatus.SUCCEEDED)
+                .map(DeploymentEntity::getId)
+                .orElse(null);
+
+        String sourceCiphertext = cipher.encrypt(artifact.composeContent().getBytes(StandardCharsets.UTF_8));
+        DeploymentEntity deployment = deploymentRepository.save(
+                DeploymentEntity.createQueued(vmId, artifact.sourceType(), sourceCiphertext, previousDeploymentId));
+
+        if (!lockService.tryLock(vmId, deployment.getId())) {
+            deployment = deploymentRepository.save(deployment.withFailed("이미 배포가 진행 중입니다."));
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
+        }
+
+        String deploymentId = deployment.getId();
+        String internalIp = context.internalIp();
+        deploymentTaskExecutor.execute(() -> runPipeline(deploymentId, vmId, internalIp, bearerToken, repoConfig, artifact));
+
+        return deployment;
+    }
+
+    private void runPipeline(String deploymentId, String appId, String internalIp, String bearerToken,
+                              RepoConfig repoConfig, ComposeArtifact artifact) {
+        Session session = null;
+        try {
+            session = sshSessionFactory.createSession(appId, internalIp);
+
+            updateStatus(deploymentId, DeploymentStatus.CLONING, "소스 체크아웃 시작 (branch: " + repoConfig.branch() + ")");
+            gitReleaseManager.ensureBareRepo(session, appId, repoConfig.repoUrl(), repoConfig.patToken());
+            String commitSha = gitReleaseManager.fetchAndResolveCommit(session, appId, repoConfig.branch(), repoConfig.patToken());
+            gitReleaseManager.createWorktree(session, appId, deploymentId, commitSha);
+            String releaseDir = gitReleaseManager.releaseDir(appId, deploymentId);
+            updateEntity(deploymentId, e -> e.withSourceRevision(commitSha, releaseDir));
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "소스 체크아웃 완료 (" + repoConfig.branch() + " → " + shortSha(commitSha) + ")");
+
+            updateStatus(deploymentId, DeploymentStatus.UPLOADING, "파일 전송 중...");
+            uploadFiles(session, releaseDir, artifact);
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "파일 전송 완료");
+
+            updateStatus(deploymentId, DeploymentStatus.VALIDATING, "compose 검증 중...");
+            String composeFilePath = releaseDir + "/" + COMPOSE_FILE_NAME;
+            CommandResult configCheck = sshCommandExecutor.exec(session,
+                    "docker compose -p gj_" + appId + " -f '" + composeFilePath + "' config", 60_000);
+            if (!configCheck.isSuccess()) {
+                failImmediately(deploymentId, "compose 검증 실패: " + trim(configCheck.stderr()));
+                return;
+            }
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "compose 검증 완료");
+
+            updateStatus(deploymentId, DeploymentStatus.BUILDING, "이미지 빌드 중...");
+            ResolvedCompose resolved;
+            try {
+                resolved = composeImageBuilder.buildAndResolve(session, appId, deploymentId, releaseDir, artifact.composeContent());
+            } catch (Exception e) {
+                failImmediately(deploymentId, "이미지 빌드 실패: " + e.getMessage());
+                return;
+            }
+            String resolvedFilePath = releaseDir + "/" + RESOLVED_COMPOSE_FILE_NAME;
+            writeRemoteFile(session, resolvedFilePath, resolved.resolvedComposeContent());
+            String imageRefsJson = objectMapper.writeValueAsString(resolved.serviceImageRefs());
+            String resolvedCiphertext = cipher.encrypt(resolved.resolvedComposeContent().getBytes(StandardCharsets.UTF_8));
+            updateEntity(deploymentId, e -> e.withResolvedCompose(resolvedCiphertext, imageRefsJson));
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "이미지 빌드 완료");
+
+            // ---- 여기서부터는 실패 시 즉시 중단이 아니라 롤백 (기존 컨테이너 교체 절차가 이미 시작됐으므로) ----
+            updateStatus(deploymentId, DeploymentStatus.SWAPPING, "컨테이너 교체 중...");
+            CommandResult upResult = sshCommandExecutor.exec(session,
+                    "docker compose -p gj_" + appId + " -f '" + resolvedFilePath + "' up -d", DOCKER_COMPOSE_TIMEOUT_MS);
+            if (!upResult.isSuccess()) {
+                rollbackService.rollback(session, deploymentId, appId, bearerToken, "컨테이너 교체 실패: " + trim(upResult.stderr()));
+                return;
+            }
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "컨테이너 교체 완료");
+
+            updateStatus(deploymentId, DeploymentStatus.HEALTH_CHECKING, "헬스체크 중...");
+            if (!runHealthChecks(session, appId, artifact.healthChecks())) {
+                rollbackService.rollback(session, deploymentId, appId, bearerToken, "헬스체크 실패");
+                return;
+            }
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "헬스체크 통과");
+
+            updateStatus(deploymentId, DeploymentStatus.ROUTING, "라우트 등록 중...");
+            try {
+                routesClient.syncRoutes(bearerToken, appId, new DeploymentRoutesRequest(deploymentId, artifact.exposedRoutes()));
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "라우트 등록 완료");
+            } catch (Exception e) {
+                // D.7 실패 처리 표: Cloudflare 등록 실패는 배포 완료 처리, Cloudflare만 재시도 안내
+                eventPublisher.publish(deploymentId, DeploymentEventType.ERROR,
+                        "라우트 등록 실패 (배포 자체는 완료됨, 재시도 필요): " + e.getMessage());
+            }
+
+            gitReleaseManager.updateCurrentSymlink(session, appId, deploymentId);
+            updateEntity(deploymentId, DeploymentEntity::withSucceeded);
+            eventPublisher.publish(deploymentId, DeploymentEventType.DONE, "배포 완료");
+        } catch (Exception e) {
+            log.error("배포 파이프라인 처리 중 예외: deploymentId={}, error={}", deploymentId, e.getMessage());
+            updateEntity(deploymentId, entity -> entity.withFailed(e.getMessage()));
+            eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, "배포 실패: " + e.getMessage());
+        } finally {
+            lockService.unlock(appId, deploymentId);
+            eventPublisher.complete(deploymentId);
+            if (session != null && session.isConnected()) {
+                session.disconnect();
+            }
+        }
+    }
+
+    // SWAPPING 이전 단계 실패 — 기존 서비스가 아직 그대로이므로 롤백 없이 즉시 FAILED (D.7 실패 처리 표)
+    private void failImmediately(String deploymentId, String message) {
+        updateEntity(deploymentId, entity -> entity.withFailed(message));
+        eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, message);
+    }
+
+    private boolean runHealthChecks(Session session, String appId, List<HealthCheck> healthChecks) {
+        if (healthChecks == null || healthChecks.isEmpty()) {
+            return true;
+        }
+        for (HealthCheck healthCheck : healthChecks) {
+            if (!waitForHealthy(session, appId, healthCheck)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean waitForHealthy(Session session, String appId, HealthCheck healthCheck) {
+        for (int attempt = 1; attempt <= HEALTH_CHECK_MAX_ATTEMPTS; attempt++) {
+            if (healthCheckExecutor.check(session, appId, healthCheck)) {
+                return true;
+            }
+            try {
+                Thread.sleep(HEALTH_CHECK_INTERVAL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // compose 원문 + 업로드 파일들을 release 디렉토리에 SFTP로 전송. 소스 체크아웃 "이후"에 전송해
+    // 체크아웃 결과를 덮어쓰는 순서를 보장함 (D.4)
+    private void uploadFiles(Session session, String releaseDir, ComposeArtifact artifact) {
+        ChannelSftp sftp = null;
+        try {
+            sftp = (ChannelSftp) session.openChannel("sftp");
+            sftp.connect(10_000);
+
+            writeSftpFile(sftp, releaseDir + "/" + COMPOSE_FILE_NAME, artifact.composeContent().getBytes(StandardCharsets.UTF_8));
+
+            for (EnvironmentFile file : artifact.environmentFiles()) {
+                String targetPath = resolveVmPath(releaseDir, file.vmPath());
+                ensureParentDir(session, targetPath);
+                writeSftpFile(sftp, targetPath, file.content().getBytes(StandardCharsets.UTF_8));
+            }
+            for (UploadedFile file : artifact.uploadedFiles()) {
+                String targetPath = resolveVmPath(releaseDir, file.vmPath());
+                ensureParentDir(session, targetPath);
+                writeSftpFile(sftp, targetPath, file.content());
+            }
+        } catch (JSchException | SftpException e) {
+            throw new OpsException(OpsErrorCode.SSH_COMMAND_FAILED);
+        } finally {
+            if (sftp != null && sftp.isConnected()) {
+                sftp.disconnect();
+            }
+        }
+    }
+
+    private void writeRemoteFile(Session session, String path, String content) {
+        ChannelSftp sftp = null;
+        try {
+            sftp = (ChannelSftp) session.openChannel("sftp");
+            sftp.connect(10_000);
+            writeSftpFile(sftp, path, content.getBytes(StandardCharsets.UTF_8));
+        } catch (JSchException | SftpException e) {
+            throw new OpsException(OpsErrorCode.SSH_COMMAND_FAILED);
+        } finally {
+            if (sftp != null && sftp.isConnected()) {
+                sftp.disconnect();
+            }
+        }
+    }
+
+    private void writeSftpFile(ChannelSftp sftp, String path, byte[] content) throws SftpException {
+        sftp.put(new ByteArrayInputStream(content), path);
+    }
+
+    private void ensureParentDir(Session session, String targetPath) {
+        String parent = targetPath.substring(0, targetPath.lastIndexOf('/'));
+        sshCommandExecutor.execOrThrow(session, "mkdir -p '" + parent + "'", 10_000);
+    }
+
+    // vmPath는 release 디렉토리 기준 상대 경로로 취급 ("./auth/.env", "nginx/nginx.conf" 등). 루트 탈출 방지.
+    // ensureParentDir에서 이 값을 그대로 'mkdir -p' 셸 커맨드에 꽂아 넣으므로, 따옴표/셸 메타문자도 함께 차단해야 함.
+    private String resolveVmPath(String releaseDir, String vmPath) {
+        if (vmPath == null || vmPath.contains("..") || UNSAFE_SHELL_CHARS.matcher(vmPath).find()) {
+            throw new OpsException(OpsErrorCode.INVALID_PATH);
+        }
+        String cleaned = vmPath.startsWith("./") ? vmPath.substring(2) : vmPath;
+        cleaned = cleaned.startsWith("/") ? cleaned.substring(1) : cleaned;
+        return releaseDir + "/" + cleaned;
+    }
+
+    private void updateStatus(String deploymentId, DeploymentStatus status, String message) {
+        updateEntity(deploymentId, e -> e.withStatus(status));
+        eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, message);
+    }
+
+    private void updateEntity(String deploymentId, UnaryOperator<DeploymentEntity> mutator) {
+        deploymentRepository.findById(deploymentId).ifPresent(entity -> deploymentRepository.save(mutator.apply(entity)));
+    }
+
+    private String shortSha(String commitSha) {
+        return commitSha.substring(0, Math.min(7, commitSha.length()));
+    }
+
+    private String trim(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() > 500 ? text.substring(0, 500) : text;
+    }
+}
