@@ -21,6 +21,20 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico"];
+const AUDIO_EXTENSIONS = ["mp3", "wav", "ogg", "m4a", "flac", "aac"];
+const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv", "avi"];
+
+type PreviewKind = "image" | "audio" | "video";
+
+function detectPreviewKind(name: string): PreviewKind | null {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (IMAGE_EXTENSIONS.includes(ext)) return "image";
+  if (AUDIO_EXTENSIONS.includes(ext)) return "audio";
+  if (VIDEO_EXTENSIONS.includes(ext)) return "video";
+  return null;
+}
+
 export default function FileBrowserPage() {
   const params = useParams();
   const router = useRouter();
@@ -29,6 +43,7 @@ export default function FileBrowserPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentPath, setCurrentPath] = useState("");
+  const [rootPath, setRootPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +58,11 @@ export default function FileBrowserPage() {
   const [editingLoading, setEditingLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
+  const [previewKind, setPreviewKind] = useState<PreviewKind | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   const load = useCallback(
     async (path: string) => {
       if (!accessToken) return;
@@ -52,6 +72,7 @@ export default function FileBrowserPage() {
         const res = await api.ops.listFiles(accessToken, vmId, path || undefined);
         setEntries(res.entries);
         setCurrentPath(res.path);
+        if (!path) setRootPath((prev) => prev ?? res.path);
       } catch (err) {
         setError(err instanceof Error ? err.message : "디렉토리 조회에 실패했습니다.");
       } finally {
@@ -60,6 +81,14 @@ export default function FileBrowserPage() {
     },
     [accessToken, vmId]
   );
+
+  function goToParent() {
+    if (!currentPath || currentPath === rootPath) return;
+    const segments = currentPath.split("/").filter(Boolean);
+    segments.pop();
+    const parent = (currentPath.startsWith("/") ? "/" : "") + segments.join("/");
+    load(parent);
+  }
 
   useEffect(() => {
     load("");
@@ -77,7 +106,37 @@ export default function FileBrowserPage() {
       load(entry.path);
       return;
     }
+    const kind = detectPreviewKind(entry.name);
+    if (kind) {
+      openPreview(entry, kind);
+      return;
+    }
     openEditor(entry);
+  }
+
+  async function openPreview(entry: FileEntry, kind: PreviewKind) {
+    if (!accessToken) return;
+    setPreviewFile(entry);
+    setPreviewKind(kind);
+    setPreviewLoading(true);
+    setError(null);
+    try {
+      // 티켓 기반 스트리밍 URL — Range 요청(seek/버퍼링)을 지원해서 오디오/비디오도 전체를 미리 안 받고 재생 가능
+      const { ticket } = await api.ops.issueStreamTicket(accessToken, vmId, entry.path);
+      setPreviewUrl(`${process.env.NEXT_PUBLIC_OPS_API}/ops/${vmId}/files/stream?ticket=${ticket}`);
+    } catch (err) {
+      setPreviewFile(null);
+      setPreviewKind(null);
+      setError(err instanceof Error ? err.message : "미리보기를 불러올 수 없습니다.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    setPreviewUrl(null);
+    setPreviewFile(null);
+    setPreviewKind(null);
   }
 
   async function openEditor(entry: FileEntry) {
@@ -223,7 +282,7 @@ export default function FileBrowserPage() {
       <div className="flex-1 border border-gray-200 rounded-lg overflow-auto">
         {loading ? (
           <PageLoader label="불러오는 중" />
-        ) : entries.length === 0 ? (
+        ) : entries.length === 0 && currentPath === rootPath ? (
           <p className="text-sm text-gray-400 text-center py-16">빈 디렉토리입니다</p>
         ) : (
           <table className="w-full text-sm">
@@ -236,6 +295,25 @@ export default function FileBrowserPage() {
               </tr>
             </thead>
             <tbody>
+              {currentPath && currentPath !== rootPath && (
+                <tr className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-2" colSpan={4}>
+                    <button onClick={goToParent} className="flex items-center gap-2 text-left hover:underline">
+                      <svg className="w-4 h-4 text-amber-400 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" />
+                      </svg>
+                      <span className="text-gray-800">..</span>
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {entries.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-12 text-center text-sm text-gray-400">
+                    빈 디렉토리입니다
+                  </td>
+                </tr>
+              )}
               {entries.map((entry) => (
                 <tr key={entry.path} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-2">
@@ -360,6 +438,41 @@ export default function FileBrowserPage() {
                 className="flex-1 h-9 bg-[#03C75A] text-white rounded-md text-sm disabled:opacity-60"
               >
                 {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 미리보기 모달 (이미지/오디오/비디오) */}
+      {previewFile && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-6">
+          <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-medium text-gray-900 truncate">{previewFile.name}</h2>
+              <button onClick={closePreview} className="text-gray-400 hover:text-gray-700">✕</button>
+            </div>
+            <div className="flex-1 flex items-center justify-center overflow-auto min-h-0">
+              {previewLoading || !previewUrl ? (
+                <PageLoader label="불러오는 중" />
+              ) : previewKind === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewUrl} alt={previewFile.name} className="max-w-full max-h-full object-contain" />
+              ) : previewKind === "audio" ? (
+                <audio controls src={previewUrl} className="w-full" />
+              ) : (
+                <video controls src={previewUrl} className="max-w-full max-h-full" />
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={closePreview} className="flex-1 h-9 border border-gray-300 rounded-md text-sm text-gray-600">
+                닫기
+              </button>
+              <button
+                onClick={() => handleDownload(previewFile)}
+                className="flex-1 h-9 bg-[#03C75A] text-white rounded-md text-sm"
+              >
+                다운로드
               </button>
             </div>
           </div>

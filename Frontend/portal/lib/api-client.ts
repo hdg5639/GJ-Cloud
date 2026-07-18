@@ -406,6 +406,13 @@ export const api = {
         method: "DELETE",
         accessToken,
       }),
+    // 이미지/오디오/비디오 미리보기용 — Range 요청(seek/버퍼링)을 지원하는 스트리밍 엔드포인트에 쓰는 티켓.
+    // 티켓 자체가 인증이라 <video>/<audio> src에 그대로 꽂을 수 있음(Authorization 헤더 불필요)
+    issueStreamTicket: (accessToken: string, vmId: string, path: string) =>
+      request<{ ticket: string }>("ops", `/ops/${vmId}/files/stream-ticket?path=${encodeURIComponent(path)}`, {
+        method: "POST",
+        accessToken,
+      }),
     // 다운로드는 ApiResponse 포맷이 아닌 원문 바이트 스트림이라 request<T>()를 못 쓰고 직접 fetch
     downloadFile: async (accessToken: string, vmId: string, path: string): Promise<Blob> => {
       const token = await getExchangedToken(accessToken, "ops-service");

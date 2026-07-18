@@ -1,10 +1,16 @@
 package gj.cloud.ops.api.controller;
 
 import gj.cloud.ops.application.filebrowser.FileBrowserService;
+import gj.cloud.ops.application.filebrowser.FileStreamService;
+import gj.cloud.ops.application.filebrowser.FileStreamTicketService;
 import gj.cloud.ops.application.filebrowser.dto.CreateDirectoryRequest;
 import gj.cloud.ops.application.filebrowser.dto.FileContentResponse;
 import gj.cloud.ops.application.filebrowser.dto.FileContentSaveRequest;
 import gj.cloud.ops.application.filebrowser.dto.FileListResponse;
+import gj.cloud.ops.application.filebrowser.dto.FileStreamTicketPayload;
+import gj.cloud.ops.application.filebrowser.dto.FileStreamTicketResponse;
+import gj.cloud.ops.global.exception.OpsException;
+import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,6 +38,8 @@ import java.util.UUID;
 public class FileBrowserController {
 
     private final FileBrowserService fileBrowserService;
+    private final FileStreamTicketService fileStreamTicketService;
+    private final FileStreamService fileStreamService;
 
     @Operation(summary = "디렉토리 목록 조회")
     @GetMapping
@@ -109,6 +117,30 @@ public class FileBrowserController {
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName);
 
         fileBrowserService.download(extractToken(request), vmId.toString(), path, response.getOutputStream());
+    }
+
+    @Operation(summary = "미디어 스트리밍 티켓 발급", description = "이미지/오디오/비디오 미리보기용. 재생 중 seek/버퍼링으로 여러 번 재사용되므로 짧은 TTL(10분) 동안 유효합니다.")
+    @PostMapping("/stream-ticket")
+    public ApiResponse<FileStreamTicketResponse> issueStreamTicket(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @RequestParam String path
+    ) {
+        String ticket = fileStreamTicketService.issue(extractToken(request), vmId.toString(), path);
+        return ApiResponse.ok(new FileStreamTicketResponse(ticket));
+    }
+
+    @Operation(summary = "미디어 스트리밍 (Range 지원)", description = "티켓으로만 인증됩니다(JWT 불필요) — <video>/<audio> 태그가 직접 호출할 수 있도록 SecurityConfig에서 permitAll 처리됨.")
+    @GetMapping("/stream")
+    public void stream(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            @PathVariable UUID vmId,
+            @RequestParam String ticket
+    ) throws IOException {
+        FileStreamTicketPayload payload = fileStreamTicketService.validate(ticket, vmId.toString())
+                .orElseThrow(() -> new OpsException(OpsErrorCode.INVALID_TICKET));
+        fileStreamService.stream(payload, request, response);
     }
 
     @Operation(summary = "파일/디렉토리 삭제", description = "디렉토리는 하위 항목까지 재귀적으로 삭제됩니다.")
