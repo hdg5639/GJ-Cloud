@@ -27,6 +27,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 
@@ -83,8 +84,8 @@ public class ProxmoxClient {
                 .doOnError(e -> log.error("VM 클론 실패: vmid={}, error={}", newVmid, e.getMessage()));
     }
 
-    public Mono<Void> configureVm(int vmid, PlanType planType, String sshPublicKey, String staticIp) {
-        VmCreate config = VmCreate.from(planType, vmid, null, sshPublicKey,
+    public Mono<Void> configureVm(int vmid, PlanType planType, List<String> sshPublicKeys, String staticIp) {
+        VmCreate config = VmCreate.from(planType, vmid, null, sshPublicKeys,
                 props.getBridge(), props.getStorage(), staticIp);
 
         MultiValueMap<String, String> configParams = new LinkedMultiValueMap<>();

@@ -1,6 +1,7 @@
 package gj.cloud.vm.application.vm.service.impl;
 
 import gj.cloud.vm.application.port.service.PortService;
+import gj.cloud.vm.application.ssh.client.OpsServiceClient;
 import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse.PlanAvailability;
@@ -11,14 +12,13 @@ import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.dto.VmStatusEvent;
 import gj.cloud.vm.application.vm.dto.VmMetricsCurrentResponse;
 import gj.cloud.vm.application.vm.dto.VmMetricsHistoryResponse;
+import gj.cloud.vm.application.vm.service.VmAccessService;
 import gj.cloud.vm.application.vm.service.VmService;
 import gj.cloud.vm.domain.port.entity.VmSshAccessEmailEntity;
 import gj.cloud.vm.domain.port.repository.VmSshAccessEmailRepository;
 import gj.cloud.vm.domain.vm.entity.VmEntity;
 import gj.cloud.vm.domain.vm.enums.PlanType;
 import gj.cloud.vm.domain.vm.enums.VmStatus;
-import gj.cloud.vm.domain.org.repository.OrganizationMemberRepository;
-import gj.cloud.vm.domain.org.repository.OrganizationVmRepository;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
@@ -53,13 +53,13 @@ public class VmServiceImpl implements VmService {
     private final ProxmoxClient proxmoxClient;
     private final CloudflareClient cloudflareClient;
     private final UserServiceClient userServiceClient;
+    private final OpsServiceClient opsServiceClient;
     private final SseEmitterManager sseEmitterManager;
     private final ProxmoxProperties proxmoxProperties;
     private final VmSshAccessEmailRepository sshAccessEmailRepository;
     private final PortService portService;
     private final MetricsCache metricsCache;
-    private final OrganizationVmRepository orgVmRepository;
-    private final OrganizationMemberRepository orgMemberRepository;
+    private final VmAccessService vmAccessService;
 
     @Override
     public Mono<VmResponse> createVm(String userId, String bearerToken, VmCreateRequest request) {
@@ -91,27 +91,29 @@ public class VmServiceImpl implements VmService {
                 .flatMap(creating ->
                         Mono.zip(
                                 userServiceClient.getSshKey(bearerToken, creating.getSshKeyId()),
+                                opsServiceClient.issueManagementKey(bearerToken, creating.getId()),
                                 allocateVmId(),
                                 allocateIp(creating.getPlanType())
                         )
                         .flatMap(tuple -> {
-                            String sshPublicKey = tuple.getT1().publicKey();
-                            int newVmid = tuple.getT2();
-                            String staticIp = tuple.getT3();
+                            List<String> sshPublicKeys = List.of(tuple.getT1().publicKey(), tuple.getT2().publicKey());
+                            int newVmid = tuple.getT3();
+                            String staticIp = tuple.getT4();
                             return proxmoxClient.ensurePoolExists(proxmoxProperties.getPool())
                                     .then(proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName()))
                                     .flatMap(taskId -> vmRepository.save(creating.withVmidAndTaskId(newVmid, taskId)))
-                                    .map(saved -> new Object[]{saved, sshPublicKey, staticIp});
+                                    .map(saved -> new Object[]{saved, sshPublicKeys, staticIp});
                         })
                 )
                 .flatMap(arr -> {
                     VmEntity cloned = (VmEntity) arr[0];
-                    String sshPublicKey = (String) arr[1];
+                    @SuppressWarnings("unchecked")
+                    List<String> sshPublicKeys = (List<String>) arr[1];
                     String staticIp = (String) arr[2];
                     return updateStatus(cloned, VmStatus.BOOTING)
                             .flatMap(booting ->
                                     proxmoxClient.waitForTaskCompletion(booting.getProxmoxTaskId())
-                                            .then(proxmoxClient.configureVm(booting.getVmid(), booting.getPlanType(), sshPublicKey, staticIp))
+                                            .then(proxmoxClient.configureVm(booting.getVmid(), booting.getPlanType(), sshPublicKeys, staticIp))
                                             .then(proxmoxClient.resizeDisk(booting.getVmid(), booting.getDiskSizeGb()))
                                             .then(proxmoxClient.startVm(booting.getVmid()))
                                             .then(proxmoxClient.waitForIpAssignment(booting.getVmid()))
@@ -180,7 +182,7 @@ public class VmServiceImpl implements VmService {
                     if (vm.getDeletedAt() != null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
                     }
-                    return checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email)
+                    return vmAccessService.checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email)
                             .then(Mono.defer(() -> {
                                 if (vm.getStatus() != VmStatus.RUNNING || vm.getVmid() == null) {
                                     return Mono.just(VmResponse.from(vm, null));
@@ -192,7 +194,7 @@ public class VmServiceImpl implements VmService {
     }
 
     @Override
-    public Mono<Void> deleteVm(String userId, UUID vmId) {
+    public Mono<Void> deleteVm(String userId, UUID vmId, String bearerToken) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .flatMap(vm -> {
@@ -206,14 +208,16 @@ public class VmServiceImpl implements VmService {
                 })
                 .flatMap(vm -> updateStatus(vm, VmStatus.DELETING))
                 .flatMap(vm -> {
+                    // Ops 관리 키 폐기는 강결합 금지: 실패해도 VM 삭제는 계속 진행 (best-effort)
+                    Mono<Void> opsKeyRevoke = opsServiceClient.revokeManagementKey(bearerToken, vm.getId());
                     Mono<Void> cloudflareTeardown = teardownCloudflare(vm);
                     if (vm.getVmid() == null) {
-                        return cloudflareTeardown
+                        return opsKeyRevoke.then(cloudflareTeardown)
                                 .then(vmRepository.save(vm.withDeleted()))
                                 .doOnNext(saved -> publishEvent(saved, null))
                                 .then();
                     }
-                    return cloudflareTeardown
+                    return opsKeyRevoke.then(cloudflareTeardown)
                             .then(proxmoxClient.deleteVm(vm.getVmid()))
                             .then(vmRepository.save(vm.withDeleted()))
                             .doOnNext(saved -> publishEvent(saved, null))
@@ -256,7 +260,7 @@ public class VmServiceImpl implements VmService {
                 .flatMap(vm -> {
                     if (vm.getDeletedAt() != null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
                     if (vm.getVmid() == null) return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
-                    return checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm);
+                    return vmAccessService.checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm);
                 })
                 .flatMap(vm -> {
                     return switch (request.action()) {
@@ -370,7 +374,7 @@ public class VmServiceImpl implements VmService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email))
+                .flatMap(vm -> vmAccessService.checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email))
                 .then(sshAccessEmailRepository.findAllByVmId(vmId)
                         .map(VmSshAccessEmailEntity::getEmail)
                         .collectList()
@@ -383,7 +387,7 @@ public class VmServiceImpl implements VmService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, ownerEmail).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, ownerEmail).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getCfAppId() == null || vm.getCfPolicyId() == null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
@@ -416,7 +420,7 @@ public class VmServiceImpl implements VmService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, ownerEmail).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(vm.getId(), vm.getUserId(), userId, ownerEmail).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getCfAppId() == null || vm.getCfPolicyId() == null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
@@ -481,6 +485,8 @@ public class VmServiceImpl implements VmService {
                 });
     }
 
+    // 사용자 세션 토큰이 없는 내부 호출 경로라 Ops 키 폐기를 여기서 요청하지 않음.
+    // Ops의 orphan-key cleanup 스케줄러가 VM 부재를 감지해 주기적으로 정리함.
     @Override
     public Mono<Void> deleteVmInternal(UUID vmId) {
         return vmRepository.findById(vmId)
@@ -527,7 +533,7 @@ public class VmServiceImpl implements VmService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getVmid() == null || !vm.getStatus().equals(VmStatus.RUNNING)) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_RUNNING));
@@ -577,7 +583,7 @@ public class VmServiceImpl implements VmService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmReadAccess(vm.getId(), vm.getUserId(), userId, email).thenReturn(vm))
                 .flatMap(vm -> {
                     if (vm.getVmid() == null) {
                         return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
@@ -607,25 +613,5 @@ public class VmServiceImpl implements VmService {
                                 return new VmMetricsHistoryResponse(vmId.toString(), timeframe, dataPoints);
                             });
                 });
-    }
-
-    // 소유자이거나 해당 VM이 연결된 org의 ACCEPTED 멤버면 통과
-    private Mono<Void> checkVmReadAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
-        if (ownerId.equals(requesterId)) return Mono.empty();
-        return orgVmRepository.findAllByVmId(vmId)
-                .flatMap(orgVm -> orgMemberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
-                .next()
-                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)))
-                .then();
-    }
-
-    // 소유자이거나 해당 VM이 연결된 org의 ACCEPTED ADMIN/OWNER 멤버면 통과
-    private Mono<Void> checkVmAdminAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
-        if (ownerId.equals(requesterId)) return Mono.empty();
-        return orgVmRepository.findAllByVmId(vmId)
-                .flatMap(orgVm -> orgMemberRepository.findAcceptedAdminByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
-                .next()
-                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)))
-                .then();
     }
 }

@@ -5,13 +5,12 @@ import gj.cloud.vm.application.port.dto.PortAddRequest;
 import gj.cloud.vm.application.port.dto.PortResponse;
 import gj.cloud.vm.application.port.dto.SubdomainCheckResponse;
 import gj.cloud.vm.application.port.service.PortService;
+import gj.cloud.vm.application.vm.service.VmAccessService;
 import gj.cloud.vm.domain.port.entity.VmPortAccessEmailEntity;
 import gj.cloud.vm.domain.port.entity.VmPortEntity;
 import gj.cloud.vm.domain.port.enums.Visibility;
 import gj.cloud.vm.domain.port.repository.VmPortAccessEmailRepository;
 import gj.cloud.vm.domain.port.repository.VmPortRepository;
-import gj.cloud.vm.domain.org.repository.OrganizationMemberRepository;
-import gj.cloud.vm.domain.org.repository.OrganizationVmRepository;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
@@ -41,8 +40,7 @@ public class PortServiceImpl implements PortService {
     private final CloudflareClient cloudflareClient;
     private final CloudflareProperties cloudflareProperties;
     private final UserServiceClient userServiceClient;
-    private final OrganizationVmRepository orgVmRepository;
-    private final OrganizationMemberRepository orgMemberRepository;
+    private final VmAccessService vmAccessService;
 
     @Override
     public Mono<PortResponse> addPort(String userId, String ownerEmail, UUID vmId, PortAddRequest request, String bearerToken) {
@@ -50,7 +48,7 @@ public class PortServiceImpl implements PortService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, ownerEmail).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(vmId, vm.getUserId(), userId, ownerEmail).thenReturn(vm))
                 .flatMap(vm -> {
                     Mono<String> subdomainMono;
                     if (request.customSubdomain() != null && !request.customSubdomain().isBlank()) {
@@ -176,7 +174,7 @@ public class PortServiceImpl implements PortService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmReadAccess(vmId, vm.getUserId(), userId, email).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmReadAccess(vmId, vm.getUserId(), userId, email).thenReturn(vm))
                 .flatMapMany(vm -> vmPortRepository.findAllByVmId(vmId))
                 .flatMap(port -> portAccessEmailRepository.findAllByVmPortId(port.getId())
                         .map(VmPortAccessEmailEntity::getEmail)
@@ -185,31 +183,13 @@ public class PortServiceImpl implements PortService {
                 );
     }
 
-    private Mono<Void> checkVmReadAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
-        if (ownerId.equals(requesterId)) return Mono.empty();
-        return orgVmRepository.findAllByVmId(vmId)
-                .flatMap(orgVm -> orgMemberRepository.findAcceptedByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
-                .next()
-                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .then();
-    }
-
-    private Mono<Void> checkVmAdminAccess(UUID vmId, String ownerId, String requesterId, String requesterEmail) {
-        if (ownerId.equals(requesterId)) return Mono.empty();
-        return orgVmRepository.findAllByVmId(vmId)
-                .flatMap(orgVm -> orgMemberRepository.findAcceptedAdminByOrgIdAndEmail(orgVm.getOrganizationId(), requesterEmail))
-                .next()
-                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)))
-                .then();
-    }
-
     @Override
     public Mono<Void> deletePort(String userId, String userEmail, UUID vmId, UUID portId) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail))
                 .then(vmPortRepository.findById(portId))
                 .filter(port -> port.getVmId().equals(vmId))
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
@@ -226,7 +206,7 @@ public class PortServiceImpl implements PortService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail).thenReturn(vm))
                 .then(vmPortRepository.findById(portId))
                 .filter(port -> port.getVmId().equals(vmId) && port.getVisibility() == Visibility.PRIVATE)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
@@ -255,7 +235,7 @@ public class PortServiceImpl implements PortService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
-                .flatMap(vm -> checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail).thenReturn(vm))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(vmId, vm.getUserId(), userId, userEmail).thenReturn(vm))
                 .then(vmPortRepository.findById(portId))
                 .filter(port -> port.getVmId().equals(vmId) && port.getVisibility() == Visibility.PRIVATE)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))

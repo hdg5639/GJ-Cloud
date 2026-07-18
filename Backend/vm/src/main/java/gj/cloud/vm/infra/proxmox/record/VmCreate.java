@@ -3,6 +3,8 @@ package gj.cloud.vm.infra.proxmox.record;
 import gj.cloud.vm.domain.vm.enums.PlanType;
 import lombok.Getter;
 
+import java.util.List;
+
 @Getter
 public class VmCreate {
 
@@ -24,17 +26,17 @@ public class VmCreate {
     private final String sshkeys;
     private final String ipconfig0;
 
-    public static VmCreate from(PlanType planType, int newVmid, String name, String sshPublicKey,
+    public static VmCreate from(PlanType planType, int newVmid, String name, List<String> sshPublicKeys,
                                  String bridge, String storage, String staticIp) {
-        return new VmCreate(planType, newVmid, name, sshPublicKey, bridge, storage, staticIp);
+        return new VmCreate(planType, newVmid, name, sshPublicKeys, bridge, storage, staticIp);
     }
 
-    private VmCreate(PlanType planType, int newVmid, String name, String sshPublicKey,
+    private VmCreate(PlanType planType, int newVmid, String name, List<String> sshPublicKeys,
                      String bridge, String storage, String staticIp) {
         this.newVmid = newVmid;
         this.templateVmid = planType.getTemplateVmid();
         this.name = name;
-        this.sshkeys = sshPublicKey;
+        this.sshkeys = String.join("\n", sshPublicKeys);
 
         this.cores = planType.getCores();
         this.memory = planType.getMemory();

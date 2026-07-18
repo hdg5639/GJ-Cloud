@@ -1,6 +1,7 @@
 package gj.cloud.vm.global.config;
 
 import gj.cloud.vm.global.security.InternalJwtAuthenticationWebFilter;
+import gj.cloud.vm.global.security.InternalOpsJwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.JwtAuthenticationWebFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -22,9 +23,32 @@ public class SecurityConfig {
 
     private final JwtAuthenticationWebFilter jwtAuthenticationWebFilter;
     private final InternalJwtAuthenticationWebFilter internalJwtAuthenticationWebFilter;
+    private final InternalOpsJwtAuthenticationWebFilter internalOpsJwtAuthenticationWebFilter;
 
+    // /internal/ops/** 전용: Ops 서비스(aud=ops-service)만 호출 가능. 아래 일반 /internal/** 체인보다 먼저 매칭돼야 함
     @Bean
     @Order(1)
+    public SecurityWebFilterChain internalOpsFilterChain(ServerHttpSecurity http) {
+        return http
+                .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/internal/ops/**"))
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+                .cors(ServerHttpSecurity.CorsSpec::disable)
+                .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
+                .authorizeExchange(auth -> auth.anyExchange().authenticated())
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint((exchange, ex) -> {
+                            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                            return exchange.getResponse().setComplete();
+                        })
+                )
+                .addFilterAt(internalOpsJwtAuthenticationWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                .build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityWebFilterChain internalFilterChain(ServerHttpSecurity http) {
         return http
                 .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/internal/**"))
@@ -45,7 +69,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @Order(2)
+    @Order(3)
     public SecurityWebFilterChain filterChain(ServerHttpSecurity http) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)

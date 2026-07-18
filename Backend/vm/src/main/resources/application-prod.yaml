@@ -18,6 +18,9 @@ auth:
 user:
   service-url: ${USER_SERVICE_URL}
 
+ops:
+  service-url: ${OPS_SERVICE_URL}
+
 proxmox:
   base-url: ${PROXMOX_URL}
   token-id: ${PROXMOX_TOKEN_ID}

@@ -26,6 +26,7 @@ const API_BASE = {
   auth: process.env.NEXT_PUBLIC_AUTH_API!,
   user: process.env.NEXT_PUBLIC_USER_API!,
   vm: process.env.NEXT_PUBLIC_VM_API!,
+  ops: process.env.NEXT_PUBLIC_OPS_API!,
   adminUser: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_USER_API)!,
   adminVm: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_VM_API)!,
 };
@@ -33,6 +34,7 @@ const API_BASE = {
 const SERVICE_AUDIENCE: Partial<Record<keyof typeof API_BASE, string>> = {
   user: "user-service",
   vm: "vm-service",
+  ops: "ops-service",
   adminUser: "user-service",
   adminVm: "vm-service",
 };

@@ -1,0 +1,48 @@
+package gj.cloud.vm.api.controller;
+
+import gj.cloud.vm.application.vm.dto.VmContextResponse;
+import gj.cloud.vm.application.vm.service.VmAccessService;
+import gj.cloud.vm.domain.vm.repository.VmRepository;
+import gj.cloud.vm.global.exception.VmException;
+import gj.cloud.vm.global.exception.enums.VmErrorCode;
+import gj.cloud.vm.global.response.ApiResponse;
+import gj.cloud.vm.global.security.VmPrincipal;
+import io.swagger.v3.oas.annotations.Hidden;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
+
+import java.util.UUID;
+
+// Ops 서비스(aud=ops-service) 전용 내부 API. VM 권한 판정은 VM 서비스가 단일 진실 공급원이므로
+// Ops는 터미널/파일/배포 요청마다 이 API로 권한을 질의하고 VM 서비스 DB를 직접 조회하지 않음.
+@Hidden
+@RestController
+@RequestMapping("/internal/ops")
+@RequiredArgsConstructor
+public class InternalOpsController {
+
+    private final VmRepository vmRepository;
+    private final VmAccessService vmAccessService;
+
+    @GetMapping("/vms/{vmId}/context")
+    public Mono<ApiResponse<VmContextResponse>> getContext(
+            @PathVariable UUID vmId,
+            @AuthenticationPrincipal VmPrincipal principal
+    ) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> {
+                    if (vm.getDeletedAt() != null) {
+                        return Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND));
+                    }
+                    return vmAccessService.resolveContext(vmId, vm.getUserId(), principal.userId(), principal.email())
+                            .map(access -> VmContextResponse.from(vm, access));
+                })
+                .map(ApiResponse::ok);
+    }
+}

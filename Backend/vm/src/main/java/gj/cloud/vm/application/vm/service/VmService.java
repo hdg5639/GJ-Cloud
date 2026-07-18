@@ -18,7 +18,7 @@ public interface VmService {
     Mono<VmResponse> createVmWithEmail(String userId, String bearerToken, VmCreateRequest request, String ownerEmail);
     Flux<VmResponse> getVms(String userId);
     Mono<VmResponse> getVm(String userId, String email, UUID vmId);
-    Mono<Void> deleteVm(String userId, UUID vmId);
+    Mono<Void> deleteVm(String userId, UUID vmId, String bearerToken);
     Flux<VmResponse> getAllVms();
     Mono<VmResponse> getVmAdmin(UUID vmId);
     Mono<Void> forceDeleteVm(UUID vmId);
