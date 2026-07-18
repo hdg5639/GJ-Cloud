@@ -25,7 +25,14 @@ public enum OpsErrorCode {
     FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "파일 또는 디렉토리를 찾을 수 없습니다."),
     FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "파일 크기가 허용 한도를 초과했습니다."),
     BINARY_FILE_EDIT_FORBIDDEN(HttpStatus.BAD_REQUEST, "바이너리 파일은 편집할 수 없습니다."),
-    SFTP_OPERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 작업에 실패했습니다.");
+    SFTP_OPERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 작업에 실패했습니다."),
+
+    // 배포 파이프라인
+    SSH_COMMAND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "원격 명령 실행에 실패했습니다."),
+    SSH_COMMAND_TIMEOUT(HttpStatus.INTERNAL_SERVER_ERROR, "원격 명령 실행이 시간 초과되었습니다."),
+    INVALID_COMPOSE(HttpStatus.BAD_REQUEST, "compose 검증에 실패했습니다."),
+    DEPLOYMENT_IN_PROGRESS(HttpStatus.CONFLICT, "이미 배포가 진행 중입니다."),
+    DEPLOYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "배포 이력을 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;

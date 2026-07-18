@@ -8,6 +8,10 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
   data:
     redis:
       host: ${REDIS_HOST}
@@ -36,6 +40,7 @@ ops:
   allowed-origin: ${PORTAL_ORIGIN}
   file-browser-max-edit-size-bytes: 1048576
   file-browser-max-upload-size-bytes: 26214400
+  deployment-lock-ttl-seconds: 1800
 
 springdoc:
   api-docs:
