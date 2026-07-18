@@ -1,14 +1,20 @@
 package gj.cloud.ops.api.controller;
 
+import gj.cloud.ops.application.deployment.ai.AiComposeReviewer;
+import gj.cloud.ops.application.deployment.ai.AiSpecGeneratorClient;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
 import gj.cloud.ops.application.deployment.dto.DeploymentCreateRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentFromSpecRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
+import gj.cloud.ops.application.deployment.dto.GenerateDeploymentSpecRequest;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
+import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderer;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
+import gj.cloud.ops.application.vmclient.VmServiceClient;
+import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
@@ -34,11 +40,16 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DeploymentController {
 
+    private static final String PERMISSION_DEPLOY = "DEPLOY";
+
     private final DeploymentExecutor deploymentExecutor;
     private final DeploymentRepository deploymentRepository;
     private final DeploymentEventPublisher eventPublisher;
     private final DeploymentSpecValidator deploymentSpecValidator;
     private final DeploymentSpecRenderer deploymentSpecRenderer;
+    private final AiSpecGeneratorClient aiSpecGeneratorClient;
+    private final AiComposeReviewer aiComposeReviewer;
+    private final VmServiceClient vmServiceClient;
 
     @Operation(summary = "배포 생성 (Raw Compose)", description = "체크아웃~라우트 등록까지 비동기로 진행됩니다. 즉시 202를 반환하고 SSE로 진행 상황을 수신하세요.")
     @PostMapping
@@ -78,6 +89,39 @@ public class DeploymentController {
 
         DeploymentEntity deployment = deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact);
         return ApiResponse.ok(DeploymentResponse.from(deployment));
+    }
+
+    @Operation(summary = "배포 스펙 AI 자동생성 (D-3)", description = "서비스 카드를 기반으로 AI가 DeploymentSpec을 생성합니다. 즉시 배포하지 않으며, 검토/수정 후 /from-spec으로 배포하세요.")
+    @PostMapping("/ai-spec/generate")
+    public ApiResponse<DeploymentSpec> generateSpec(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody GenerateDeploymentSpecRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId.toString());
+        if (!context.hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+        DeploymentSpec spec = aiSpecGeneratorClient.generate(vmId.toString(), body);
+        return ApiResponse.ok(spec);
+    }
+
+    @Operation(summary = "배포 스펙 AI 검수 (D.5-1)", description = "결정론적 검증을 통과한 스펙에 대해서만 비차단 AI 검수를 요청합니다. 코멘트만 반환하며 배포를 승인/거부하지 않습니다.")
+    @PostMapping("/ai-spec/review")
+    public ApiResponse<List<String>> reviewSpec(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody DeploymentSpec spec
+    ) {
+        String bearerToken = extractToken(request);
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId.toString());
+        if (!context.hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+        deploymentSpecValidator.validate(spec);
+        List<String> comments = aiComposeReviewer.review(vmId.toString(), spec);
+        return ApiResponse.ok(comments);
     }
 
     @Operation(summary = "배포 이력 조회")

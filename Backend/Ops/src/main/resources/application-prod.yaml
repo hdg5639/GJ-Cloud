@@ -32,6 +32,12 @@ auth:
 vm:
   service-url: ${VM_SERVICE_URL}
 
+ai:
+  api-key: ${OPENAI_API_KEY}
+  model:
+    standard: ${AI_MODEL_STANDARD:gpt-5.6-terra}
+    escalated: ${AI_MODEL_ESCALATED:gpt-5.6-sol}
+
 ops:
   management-key-encryption-secret: ${OPS_KEY_ENCRYPTION_SECRET}
   terminal-ticket-ttl-seconds: 30

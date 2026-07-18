@@ -18,6 +18,8 @@ import java.util.regex.Pattern;
 public class ComposeValidator {
 
     private static final Pattern DANGEROUS_CHARS = Pattern.compile("[;&`|]|\\$\\(");
+    private static final String DOCKER_SOCK_PATH = "/var/run/docker.sock";
+    private static final Set<Integer> SENSITIVE_DB_PORTS = Set.of(5432, 3306, 6379, 27017);
 
     public ValidationResult validate(String composeContent) {
         List<ValidationError> errors = new ArrayList<>();
@@ -54,6 +56,10 @@ public class ComposeValidator {
 
             checkPortDuplication(serviceDef.get("ports"), seenHostPorts, errors);
             checkDangerousPaths(serviceDef.get("volumes"), errors);
+            checkPrivileged(serviceDef.get("privileged"), serviceName, errors);
+            checkHostNetwork(serviceDef.get("network_mode"), serviceName, errors);
+            checkDockerSocketMount(serviceDef.get("volumes"), serviceName, errors);
+            checkExposedDatabasePorts(serviceDef.get("ports"), serviceName, errors);
         }
 
         return errors.isEmpty() ? ValidationResult.ok() : ValidationResult.fail(errors);
@@ -79,6 +85,48 @@ public class ComposeValidator {
             if (v != null && DANGEROUS_CHARS.matcher(String.valueOf(v)).find()) {
                 errors.add(new ValidationError("볼륨 경로에 허용되지 않는 문자가 포함되어 있습니다: " + v));
             }
+        }
+    }
+
+    private void checkPrivileged(Object privilegedObj, String serviceName, List<ValidationError> errors) {
+        if (Boolean.TRUE.equals(privilegedObj) || "true".equalsIgnoreCase(String.valueOf(privilegedObj))) {
+            errors.add(new ValidationError(serviceName + ": privileged 모드는 허용되지 않습니다."));
+        }
+    }
+
+    private void checkHostNetwork(Object networkModeObj, String serviceName, List<ValidationError> errors) {
+        if (networkModeObj != null && "host".equalsIgnoreCase(String.valueOf(networkModeObj))) {
+            errors.add(new ValidationError(serviceName + ": host 네트워크 모드는 허용되지 않습니다."));
+        }
+    }
+
+    private void checkDockerSocketMount(Object volumesObj, String serviceName, List<ValidationError> errors) {
+        if (!(volumesObj instanceof List<?> volumes)) {
+            return;
+        }
+        for (Object v : volumes) {
+            if (v != null && String.valueOf(v).contains(DOCKER_SOCK_PATH)) {
+                errors.add(new ValidationError(serviceName + ": Docker 소켓 마운트는 허용되지 않습니다."));
+            }
+        }
+    }
+
+    // 알려진 DB 포트(5432/3306/6379/27017)가 127.0.0.1/localhost로 바인딩되지 않고 그대로 호스트에 노출되는 경우 차단
+    private void checkExposedDatabasePorts(Object portsObj, String serviceName, List<ValidationError> errors) {
+        if (!(portsObj instanceof List<?> ports)) {
+            return;
+        }
+        for (Object portEntry : ports) {
+            String mapping = String.valueOf(portEntry);
+            Integer hostPort = extractHostPort(mapping);
+            if (hostPort == null || !SENSITIVE_DB_PORTS.contains(hostPort)) {
+                continue;
+            }
+            if (mapping.startsWith("127.0.0.1:") || mapping.startsWith("localhost:")) {
+                continue;
+            }
+            errors.add(new ValidationError(
+                    serviceName + ": DB 포트(" + hostPort + ")를 외부에 직접 노출할 수 없습니다. 127.0.0.1로 바인딩하세요."));
         }
     }
 
