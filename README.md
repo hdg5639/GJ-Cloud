@@ -187,19 +187,66 @@ GJ-Cloud/
 
 ---
 
-## 실기(e2e) 검증에서 발견해 고친 문제들
+## 트러블슈팅
 
-로컬 환경만으로는 재현되지 않던 실제 VM 대상 이슈들:
+처음부터 지금까지 개발하면서 실제로 겪고 고친 문제들을 영역별로 정리했다. 대부분 로컬 환경에서는 재현되지 않고 실제 배포·실기 테스트 중에 드러난 것들이다.
 
-- VM cloud-init에 DNS 서버가 설정되지 않아, 게이트웨이가 DNS를 포워딩하지 않으면 VM 내부 `git clone`/`curl` 등 도메인 조회가 전부 실패하던 문제
-- Docker 설치 성공 여부를 `curl | sh` 파이프의 종료 코드로만 판단해, curl이 네트워크 오류로 실패해도 성공으로 오판하던 문제
-- Docker는 설치되지만 접속 계정을 `docker` 그룹에 자동으로 넣어주지 않아 이후 모든 docker 명령이 권한 오류로 실패하던 문제
-- 갓 생성된 VM에서 cloud-init이 부팅 직후 자체 `apt-get`을 실행 중이라 dpkg 락 경합으로 Docker 설치가 실패하던 문제
-- 배포 SSE 스트림 종료 시 Spring Security가 컨테이너의 ASYNC 재디스패치에서 인증 컨텍스트를 못 찾아 인가 거부 → 이미 커밋된 SSE 응답이 깨지던 문제
-- 서비스 간 인증 설정 바인딩 오류로 VM→Auth 서비스 토큰 발급이 전부 401로 실패해 VM 생성이 막히던 문제
-- AI 기반 배포 스펙 생성이 정적 사이트를 Node.js로 오분류(존재하지 않는 포트·헬스체크를 지어냄)하던 문제 → 결정론적 저장소 분석 도입으로 해결
+### 인증 / 보안
 
-VM 생성부터 Docker 설치, AI 자동생성 기반 배포까지 실제 VM 대상 end-to-end 검증 완료.
+- Spring Security(MVC·WebFlux 둘 다)는 인증 실패 시 기본적으로 403을 반환 — API 클라이언트 입장에서 "인증 안 됨(401)"과 "권한 없음(403)"이 구분되지 않던 문제 → `AuthenticationEntryPoint`/`exceptionHandling`을 명시해 401로 통일 (Auth, VM 각각에서 별도로 발견)
+- WebFlux에서 `CorsWebFilter`에 순서를 지정하지 않으면 Spring Security 필터 체인보다 늦게 실행돼, 인증 실패(401) 응답에도 CORS 헤더가 안 붙어 브라우저가 진짜 에러 대신 CORS 에러로 표시하던 문제 → `HIGHEST_PRECEDENCE`로 고정. 이후 이런 종류의 문제를 근본적으로 없애기 위해 서버단 CORS 설정 자체를 제거하고 Caddy로 일원화
+- `EventSource`(SSE)는 커스텀 헤더를 못 보내 `Authorization` 헤더 기반 인증이 안 먹히는 문제 — VM 이벤트, 메트릭 SSE에서 각각 겪음 → 쿼리 파라미터 토큰 인증 경로를 별도로 추가
+- 프론트 Access Token 자동 갱신 로직이 React StrictMode의 이중 마운트로 동시에 두 번 실행되며 Refresh Token Rotation과 충돌(먼저 도착한 새 토큰 쌍이 나중 요청에 의해 무효화됨) → 갱신 중 플래그로 재진입 차단
+- 서비스 간 인증 설정(`auth.service-clients`)이 YAML 중첩 레벨 하나가 빠진 채로 작성돼 있어 실제로는 항상 빈 맵으로 바인딩 → VM→Auth 서비스 토큰 발급이 전부 401로 실패해 **VM 생성 자체가 막히던** 문제 (배포 후 실기 테스트에서 발견)
+- VM→Ops 내부 API(관리 키 발급/폐기)를 로그인 사용자의 토큰을 그대로 전달하는 방식으로 만들었다가, 임의의 로그인 사용자가 토큰 교환 API로 동일 오디언스 토큰을 스스로 발급받아 이 내부 API를 직접 호출할 수 있는 **권한 상승 취약점**을 자체 점검 중 발견 → client-credentials 기반 서비스 신원 인증(서비스 전용 토큰 발급 엔드포인트 + `token_type=service` 클레임 검증)으로 전환
+- 같은 보안 점검에서 한 번에 발견해 수정한 나머지 항목: 배포 조회/이벤트 엔드포인트 권한 체크 누락, compose 서비스명·git 브랜치명을 블랙리스트로만 걸러 셸 인젝션 여지가 남아있던 문제(허용목록 방식으로 전환), 폐기 대기 상태 관리 키의 재사용, 스트리밍 티켓을 발급 시점에만 검증하고 사용 시점엔 재검증하지 않던 문제, HTTP Range 요청 파서의 suffix-range/다중 range 처리 버그
+- reactor에서 `flatMap(m -> Mono.empty())` 패턴이 값이 있어도 항상 빈 `Mono`를 반환해버려서, 뒤에 붙인 `switchIfEmpty`(거부 응답)가 조건과 무관하게 항상 발동 — 조직 멤버 권한 체크가 사실상 **항상 403**으로 막히던 버그. VM/Port/Collaboration 세 서비스에 동일한 실수가 반복돼 있어 한 번에 일괄 수정
+- 탈퇴한 계정의 이메일로 재가입하면 정상적으로 새 계정이 만들어져야 하는데 중복 이메일로 판단해 409를 반환하던 버그
+
+### CORS / 라우팅
+
+- Caddy로 CORS를 일원화하기 전까지는, 서비스별 로컬 CORS 설정에서 OPTIONS preflight가 인증 필터에 막히거나, dev 프로필이 없을 때 CORS 빈이 비활성화되지 않는 등 서비스마다 미묘하게 다른 문제가 반복
+- 어드민 프론트 라우트가 파일 기반 라우팅상 `/admin/*`로 시작하면 백엔드 어드민 API 경로(`/admin/users`, `/admin/vms`)와 URL이 겹치는 문제 → 프론트 라우트를 `/admin` 이외의 경로로 완전히 분리하고, 필요 시 어드민 API를 별도 도메인으로 분리할 수 있는 옵션도 추가
+- Ops 서비스의 공개 API 경로가 `/api/vms` → `/api/ops`로 바뀌었다가 Caddy 라우팅 규칙과 계속 충돌해 다시 `/ops`로 정리 — 경로 프리픽스는 각 서비스가 독립적으로 정할 게 아니라 리버스 프록시 라우팅 규칙과 맞춰서 먼저 확정해야 한다는 교훈
+
+### VM 프로비저닝 (Proxmox / Cloudflare)
+
+- Proxmox가 자체 서명 인증서를 쓰기 때문에 기본 WebClient SSL 검증이 걸려 연동 자체가 안 되던 문제 → 검증 비활성화(사설 네트워크 내부 통신이라 감수)
+- VM 클론 태스크가 끝나기 전에 설정(config)을 먼저 건드리거나, 존재하지 않는 pool 파라미터를 넘겨 taskId가 null로 돌아오던 클론 순서 버그 → 클론 완료 대기 → 설정 순서로 재배치
+- VM 이름이 Proxmox/DNS가 요구하는 서브도메인 형식을 만족하지 않으면 클론 요청 자체가 실패 → 생성 전 형식 검증 추가
+- Cloudflare CNAME 등록 요청을 `Map<String, String>`으로 만들어 보내면 `proxied`(boolean) 값이 문자열로 직렬화돼 API가 400을 반환하던 문제 → `Map<String, Object>`로 교체
+- VM cloud-init 설정에 DNS 서버(nameserver)가 아예 빠져 있어서, 게이트웨이가 DNS를 포워딩해주지 않는 네트워크에서는 VM 내부의 모든 도메인 조회(git clone, curl 등)가 실패하던 문제 — 실기 테스트에서 발견, 신규 생성 VM부터 적용(기존 VM은 수동 조치 필요)
+
+### Ops / 배포 파이프라인
+
+- Docker 설치를 `curl ... | sh` 파이프로 실행했는데, 파이프의 종료 코드는 마지막 명령(`sh`)만 반영하기 때문에 `curl`이 네트워크 오류로 실패해도 전체가 성공으로 오판되던 문제 → 임시 파일로 받아 각 단계를 `&&`로 연결하고 실제 설치 여부까지 확인
+- Docker 설치는 성공해도 접속 계정을 `docker` 그룹에 자동으로 넣어주지 않아, 이후 모든 docker 명령이 "permission denied"로 실패하던 문제(Docker 관리 화면 + 배포 파이프라인 전체가 영향받음)
+- 갓 생성된 VM은 cloud-init이 부팅 직후 자체적으로 `apt-get`을 실행 중이라 dpkg 락을 잡고 있어서, 곧바로 Docker를 설치하려 하면 "Unable to acquire the dpkg frontend lock"으로 실패하던 문제 → cloud-init 완료 대기 후에도 락이 남아있으면 일정 간격으로 재시도
+- Ed25519 관리 키를 생성할 때 사용 중인 JSch 포크가 레거시 PEM 포맷을 지원하지 않아 `UnsupportedOperationException` 발생 → Ed25519는 OpenSSH v1 포맷으로만 표현 가능하다는 걸 확인하고 그 포맷으로 저장하도록 변경
+- 배포 SSE 스트림이 완료/타임아웃/에러로 끝나는 시점에, 서블릿 컨테이너가 다른 스레드에서 ASYNC 디스패치를 필터 체인에 다시 흘려보내는데 이 시점엔 `SecurityContext`가 없어 인가 필터가 인증 안 된 요청으로 오판 → 이미 커밋된 SSE 응답이 깨져 브라우저에 `ERR_HTTP2_PROTOCOL_ERROR`로 나타나던 문제 → ASYNC/ERROR 디스패치는 최초 REQUEST 디스패치에서 이미 인증을 마쳤으므로 인가 재검사 대상에서 제외
+- AI 기반 배포 스펙 생성이 백엔드 런타임 매니페스트가 전혀 없는 정적 HTML/CSS/JS 사이트를 Node.js로 오분류해, 존재하지 않는 포트·헬스체크를 지어내던 문제 → 결정론적 저장소 분석(매니페스트 기반 규칙 판정)을 AI 호출 앞에 두는 구조로 근본 해결 (위 "배포 파이프라인" 섹션)
+
+### 데이터베이스 / 직렬화
+
+- PostgreSQL은 `ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS`를 지원하지 않는다는 걸 뒤늦게 발견 → `pg_constraint` 조회 후 없을 때만 추가하는 `DO $$` 블록으로 교체했는데, 이번엔 R2DBC 드라이버의 SQL 파서가 dollar-quote(`$$`) 블록을 제대로 못 읽는 문제가 새로 발생 → 결국 `CREATE UNIQUE INDEX IF NOT EXISTS`처럼 애초에 조건부 문법을 지원하는 형태로 스키마 마이그레이션 패턴 자체를 바꿈
+- `spring.jackson.serialization.*` 설정 키는 소문자 케밥이 아니라 대문자 스네이크케이스(`WRITE_DATES_AS_TIMESTAMPS`, `INDENT_OUTPUT`)로 써야 인식된다는 걸 모르고 적용이 안 되던 문제
+- Spring Data `Page` 객체를 그대로 API 응답으로 반환하면 Jackson 직렬화 결과가 불안정해서, 처음엔 커스텀 DTO로 감쌌다가 → Jackson 설정(`default-property-inclusion`, 타임스탬프 포맷)을 제대로 잡은 뒤에는 다시 `Page`를 직접 반환하도록 정리(장기적으로 페이지네이션 확장이 쉬운 형태)
+
+### 프론트엔드
+
+- SSE 재연결 훅이 콜백을 매 렌더마다 새로 캡처해서 연결-해제-재연결이 반복되는 루프에 빠지던 문제 → 콜백을 ref로 분리하고, 재시도 횟수 상한과 토큰 없을 때 즉시 비활성화하는 가드 추가
+- Cloudflare Tunnel의 idle timeout(약 100초) 때문에 오래 열어두는 SSE 연결이 524로 끊기던 문제 → 타임아웃 직전(99초)에 클라이언트가 선제적으로 재연결하도록 처리, 수동 동기화 버튼도 추가
+- `useSearchParams`를 Suspense 경계 없이 사용해 프로덕션 빌드가 실패하던 문제
+- 백엔드에 VM 상태 enum 값(`PENDING`/`BOOTING`/`FAILED`/`DELETING` 등)이 추가될 때마다 프론트 타입 정의가 따라가지 못해 특정 상태에서 화면이 깨지던 문제 — 여러 차례 반복되며 타입 동기화의 중요성을 재확인
+- Tailwind v4가 브라우저의 시스템 다크모드를 자동으로 따라가면서 의도치 않게 배경이 검게 바뀌던 문제 → `color-scheme: light`로 고정
+- `204 No Content` 응답에도 JSON 파싱을 시도해 에러가 나던 문제
+- HTML `pattern` 속성의 정규식에서 문자 클래스(`[...]`) 안에 이스케이프 없는 하이픈을 그대로 쓰면 Chrome의 새 정규식 엔진(v-flag 모드)에서 항상 파싱 에러가 나는 브라우저 호환성 문제 — 여러 입력 필드(서브도메인 체크 등)에서 반복적으로 발견되어 동일한 방식으로 일괄 수정
+
+### 플랜 / 요금제
+
+- Role(권한)과 Plan(요금제)이 같은 enum(FREE/PRO/ADMIN)에 뒤섞여 있어서 "권한이 FREE"라는 의미상 모순이 존재하던 문제 → Role은 USER/ADMIN으로, Plan은 별도 도메인으로 완전히 분리
+- 인스턴스 생성 화면의 FREE/PRO 최대 VM 대수가 프론트에 하드코딩돼 있어 실제 정책 값과 어긋나던 문제 → 사용량 조회 API가 내려주는 값을 그대로 쓰도록 변경
+- 플랜 변경 요청 기능 자체는 JPA ID 자동 생성과 수동 설정 충돌(낙관적 락 예외), API 경로 불일치, 목록 응답의 `Page` 직렬화 문제 등을 거치며 여러 차례에 걸쳐 안정화
 
 ---
 
