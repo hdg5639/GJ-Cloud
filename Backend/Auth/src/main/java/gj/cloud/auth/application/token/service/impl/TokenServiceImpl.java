@@ -16,6 +16,7 @@ import gj.cloud.auth.global.jwt.JwtProperties;
 import gj.cloud.auth.global.jwt.JwtProvider;
 import gj.cloud.auth.global.jwt.ServiceClientProperties;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TokenServiceImpl implements TokenService {
@@ -145,10 +147,25 @@ public class TokenServiceImpl implements TokenService {
     @Override
     public TokenResponse issueServiceToken(ServiceTokenRequest request) {
         ServiceClientProperties.ServiceClient config = serviceClientProperties.getClients().get(request.clientId());
-        if (config == null || config.getSecret() == null || config.getSecret().isBlank()
-                || !MessageDigest.isEqual(
-                        request.clientSecret().getBytes(StandardCharsets.UTF_8),
-                        config.getSecret().getBytes(StandardCharsets.UTF_8))) {
+        if (config == null) {
+            log.warn("서비스 토큰 발급 거부: clientId='{}'가 auth.service-clients 설정에 등록돼 있지 않음 (등록된 clientId 목록: {})",
+                    request.clientId(), serviceClientProperties.getClients().keySet());
+            throw new AuthException(AuthErrorCode.INVALID_SERVICE_CLIENT);
+        }
+        if (config.getSecret() == null || config.getSecret().isBlank()) {
+            log.warn("서비스 토큰 발급 거부: clientId='{}'는 등록돼 있으나 설정된 secret이 비어있음 (VM_SERVICE_CLIENT_SECRET 환경변수 확인 필요)",
+                    request.clientId());
+            throw new AuthException(AuthErrorCode.INVALID_SERVICE_CLIENT);
+        }
+        boolean requestSecretPresent = request.clientSecret() != null && !request.clientSecret().isBlank();
+        boolean secretMatches = requestSecretPresent && MessageDigest.isEqual(
+                request.clientSecret().getBytes(StandardCharsets.UTF_8),
+                config.getSecret().getBytes(StandardCharsets.UTF_8));
+        if (!secretMatches) {
+            log.warn("서비스 토큰 발급 거부: clientId='{}' secret 불일치 (요청 secret 존재={}, 요청 길이={}, 등록된 길이={})",
+                    request.clientId(), requestSecretPresent,
+                    request.clientSecret() == null ? -1 : request.clientSecret().length(),
+                    config.getSecret().length());
             throw new AuthException(AuthErrorCode.INVALID_SERVICE_CLIENT);
         }
 
