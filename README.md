@@ -35,12 +35,16 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
     │
     ▼  API 서버  [Caddy 역프록시]
     │
-    ├── Auth 서비스      — 회원가입/로그인/JWT 발급/Refresh Token 로테이션
+    ├── Auth 서비스      — 회원가입/로그인/JWT 발급/Refresh Token 로테이션/서비스 간 client-credentials 토큰
     ├── User 서비스      — 프로필/SSH 키 관리/플랜 변경 요청
-    └── VM 서비스        — VM CRUD/전원제어/Cloudflare 연동/조직 관리/협업
+    ├── VM 서비스        — VM CRUD/전원제어/Cloudflare 연동/조직 관리/협업
+    │       │
+    │       ├── Proxmox API          (VM 생성·삭제·전원·리소스 변경·메트릭)
+    │       └── Cloudflare API       (CNAME·Tunnel ingress·Zero Trust Access)
+    │
+    └── Ops 서비스       — 웹 SSH 콘솔/파일 브라우저/Docker 관리/배포 파이프라인/DB 백업
             │
-            ├── Proxmox API          (VM 생성·삭제·전원·리소스 변경·메트릭)
-            └── Cloudflare API       (CNAME·Tunnel ingress·Zero Trust Access)
+            └── VM 내부 SSH(JSch)     (git 체크아웃·이미지 빌드·compose 기동·헬스체크·롤백)
 ```
 
 **데이터베이스**
@@ -49,12 +53,14 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 Auth → MySQL       (Spring MVC + JPA)
 User → MySQL       (Spring MVC + JPA)
 VM   → PostgreSQL  (Spring WebFlux + R2DBC)
+Ops  → PostgreSQL  (Spring MVC + JPA)
 ```
 
 **캐시 / 상태**
 
 ```
-Redis — Refresh Token, 이메일 인증 코드, Token Exchange 캐시, 로그인 레이트 리밋
+Redis — Refresh Token, 이메일 인증 코드, Token Exchange 캐시, 로그인 레이트 리밋 (Auth)
+Redis — 웹 콘솔/미디어 스트리밍 티켓, 배포 동시 실행 락 (Ops)
 ```
 
 ---
@@ -63,17 +69,18 @@ Redis — Refresh Token, 이메일 인증 코드, Token Exchange 캐시, 로그�
 
 **Backend**
 
-- Java 17, Spring Boot 3
+- Java 17, Spring Boot 4.1 / Spring Security 7.1
 - Spring WebFlux + R2DBC (VM 서비스 — 비동기 전체)
-- Spring MVC + JPA (Auth/User 서비스)
-- Spring Security, Nimbus JOSE+JWT (RS256)
+- Spring MVC + JPA (Auth/User/Ops 서비스)
+- Spring Security, Nimbus JOSE+JWT (RS256), client-credentials 기반 서비스 간 인증
 - MySQL, PostgreSQL, Redis
+- JSch (Ops — VM 내부 SSH/SFTP 자동화), OpenAI API (Ops — 배포 스펙 AI 자동생성/검수)
 
 **Frontend**
 
-- Next.js 15 (App Router), TypeScript
+- Next.js 16 (App Router), TypeScript
 - Tailwind CSS
-- SSE (VM 상태 실시간 수신, 메트릭 스트림)
+- SSE (VM 상태·메트릭·배포 진행 로그 실시간 수신), WebSocket (웹 SSH 콘솔)
 
 **Infrastructure**
 
@@ -163,10 +170,20 @@ VM을 만든 뒤 "그 안에서 뭔가 하는" 영역(터미널 접속, 파일 �
 - **DB 백업 (프론트엔드)** — 수동 백업 트리거 + 이력 조회 + 파일 브라우저 재사용 다운로드
 - **서비스 간 인증 강화 (OPS-SEC-002)** — VM→Ops 내부 API(`/internal/vms/{vmId}/management-key`) 호출을 로그인 사용자의 토큰을 그대로 전달하는 방식에서 client-credentials 기반 서비스 신원 인증으로 전환. 기존에는 임의의 로그인 사용자가 `/auth/token/exchange`로 `vm-service` 오디언스 토큰을 스스로 발급받아 Ops의 관리 키 발급/폐기 API를 직접 호출할 수 있는 권한 상승 취약점이 있었음. Auth에 서비스 전용 토큰 발급 엔드포인트(`/auth/token/service`, client_id/secret 기반)를 추가하고 VM 서비스가 여기서 받은 자체 서비스 토큰을 캐싱해 사용하도록 변경, Ops의 `InternalJwtValidator`는 `token_type=service` + `client_id` 클레임까지 검증하도록 강화
 - **Ops 서버 보안 강화 (OPS-SEC-001, 003~006)** — 배포 조회/이벤트 엔드포인트 권한 체크, compose 서비스명·git 브랜치명 허용목록 검증, 관리 키 상태 재사용 차단, 스트리밍 티켓 요청 시점 재검증, HTTP Range 파서 버그 수정
+- **배포 재시도 / 수정 후 재배포 / 수동 롤백 (백엔드+프론트엔드)** — 실패한 배포를 저장 당시의 compose 스펙 그대로 재시도하거나 값을 수정한 뒤 재배포(Git 저장소 URL/브랜치/PAT는 보안상 저장하지 않아 재입력 필요), 과거 SUCCEEDED 배포로 수동 롤백(재빌드 없이 해당 시점 이미지로 컨테이너만 재기동, 기존 자동 롤백 로직 재사용 — 롤백 자체도 하나의 배포 이력으로 남아 기존 SSE로 진행 확인 가능)
 
-### 진행 중인 작업
+### 진행 중인 작업 — 실제 VM 대상 종단간(e2e) 배포 테스트
 
-- 실제 VM 대상 종단간(end-to-end) 동작 검증 — 로컬 환경 제약으로 코드 레벨 검증까지만 완료, 실기 배포 테스트 필요
+로컬 환경 제약으로 미뤄뒀던 실기 테스트를 시작, 다음 인프라 이슈들을 발견해 수정 완료:
+
+- VM cloud-init에 DNS 서버(`nameserver`)가 아예 설정되지 않아 게이트웨이가 DNS를 포워딩해주지 않으면 VM 내부에서 `git clone`/`curl` 등 도메인 조회가 전부 실패하던 문제 (신규 생성 VM부터 적용 — 이미 생성된 VM은 수동 조치 필요)
+- Docker 설치 성공 여부를 `curl | sh` 파이프의 종료 코드로만 판단해, curl이 네트워크 오류로 실패해도 성공으로 오판하던 문제
+- Docker 설치는 되지만 접속 계정을 `docker` 그룹에 자동으로 넣어주지 않아 이후 모든 docker 명령이 권한 오류로 실패하던 문제
+- 갓 생성된 VM에서 cloud-init이 부팅 직후 자체 `apt-get`을 실행 중이라 dpkg 락 경합으로 Docker 설치가 실패하던 문제 (cloud-init 완료 대기 + 재시도로 해결)
+- 배포 SSE 스트림이 완료/종료될 때 Spring Security가 컨테이너의 ASYNC 재디스패치에서 인증 컨텍스트를 못 찾아 인가 거부 → 이미 커밋된 SSE 응답이 깨져 브라우저에 `ERR_HTTP2_PROTOCOL_ERROR`로 나타나던 문제
+- `auth.service-clients` 설정이 YAML 중첩 레벨 하나를 빼먹어 항상 빈 맵으로 바인딩되면서, VM→Auth 서비스 토큰 발급이 전부 401로 실패해 VM 생성이 막히던 문제
+
+계속 실기 테스트 진행 중 — 위 항목 외 추가 이슈 발견 시 계속 수정 예정.
 
 ---
 
