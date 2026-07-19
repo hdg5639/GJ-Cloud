@@ -1,13 +1,16 @@
 package gj.cloud.ops.application.deployment.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
+import gj.cloud.ops.application.deployment.dto.ComposeSpecResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
 import gj.cloud.ops.application.deployment.dto.EnvironmentFile;
+import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.dto.HealthCheck;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.dto.ResolvedCompose;
@@ -94,8 +97,17 @@ public class DeploymentExecutor {
                 .orElse(null);
 
         String sourceCiphertext = cipher.encrypt(artifact.composeContent().getBytes(StandardCharsets.UTF_8));
+        // 재시도/수정 후 재배포(compose-spec 조회 API)에서 그대로 복원할 수 있도록 함께 저장.
+        // environmentFiles는 .env 내용(비밀값 가능)이라 compose 원문과 동일하게 암호화, 나머지는 평문 JSON.
+        String environmentFilesCiphertext = artifact.environmentFiles().isEmpty()
+                ? null
+                : cipher.encrypt(toJson(artifact.environmentFiles()).getBytes(StandardCharsets.UTF_8));
+        String exposedRoutesJson = artifact.exposedRoutes().isEmpty() ? null : toJson(artifact.exposedRoutes());
+        String healthChecksJson = artifact.healthChecks().isEmpty() ? null : toJson(artifact.healthChecks());
+
         DeploymentEntity deployment = deploymentRepository.save(
-                DeploymentEntity.createQueued(vmId, artifact.sourceType(), sourceCiphertext, previousDeploymentId));
+                DeploymentEntity.createQueued(vmId, artifact.sourceType(), sourceCiphertext, previousDeploymentId,
+                        environmentFilesCiphertext, exposedRoutesJson, healthChecksJson));
 
         if (!lockService.tryLock(vmId, deployment.getId())) {
             deployment = deploymentRepository.save(deployment.withFailed("이미 배포가 진행 중입니다."));
@@ -107,6 +119,90 @@ public class DeploymentExecutor {
         deploymentTaskExecutor.execute(() -> runPipeline(deploymentId, vmId, internalIp, bearerToken, repoConfig, artifact));
 
         return deployment;
+    }
+
+    // 재시도/수정 후 재배포용 — 저장된 compose 원문과 환경변수/라우트/헬스체크를 복호화해 그대로 반환.
+    // repoUrl/branch/patToken은 애초에 영속화하지 않으므로(비밀값 DB 잔류 방지) 응답에 포함되지 않음 —
+    // 재제출 시 사용자가 다시 입력해야 함(기존 새 배포 폼과 동일한 요구사항).
+    public ComposeSpecResponse getComposeSpec(DeploymentEntity entity) {
+        String composeContent = entity.getSourceComposeCiphertext() != null
+                ? new String(cipher.decrypt(entity.getSourceComposeCiphertext()), StandardCharsets.UTF_8)
+                : "";
+        List<EnvironmentFile> environmentFiles = entity.getEnvironmentFilesCiphertext() != null
+                ? readJsonList(new String(cipher.decrypt(entity.getEnvironmentFilesCiphertext()), StandardCharsets.UTF_8), EnvironmentFile.class)
+                : List.of();
+        List<ExposedRoute> exposedRoutes = entity.getExposedRoutesJson() != null
+                ? readJsonList(entity.getExposedRoutesJson(), ExposedRoute.class)
+                : List.of();
+        List<HealthCheck> healthChecks = entity.getHealthChecksJson() != null
+                ? readJsonList(entity.getHealthChecksJson(), HealthCheck.class)
+                : List.of();
+        return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks);
+    }
+
+    // 사용자가 임의로 지정한 과거 SUCCEEDED 배포로 수동 롤백. 기존 자동 롤백(RollbackService)과 동일하게
+    // 재빌드 없이 target의 release 디렉토리에 남아있는 resolved-compose.yml(이미지 태그 고정본)을 그대로 재기동함.
+    // 이 롤백 자체도 하나의 배포 이력으로 남기고(RollbackService가 QUEUED→ROLLING_BACK→ROLLED_BACK으로 전이시킴)
+    // 기존 SSE(/events) 스트림으로 진행 상황을 동일하게 관전할 수 있도록 함.
+    public DeploymentEntity rollbackTo(String bearerToken, String vmId, DeploymentEntity target) {
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
+        if (!context.hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+        if (context.internalIp() == null || !"RUNNING".equals(context.status())) {
+            throw new OpsException(OpsErrorCode.VM_NOT_RUNNING);
+        }
+        if (target.getStatus() != DeploymentStatus.SUCCEEDED || target.getReleaseDir() == null) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_ROLLBACK_TARGET_NOT_SUCCEEDED);
+        }
+
+        DeploymentEntity rollbackEntity = deploymentRepository.save(
+                DeploymentEntity.createQueued(vmId, target.getSourceType(), target.getSourceComposeCiphertext(), target.getId()));
+
+        if (!lockService.tryLock(vmId, rollbackEntity.getId())) {
+            rollbackEntity = deploymentRepository.save(rollbackEntity.withFailed("이미 배포가 진행 중입니다."));
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
+        }
+
+        String rollbackId = rollbackEntity.getId();
+        String internalIp = context.internalIp();
+        deploymentTaskExecutor.execute(() -> runRollback(rollbackId, vmId, internalIp, bearerToken));
+
+        return rollbackEntity;
+    }
+
+    private void runRollback(String deploymentId, String appId, String internalIp, String bearerToken) {
+        Session session = null;
+        try {
+            session = sshSessionFactory.createSession(appId, internalIp);
+            rollbackService.rollback(session, deploymentId, appId, bearerToken, "사용자 요청에 의한 수동 롤백");
+        } catch (Exception e) {
+            log.error("수동 롤백 처리 중 예외: deploymentId={}, error={}", deploymentId, e.getMessage());
+            updateEntity(deploymentId, entity -> entity.withFailed(e.getMessage()));
+            eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, "롤백 실패: " + e.getMessage());
+        } finally {
+            lockService.unlock(appId, deploymentId);
+            eventPublisher.complete(deploymentId);
+            if (session != null && session.isConnected()) {
+                session.disconnect();
+            }
+        }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("JSON 직렬화 실패", e);
+        }
+    }
+
+    private <T> List<T> readJsonList(String json, Class<T> type) {
+        try {
+            return objectMapper.readerForListOf(type).readValue(json);
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
     private void runPipeline(String deploymentId, String appId, String internalIp, String bearerToken,

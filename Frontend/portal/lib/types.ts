@@ -347,6 +347,14 @@ export interface DeploymentEventPayload {
   createdAt: string;
 }
 
+// 재시도/수정 후 재배포용 — repoUrl/branch/patToken은 서버에 저장되지 않아 포함되지 않음(재입력 필요)
+export interface ComposeSpecResponse {
+  composeContent: string;
+  environmentFiles: EnvironmentFile[];
+  exposedRoutes: ExposedRoute[];
+  healthChecks: HealthCheck[];
+}
+
 // 11절 수동 DB 백업 — 덤프 파일은 VM 파일시스템에 저장되고 다운로드는 파일 브라우저 API를 재사용함
 export interface DbBackupResponse {
   id: string;

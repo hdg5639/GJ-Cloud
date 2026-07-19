@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS deployments (
     source_compose_ciphertext   TEXT,
     resolved_compose_ciphertext TEXT,
     service_image_refs_json     TEXT,
+    environment_files_ciphertext TEXT,
+    exposed_routes_json         TEXT,
+    health_checks_json          TEXT,
     release_dir                 VARCHAR(500),
     env_version                 INTEGER,
     previous_deployment_id      VARCHAR(36),
@@ -35,6 +38,11 @@ CREATE TABLE IF NOT EXISTS deployments (
     )),
     CONSTRAINT chk_source_type CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE'))
 );
+
+-- 재시도/수정 후 재배포(compose-spec 조회 API)를 위해 추가 — 기존 배포 환경에서도 반영되도록 idempotent하게 추가
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS environment_files_ciphertext TEXT;
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS exposed_routes_json TEXT;
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS health_checks_json TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id_created_at ON deployments(vm_id, created_at DESC);

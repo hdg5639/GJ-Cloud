@@ -35,6 +35,7 @@ import type {
   ServiceCard,
   InfraSelection,
   DeploymentEventPayload,
+  ComposeSpecResponse,
   DbBackupResponse,
 } from "./types";
 
@@ -498,6 +499,14 @@ export const api = {
         request<DeploymentResponse[]>("ops", `/ops/${vmId}/deployments`, { accessToken }),
       get: (accessToken: string, vmId: string, deploymentId: string) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/deployments/${deploymentId}`, { accessToken }),
+      // 재시도/수정 후 재배포용 — 저장된 compose 원문/환경변수/라우트/헬스체크를 복호화해 가져옴 (repoUrl/branch/patToken은 미포함)
+      getComposeSpec: (accessToken: string, vmId: string, deploymentId: string) =>
+        request<ComposeSpecResponse>("ops", `/ops/${vmId}/deployments/${deploymentId}/compose-spec`, { accessToken }),
+      rollback: (accessToken: string, vmId: string, deploymentId: string) =>
+        request<DeploymentResponse>("ops", `/ops/${vmId}/deployments/${deploymentId}/rollback`, {
+          method: "POST",
+          accessToken,
+        }),
       create: (
         accessToken: string,
         vmId: string,

@@ -48,6 +48,17 @@ public class DeploymentEntity {
     @Column(name = "service_image_refs_json", columnDefinition = "TEXT")
     private String serviceImageRefsJson;
 
+    // 재시도/수정 후 재배포 시 프리필용 — environmentFiles는 비밀값(.env 내용)을 담을 수 있어 compose 원문과
+    // 동일하게 암호화, exposedRoutes/healthChecks는 비밀값이 없어 평문 JSON으로 저장 (serviceImageRefsJson과 동일한 관례)
+    @Column(name = "environment_files_ciphertext", columnDefinition = "TEXT")
+    private String environmentFilesCiphertext;
+
+    @Column(name = "exposed_routes_json", columnDefinition = "TEXT")
+    private String exposedRoutesJson;
+
+    @Column(name = "health_checks_json", columnDefinition = "TEXT")
+    private String healthChecksJson;
+
     @Column(name = "release_dir")
     private String releaseDir;
 
@@ -71,6 +82,12 @@ public class DeploymentEntity {
 
     public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
                                                  String previousDeploymentId) {
+        return createQueued(vmId, sourceType, sourceComposeCiphertext, previousDeploymentId, null, null, null);
+    }
+
+    public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
+                                                 String previousDeploymentId, String environmentFilesCiphertext,
+                                                 String exposedRoutesJson, String healthChecksJson) {
         LocalDateTime now = LocalDateTime.now();
         return DeploymentEntity.builder()
                 .id(UUID.randomUUID().toString())
@@ -79,6 +96,9 @@ public class DeploymentEntity {
                 .sourceType(sourceType)
                 .sourceComposeCiphertext(sourceComposeCiphertext)
                 .previousDeploymentId(previousDeploymentId)
+                .environmentFilesCiphertext(environmentFilesCiphertext)
+                .exposedRoutesJson(exposedRoutesJson)
+                .healthChecksJson(healthChecksJson)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();

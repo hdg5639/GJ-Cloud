@@ -12,6 +12,7 @@ import type {
   HealthCheck,
   ServiceCard,
   InfraSelection,
+  ComposeSpecResponse,
 } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 
@@ -45,6 +46,12 @@ function formatDate(iso: string): string {
 
 type CreateTab = "compose" | "ai";
 
+// 배포 상세 페이지의 "재시도" 버튼 → 이 목록 페이지로 넘어올 때 프리필 스펙을 임시로 담아두는 키
+// (같은 형식의 키를 deployments/[deploymentId]/page.tsx에서도 그대로 사용)
+function retryStorageKey(vmId: string): string {
+  return `retryDeployment:${vmId}`;
+}
+
 const emptyExposedRoute = (): ExposedRoute => ({ serviceName: "", port: 80, protocol: "HTTP", visibility: "PUBLIC", nickname: "" });
 const emptyHealthCheck = (): HealthCheck => ({ serviceName: "", path: "/", hostPort: undefined, containerPort: undefined });
 const emptyEnvFile = (): EnvironmentFile => ({ vmPath: ".env", content: "" });
@@ -64,6 +71,9 @@ export default function DeploymentsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("compose");
   const [submitting, setSubmitting] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [rollingBackId, setRollingBackId] = useState<string | null>(null);
+  const [retryNotice, setRetryNotice] = useState(false);
 
   // 공통 (repo)
   const [repoUrl, setRepoUrl] = useState("");
@@ -103,6 +113,59 @@ export default function DeploymentsPage() {
     load();
   }, [load]);
 
+  // 배포 상세 페이지의 "재시도" 버튼에서 넘어온 프리필 스펙을 페이지 진입 시 적용 (모달 상태는
+  // 이 목록 페이지에만 있어서 페이지 간 전달에 sessionStorage를 사용)
+  useEffect(() => {
+    const raw = sessionStorage.getItem(retryStorageKey(vmId));
+    if (!raw) return;
+    sessionStorage.removeItem(retryStorageKey(vmId));
+    try {
+      const spec: ComposeSpecResponse = JSON.parse(raw);
+      applyComposeSpec(spec);
+    } catch {
+      // 손상된 데이터는 무시
+    }
+  }, [vmId]);
+
+  function applyComposeSpec(spec: ComposeSpecResponse) {
+    setComposeContent(spec.composeContent);
+    setEnvFiles(spec.environmentFiles);
+    setRoutes(spec.exposedRoutes);
+    setHealthChecks(spec.healthChecks);
+    setShowAdvanced(spec.environmentFiles.length > 0 || spec.exposedRoutes.length > 0 || spec.healthChecks.length > 0);
+    setCreateTab("compose");
+    setRetryNotice(true);
+    setShowCreate(true);
+  }
+
+  async function handleRetry(deploymentId: string) {
+    if (!accessToken) return;
+    setRetryingId(deploymentId);
+    setError(null);
+    try {
+      const spec = await api.ops.deployments.getComposeSpec(accessToken, vmId, deploymentId);
+      applyComposeSpec(spec);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "이전 배포 스펙을 불러오지 못했습니다.");
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
+  async function handleRollback(deploymentId: string) {
+    if (!accessToken) return;
+    if (!confirm("이 배포로 롤백하시겠습니까? 재빌드 없이 이 시점의 이미지로 컨테이너만 재기동합니다.")) return;
+    setRollingBackId(deploymentId);
+    setError(null);
+    try {
+      const rollback = await api.ops.deployments.rollback(accessToken, vmId, deploymentId);
+      router.push(`/instances/${vmId}/deployments/${rollback.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "롤백 요청에 실패했습니다.");
+      setRollingBackId(null);
+    }
+  }
+
   function resetCreateForm() {
     setRepoUrl("");
     setBranch("main");
@@ -116,6 +179,7 @@ export default function DeploymentsPage() {
     setInfraSelections([]);
     setGeneratedSpec("");
     setReviewComments(null);
+    setRetryNotice(false);
   }
 
   async function handleCreateFromCompose(e: React.FormEvent) {
@@ -244,7 +308,7 @@ export default function DeploymentsPage() {
                 <th className="px-4 py-2 font-medium">방식</th>
                 <th className="px-4 py-2 font-medium">리비전</th>
                 <th className="px-4 py-2 font-medium">상태</th>
-                <th className="px-4 py-2 font-medium w-20">상세</th>
+                <th className="px-4 py-2 font-medium w-48">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -259,12 +323,32 @@ export default function DeploymentsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2">
-                    <button
-                      onClick={() => router.push(`/instances/${vmId}/deployments/${d.id}`)}
-                      className="text-xs text-[#03C75A] hover:underline"
-                    >
-                      보기
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => router.push(`/instances/${vmId}/deployments/${d.id}`)}
+                        className="text-xs text-[#03C75A] hover:underline"
+                      >
+                        보기
+                      </button>
+                      {d.status === "FAILED" && (
+                        <button
+                          onClick={() => handleRetry(d.id)}
+                          disabled={retryingId === d.id}
+                          className="text-xs text-gray-500 hover:underline disabled:opacity-50"
+                        >
+                          {retryingId === d.id ? "불러오는 중..." : "재시도"}
+                        </button>
+                      )}
+                      {d.status === "SUCCEEDED" && (
+                        <button
+                          onClick={() => handleRollback(d.id)}
+                          disabled={rollingBackId === d.id}
+                          className="text-xs text-gray-500 hover:underline disabled:opacity-50"
+                        >
+                          {rollingBackId === d.id ? "롤백 요청 중..." : "롤백"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -278,9 +362,15 @@ export default function DeploymentsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-6">
           <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-medium text-gray-900">새 배포</h2>
+              <h2 className="text-base font-medium text-gray-900">{retryNotice ? "재시도 / 수정 후 재배포" : "새 배포"}</h2>
               <button onClick={() => { setShowCreate(false); resetCreateForm(); }} className="text-gray-400 hover:text-gray-700">✕</button>
             </div>
+
+            {retryNotice && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5 text-xs text-amber-700 mb-3 shrink-0">
+                이전 배포의 compose 내용을 불러왔습니다. Git 저장소 URL/브랜치/PAT는 보안상 저장되지 않아 다시 입력해야 합니다. 필요하면 내용을 수정한 뒤 배포를 시작하세요.
+              </div>
+            )}
 
             <div className="flex gap-1 mb-4 shrink-0">
               <button

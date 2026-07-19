@@ -34,6 +34,7 @@ public enum OpsErrorCode {
     INVALID_REPO_CONFIG(HttpStatus.BAD_REQUEST, "레포 URL 또는 브랜치명이 유효하지 않습니다."),
     DEPLOYMENT_IN_PROGRESS(HttpStatus.CONFLICT, "이미 배포가 진행 중입니다."),
     DEPLOYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "배포 이력을 찾을 수 없습니다."),
+    DEPLOYMENT_ROLLBACK_TARGET_NOT_SUCCEEDED(HttpStatus.BAD_REQUEST, "성공한 배포로만 롤백할 수 있습니다."),
 
     // Docker 관리
     DOCKER_NOT_INSTALLED(HttpStatus.BAD_REQUEST, "VM에 Docker가 설치되어 있지 않습니다."),

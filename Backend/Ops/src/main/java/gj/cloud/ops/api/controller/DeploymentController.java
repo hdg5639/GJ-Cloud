@@ -3,6 +3,7 @@ package gj.cloud.ops.api.controller;
 import gj.cloud.ops.application.deployment.ai.AiComposeReviewer;
 import gj.cloud.ops.application.deployment.ai.AiSpecGeneratorClient;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
+import gj.cloud.ops.application.deployment.dto.ComposeSpecResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentCreateRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentFromSpecRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
@@ -143,6 +144,31 @@ public class DeploymentController {
         requireDeployPermission(request, vmId);
         DeploymentEntity entity = findOwned(vmId, deploymentId);
         return ApiResponse.ok(DeploymentResponse.from(entity));
+    }
+
+    @Operation(summary = "배포 compose 스펙 조회 (재시도/수정 후 재배포용)",
+            description = "저장된 compose 원문 및 환경변수/라우트/헬스체크 설정을 복호화해 반환합니다. " +
+                    "repoUrl/branch/patToken은 저장되지 않으므로 재제출 시 다시 입력해야 합니다.")
+    @GetMapping("/{deploymentId}/compose-spec")
+    public ApiResponse<ComposeSpecResponse> composeSpec(
+            HttpServletRequest request, @PathVariable UUID vmId, @PathVariable String deploymentId
+    ) {
+        requireDeployPermission(request, vmId);
+        DeploymentEntity entity = findOwned(vmId, deploymentId);
+        return ApiResponse.ok(deploymentExecutor.getComposeSpec(entity));
+    }
+
+    @Operation(summary = "특정 성공 배포로 수동 롤백", description = "재빌드 없이 대상 배포 시점의 이미지로 컨테이너만 재기동합니다. 대상은 반드시 SUCCEEDED 상태여야 합니다.")
+    @PostMapping("/{deploymentId}/rollback")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<DeploymentResponse> rollback(
+            HttpServletRequest request, @PathVariable UUID vmId, @PathVariable String deploymentId
+    ) {
+        requireDeployPermission(request, vmId);
+        String bearerToken = extractToken(request);
+        DeploymentEntity target = findOwned(vmId, deploymentId);
+        DeploymentEntity rollbackEntity = deploymentExecutor.rollbackTo(bearerToken, vmId.toString(), target);
+        return ApiResponse.ok(DeploymentResponse.from(rollbackEntity));
     }
 
     // 주의: EventSource는 커스텀 Authorization 헤더를 못 붙이지만, 이 엔드포인트는 아직 ?token= 같은

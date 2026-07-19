@@ -52,6 +52,8 @@ export default function DeploymentDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<DeploymentEventPayload[]>([]);
   const [connected, setConnected] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const stopRef = useRef<(() => void) | null>(null);
 
@@ -89,6 +91,36 @@ export default function DeploymentDetailPage() {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [events]);
 
+  // 배포 목록 페이지의 "새 배포" 모달에 프리필하기 위해 sessionStorage로 스펙을 전달
+  // (같은 키 형식을 deployments/page.tsx에서도 그대로 사용)
+  async function handleRetry() {
+    if (!accessToken) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      const spec = await api.ops.deployments.getComposeSpec(accessToken, vmId, deploymentId);
+      sessionStorage.setItem(`retryDeployment:${vmId}`, JSON.stringify(spec));
+      router.push(`/instances/${vmId}/deployments`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "이전 배포 스펙을 불러오지 못했습니다.");
+      setRetrying(false);
+    }
+  }
+
+  async function handleRollback() {
+    if (!accessToken) return;
+    if (!confirm("이 배포로 롤백하시겠습니까? 재빌드 없이 이 시점의 이미지로 컨테이너만 재기동합니다.")) return;
+    setRollingBack(true);
+    setError(null);
+    try {
+      const rollback = await api.ops.deployments.rollback(accessToken, vmId, deploymentId);
+      router.push(`/instances/${vmId}/deployments/${rollback.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "롤백 요청에 실패했습니다.");
+      setRollingBack(false);
+    }
+  }
+
   if (!accessToken || loading) return <PageLoader />;
   if (!deployment) {
     return (
@@ -118,6 +150,26 @@ export default function DeploymentDetailPage() {
               <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-[#03C75A] animate-pulse" : "bg-gray-300"}`} />
               {connected ? "실시간 연결됨" : "연결 끊김"}
             </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {deployment.status === "FAILED" && (
+            <button
+              onClick={handleRetry}
+              disabled={retrying}
+              className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+            >
+              {retrying ? "불러오는 중..." : "재시도 / 수정 후 재배포"}
+            </button>
+          )}
+          {deployment.status === "SUCCEEDED" && (
+            <button
+              onClick={handleRollback}
+              disabled={rollingBack}
+              className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+            >
+              {rollingBack ? "롤백 요청 중..." : "이 배포로 롤백"}
+            </button>
           )}
         </div>
       </div>
