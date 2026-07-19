@@ -4,6 +4,7 @@ import gj.cloud.ops.global.jwt.InternalJwtValidator;
 import gj.cloud.ops.global.jwt.JwtValidator;
 import gj.cloud.ops.global.security.InternalJwtAuthenticationFilter;
 import gj.cloud.ops.global.security.JwtAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -51,6 +52,13 @@ public class SecurityConfig {
                 .cors(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // 배포 SSE(SseEmitter)는 emitter가 완료/타임아웃/에러될 때 컨트롤러 스레드가 아닌
+                        // 다른 스레드에서 컨테이너가 ASYNC 디스패치를 한 번 더 흘려보내는데, 이 시점엔
+                        // SecurityContext가 없어 authenticated() 매칭에 걸려 AuthorizationDeniedException이
+                        // 발생함 — 이미 SSE 응답이 커밋된 뒤라 에러 응답을 못 보내고 스트림이 깨져
+                        // 클라이언트에 ERR_HTTP2_PROTOCOL_ERROR로 나타남. 최초 REQUEST 디스패치에서 이미
+                        // 인증을 마쳤으므로 ASYNC/ERROR 재진입은 인가 재검사 대상에서 제외.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(
                                 "/actuator/health",
                                 "/v3/api-docs/**",
