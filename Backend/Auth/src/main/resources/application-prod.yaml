@@ -38,10 +38,13 @@ jwt:
 
 auth:
   service-clients:
-    vm-service:
-      secret: ${VM_SERVICE_CLIENT_SECRET}
-      audience: ops-service
-      scope: internal:management-key
+    # ServiceClientProperties의 Map 필드명이 clients라서 prefix(auth.service-clients) 아래
+    # 한 단계 더 들어가야 바인딩됨 — 이 레벨을 빼먹으면 맵이 항상 빈 상태로 바인딩됨
+    clients:
+      vm-service:
+        secret: ${VM_SERVICE_CLIENT_SECRET}
+        audience: ops-service
+        scope: internal:management-key
 
 app:
   email-verification:
