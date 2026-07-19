@@ -53,7 +53,16 @@ public class DockerService {
 
     public void installDocker(String bearerToken, String vmId) {
         execute(bearerToken, vmId, PERMISSION_DOCKER_ADMIN, session -> {
-            CommandResult result = sshCommandExecutor.exec(session, "curl -fsSL https://get.docker.com | sh", INSTALL_TIMEOUT_MS);
+            // "curl ... | sh" 파이프는 sh(마지막 명령)의 종료 코드만 반영함 — curl이 네트워크 오류로
+            // 아무것도 못 받아와도 sh는 빈 입력을 그냥 성공(exit 0)으로 처리해버려서, 설치가 실제로는
+            // 하나도 안 됐는데도 성공으로 오판하는 문제가 있었음. 임시 파일로 받아 각 단계를 &&로 연결하고
+            // 마지막에 command -v docker로 실제 설치 여부까지 확인.
+            CommandResult result = sshCommandExecutor.exec(session,
+                    "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh "
+                            + "&& sh /tmp/get-docker.sh "
+                            + "&& rm -f /tmp/get-docker.sh "
+                            + "&& command -v docker",
+                    INSTALL_TIMEOUT_MS);
             if (!result.isSuccess()) {
                 throw new OpsException(OpsErrorCode.DOCKER_INSTALL_FAILED);
             }

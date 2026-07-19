@@ -94,6 +94,7 @@ public class ProxmoxClient {
         configParams.add("cpu", config.getCpu());
         configParams.add("sshkeys", UriUtils.encode(config.getSshkeys(), "UTF-8"));
         configParams.add("ipconfig0", config.getIpconfig0());
+        configParams.add("nameserver", config.getNameserver());
 
         if (config.getCpulimit() > 0) {
             configParams.add("cpulimit", String.valueOf(config.getCpulimit()));
