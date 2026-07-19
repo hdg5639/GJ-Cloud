@@ -1,16 +1,25 @@
 package gj.cloud.ops.application.deployment.ai;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openai.client.OpenAIClient;
 import com.openai.models.Reasoning;
 import com.openai.models.ReasoningEffort;
-import com.openai.models.responses.Response;
 import com.openai.models.responses.ResponseCreateParams;
+import com.openai.models.responses.StructuredResponse;
+import com.openai.models.responses.StructuredResponseCreateParams;
+import com.openai.models.responses.StructuredResponseOutputMessage;
 import gj.cloud.ops.application.deployment.dto.GenerateDeploymentSpecRequest;
 import gj.cloud.ops.application.deployment.dto.InfraSelection;
 import gj.cloud.ops.application.deployment.dto.ServiceCard;
+import gj.cloud.ops.application.deployment.repoanalysis.RepositoryEvidence;
+import gj.cloud.ops.application.deployment.repoanalysis.RepositorySnapshotBuilder;
+import gj.cloud.ops.application.deployment.repoanalysis.RuleBasedSpecInferrer;
+import gj.cloud.ops.application.deployment.repoanalysis.RuleBasedSpecInferrer.RuleBasedInferenceResult;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
+import gj.cloud.ops.application.deployment.spec.DeploymentSpecPolicyValidator;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
+import gj.cloud.ops.application.deployment.spec.InfrastructureSpec;
+import gj.cloud.ops.application.deployment.spec.ExposeSpec;
+import gj.cloud.ops.application.deployment.spec.ServiceSpec;
 import gj.cloud.ops.domain.deployment.enums.AiCallKind;
 import gj.cloud.ops.domain.deployment.entity.AiSpecGenerationLogEntity;
 import gj.cloud.ops.domain.deployment.repository.AiSpecGenerationLogRepository;
@@ -20,91 +29,139 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
-// D-3 AI 자동생성 — 사용자가 입력한 경량 서비스 카드를 완전한 DeploymentSpec JSON으로 변환.
-// AI는 raw compose를 직접 만들지 않고 검증 가능한 스펙(JSON)만 생성 → gamjabox가 기존 DeploymentSpecValidator/
-// DeploymentSpecRenderer(D-1과 공유)로 compose를 결정적으로 렌더링함 (보안 위험 차단, D-3절 원칙).
-//
-// 모델 티어링 (비용 최소화):
-//   표준 생성            → standard 모델 / LOW
-//   검증 1회 실패(재교정) → standard 모델 / MEDIUM (이전 응답+오류를 그대로 전달)
-//   복잡한 모노레포       → escalated 모델 / MEDIUM (처음부터)
-//   반복 실패(재교정도 실패) → escalated 모델 / MEDIUM 로 최종 승격
-// 최대 시도 횟수는 고정 상한(초기 1회 + 재교정 2회)이며, 무한 재시도는 하지 않는다.
-// 원문 프롬프트/응답은 저장하지 않고 모델명·토큰 수·재교정 횟수·성공 여부만 감사 로그로 남긴다.
+// D-3 AI 자동생성 — AI-Deployment-Pipeline.md 3~11절 반영판.
+// 흐름이 완전히 바뀜: (1) 저장소를 실제로 얕게 클론해 결정론적 증거를 수집 → (2) 규칙 기반으로 최대한 확정
+// (정적 사이트 등은 여기서 AI 호출 없이 끝남) → (3) 그래도 모호한 서비스만 골라 AI에게 넘김, 이때도
+// 자유 문자열이 아니라 구조화 출력(JSON Schema 강제)으로 ServiceSpec을 직접 받음 → (4) 전체를 합쳐 검증.
+// 원문 프롬프트/응답/저장소 내용은 저장하지 않고, 모델명·토큰 수·재교정 횟수·ambiguity 점수·성공 여부만 감사 로그로 남긴다.
 @Slf4j
 @Component
 public class AiSpecGeneratorClient {
 
     private static final int MAX_CORRECTION_ATTEMPTS = 2;
-    // 서비스가 이 개수 이상이면 모노레포로 간주해 처음부터 escalated 모델 사용
-    private static final int COMPLEX_SERVICE_THRESHOLD = 2;
+    private static final String SCHEMA_VERSION = "2.0";
+    private static final String NETWORK_NAME = "app-network";
 
     private static final String SYSTEM_PROMPT = """
-            너는 gamjabox 배포 파이프라인의 DeploymentSpec JSON 생성기다. 사용자가 제공하는 서비스 카드와 \
-            공유 인프라 선택을 받아 아래 스키마를 정확히 따르는 JSON만 출력한다. 설명, 마크다운 코드펜스, 그 외 \
-            텍스트는 절대 포함하지 않는다.
+            너는 gamjabox 배포 파이프라인의 ServiceSpec JSON 생성기다. 이미 결정론적 규칙으로는 확정할 수 없었던
+            서비스에 대해서만 요청을 받는다 — 각 서비스는 저장소 분석 결과(RepositoryEvidence 요약)와 함께 주어진다.
 
-            스키마:
-            {
-              "schemaVersion": "1.0",
-              "services": [
-                {
-                  "name": string,
-                  "runtime": "spring-boot" | "nextjs" | "react-nginx" | "nodejs" | "nestjs" | "python",
-                  "javaVersion": number | null,
-                  "buildTool": "gradle" | "maven" | null,
-                  "nodeVersion": number | null,
-                  "buildCommand": string | null,
-                  "startCommand": string | null,
-                  "pythonVersion": string | null,
-                  "pythonFramework": "fastapi" | "django" | "flask" | null,
-                  "context": string,
-                  "containerPort": number,
-                  "expose": { "enabled": boolean, "protocol": "http", "healthCheckPath": string } | null
-                }
-              ],
-              "infrastructure": [
-                { "type": "postgresql" | "mysql" | "redis" | "mongodb", "version": string, "expose": null }
-              ],
-              "network": string
-            }
-
-            규칙:
-            - runtime별로 실제 쓰이는 필드만 채운다 (spring-boot→javaVersion/buildTool, nextjs/react-nginx/nodejs/nestjs→nodeVersion, python→pythonVersion/pythonFramework). 나머지는 null로 둔다.
-            - 서비스 카드에 값이 없는 필드는 해당 런타임의 안정적인 LTS 기본값으로 채운다 (예: javaVersion 21, nodeVersion 20).
-            - expose가 true인 서비스는 healthCheckPath를 실제로 존재할 법한 경로로 채운다(예: "/actuator/health", "/", "/api/health"). expose가 false면 expose 필드 전체를 null로 둔다.
-            - infrastructure 항목의 version이 비어있으면 안정적인 기본 버전으로 채운다 (postgresql→"16", mysql→"8", redis→"7", mongodb→"7"). infrastructure의 expose는 항상 null.
-            - network는 소문자 영숫자와 하이픈으로 구성된 하나의 문자열로 정한다 (예: "app-network").
+            반드시 지켜야 할 원칙:
+            - 저장소 분석 결과에 없는 사실을 지어내지 마라. 포트, 헬스체크 경로, 시작 스크립트 이름을 추측해서 만들지 마라.
+            - 백엔드 런타임 매니페스트(package.json/pom.xml/build.gradle/requirements.txt 등)가 전혀 없는데
+              index.html만 있다면 반드시 STATIC 산출물로 취급해야 한다 — 절대 nodejs 등으로 분류하지 마라.
+            - build/run 명령은 허용된 전략(enum) 중에서만 선택한다. 이 목록에 없는 임의의 셸 명령을 지어내지 마라.
+            - 확정에 필요한 근거가 부족하면 해당 서비스를 unresolved 목록에 넣고 이유를 설명하라 — 억지로 완전한
+              스펙을 만들어내지 마라. status를 NEEDS_INPUT/UNSUPPORTED/CONFLICT 중 알맞게 설정하라.
+            - 사용자가 선택한 서비스 카드의 값이 저장소 분석 결과와 모순되면(예: 카드에는 java라고 했는데 저장소에
+              pom.xml/build.gradle이 전혀 없음) status를 CONFLICT로 설정하고 이유를 설명하라.
+            - 모든 확정이 끝났으면 status를 READY로 설정한다.
             """;
 
     private final OpenAIClient client;
     private final String standardModel;
     private final String escalatedModel;
-    private final ObjectMapper objectMapper;
     private final DeploymentSpecValidator deploymentSpecValidator;
+    private final DeploymentSpecPolicyValidator deploymentSpecPolicyValidator;
     private final AiSpecGenerationLogRepository logRepository;
+    private final RepositorySnapshotBuilder repositorySnapshotBuilder;
+    private final RuleBasedSpecInferrer ruleBasedSpecInferrer;
+    private final AmbiguityScorer ambiguityScorer;
+    private final AiGenerationCache generationCache;
 
     public AiSpecGeneratorClient(
             OpenAIClient client,
             @Value("${ai.model.standard}") String standardModel,
             @Value("${ai.model.escalated}") String escalatedModel,
-            ObjectMapper objectMapper,
             DeploymentSpecValidator deploymentSpecValidator,
-            AiSpecGenerationLogRepository logRepository
+            DeploymentSpecPolicyValidator deploymentSpecPolicyValidator,
+            AiSpecGenerationLogRepository logRepository,
+            RepositorySnapshotBuilder repositorySnapshotBuilder,
+            RuleBasedSpecInferrer ruleBasedSpecInferrer,
+            AmbiguityScorer ambiguityScorer,
+            AiGenerationCache generationCache
     ) {
         this.client = client;
         this.standardModel = standardModel;
         this.escalatedModel = escalatedModel;
-        this.objectMapper = objectMapper;
         this.deploymentSpecValidator = deploymentSpecValidator;
+        this.deploymentSpecPolicyValidator = deploymentSpecPolicyValidator;
         this.logRepository = logRepository;
+        this.repositorySnapshotBuilder = repositorySnapshotBuilder;
+        this.ruleBasedSpecInferrer = ruleBasedSpecInferrer;
+        this.ambiguityScorer = ambiguityScorer;
+        this.generationCache = generationCache;
     }
 
-    public DeploymentSpec generate(String vmId, GenerateDeploymentSpecRequest request) {
-        String prompt = buildUserPrompt(request);
-        ModelChoice choice = initialChoice(request);
+    public AiGenerationResult generate(String vmId, GenerateDeploymentSpecRequest request) {
+        Optional<AiGenerationResult> cached = generationCache.get(request);
+        if (cached.isPresent()) {
+            logRepository.save(AiSpecGenerationLogEntity.create(vmId, AiCallKind.GENERATION, "cache-hit",
+                    0, 0, 0, true, false, null, true));
+            return cached.get();
+        }
+
+        List<String> contexts = request.services().stream().map(ServiceCard::context).distinct().toList();
+        Map<String, RepositoryEvidence> evidenceByContext = repositorySnapshotBuilder.analyze(
+                request.repoUrl(), request.branch(), request.patToken(), contexts);
+
+        List<ServiceSpec> resolvedSpecs = new ArrayList<>();
+        List<String> evidenceRefs = new ArrayList<>();
+        List<UnresolvedField> earlyUnresolved = new ArrayList<>();
+        List<ServiceCard> aiCards = new ArrayList<>();
+        Map<String, RepositoryEvidence> aiEvidence = new LinkedHashMap<>();
+
+        for (ServiceCard card : request.services()) {
+            RepositoryEvidence evidence = evidenceByContext.get(card.context());
+            RuleBasedInferenceResult inference = ruleBasedSpecInferrer.infer(evidence, card);
+            if (inference.resolved()) {
+                resolvedSpecs.add(inference.spec());
+                evidenceRefs.add(card.context() + ":" + inference.detectedType() + ":" + inference.confidence());
+            } else {
+                aiCards.add(card);
+                aiEvidence.put(card.context(), evidence);
+                for (String reason : inference.unresolvedReasons()) {
+                    earlyUnresolved.add(new UnresolvedField(card.context(), "RULE_UNRESOLVED", reason));
+                }
+            }
+        }
+
+        AiGenerationResult result = aiCards.isEmpty()
+                // 전부 결정론적으로 확정 — AI 호출 0회 (신고된 오분류 버그의 핵심 방지책)
+                ? finalizeDeterministic(vmId, resolvedSpecs, request.infrastructure(), evidenceRefs)
+                : generateWithAi(vmId, request, resolvedSpecs, aiCards, aiEvidence, evidenceRefs, earlyUnresolved);
+        generationCache.put(request, result);
+        return result;
+    }
+
+    private AiGenerationResult finalizeDeterministic(String vmId, List<ServiceSpec> resolvedSpecs,
+                                                      List<InfraSelection> infrastructure, List<String> evidenceRefs) {
+        DeploymentSpec spec = assembleSpec(resolvedSpecs, infrastructure);
+        List<String> errors = collectAllErrors(spec);
+        boolean ok = errors.isEmpty();
+        logRepository.save(AiSpecGenerationLogEntity.create(vmId, AiCallKind.GENERATION, "deterministic-rules",
+                0, 0, 0, ok, true, 0, false));
+        if (!ok) {
+            return new AiGenerationResult(GenerationStatus.INVALID_RESPONSE, null,
+                    errors.stream().map(m -> new UnresolvedField("spec", "VALIDATION_ERROR", m)).toList(),
+                    List.of(), evidenceRefs);
+        }
+        return new AiGenerationResult(GenerationStatus.READY, spec, List.of(), List.of(), evidenceRefs);
+    }
+
+    private AiGenerationResult generateWithAi(String vmId, GenerateDeploymentSpecRequest request,
+                                               List<ServiceSpec> resolvedSpecs, List<ServiceCard> aiCards,
+                                               Map<String, RepositoryEvidence> aiEvidence, List<String> evidenceRefs,
+                                               List<UnresolvedField> earlyUnresolved) {
+        int ambiguity = ambiguityScorer.score(aiCards.stream().map(ServiceCard::context).toList(), aiEvidence, request);
+        ModelChoice choice = initialChoiceFor(ambiguity);
+        String prompt = buildUserPrompt(aiCards, aiEvidence, request.infrastructure());
 
         long totalInputTokens = 0;
         long totalOutputTokens = 0;
@@ -116,43 +173,82 @@ public class AiSpecGeneratorClient {
             totalInputTokens += call.inputTokens();
             totalOutputTokens += call.outputTokens();
 
-            ParsedSpec parsed = tryParse(call.json());
-            List<String> errors = collectErrors(parsed);
+            AiServiceSpecOutput output = call.output();
+            List<String> errors = validateAiOutput(output, aiCards);
 
             while (!errors.isEmpty() && correctionAttempts < MAX_CORRECTION_ATTEMPTS) {
                 correctionAttempts++;
                 choice = correctionChoice(choice, correctionAttempts);
                 lastModelUsed = choice.model();
-                call = callModel(choice, buildCorrectionPrompt(prompt, call.json(), errors));
+                call = callModel(choice, buildCorrectionPrompt(prompt, output, errors));
                 totalInputTokens += call.inputTokens();
                 totalOutputTokens += call.outputTokens();
-                parsed = tryParse(call.json());
-                errors = collectErrors(parsed);
+                output = call.output();
+                errors = validateAiOutput(output, aiCards);
             }
 
             if (!errors.isEmpty()) {
                 log.error("AI 배포 스펙 생성 실패 (재교정 {}회 포함): {}", correctionAttempts, errors);
-                throw new OpsException(OpsErrorCode.AI_SPEC_INVALID_RESPONSE);
+                return new AiGenerationResult(GenerationStatus.INVALID_RESPONSE, null,
+                        errors.stream().map(m -> new UnresolvedField("ai", "VALIDATION_ERROR", m)).toList(),
+                        List.of(), evidenceRefs);
+            }
+
+            if (output.status() != GenerationStatus.READY) {
+                succeeded = true; // AI가 정직하게 "확정 불가"라고 답한 것 — 실패가 아니라 정상 동작
+                List<UnresolvedField> combined = new ArrayList<>(earlyUnresolved);
+                combined.addAll(output.unresolved());
+                return new AiGenerationResult(output.status(), null, combined, output.warnings(), evidenceRefs);
+            }
+
+            List<ServiceSpec> allServices = new ArrayList<>(resolvedSpecs);
+            allServices.addAll(output.services());
+            DeploymentSpec spec = assembleSpec(allServices, request.infrastructure());
+            List<String> specErrors = collectAllErrors(spec);
+            if (!specErrors.isEmpty()) {
+                return new AiGenerationResult(GenerationStatus.INVALID_RESPONSE, null,
+                        specErrors.stream().map(m -> new UnresolvedField("spec", "VALIDATION_ERROR", m)).toList(),
+                        List.of(), evidenceRefs);
             }
             succeeded = true;
-            return parsed.spec();
+            return new AiGenerationResult(GenerationStatus.READY, spec, List.of(), output.warnings(), evidenceRefs);
         } finally {
-            logRepository.save(AiSpecGenerationLogEntity.create(
-                    vmId, AiCallKind.GENERATION, lastModelUsed, totalInputTokens, totalOutputTokens,
-                    correctionAttempts, succeeded));
+            logRepository.save(AiSpecGenerationLogEntity.create(vmId, AiCallKind.GENERATION, lastModelUsed,
+                    totalInputTokens, totalOutputTokens, correctionAttempts, succeeded, false, ambiguity, false));
         }
     }
 
-    // 서비스가 여러 개면 모노레포로 간주해 처음부터 escalated 모델 사용
-    private ModelChoice initialChoice(GenerateDeploymentSpecRequest request) {
-        boolean complexMonorepo = request.services().size() >= COMPLEX_SERVICE_THRESHOLD;
-        return complexMonorepo
-                ? new ModelChoice(escalatedModel, ReasoningEffort.MEDIUM)
-                : new ModelChoice(standardModel, ReasoningEffort.LOW);
+    private DeploymentSpec assembleSpec(List<ServiceSpec> services, List<InfraSelection> infrastructure) {
+        List<InfrastructureSpec> infra = infrastructure == null ? List.of() : infrastructure.stream()
+                .map(i -> new InfrastructureSpec(i.type(),
+                        i.version() != null && !i.version().isBlank() ? i.version() : defaultInfraVersion(i.type()),
+                        new ExposeSpec(false, null, null)))
+                .toList();
+        return new DeploymentSpec(SCHEMA_VERSION, services, infra, NETWORK_NAME);
     }
 
-    // 이미 escalated 모델로 시작했다면 유지, standard였다면 1차는 같은 모델의 effort만 올리고
-    // 그래도 실패(반복 실패)하면 escalated 모델로 최종 승격
+    private String defaultInfraVersion(String type) {
+        return switch (type) {
+            case "postgresql" -> "16";
+            case "mysql" -> "8";
+            case "redis" -> "7";
+            case "mongodb" -> "7";
+            default -> "latest";
+        };
+    }
+
+    // 서비스가 여러 개면 모노레포로 간주해 처음부터 escalated 모델 사용하던 기존 방식 대신,
+    // AmbiguityScorer가 계산한 점수 구간으로 라우팅 (9절)
+    private ModelChoice initialChoiceFor(int ambiguityScore) {
+        if (ambiguityScore >= 6) {
+            return new ModelChoice(escalatedModel, ReasoningEffort.MEDIUM);
+        }
+        if (ambiguityScore >= 3) {
+            return new ModelChoice(standardModel, ReasoningEffort.MEDIUM);
+        }
+        return new ModelChoice(standardModel, ReasoningEffort.LOW);
+    }
+
     private ModelChoice correctionChoice(ModelChoice previous, int attemptNumber) {
         if (previous.model().equals(escalatedModel)) {
             return new ModelChoice(escalatedModel, ReasoningEffort.MEDIUM);
@@ -162,19 +258,38 @@ public class AiSpecGeneratorClient {
                 : new ModelChoice(escalatedModel, ReasoningEffort.MEDIUM);
     }
 
-    private List<String> collectErrors(ParsedSpec parsed) {
-        return parsed.spec() != null ? deploymentSpecValidator.collectErrors(parsed.spec()) : List.of(parsed.parseError());
+    // 구조적 검증(DeploymentSpecValidator) + 보안/정책 검증(DeploymentSpecPolicyValidator)을 함께 수행 —
+    // 최종적으로 확정된 스펙(결정론적 + AI 해결분 합산본)에 대해서만 호출한다 (12절 — 관심사 분리는 유지하되
+    // 렌더링 직전엔 항상 둘 다 통과해야 함).
+    private List<String> collectAllErrors(DeploymentSpec spec) {
+        List<String> errors = new ArrayList<>(deploymentSpecValidator.collectErrors(spec));
+        errors.addAll(deploymentSpecPolicyValidator.collectErrors(spec));
+        return errors;
+    }
+
+    private List<String> validateAiOutput(AiServiceSpecOutput output, List<ServiceCard> requestedCards) {
+        List<String> errors = new ArrayList<>();
+        if (output.status() == GenerationStatus.READY) {
+            if (output.services() == null || output.services().size() != requestedCards.size()) {
+                errors.add("요청한 서비스 수와 응답의 services 개수가 일치하지 않습니다");
+            } else {
+                DeploymentSpec probe = assembleSpec(output.services(), List.of());
+                errors.addAll(deploymentSpecValidator.collectErrors(probe));
+            }
+        }
+        return errors;
     }
 
     private AiCallResult callModel(ModelChoice choice, String userPrompt) {
-        ResponseCreateParams params = ResponseCreateParams.builder()
+        StructuredResponseCreateParams<AiServiceSpecOutput> params = ResponseCreateParams.builder()
                 .model(choice.model())
                 .reasoning(Reasoning.builder().effort(choice.effort()).build())
                 .instructions(SYSTEM_PROMPT)
                 .input(userPrompt)
+                .text(AiServiceSpecOutput.class)
                 .build();
 
-        Response response;
+        StructuredResponse<AiServiceSpecOutput> response;
         try {
             response = client.responses().create(params);
         } catch (Exception e) {
@@ -182,85 +297,65 @@ public class AiSpecGeneratorClient {
             throw new OpsException(OpsErrorCode.AI_SPEC_GENERATION_FAILED);
         }
 
-        String json = stripCodeFence(response.output().stream()
-                .filter(item -> item.isMessage())
-                .flatMap(item -> item.asMessage().content().stream())
-                .filter(content -> content.isOutputText())
-                .map(content -> content.asOutputText().text())
-                .reduce("", String::concat)
-                .trim());
+        AiServiceSpecOutput output = response.output().stream()
+                .filter(item -> item.message().isPresent())
+                .flatMap(item -> item.message().get().content().stream())
+                .filter(StructuredResponseOutputMessage.Content::isOutputText)
+                .map(StructuredResponseOutputMessage.Content::asOutputText)
+                .findFirst()
+                .orElseThrow(() -> new OpsException(OpsErrorCode.AI_SPEC_INVALID_RESPONSE));
 
         long inputTokens = response.usage().map(usage -> usage.inputTokens()).orElse(0L);
         long outputTokens = response.usage().map(usage -> usage.outputTokens()).orElse(0L);
 
-        return new AiCallResult(json, inputTokens, outputTokens);
+        return new AiCallResult(output, inputTokens, outputTokens);
     }
 
-    private ParsedSpec tryParse(String json) {
-        try {
-            return new ParsedSpec(objectMapper.readValue(json, DeploymentSpec.class), null);
-        } catch (Exception e) {
-            return new ParsedSpec(null, "JSON 파싱 실패: " + e.getMessage());
-        }
-    }
-
-    private String buildUserPrompt(GenerateDeploymentSpecRequest request) {
-        StringBuilder sb = new StringBuilder("서비스 카드:\n");
-        for (ServiceCard service : request.services()) {
-            sb.append("- name=").append(service.name())
-                    .append(", runtime=").append(service.runtime())
-                    .append(", context=").append(service.context())
-                    .append(", containerPort=").append(service.containerPort())
-                    .append(", javaVersion=").append(service.javaVersion())
-                    .append(", buildTool=").append(service.buildTool())
-                    .append(", nodeVersion=").append(service.nodeVersion())
-                    .append(", buildCommand=").append(service.buildCommand())
-                    .append(", startCommand=").append(service.startCommand())
-                    .append(", pythonVersion=").append(service.pythonVersion())
-                    .append(", pythonFramework=").append(service.pythonFramework())
-                    .append(", expose=").append(service.expose())
+    private String buildUserPrompt(List<ServiceCard> cards, Map<String, RepositoryEvidence> evidenceByContext,
+                                    List<InfraSelection> infrastructure) {
+        StringBuilder sb = new StringBuilder("확정이 필요한 서비스:\n");
+        for (ServiceCard card : cards) {
+            RepositoryEvidence evidence = evidenceByContext.get(card.context());
+            sb.append("- name=").append(card.name())
+                    .append(", context=").append(card.context())
+                    .append(", containerPort=").append(card.containerPort())
+                    .append(", expose=").append(card.expose())
+                    .append(", 사용자가 선택한 카테고리=").append(card.runtime())
+                    .append("\n  저장소 분석 결과: ").append(describeEvidence(evidence))
                     .append("\n");
         }
-        if (request.infrastructure() != null && !request.infrastructure().isEmpty()) {
+        if (infrastructure != null && !infrastructure.isEmpty()) {
             sb.append("공유 인프라:\n");
-            for (InfraSelection infra : request.infrastructure()) {
-                sb.append("- type=").append(infra.type())
-                        .append(", version=").append(infra.version())
-                        .append("\n");
+            for (InfraSelection infra : infrastructure) {
+                sb.append("- type=").append(infra.type()).append(", version=").append(infra.version()).append("\n");
             }
         }
         return sb.toString();
     }
 
-    private String buildCorrectionPrompt(String originalPrompt, String previousJson, List<String> errors) {
-        return originalPrompt
-                + "\n\n이전 응답:\n" + previousJson
-                + "\n\n검증 오류:\n- " + String.join("\n- ", errors)
-                + "\n\n위 오류에 해당하는 필드만 수정한 전체 JSON을 다시 출력하라. 스키마와 규칙은 이전과 동일하게 유지한다.";
+    private String describeEvidence(RepositoryEvidence evidence) {
+        if (evidence == null || evidence.files() == null) {
+            return "분석 결과 없음";
+        }
+        return "dockerfile=" + evidence.files().dockerfile()
+                + ", packageJson=" + evidence.files().packageJson()
+                + ", pomXml=" + evidence.files().pomXml()
+                + ", gradleBuild=" + evidence.files().gradleBuild()
+                + ", requirementsTxt=" + evidence.files().requirementsTxt()
+                + ", pyprojectToml=" + evidence.files().pyprojectToml()
+                + ", indexHtml=" + evidence.files().indexHtml();
     }
 
-    private String stripCodeFence(String text) {
-        String trimmed = text.trim();
-        if (!trimmed.startsWith("```")) {
-            return trimmed;
-        }
-        int firstNewline = trimmed.indexOf('\n');
-        if (firstNewline != -1) {
-            trimmed = trimmed.substring(firstNewline + 1);
-        }
-        int lastFence = trimmed.lastIndexOf("```");
-        if (lastFence != -1) {
-            trimmed = trimmed.substring(0, lastFence);
-        }
-        return trimmed.trim();
+    private String buildCorrectionPrompt(String originalPrompt, AiServiceSpecOutput previous, List<String> errors) {
+        return originalPrompt
+                + "\n\n이전 응답:\n" + previous
+                + "\n\n검증 오류:\n- " + String.join("\n- ", errors)
+                + "\n\n위 오류에 해당하는 필드만 수정한 전체 응답을 다시 출력하라. 스키마와 규칙은 이전과 동일하게 유지한다.";
     }
 
     private record ModelChoice(String model, ReasoningEffort effort) {
     }
 
-    private record AiCallResult(String json, long inputTokens, long outputTokens) {
-    }
-
-    private record ParsedSpec(DeploymentSpec spec, String parseError) {
+    private record AiCallResult(AiServiceSpecOutput output, long inputTokens, long outputTokens) {
     }
 }

@@ -339,6 +339,35 @@ export interface DeploymentSpec {
   network: string;
 }
 
+// AI 자동생성 파이프라인 개선(결정론적 저장소 분석 + 명시적 불확실성 상태) — 생성 결과가 항상
+// 완전한 스펙은 아님. status가 READY가 아니면 spec은 null이고 unresolved 사유를 보여줘야 함.
+export type GenerationStatus = "READY" | "NEEDS_INPUT" | "UNSUPPORTED" | "CONFLICT" | "INVALID_RESPONSE";
+
+export interface UnresolvedField {
+  field: string;
+  code: string;
+  reason: string;
+}
+
+export interface AiGenerationResult {
+  status: GenerationStatus;
+  spec: DeploymentSpec | null;
+  unresolved: UnresolvedField[];
+  warnings: string[];
+  evidenceRefs: string[];
+}
+
+export interface ComposeReviewFinding {
+  code: string;
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  service: string;
+  location: string;
+  message: string;
+  remediation: string;
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  evidence: string;
+}
+
 export interface DeploymentEventPayload {
   sequence: number;
   eventType: "STAGE_CHANGE" | "BUILD_LOG" | "ERROR" | "DONE";

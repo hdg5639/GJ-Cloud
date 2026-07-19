@@ -42,11 +42,28 @@ public class AiSpecGenerationLogEntity {
     @Column(nullable = false)
     private boolean succeeded;
 
+    // 결정론적 규칙만으로 전부 해결되어 AI 호출이 0회였는지 (9절 — "고신뢰 결정론적 결과 → AI 호출 없음")
+    @Column(name = "used_deterministic_rules", nullable = false)
+    private boolean usedDeterministicRules;
+
+    @Column(name = "ambiguity_score")
+    private Integer ambiguityScore;
+
+    @Column(name = "cache_hit", nullable = false)
+    private boolean cacheHit;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     public static AiSpecGenerationLogEntity create(String vmId, AiCallKind kind, String model, long inputTokens,
                                                      long outputTokens, int correctionAttemptCount, boolean succeeded) {
+        return create(vmId, kind, model, inputTokens, outputTokens, correctionAttemptCount, succeeded,
+                false, null, false);
+    }
+
+    public static AiSpecGenerationLogEntity create(String vmId, AiCallKind kind, String model, long inputTokens,
+                                                     long outputTokens, int correctionAttemptCount, boolean succeeded,
+                                                     boolean usedDeterministicRules, Integer ambiguityScore, boolean cacheHit) {
         return AiSpecGenerationLogEntity.builder()
                 .id(UUID.randomUUID().toString())
                 .vmId(vmId)
@@ -56,6 +73,9 @@ public class AiSpecGenerationLogEntity {
                 .outputTokens(outputTokens)
                 .correctionAttemptCount(correctionAttemptCount)
                 .succeeded(succeeded)
+                .usedDeterministicRules(usedDeterministicRules)
+                .ambiguityScore(ambiguityScore)
+                .cacheHit(cacheHit)
                 .createdAt(LocalDateTime.now())
                 .build();
     }

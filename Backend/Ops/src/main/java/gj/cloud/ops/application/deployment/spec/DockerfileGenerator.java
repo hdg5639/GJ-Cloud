@@ -4,28 +4,65 @@ import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import org.springframework.stereotype.Component;
 
-// D-1 "제공 템플릿" 6종에 대한 표준 멀티스테이지 Dockerfile 생성.
-// 참고: 실제 이미지 빌드로 검증한 템플릿이 아니라 각 스택의 통상적인 Dockerfile 관례를 따른 것 — 실제 배포 전 확인 권장.
+// build/artifact/run 분리 스키마(5절) + 허용목록 전략(6절) 기반 Dockerfile 생성.
+// buildCommand/startCommand 같은 자유 문자열은 더 이상 존재하지 않음 — 모든 RUN/CMD 값은
+// BuildRunStrategy의 "고정된" 케이스에서만 나오므로(이 클래스 밖에서 절대 인자를 주입하지 않음)
+// AI나 사용자가 임의 셸 명령을 넣을 수 있는 경로 자체가 없음.
+// 참고: build.strategy=DOCKERFILE(저장소에 이미 있는 Dockerfile 사용)인 서비스는 이 클래스를 호출하지 않고
+// DeploymentSpecRenderer가 저장소의 기존 Dockerfile 경로를 그대로 참조함 — generate()는 그 경우 호출되지 않는다.
 @Component
 public class DockerfileGenerator {
 
     public String generate(ServiceSpec service) {
-        return switch (service.runtime()) {
-            case "spring-boot" -> springBoot(service);
-            case "nextjs" -> nextjs(service);
-            case "react-nginx" -> reactNginx(service);
-            case "nodejs" -> nodejs(service);
-            case "nestjs" -> nestjs(service);
-            case "python" -> python(service);
-            default -> throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        if (service.build().strategy() == BuildRunStrategy.DOCKERFILE) {
+            throw new IllegalStateException(
+                    "DOCKERFILE 전략은 저장소의 기존 Dockerfile을 사용해야 하므로 generate() 호출 대상이 아닙니다 (렌더러 버그)");
+        }
+        return switch (service.artifact().type()) {
+            case STATIC_DIRECTORY -> staticDirectory(service);
+            case JAR -> jar(service);
+            case PYTHON_APPLICATION -> pythonApplication(service);
+            case CONTAINER_IMAGE -> containerImage(service);
+            case UNKNOWN -> throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
         };
     }
 
-    private String springBoot(ServiceSpec service) {
-        int javaVersion = service.javaVersion() != null ? service.javaVersion() : 21;
-        boolean maven = "maven".equalsIgnoreCase(service.buildTool());
-        String buildCmd = maven ? "mvn -B package -DskipTests" : "./gradlew build -x test --no-daemon";
+    // artifact=STATIC_DIRECTORY, build.runtime=NONE → 빌드 단계 없이 그대로 nginx로 서빙 (진짜 정적 사이트)
+    // artifact=STATIC_DIRECTORY, build.runtime=NODEJS → Node로 빌드한 뒤 산출물만 nginx로 서빙 (Vite/CRA 등)
+    private String staticDirectory(ServiceSpec service) {
+        if (service.build().runtime() != RuntimeKind.NODEJS) {
+            return """
+                    FROM nginx:alpine
+                    COPY . /usr/share/nginx/html
+                    EXPOSE 80
+                    """;
+        }
+
+        int nodeVersion = parseIntOrDefault(service.build().version(), 20);
+        String outputPath = service.build().outputPath() != null ? service.build().outputPath() : "dist";
+        String buildStep = buildStepFor(service.build().strategy());
+
+        return """
+                FROM node:%d-alpine AS build
+                WORKDIR /app
+                COPY package*.json ./
+                RUN %s
+                COPY . .
+                RUN %s
+
+                FROM nginx:alpine
+                COPY --from=build /app/%s /usr/share/nginx/html
+                EXPOSE 80
+                """.formatted(nodeVersion, installStepFor(service.build().strategy()), buildStep, outputPath);
+    }
+
+    // artifact=JAR, build.runtime=JAVA → Maven/Gradle 멀티스테이지 빌드, 슬림 JRE 이미지로 실행
+    private String jar(ServiceSpec service) {
+        int javaVersion = parseIntOrDefault(service.build().version(), 21);
+        String buildStep = buildStepFor(service.build().strategy());
+        boolean maven = service.build().strategy() == BuildRunStrategy.MAVEN_PACKAGE;
         String jarGlob = maven ? "/app/target/*.jar" : "/app/build/libs/*.jar";
+        int port = service.run().containerPort() != null ? service.run().containerPort() : 8080;
 
         return """
                 FROM eclipse-temurin:%d-jdk AS build
@@ -38,18 +75,66 @@ public class DockerfileGenerator {
                 COPY --from=build %s app.jar
                 EXPOSE %d
                 ENTRYPOINT ["java", "-jar", "app.jar"]
-                """.formatted(javaVersion, buildCmd, javaVersion, jarGlob, service.containerPort());
+                """.formatted(javaVersion, buildStep, javaVersion, jarGlob, port);
     }
 
-    private String nextjs(ServiceSpec service) {
-        int nodeVersion = service.nodeVersion() != null ? service.nodeVersion() : 20;
-        String buildCommand = service.buildCommand() != null ? service.buildCommand() : "npm run build";
+    // artifact=PYTHON_APPLICATION, build.runtime=PYTHON → 단일 스테이지, gunicorn/uvicorn/django runserver로 실행
+    private String pythonApplication(ServiceSpec service) {
+        String pythonVersion = service.build().version() != null ? service.build().version() : "3.11";
+        int port = service.run().containerPort() != null ? service.run().containerPort() : 8000;
+        String installStep = service.build().strategy() == BuildRunStrategy.UV_SYNC
+                ? "pip install --no-cache-dir uv && uv sync --frozen"
+                : "pip install --no-cache-dir -r requirements.txt";
+        String[] cmd = switch (service.run().strategy()) {
+            case GUNICORN -> new String[]{"gunicorn", "main:app", "--bind", "0.0.0.0:" + port};
+            case UVICORN -> new String[]{"uvicorn", "main:app", "--host", "0.0.0.0", "--port", String.valueOf(port)};
+            default -> throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        };
 
+        return """
+                FROM python:%s-slim
+                WORKDIR /app
+                COPY . .
+                RUN %s
+                EXPOSE %d
+                CMD %s
+                """.formatted(pythonVersion, installStep, port, quoteJsonArray(cmd));
+    }
+
+    // artifact=CONTAINER_IMAGE, build.runtime=NODEJS → Node 서버 프로세스(Next.js SSR/Express/NestJS 등).
+    // 컴파일된 별도 산출물(jar 같은)을 구분해 다루지 않고 컨테이너 자체가 곧 산출물인 경우.
+    private String containerImage(ServiceSpec service) {
+        if (service.build().runtime() != RuntimeKind.NODEJS) {
+            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        }
+        int nodeVersion = parseIntOrDefault(service.build().version(), 20);
+        int port = service.run().containerPort() != null ? service.run().containerPort() : 3000;
+        String[] runCmd = switch (service.run().strategy()) {
+            case NPM_START -> new String[]{"npm", "start"};
+            case PNPM_START -> new String[]{"pnpm", "start"};
+            case YARN_START -> new String[]{"yarn", "start"};
+            default -> throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        };
+
+        if (service.build().strategy() == BuildRunStrategy.NONE) {
+            // 빌드 단계 없이 바로 실행 (예: 순수 Node 스크립트, 빌드 트랜스파일이 필요 없는 경우)
+            return """
+                    FROM node:%d-alpine
+                    WORKDIR /app
+                    COPY package*.json ./
+                    RUN npm ci --omit=dev
+                    COPY . .
+                    EXPOSE %d
+                    CMD %s
+                    """.formatted(nodeVersion, port, quoteJsonArray(runCmd));
+        }
+
+        String buildStep = buildStepFor(service.build().strategy());
         return """
                 FROM node:%d-alpine AS build
                 WORKDIR /app
                 COPY package*.json ./
-                RUN npm ci
+                RUN %s
                 COPY . .
                 RUN %s
 
@@ -58,85 +143,43 @@ public class DockerfileGenerator {
                 ENV NODE_ENV=production
                 COPY --from=build /app ./
                 EXPOSE %d
-                CMD ["npm", "start"]
-                """.formatted(nodeVersion, buildCommand, nodeVersion, service.containerPort());
-    }
-
-    // nginx가 80으로 서빙하는 게 표준 관례라 containerPort 지정과 무관하게 80 고정 (compose 쪽에서도 동일하게 처리해야 함)
-    private String reactNginx(ServiceSpec service) {
-        int nodeVersion = service.nodeVersion() != null ? service.nodeVersion() : 20;
-        String buildCommand = service.buildCommand() != null ? service.buildCommand() : "npm run build";
-
-        return """
-                FROM node:%d-alpine AS build
-                WORKDIR /app
-                COPY package*.json ./
-                RUN npm ci
-                COPY . .
-                RUN %s
-
-                FROM nginx:alpine
-                COPY --from=build /app/build /usr/share/nginx/html
-                EXPOSE 80
-                """.formatted(nodeVersion, buildCommand);
-    }
-
-    private String nodejs(ServiceSpec service) {
-        int nodeVersion = service.nodeVersion() != null ? service.nodeVersion() : 20;
-        String startCommand = service.startCommand() != null ? service.startCommand() : "node index.js";
-        String[] cmdParts = startCommand.split("\\s+");
-        String cmdArray = quoteJsonArray(cmdParts);
-
-        return """
-                FROM node:%d-alpine
-                WORKDIR /app
-                COPY package*.json ./
-                RUN npm ci --omit=dev
-                COPY . .
-                EXPOSE %d
-                CMD [%s]
-                """.formatted(nodeVersion, service.containerPort(), cmdArray);
-    }
-
-    private String nestjs(ServiceSpec service) {
-        int nodeVersion = service.nodeVersion() != null ? service.nodeVersion() : 20;
-
-        return """
-                FROM node:%d-alpine AS build
-                WORKDIR /app
-                COPY package*.json ./
-                RUN npm ci
-                COPY . .
-                RUN npm run build
-
-                FROM node:%d-alpine
-                WORKDIR /app
-                ENV NODE_ENV=production
-                COPY --from=build /app/dist ./dist
-                COPY --from=build /app/node_modules ./node_modules
-                EXPOSE %d
-                CMD ["node", "dist/main"]
-                """.formatted(nodeVersion, nodeVersion, service.containerPort());
-    }
-
-    private String python(ServiceSpec service) {
-        String pythonVersion = service.pythonVersion() != null ? service.pythonVersion() : "3.11";
-        String framework = service.pythonFramework() != null ? service.pythonFramework() : "fastapi";
-        String cmd = switch (framework) {
-            case "django" -> "[\"python\", \"manage.py\", \"runserver\", \"0.0.0.0:%d\"]".formatted(service.containerPort());
-            case "flask" -> "[\"flask\", \"run\", \"--host=0.0.0.0\", \"--port=%d\"]".formatted(service.containerPort());
-            default -> "[\"uvicorn\", \"main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"%d\"]".formatted(service.containerPort());
-        };
-
-        return """
-                FROM python:%s-slim
-                WORKDIR /app
-                COPY requirements.txt .
-                RUN pip install --no-cache-dir -r requirements.txt
-                COPY . .
-                EXPOSE %d
                 CMD %s
-                """.formatted(pythonVersion, service.containerPort(), cmd);
+                """.formatted(nodeVersion, installStepFor(service.build().strategy()), buildStep,
+                nodeVersion, port, quoteJsonArray(runCmd));
+    }
+
+    // 아래 두 메서드가 반환하는 값은 전부 컴파일 타임에 고정된 문자열 리터럴이다(enum 케이스별 switch) —
+    // 외부(AI/사용자) 입력이 그대로 반환되는 경로는 존재하지 않는다.
+    private String installStepFor(BuildRunStrategy strategy) {
+        return switch (strategy) {
+            case PNPM_BUILD, PNPM_INSTALL, PNPM_START -> "pnpm install --frozen-lockfile";
+            case YARN_BUILD, YARN_INSTALL, YARN_START -> "yarn install --frozen-lockfile";
+            default -> "npm ci";
+        };
+    }
+
+    private String buildStepFor(BuildRunStrategy strategy) {
+        return switch (strategy) {
+            case NPM_BUILD -> "npm run build";
+            case PNPM_BUILD -> "pnpm run build";
+            case YARN_BUILD -> "yarn build";
+            case MAVEN_PACKAGE -> "mvn -B package -DskipTests";
+            case GRADLE_BUILD -> "./gradlew build -x test --no-daemon";
+            case GRADLE_BOOT_JAR -> "./gradlew bootJar --no-daemon";
+            case NONE, COPY_SOURCE -> "true";
+            default -> throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        };
+    }
+
+    private int parseIntOrDefault(String value, int defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
     }
 
     private String quoteJsonArray(String[] parts) {

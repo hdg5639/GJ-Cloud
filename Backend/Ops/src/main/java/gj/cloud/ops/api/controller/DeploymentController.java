@@ -1,7 +1,9 @@
 package gj.cloud.ops.api.controller;
 
 import gj.cloud.ops.application.deployment.ai.AiComposeReviewer;
+import gj.cloud.ops.application.deployment.ai.AiGenerationResult;
 import gj.cloud.ops.application.deployment.ai.AiSpecGeneratorClient;
+import gj.cloud.ops.application.deployment.ai.ComposeReviewFinding;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
 import gj.cloud.ops.application.deployment.dto.ComposeSpecResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentCreateRequest;
@@ -12,6 +14,7 @@ import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
+import gj.cloud.ops.application.deployment.spec.DeploymentSpecPolicyValidator;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderer;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
@@ -47,6 +50,7 @@ public class DeploymentController {
     private final DeploymentRepository deploymentRepository;
     private final DeploymentEventPublisher eventPublisher;
     private final DeploymentSpecValidator deploymentSpecValidator;
+    private final DeploymentSpecPolicyValidator deploymentSpecPolicyValidator;
     private final DeploymentSpecRenderer deploymentSpecRenderer;
     private final AiSpecGeneratorClient aiSpecGeneratorClient;
     private final AiComposeReviewer aiComposeReviewer;
@@ -85,6 +89,7 @@ public class DeploymentController {
     ) {
         String bearerToken = extractToken(request);
         deploymentSpecValidator.validate(body.spec());
+        deploymentSpecPolicyValidator.validate(body.spec());
         ComposeArtifact artifact = deploymentSpecRenderer.render(body.spec());
         RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken());
 
@@ -92,9 +97,12 @@ public class DeploymentController {
         return ApiResponse.ok(DeploymentResponse.from(deployment));
     }
 
-    @Operation(summary = "배포 스펙 AI 자동생성 (D-3)", description = "서비스 카드를 기반으로 AI가 DeploymentSpec을 생성합니다. 즉시 배포하지 않으며, 검토/수정 후 /from-spec으로 배포하세요.")
+    @Operation(summary = "배포 스펙 AI 자동생성 (D-3)",
+            description = "저장소를 결정론적으로 먼저 분석하고, 규칙으로 확정 못한 서비스만 AI에게 넘겨 DeploymentSpec을 생성합니다. "
+                    + "status=READY가 아니면(NEEDS_INPUT/UNSUPPORTED/CONFLICT) spec이 없으니 unresolved 사유를 확인하세요. "
+                    + "즉시 배포하지 않으며, 검토/수정 후 /from-spec으로 배포하세요.")
     @PostMapping("/ai-spec/generate")
-    public ApiResponse<DeploymentSpec> generateSpec(
+    public ApiResponse<AiGenerationResult> generateSpec(
             HttpServletRequest request,
             @PathVariable UUID vmId,
             @Valid @RequestBody GenerateDeploymentSpecRequest body
@@ -104,13 +112,15 @@ public class DeploymentController {
         if (!context.hasPermission(PERMISSION_DEPLOY)) {
             throw new OpsException(OpsErrorCode.FORBIDDEN);
         }
-        DeploymentSpec spec = aiSpecGeneratorClient.generate(vmId.toString(), body);
-        return ApiResponse.ok(spec);
+        AiGenerationResult result = aiSpecGeneratorClient.generate(vmId.toString(), body);
+        return ApiResponse.ok(result);
     }
 
-    @Operation(summary = "배포 스펙 AI 검수 (D.5-1)", description = "결정론적 검증을 통과한 스펙에 대해서만 비차단 AI 검수를 요청합니다. 코멘트만 반환하며 배포를 승인/거부하지 않습니다.")
+    @Operation(summary = "배포 스펙 AI 검수 (D.5-1)",
+            description = "결정론적 검증(구조+정책)을 통과한 스펙을 실제로 렌더링한 뒤, 그 최종 compose 내용을 비차단 AI 검수합니다. "
+                    + "환경변수 비밀값은 AI에게 전송되기 전 redact됩니다. 코멘트만 반환하며 배포를 승인/거부하지 않습니다.")
     @PostMapping("/ai-spec/review")
-    public ApiResponse<List<String>> reviewSpec(
+    public ApiResponse<List<ComposeReviewFinding>> reviewSpec(
             HttpServletRequest request,
             @PathVariable UUID vmId,
             @Valid @RequestBody DeploymentSpec spec
@@ -121,8 +131,10 @@ public class DeploymentController {
             throw new OpsException(OpsErrorCode.FORBIDDEN);
         }
         deploymentSpecValidator.validate(spec);
-        List<String> comments = aiComposeReviewer.review(vmId.toString(), spec);
-        return ApiResponse.ok(comments);
+        deploymentSpecPolicyValidator.validate(spec);
+        ComposeArtifact artifact = deploymentSpecRenderer.render(spec);
+        List<ComposeReviewFinding> findings = aiComposeReviewer.review(vmId.toString(), artifact.composeContent());
+        return ApiResponse.ok(findings);
     }
 
     @Operation(summary = "배포 이력 조회")

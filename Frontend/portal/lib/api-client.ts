@@ -36,6 +36,8 @@ import type {
   InfraSelection,
   DeploymentEventPayload,
   ComposeSpecResponse,
+  AiGenerationResult,
+  ComposeReviewFinding,
   DbBackupResponse,
 } from "./types";
 
@@ -538,15 +540,21 @@ export const api = {
       generateSpec: (
         accessToken: string,
         vmId: string,
-        body: { services: ServiceCard[]; infrastructure?: InfraSelection[] }
+        body: {
+          repoUrl: string;
+          branch: string;
+          patToken?: string;
+          services: ServiceCard[];
+          infrastructure?: InfraSelection[];
+        }
       ) =>
-        request<DeploymentSpec>("ops", `/ops/${vmId}/deployments/ai-spec/generate`, {
+        request<AiGenerationResult>("ops", `/ops/${vmId}/deployments/ai-spec/generate`, {
           method: "POST",
           body: JSON.stringify(body),
           accessToken,
         }),
       reviewSpec: (accessToken: string, vmId: string, spec: DeploymentSpec) =>
-        request<string[]>("ops", `/ops/${vmId}/deployments/ai-spec/review`, {
+        request<ComposeReviewFinding[]>("ops", `/ops/${vmId}/deployments/ai-spec/review`, {
           method: "POST",
           body: JSON.stringify(spec),
           accessToken,

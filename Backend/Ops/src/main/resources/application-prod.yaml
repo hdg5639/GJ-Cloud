@@ -51,6 +51,14 @@ ops:
     core-pool-size: 2
     max-pool-size: 4
     queue-capacity: 20
+  repo-analysis:
+    clone-timeout-ms: 60000
+    max-files: 2000
+    max-depth: 12
+    max-file-size-bytes: 1048576
+    max-total-size-bytes: 52428800
+  ai-generation-cache:
+    ttl-seconds: 900
 
 springdoc:
   api-docs:

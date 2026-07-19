@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS ai_spec_generation_log (
     output_tokens               BIGINT       NOT NULL,
     correction_attempt_count    INTEGER      NOT NULL DEFAULT 0,
     succeeded                   BOOLEAN      NOT NULL,
+    used_deterministic_rules    BOOLEAN      NOT NULL DEFAULT false,
+    ambiguity_score             INTEGER,
+    cache_hit                   BOOLEAN      NOT NULL DEFAULT false,
     created_at                  TIMESTAMP    NOT NULL DEFAULT now(),
 
     CONSTRAINT chk_ai_spec_generation_log_kind CHECK (kind IN ('GENERATION', 'REVIEW'))
@@ -78,6 +81,10 @@ CREATE TABLE IF NOT EXISTS ai_spec_generation_log (
 
 -- 이미 배포된 환경에서 테이블이 kind 컬럼 없이 먼저 생성됐을 수 있어 ALTER로 보강 (idempotent)
 ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS kind VARCHAR(20) NOT NULL DEFAULT 'GENERATION';
+-- 결정론적 규칙 기반 추론/ambiguity 라우팅/애플리케이션 캐시 도입(AI-Deployment-Pipeline.md 9·15·16절)에 따른 보강
+ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS used_deterministic_rules BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS ambiguity_score INTEGER;
+ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS cache_hit BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS idx_ai_spec_generation_log_vm_id ON ai_spec_generation_log(vm_id);
 

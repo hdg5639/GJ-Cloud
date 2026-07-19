@@ -41,12 +41,21 @@ public class DeploymentSpecRenderer {
         List<HealthCheck> healthChecks = new ArrayList<>();
 
         for (ServiceSpec service : spec.services()) {
-            int effectivePort = "react-nginx".equals(service.runtime()) ? 80 : service.containerPort();
+            boolean isStatic = service.artifact().type() == ArtifactType.STATIC_DIRECTORY;
+            int effectivePort = isStatic ? 80 : (service.run().containerPort() != null ? service.run().containerPort() : 0);
 
             Map<String, Object> serviceBlock = new LinkedHashMap<>();
             Map<String, Object> build = new LinkedHashMap<>();
             build.put("context", service.context());
-            build.put("dockerfile", DOCKERFILE_NAME);
+
+            boolean useExistingDockerfile = service.build().strategy() == BuildRunStrategy.DOCKERFILE;
+            if (useExistingDockerfile) {
+                // 저장소에 이미 있는 Dockerfile을 그대로 사용 — 우리가 생성하지 않음 (D-1/D-3과 달리 D-2 raw
+                // compose 흐름과 동일하게 사용자가 제공한 빌드 정의가 그대로 authoritative함)
+                build.put("dockerfile", "Dockerfile");
+            } else {
+                build.put("dockerfile", DOCKERFILE_NAME);
+            }
             serviceBlock.put("build", build);
             serviceBlock.put("container_name", service.name());
             serviceBlock.put("restart", "unless-stopped");
@@ -59,9 +68,11 @@ public class DeploymentSpecRenderer {
             }
             services.put(service.name(), serviceBlock);
 
-            String dockerfileContent = dockerfileGenerator.generate(service);
-            uploadedFiles.add(new UploadedFile(service.context() + "/" + DOCKERFILE_NAME,
-                    dockerfileContent.getBytes(StandardCharsets.UTF_8)));
+            if (!useExistingDockerfile) {
+                String dockerfileContent = dockerfileGenerator.generate(service);
+                uploadedFiles.add(new UploadedFile(service.context() + "/" + DOCKERFILE_NAME,
+                        dockerfileContent.getBytes(StandardCharsets.UTF_8)));
+            }
 
             if (exposed) {
                 String protocol = "http".equalsIgnoreCase(service.expose().protocol()) ? "HTTP" : "TCP";

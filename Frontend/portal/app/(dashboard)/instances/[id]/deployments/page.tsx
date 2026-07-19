@@ -13,6 +13,9 @@ import type {
   ServiceCard,
   InfraSelection,
   ComposeSpecResponse,
+  GenerationStatus,
+  UnresolvedField,
+  ComposeReviewFinding,
 } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 
@@ -92,8 +95,14 @@ export default function DeploymentsPage() {
   const [infraSelections, setInfraSelections] = useState<InfraSelection[]>([]);
   const [generatedSpec, setGeneratedSpec] = useState<string>("");
   const [generating, setGenerating] = useState(false);
-  const [reviewComments, setReviewComments] = useState<string[] | null>(null);
+  const [reviewFindings, setReviewFindings] = useState<ComposeReviewFinding[] | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  // 결정론적 저장소 분석 + 명시적 불확실성 상태 — status가 READY가 아니면 generatedSpec은 비어있고
+  // unresolvedFields에 이유가 담김 (AI가 근거 없이 완전한 스펙을 지어내지 않았다는 뜻)
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus | null>(null);
+  const [unresolvedFields, setUnresolvedFields] = useState<UnresolvedField[]>([]);
+  const [evidenceRefs, setEvidenceRefs] = useState<string[]>([]);
+  const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -178,7 +187,11 @@ export default function DeploymentsPage() {
     setServiceCards([emptyServiceCard()]);
     setInfraSelections([]);
     setGeneratedSpec("");
-    setReviewComments(null);
+    setReviewFindings(null);
+    setGenerationStatus(null);
+    setUnresolvedFields([]);
+    setEvidenceRefs([]);
+    setGenerationWarnings([]);
     setRetryNotice(false);
   }
 
@@ -208,16 +221,27 @@ export default function DeploymentsPage() {
   }
 
   async function handleGenerateSpec() {
-    if (!accessToken) return;
+    if (!accessToken || !repoUrl || !branch) return;
     setGenerating(true);
     setError(null);
-    setReviewComments(null);
+    setReviewFindings(null);
+    setGenerationStatus(null);
+    setUnresolvedFields([]);
+    setEvidenceRefs([]);
+    setGenerationWarnings([]);
     try {
-      const spec = await api.ops.deployments.generateSpec(accessToken, vmId, {
+      const result = await api.ops.deployments.generateSpec(accessToken, vmId, {
+        repoUrl,
+        branch,
+        patToken: patToken || undefined,
         services: serviceCards.filter((s) => s.name && s.runtime && s.context),
         infrastructure: infraSelections.filter((i) => i.type),
       });
-      setGeneratedSpec(JSON.stringify(spec, null, 2));
+      setGenerationStatus(result.status);
+      setEvidenceRefs(result.evidenceRefs);
+      setGenerationWarnings(result.warnings);
+      setUnresolvedFields(result.unresolved);
+      setGeneratedSpec(result.status === "READY" && result.spec ? JSON.stringify(result.spec, null, 2) : "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI 스펙 생성에 실패했습니다.");
     } finally {
@@ -231,8 +255,8 @@ export default function DeploymentsPage() {
     setError(null);
     try {
       const spec: DeploymentSpec = JSON.parse(generatedSpec);
-      const comments = await api.ops.deployments.reviewSpec(accessToken, vmId, spec);
-      setReviewComments(comments);
+      const findings = await api.ops.deployments.reviewSpec(accessToken, vmId, spec);
+      setReviewFindings(findings);
     } catch (err) {
       setError(err instanceof Error ? err.message : "스펙 JSON이 올바르지 않거나 검수에 실패했습니다.");
     } finally {
@@ -585,17 +609,55 @@ export default function DeploymentsPage() {
                   <button
                     type="button"
                     onClick={handleGenerateSpec}
-                    disabled={generating || serviceCards.every((s) => !s.name)}
+                    disabled={generating || !repoUrl || !branch || serviceCards.every((s) => !s.name)}
                     className="h-9 border border-gray-300 rounded-md text-sm disabled:opacity-60"
+                    title={!repoUrl || !branch ? "위쪽 공통 레포 설정에 Git 저장소 URL/브랜치를 먼저 입력하세요" : undefined}
                   >
-                    {generating ? "AI 스펙 생성 중..." : "AI 스펙 생성"}
+                    {generating ? "저장소 분석 + AI 생성 중..." : "AI 스펙 생성"}
                   </button>
+
+                  {/* 결정론적 저장소 분석 결과 — AI 호출 여부와 무관하게 항상 먼저 보여줌 */}
+                  {evidenceRefs.length > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs text-blue-800 space-y-1">
+                      <p className="font-medium">저장소 분석 결과</p>
+                      {evidenceRefs.map((ref, i) => {
+                        const [context, detectedType, confidence] = ref.split(":");
+                        return (
+                          <p key={i}>
+                            · <span className="font-mono">{context || "."}</span> → {detectedType}
+                            {confidence && <span className="text-blue-500"> (신뢰도: {confidence})</span>}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {generationWarnings.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-700 space-y-1">
+                      {generationWarnings.map((w, i) => <p key={i}>⚠ {w}</p>)}
+                    </div>
+                  )}
+
+                  {/* 근거 부족/충돌 등으로 확정하지 못한 경우 — 억지로 스펙을 만들어내지 않고 사유를 그대로 보여줌 */}
+                  {generationStatus && generationStatus !== "READY" && (
+                    <div className="bg-red-50 border border-red-200 rounded-md p-3 text-xs text-red-700 space-y-1.5">
+                      <p className="font-medium">
+                        {generationStatus === "NEEDS_INPUT" && "추가 정보가 필요합니다"}
+                        {generationStatus === "UNSUPPORTED" && "이 구성은 자동 배포를 지원하지 않습니다"}
+                        {generationStatus === "CONFLICT" && "입력값이 저장소 분석 결과와 충돌합니다"}
+                        {generationStatus === "INVALID_RESPONSE" && "스펙 생성에 실패했습니다"}
+                      </p>
+                      {unresolvedFields.map((f, i) => (
+                        <p key={i}>· [{f.field}] {f.reason}</p>
+                      ))}
+                    </div>
+                  )}
 
                   {generatedSpec && (
                     <>
                       <div>
                         <label htmlFor="deploy-generated-spec" className="text-xs text-gray-500 block mb-1">
-                          생성된 스펙 (검토 후 필요 시 수정 가능)
+                          생성된 스펙 (검토 후 필요 시 수정 가능 — 결정론적 규칙으로 확정된 부분과 AI 확정 부분이 합쳐져 있습니다)
                         </label>
                         <textarea
                           id="deploy-generated-spec"
@@ -615,12 +677,22 @@ export default function DeploymentsPage() {
                       >
                         {reviewing ? "AI 검수 중..." : "AI 검수 요청 (선택)"}
                       </button>
-                      {reviewComments && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-md p-3 text-xs text-gray-700 space-y-1">
-                          {reviewComments.length === 0 ? (
+                      {reviewFindings && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-md p-3 text-xs text-gray-700 space-y-2">
+                          <p className="text-[11px] text-gray-400">AI 검수는 참고용이며 배포를 막지 않습니다.</p>
+                          {reviewFindings.length === 0 ? (
                             <p className="text-gray-400">특이사항이 없습니다.</p>
                           ) : (
-                            reviewComments.map((c, i) => <p key={i}>· {c}</p>)
+                            reviewFindings.map((finding, i) => (
+                              <div key={i} className="border-l-2 pl-2" style={{
+                                borderColor: finding.severity === "CRITICAL" ? "#ef4444" : finding.severity === "WARNING" ? "#f59e0b" : "#9ca3af",
+                              }}>
+                                <p className="font-medium text-gray-800">
+                                  [{finding.severity}] {finding.service && <span className="font-mono">{finding.service}</span>} {finding.message}
+                                </p>
+                                {finding.remediation && <p className="text-gray-500 mt-0.5">→ {finding.remediation}</p>}
+                              </div>
+                            ))
                           )}
                         </div>
                       )}

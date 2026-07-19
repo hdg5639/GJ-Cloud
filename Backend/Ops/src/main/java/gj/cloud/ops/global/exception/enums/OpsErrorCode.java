@@ -45,6 +45,16 @@ public enum OpsErrorCode {
     // AI 배포 스펙 생성 (D-3)
     AI_SPEC_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "AI 배포 스펙 생성 요청에 실패했습니다."),
     AI_SPEC_INVALID_RESPONSE(HttpStatus.INTERNAL_SERVER_ERROR, "AI가 생성한 스펙이 올바르지 않습니다."),
+    AI_SPEC_NEEDS_INPUT(HttpStatus.UNPROCESSABLE_CONTENT, "자동 생성에 필요한 정보가 부족합니다."),
+    AI_SPEC_UNSUPPORTED(HttpStatus.UNPROCESSABLE_CONTENT, "이 저장소 구성은 자동 배포를 지원하지 않습니다."),
+    AI_SPEC_CONFLICT(HttpStatus.CONFLICT, "입력값이 저장소 분석 결과와 충돌합니다."),
+    DEPLOYMENT_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "배포 스펙이 보안 정책을 위반했습니다."),
+
+    // 저장소 분석 (AI 배포 스펙 생성 전 결정론적 사전 분석)
+    LOCAL_COMMAND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "로컬 명령 실행에 실패했습니다."),
+    LOCAL_COMMAND_TIMEOUT(HttpStatus.INTERNAL_SERVER_ERROR, "로컬 명령 실행이 시간 초과되었습니다."),
+    REPOSITORY_CLONE_FAILED(HttpStatus.BAD_REQUEST, "저장소를 가져오지 못했습니다. URL/브랜치/PAT를 확인해주세요."),
+    REPOSITORY_TOO_LARGE(HttpStatus.BAD_REQUEST, "저장소 크기가 분석 허용 한도를 초과했습니다."),
 
     // 수동 DB 백업 (11절)
     INVALID_DB_IDENTIFIER(HttpStatus.BAD_REQUEST, "유효하지 않은 DB 식별자입니다."),
