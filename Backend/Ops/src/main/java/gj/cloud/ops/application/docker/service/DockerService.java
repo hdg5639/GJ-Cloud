@@ -57,10 +57,14 @@ public class DockerService {
             // 아무것도 못 받아와도 sh는 빈 입력을 그냥 성공(exit 0)으로 처리해버려서, 설치가 실제로는
             // 하나도 안 됐는데도 성공으로 오판하는 문제가 있었음. 임시 파일로 받아 각 단계를 &&로 연결하고
             // 마지막에 command -v docker로 실제 설치 여부까지 확인.
+            // get-docker.sh는 Docker만 설치하고 현재 접속 사용자를 docker 그룹에 자동으로 넣어주지 않아서,
+            // 그대로 두면 이후의 모든 docker 명령(배포 파이프라인 포함)이 소켓 권한 문제로 실패함 —
+            // 설치 직후 usermod로 그룹에 추가(다음 SSH 세션부터 적용, 이번 세션 자체엔 영향 없음).
             CommandResult result = sshCommandExecutor.exec(session,
                     "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh "
                             + "&& sh /tmp/get-docker.sh "
                             + "&& rm -f /tmp/get-docker.sh "
+                            + "&& sudo usermod -aG docker $(whoami) "
                             + "&& command -v docker",
                     INSTALL_TIMEOUT_MS);
             if (!result.isSuccess()) {
