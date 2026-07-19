@@ -35,7 +35,7 @@ public class DockerService {
     private static final String PERMISSION_DOCKER_READ = "DOCKER_READ";
     private static final String PERMISSION_DOCKER_ADMIN = "DOCKER_ADMIN";
     private static final long DOCKER_CMD_TIMEOUT_MS = 30_000;
-    private static final long INSTALL_TIMEOUT_MS = 300_000;
+    private static final long INSTALL_TIMEOUT_MS = 600_000;
     private static final long LOGS_TIMEOUT_MS = 20_000;
     private static final Set<String> SAFE_NETWORK_DRIVERS = Set.of("bridge", "host", "overlay", "macvlan", "none");
     // 컨테이너/이미지 ID, 컨테이너/네트워크 이름 등 요청 경로에서 들어오는 값은 셸 커맨드에 그대로 꽂히므로 반드시 검증
@@ -60,12 +60,19 @@ public class DockerService {
             // get-docker.sh는 Docker만 설치하고 현재 접속 사용자를 docker 그룹에 자동으로 넣어주지 않아서,
             // 그대로 두면 이후의 모든 docker 명령(배포 파이프라인 포함)이 소켓 권한 문제로 실패함 —
             // 설치 직후 usermod로 그룹에 추가(다음 SSH 세션부터 적용, 이번 세션 자체엔 영향 없음).
+            // 갓 생성된 VM은 cloud-init이 부팅 직후 자체적으로 apt-get을 돌리고 있어 dpkg 락을 잡고
+            // 있을 수 있음 — cloud-init 완료를 먼저 기다리고, 그래도 락이 걸려있으면(unattended-upgrades 등)
+            // 짧게 재시도.
             CommandResult result = sshCommandExecutor.exec(session,
-                    "curl -fsSL https://get.docker.com -o /tmp/get-docker.sh "
+                    "for i in 1 2 3 4 5 6 7 8 9 10; do "
+                            + "cloud-init status --wait >/dev/null 2>&1; "
+                            + "if curl -fsSL https://get.docker.com -o /tmp/get-docker.sh "
                             + "&& sh /tmp/get-docker.sh "
                             + "&& rm -f /tmp/get-docker.sh "
                             + "&& sudo usermod -aG docker $(whoami) "
-                            + "&& command -v docker",
+                            + "&& command -v docker; then exit 0; fi; "
+                            + "sleep 10; "
+                            + "done; exit 1",
                     INSTALL_TIMEOUT_MS);
             if (!result.isSuccess()) {
                 log.warn("Docker 설치 실패: vmId={}, exitStatus={}, stderr={}, stdout={}",
