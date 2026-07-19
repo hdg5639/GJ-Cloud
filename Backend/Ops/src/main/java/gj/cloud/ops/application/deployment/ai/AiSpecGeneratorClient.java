@@ -20,6 +20,7 @@ import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
 import gj.cloud.ops.application.deployment.spec.InfrastructureSpec;
 import gj.cloud.ops.application.deployment.spec.ExposeSpec;
 import gj.cloud.ops.application.deployment.spec.ServiceSpec;
+import gj.cloud.ops.application.deployment.spec.ValidationError;
 import gj.cloud.ops.domain.deployment.enums.AiCallKind;
 import gj.cloud.ops.domain.deployment.entity.AiSpecGenerationLogEntity;
 import gj.cloud.ops.domain.deployment.repository.AiSpecGenerationLogRepository;
@@ -40,6 +41,11 @@ import java.util.Optional;
 // (정적 사이트 등은 여기서 AI 호출 없이 끝남) → (3) 그래도 모호한 서비스만 골라 AI에게 넘김, 이때도
 // 자유 문자열이 아니라 구조화 출력(JSON Schema 강제)으로 ServiceSpec을 직접 받음 → (4) 전체를 합쳐 검증.
 // 원문 프롬프트/응답/저장소 내용은 저장하지 않고, 모델명·토큰 수·재교정 횟수·ambiguity 점수·성공 여부만 감사 로그로 남긴다.
+//
+// 프롬프트(지시문+동적 컨텍스트)는 전부 영어로 작성한다 — 한국어는 GPT류 BPE 토크나이저에서 같은 의미라도
+// 영어보다 토큰을 더 쓰기 때문에, 매 호출마다 반복 전송되는 지시문/컨텍스트를 영어로 바꾸면 입력 토큰이
+// 줄어든다. 다만 포털에 그대로 노출되는 자유 텍스트 필드(unresolved reason, warnings)는 한국어로 쓰도록
+// 프롬프트에서 명시적으로 지시한다 — 이건 실제 사용자가 읽는 문구라서.
 @Slf4j
 @Component
 public class AiSpecGeneratorClient {
@@ -49,19 +55,28 @@ public class AiSpecGeneratorClient {
     private static final String NETWORK_NAME = "app-network";
 
     private static final String SYSTEM_PROMPT = """
-            너는 gamjabox 배포 파이프라인의 ServiceSpec JSON 생성기다. 이미 결정론적 규칙으로는 확정할 수 없었던
-            서비스에 대해서만 요청을 받는다 — 각 서비스는 저장소 분석 결과(RepositoryEvidence 요약)와 함께 주어진다.
+            You are the ServiceSpec JSON generator for the gamjabox deployment pipeline. You are only asked about \
+            services that deterministic rules could not already resolve — each service is given together with a \
+            summary of its repository analysis (RepositoryEvidence).
 
-            반드시 지켜야 할 원칙:
-            - 저장소 분석 결과에 없는 사실을 지어내지 마라. 포트, 헬스체크 경로, 시작 스크립트 이름을 추측해서 만들지 마라.
-            - 백엔드 런타임 매니페스트(package.json/pom.xml/build.gradle/requirements.txt 등)가 전혀 없는데
-              index.html만 있다면 반드시 STATIC 산출물로 취급해야 한다 — 절대 nodejs 등으로 분류하지 마라.
-            - build/run 명령은 허용된 전략(enum) 중에서만 선택한다. 이 목록에 없는 임의의 셸 명령을 지어내지 마라.
-            - 확정에 필요한 근거가 부족하면 해당 서비스를 unresolved 목록에 넣고 이유를 설명하라 — 억지로 완전한
-              스펙을 만들어내지 마라. status를 NEEDS_INPUT/UNSUPPORTED/CONFLICT 중 알맞게 설정하라.
-            - 사용자가 선택한 서비스 카드의 값이 저장소 분석 결과와 모순되면(예: 카드에는 java라고 했는데 저장소에
-              pom.xml/build.gradle이 전혀 없음) status를 CONFLICT로 설정하고 이유를 설명하라.
-            - 모든 확정이 끝났으면 status를 READY로 설정한다.
+            Mandatory rules:
+            - Never invent facts that are not present in the repository evidence. Do not guess ports, health-check \
+              paths, or start script names.
+            - If there is no backend runtime manifest at all (package.json/pom.xml/build.gradle/requirements.txt etc.) \
+              but only an index.html exists, you MUST treat it as a STATIC artifact — never classify it as nodejs or \
+              any other backend runtime.
+            - Build/run commands may only be chosen from the allowed strategy enum. Never invent an arbitrary shell \
+              command outside that list.
+            - If there isn't enough evidence to resolve a service, put it in the unresolved list with a reason instead \
+              of forcing a complete spec. Set status to whichever of NEEDS_INPUT/UNSUPPORTED/CONFLICT applies.
+            - If the user-selected service card contradicts the repository evidence (e.g. the card says java but there \
+              is no pom.xml/build.gradle at all in the repository), set status to CONFLICT and explain why.
+            - Once everything is resolved, set status to READY.
+
+            Language requirement: this system is used by Korean-speaking users through a Korean-language portal. \
+            Write the `reason` field inside `unresolved` entries, and every string in `warnings`, in Korean — those \
+            are shown directly to the end user. Every other field (enum values, paths, numbers) must follow the \
+            schema exactly regardless of language.
             """;
 
     private final OpenAIClient client;
@@ -143,13 +158,13 @@ public class AiSpecGeneratorClient {
     private AiGenerationResult finalizeDeterministic(String vmId, List<ServiceSpec> resolvedSpecs,
                                                       List<InfraSelection> infrastructure, List<String> evidenceRefs) {
         DeploymentSpec spec = assembleSpec(resolvedSpecs, infrastructure);
-        List<String> errors = collectAllErrors(spec);
+        List<ValidationError> errors = collectAllErrors(spec);
         boolean ok = errors.isEmpty();
         logRepository.save(AiSpecGenerationLogEntity.create(vmId, AiCallKind.GENERATION, "deterministic-rules",
                 0, 0, 0, ok, true, 0, false));
         if (!ok) {
             return new AiGenerationResult(GenerationStatus.INVALID_RESPONSE, null,
-                    errors.stream().map(m -> new UnresolvedField("spec", "VALIDATION_ERROR", m)).toList(),
+                    errors.stream().map(e -> new UnresolvedField("spec", "VALIDATION_ERROR", e.userMessage())).toList(),
                     List.of(), evidenceRefs);
         }
         return new AiGenerationResult(GenerationStatus.READY, spec, List.of(), List.of(), evidenceRefs);
@@ -174,7 +189,7 @@ public class AiSpecGeneratorClient {
             totalOutputTokens += call.outputTokens();
 
             AiServiceSpecOutput output = call.output();
-            List<String> errors = validateAiOutput(output, aiCards);
+            List<ValidationError> errors = validateAiOutput(output, aiCards);
 
             while (!errors.isEmpty() && correctionAttempts < MAX_CORRECTION_ATTEMPTS) {
                 correctionAttempts++;
@@ -188,9 +203,10 @@ public class AiSpecGeneratorClient {
             }
 
             if (!errors.isEmpty()) {
-                log.error("AI 배포 스펙 생성 실패 (재교정 {}회 포함): {}", correctionAttempts, errors);
+                log.error("AI 배포 스펙 생성 실패 (재교정 {}회 포함): {}", correctionAttempts,
+                        errors.stream().map(ValidationError::aiMessage).toList());
                 return new AiGenerationResult(GenerationStatus.INVALID_RESPONSE, null,
-                        errors.stream().map(m -> new UnresolvedField("ai", "VALIDATION_ERROR", m)).toList(),
+                        errors.stream().map(e -> new UnresolvedField("ai", "VALIDATION_ERROR", e.userMessage())).toList(),
                         List.of(), evidenceRefs);
             }
 
@@ -204,10 +220,10 @@ public class AiSpecGeneratorClient {
             List<ServiceSpec> allServices = new ArrayList<>(resolvedSpecs);
             allServices.addAll(output.services());
             DeploymentSpec spec = assembleSpec(allServices, request.infrastructure());
-            List<String> specErrors = collectAllErrors(spec);
+            List<ValidationError> specErrors = collectAllErrors(spec);
             if (!specErrors.isEmpty()) {
                 return new AiGenerationResult(GenerationStatus.INVALID_RESPONSE, null,
-                        specErrors.stream().map(m -> new UnresolvedField("spec", "VALIDATION_ERROR", m)).toList(),
+                        specErrors.stream().map(e -> new UnresolvedField("spec", "VALIDATION_ERROR", e.userMessage())).toList(),
                         List.of(), evidenceRefs);
             }
             succeeded = true;
@@ -261,17 +277,19 @@ public class AiSpecGeneratorClient {
     // 구조적 검증(DeploymentSpecValidator) + 보안/정책 검증(DeploymentSpecPolicyValidator)을 함께 수행 —
     // 최종적으로 확정된 스펙(결정론적 + AI 해결분 합산본)에 대해서만 호출한다 (12절 — 관심사 분리는 유지하되
     // 렌더링 직전엔 항상 둘 다 통과해야 함).
-    private List<String> collectAllErrors(DeploymentSpec spec) {
-        List<String> errors = new ArrayList<>(deploymentSpecValidator.collectErrors(spec));
+    private List<ValidationError> collectAllErrors(DeploymentSpec spec) {
+        List<ValidationError> errors = new ArrayList<>(deploymentSpecValidator.collectErrors(spec));
         errors.addAll(deploymentSpecPolicyValidator.collectErrors(spec));
         return errors;
     }
 
-    private List<String> validateAiOutput(AiServiceSpecOutput output, List<ServiceCard> requestedCards) {
-        List<String> errors = new ArrayList<>();
+    private List<ValidationError> validateAiOutput(AiServiceSpecOutput output, List<ServiceCard> requestedCards) {
+        List<ValidationError> errors = new ArrayList<>();
         if (output.status() == GenerationStatus.READY) {
             if (output.services() == null || output.services().size() != requestedCards.size()) {
-                errors.add("요청한 서비스 수와 응답의 services 개수가 일치하지 않습니다");
+                errors.add(new ValidationError(
+                        "요청한 서비스 수와 응답의 services 개수가 일치하지 않습니다",
+                        "The number of requested services does not match the number of services in the response"));
             } else {
                 DeploymentSpec probe = assembleSpec(output.services(), List.of());
                 errors.addAll(deploymentSpecValidator.collectErrors(probe));
@@ -313,19 +331,19 @@ public class AiSpecGeneratorClient {
 
     private String buildUserPrompt(List<ServiceCard> cards, Map<String, RepositoryEvidence> evidenceByContext,
                                     List<InfraSelection> infrastructure) {
-        StringBuilder sb = new StringBuilder("확정이 필요한 서비스:\n");
+        StringBuilder sb = new StringBuilder("Services requiring resolution:\n");
         for (ServiceCard card : cards) {
             RepositoryEvidence evidence = evidenceByContext.get(card.context());
             sb.append("- name=").append(card.name())
                     .append(", context=").append(card.context())
                     .append(", containerPort=").append(card.containerPort())
                     .append(", expose=").append(card.expose())
-                    .append(", 사용자가 선택한 카테고리=").append(card.runtime())
-                    .append("\n  저장소 분석 결과: ").append(describeEvidence(evidence))
+                    .append(", user-selected category=").append(card.runtime())
+                    .append("\n  repository analysis: ").append(describeEvidence(evidence))
                     .append("\n");
         }
         if (infrastructure != null && !infrastructure.isEmpty()) {
-            sb.append("공유 인프라:\n");
+            sb.append("Shared infrastructure:\n");
             for (InfraSelection infra : infrastructure) {
                 sb.append("- type=").append(infra.type()).append(", version=").append(infra.version()).append("\n");
             }
@@ -335,7 +353,7 @@ public class AiSpecGeneratorClient {
 
     private String describeEvidence(RepositoryEvidence evidence) {
         if (evidence == null || evidence.files() == null) {
-            return "분석 결과 없음";
+            return "no analysis result";
         }
         return "dockerfile=" + evidence.files().dockerfile()
                 + ", packageJson=" + evidence.files().packageJson()
@@ -346,11 +364,11 @@ public class AiSpecGeneratorClient {
                 + ", indexHtml=" + evidence.files().indexHtml();
     }
 
-    private String buildCorrectionPrompt(String originalPrompt, AiServiceSpecOutput previous, List<String> errors) {
+    private String buildCorrectionPrompt(String originalPrompt, AiServiceSpecOutput previous, List<ValidationError> errors) {
         return originalPrompt
-                + "\n\n이전 응답:\n" + previous
-                + "\n\n검증 오류:\n- " + String.join("\n- ", errors)
-                + "\n\n위 오류에 해당하는 필드만 수정한 전체 응답을 다시 출력하라. 스키마와 규칙은 이전과 동일하게 유지한다.";
+                + "\n\nPrevious response:\n" + previous
+                + "\n\nValidation errors:\n- " + errors.stream().map(ValidationError::aiMessage).reduce((a, b) -> a + "\n- " + b).orElse("")
+                + "\n\nRe-output the full response, fixing only the fields related to the errors above. Keep the schema and all other rules unchanged.";
     }
 
     private record ModelChoice(String model, ReasoningEffort effort) {

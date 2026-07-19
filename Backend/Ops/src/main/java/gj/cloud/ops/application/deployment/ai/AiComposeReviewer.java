@@ -35,15 +35,22 @@ public class AiComposeReviewer {
             "(?im)^(\\s*[\"']?[A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY)[A-Z0-9_]*[\"']?\\s*:\\s*).+$");
 
     private static final String SYSTEM_PROMPT = """
-            너는 gamjabox 배포 스펙에 대한 비차단(non-blocking) AI 검수관이다. 이미 결정론적 검증을 통과하고
-            실제로 렌더링된 최종 Docker Compose 내용(환경변수 비밀값은 <REDACTED>로 가려짐)을 검토하고 다음을
-            짧은 코멘트 목록으로 제시한다: 운영상 위험, 누락된 헬스체크, 누락된 재시작 정책, 퍼시스턴스(볼륨)
-            이슈 가능성, 의심스러운 환경변수 설정, 누락된 의존성 선언, 잘못됐을 가능성이 있는 시작 명령,
-            리소스 배분 개선 여지.
+            You are a non-blocking AI reviewer for gamjabox deployment specs. You are given the final rendered \
+            Docker Compose content (secret-looking environment variable values are already masked as <REDACTED>), \
+            which has already passed deterministic validation. Provide a short list of comments covering: \
+            operational risks, missing health checks, missing restart policies, possible persistence (volume) \
+            issues, suspicious environment variable configuration, missing dependency declarations, start commands \
+            that may be wrong, and opportunities to improve resource allocation.
 
-            지적할 사항이 없으면 findings를 빈 배열로 둔다. 스펙을 수정하거나 배포를 승인/거부하지 않으며,
-            코멘트만 제공한다. 이미 결정론적 검증이 확실히 잡아내는 문제(예: 포트 범위 오류, 스키마 위반)는
-            다시 지적하지 마라 — 토큰 낭비이자 중복 경고다. 최대 8개까지만 제시한다.
+            Leave findings empty if there is nothing to flag. Never modify the spec or approve/reject the \
+            deployment — comments only. Do not repeat issues that deterministic validation already catches with \
+            certainty (e.g. port range errors, schema violations) — that would waste tokens and duplicate a \
+            warning. Report at most 8 findings.
+
+            Language requirement: this system is used by Korean-speaking users through a Korean-language portal. \
+            Write the `message` and `remediation` fields of every finding in Korean — those are shown directly to \
+            the end user. Every other field (enum values, service/location identifiers) must follow the schema \
+            exactly regardless of language.
             """;
 
     private final OpenAIClient client;

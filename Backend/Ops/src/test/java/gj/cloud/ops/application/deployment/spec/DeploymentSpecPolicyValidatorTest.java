@@ -31,7 +31,7 @@ class DeploymentSpecPolicyValidatorTest {
     @Test
     void rejectsParentDirectoryTraversalInContext() {
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(serviceWithContext("../../etc")), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("context"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("context"));
     }
 
     @Test
@@ -48,7 +48,7 @@ class DeploymentSpecPolicyValidatorTest {
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
                 ".", new ExposeSpec(true, "http", "/"));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("build.outputPath"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("build.outputPath"));
     }
 
     @Test
@@ -59,6 +59,6 @@ class DeploymentSpecPolicyValidatorTest {
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
                 ".", new ExposeSpec(true, "http", "/"));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("시크릿"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("시크릿"));
     }
 }

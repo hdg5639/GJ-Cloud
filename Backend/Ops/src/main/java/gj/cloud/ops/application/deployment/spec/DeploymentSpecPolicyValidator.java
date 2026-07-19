@@ -20,14 +20,14 @@ public class DeploymentSpecPolicyValidator {
             "(?i)(password|secret|api[_-]?key|token)\\s*[:=]\\s*\\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}");
 
     public void validate(DeploymentSpec spec) {
-        List<String> errors = collectErrors(spec);
+        List<ValidationError> errors = collectErrors(spec);
         if (!errors.isEmpty()) {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_POLICY_VIOLATION);
         }
     }
 
-    public List<String> collectErrors(DeploymentSpec spec) {
-        List<String> errors = new ArrayList<>();
+    public List<ValidationError> collectErrors(DeploymentSpec spec) {
+        List<ValidationError> errors = new ArrayList<>();
         for (ServiceSpec service : spec.services()) {
             checkNoPathTraversal(service.context(), "context", service.name(), errors);
             if (service.build().outputPath() != null) {
@@ -41,22 +41,26 @@ public class DeploymentSpecPolicyValidator {
         return errors;
     }
 
-    private void checkNoPathTraversal(String path, String field, String serviceName, List<String> errors) {
+    private void checkNoPathTraversal(String path, String field, String serviceName, List<ValidationError> errors) {
         if (path == null) {
             return;
         }
         if (path.contains("..") || path.startsWith("/") || path.contains("~")) {
-            errors.add(field + "가 저장소 루트를 벗어나는 경로를 참조합니다: " + path + " (service=" + serviceName + ")");
+            errors.add(new ValidationError(
+                    field + "가 저장소 루트를 벗어나는 경로를 참조합니다: " + path + " (service=" + serviceName + ")",
+                    field + " references a path outside the repository root: " + path + " (service=" + serviceName + ")"));
         }
     }
 
     // 스펙의 문자열 필드에 시크릿처럼 보이는 값이 하드코딩돼 있으면 거부 — 진짜 비밀값은 배포 시점의
     // environmentFiles(암호화 저장)로만 전달돼야 하고, AI가 생성/기억한 값이 스펙 자체에 박혀서는 안 됨.
-    private void checkNoSecretLookingValue(ServiceSpec service, List<String> errors) {
+    private void checkNoSecretLookingValue(ServiceSpec service, List<ValidationError> errors) {
         String[] candidates = {service.context(), service.build().version(), service.build().outputPath(), service.artifact().path()};
         for (String candidate : candidates) {
             if (candidate != null && SECRET_LOOKING_VALUE.matcher(candidate).find()) {
-                errors.add("시크릿으로 보이는 값이 스펙 필드에 포함돼 있습니다 (service=" + service.name() + ")");
+                errors.add(new ValidationError(
+                        "시크릿으로 보이는 값이 스펙 필드에 포함돼 있습니다 (service=" + service.name() + ")",
+                        "A value that looks like a secret is embedded in a spec field (service=" + service.name() + ")"));
                 break;
             }
         }

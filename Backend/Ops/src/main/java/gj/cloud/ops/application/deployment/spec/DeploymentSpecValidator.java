@@ -38,17 +38,20 @@ public class DeploymentSpecValidator {
             BuildRunStrategy.STATIC_SERVER, BuildRunStrategy.NONE);
 
     public void validate(DeploymentSpec spec) {
-        List<String> errors = collectErrors(spec);
+        List<ValidationError> errors = collectErrors(spec);
         if (!errors.isEmpty()) {
             throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
         }
     }
 
-    // AI 자동 재교정 — 실패 사유를 그대로 AI/사용자에게 돌려줘야 하므로 예외 대신 메시지 목록으로 반환
-    public List<String> collectErrors(DeploymentSpec spec) {
-        List<String> errors = new ArrayList<>();
+    // AI 자동 재교정 — 실패 사유를 그대로 AI/사용자에게 돌려줘야 하므로 예외 대신 메시지 목록으로 반환.
+    // 사용자용(한국어)/AI 재교정용(영어) 메시지를 함께 담는다.
+    public List<ValidationError> collectErrors(DeploymentSpec spec) {
+        List<ValidationError> errors = new ArrayList<>();
         if (!SUPPORTED_SCHEMA_VERSIONS.contains(spec.schemaVersion())) {
-            errors.add("지원하지 않는 schemaVersion입니다: " + spec.schemaVersion());
+            errors.add(new ValidationError(
+                    "지원하지 않는 schemaVersion입니다: " + spec.schemaVersion(),
+                    "Unsupported schemaVersion: " + spec.schemaVersion()));
         }
         for (ServiceSpec service : spec.services()) {
             validateService(service, errors);
@@ -56,14 +59,16 @@ public class DeploymentSpecValidator {
         if (spec.infrastructure() != null) {
             for (InfrastructureSpec infra : spec.infrastructure()) {
                 if (!SUPPORTED_INFRA_TYPES.contains(infra.type())) {
-                    errors.add("지원하지 않는 infrastructure type입니다: " + infra.type());
+                    errors.add(new ValidationError(
+                            "지원하지 않는 infrastructure type입니다: " + infra.type(),
+                            "Unsupported infrastructure type: " + infra.type()));
                 }
             }
         }
         return errors;
     }
 
-    private void validateService(ServiceSpec service, List<String> errors) {
+    private void validateService(ServiceSpec service, List<ValidationError> errors) {
         String svc = service.name();
 
         // build.runtime과 build.strategy 조합 일관성 (7절/11.1절 — 기계적 오류)
@@ -76,8 +81,11 @@ public class DeploymentSpecValidator {
             case DOCKERFILE -> service.build().strategy() == BuildRunStrategy.DOCKERFILE;
         };
         if (!buildStrategyValid) {
-            errors.add("build.strategy가 build.runtime과 맞지 않습니다: " + service.build().runtime() + "/" + service.build().strategy()
-                    + " (service=" + svc + ")");
+            errors.add(new ValidationError(
+                    "build.strategy가 build.runtime과 맞지 않습니다: " + service.build().runtime() + "/" + service.build().strategy()
+                            + " (service=" + svc + ")",
+                    "build.strategy does not match build.runtime: " + service.build().runtime() + "/" + service.build().strategy()
+                            + " (service=" + svc + ")"));
         }
 
         // run.runtime과 run.strategy 조합 일관성
@@ -90,8 +98,11 @@ public class DeploymentSpecValidator {
             case DOCKERFILE -> true; // 저장소 자체 Dockerfile의 ENTRYPOINT/CMD를 그대로 신뢰
         };
         if (!runStrategyValid) {
-            errors.add("run.strategy가 run.runtime과 맞지 않습니다: " + service.run().runtime() + "/" + service.run().strategy()
-                    + " (service=" + svc + ")");
+            errors.add(new ValidationError(
+                    "run.strategy가 run.runtime과 맞지 않습니다: " + service.run().runtime() + "/" + service.run().strategy()
+                            + " (service=" + svc + ")",
+                    "run.strategy does not match run.runtime: " + service.run().runtime() + "/" + service.run().strategy()
+                            + " (service=" + svc + ")"));
         }
 
         // artifact.type과 run 조합 일관성 — STATIC_DIRECTORY인데 애플리케이션 서버 전략을 쓰면 안 됨 등
@@ -103,35 +114,48 @@ public class DeploymentSpecValidator {
             case UNKNOWN -> false;
         };
         if (!artifactConsistent) {
-            errors.add("artifact.type과 run 전략이 맞지 않습니다: " + service.artifact().type() + "/" + service.run().strategy()
-                    + " (service=" + svc + ")");
+            errors.add(new ValidationError(
+                    "artifact.type과 run 전략이 맞지 않습니다: " + service.artifact().type() + "/" + service.run().strategy()
+                            + " (service=" + svc + ")",
+                    "artifact.type does not match run strategy: " + service.artifact().type() + "/" + service.run().strategy()
+                            + " (service=" + svc + ")"));
         }
 
         // expose 일관성 (7절 — 존재하지 않을 필드를 지어내지 않기: expose=false인데 healthCheckPath가 있으면 오류)
         if (service.expose() != null) {
             ExposeSpec expose = service.expose();
             if (!expose.enabled() && expose.healthCheckPath() != null && !expose.healthCheckPath().isBlank()) {
-                errors.add("expose.enabled=false인데 healthCheckPath가 지정돼 있습니다 (service=" + svc + ")");
+                errors.add(new ValidationError(
+                        "expose.enabled=false인데 healthCheckPath가 지정돼 있습니다 (service=" + svc + ")",
+                        "healthCheckPath is set while expose.enabled=false (service=" + svc + ")"));
             }
             if (expose.enabled() && !"http".equalsIgnoreCase(expose.protocol())
                     && expose.healthCheckPath() != null && !expose.healthCheckPath().isBlank()) {
-                errors.add("HTTP가 아닌 노출에는 healthCheckPath를 지정할 수 없습니다 (service=" + svc + ")");
+                errors.add(new ValidationError(
+                        "HTTP가 아닌 노출에는 healthCheckPath를 지정할 수 없습니다 (service=" + svc + ")",
+                        "healthCheckPath cannot be set for non-HTTP exposure (service=" + svc + ")"));
             }
             if (expose.enabled() && service.run().containerPort() == null) {
-                errors.add("expose.enabled=true인데 run.containerPort가 없습니다 (service=" + svc + ")");
+                errors.add(new ValidationError(
+                        "expose.enabled=true인데 run.containerPort가 없습니다 (service=" + svc + ")",
+                        "run.containerPort is missing while expose.enabled=true (service=" + svc + ")"));
             }
         }
 
         // 포트 범위
         Integer port = service.run().containerPort();
         if (port != null && (port < 1 || port > 65535)) {
-            errors.add("run.containerPort가 유효 범위를 벗어났습니다: " + port + " (service=" + svc + ")");
+            errors.add(new ValidationError(
+                    "run.containerPort가 유효 범위를 벗어났습니다: " + port + " (service=" + svc + ")",
+                    "run.containerPort is out of valid range: " + port + " (service=" + svc + ")"));
         }
 
         // artifact-only 모드에서는 실제 애플리케이션 서버 전략을 쓸 수 없음 (정적 서빙 또는 없음만 허용)
         if (service.deploymentMode() == DeploymentMode.ARTIFACT_ONLY
                 && !STATIC_RUN_STRATEGIES.contains(service.run().strategy())) {
-            errors.add("deploymentMode=ARTIFACT_ONLY인 서비스는 STATIC_SERVER 또는 NONE run 전략만 가능합니다 (service=" + svc + ")");
+            errors.add(new ValidationError(
+                    "deploymentMode=ARTIFACT_ONLY인 서비스는 STATIC_SERVER 또는 NONE run 전략만 가능합니다 (service=" + svc + ")",
+                    "deploymentMode=ARTIFACT_ONLY services may only use STATIC_SERVER or NONE run strategy (service=" + svc + ")"));
         }
     }
 }

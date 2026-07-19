@@ -27,7 +27,7 @@ class DeploymentSpecValidatorTest {
     @Test
     void rejectsUnsupportedSchemaVersion() {
         DeploymentSpec spec = new DeploymentSpec("1.0", List.of(staticService("web", true)), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("schemaVersion"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("schemaVersion"));
     }
 
     @Test
@@ -38,7 +38,7 @@ class DeploymentSpecValidatorTest {
                 new RunSpec(RuntimeKind.NODEJS, BuildRunStrategy.NPM_START, null),
                 ".", new ExposeSpec(true, "http", "/"));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("containerPort"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("containerPort"));
     }
 
     @Test
@@ -49,7 +49,7 @@ class DeploymentSpecValidatorTest {
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
                 ".", new ExposeSpec(false, "http", "/health"));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("healthCheckPath"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("healthCheckPath"));
     }
 
     @Test
@@ -61,7 +61,7 @@ class DeploymentSpecValidatorTest {
                 new RunSpec(RuntimeKind.PYTHON, BuildRunStrategy.UVICORN, 8000),
                 ".", null);
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("build.strategy"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("build.strategy"));
     }
 
     @Test
@@ -72,6 +72,6 @@ class DeploymentSpecValidatorTest {
                 new RunSpec(RuntimeKind.JAVA, BuildRunStrategy.JAVA_JAR, 8080),
                 ".", null);
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
-        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.contains("ARTIFACT_ONLY"));
+        assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("ARTIFACT_ONLY"));
     }
 }
