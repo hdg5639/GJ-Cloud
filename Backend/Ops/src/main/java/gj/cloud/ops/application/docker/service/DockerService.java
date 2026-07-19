@@ -64,6 +64,8 @@ public class DockerService {
                             + "&& command -v docker",
                     INSTALL_TIMEOUT_MS);
             if (!result.isSuccess()) {
+                log.warn("Docker 설치 실패: vmId={}, exitStatus={}, stderr={}, stdout={}",
+                        vmId, result.exitStatus(), trim(result.stderr()), trim(result.stdout()));
                 throw new OpsException(OpsErrorCode.DOCKER_INSTALL_FAILED);
             }
             return null;
@@ -179,6 +181,13 @@ public class DockerService {
             throw new OpsException(OpsErrorCode.INVALID_DOCKER_IDENTIFIER);
         }
         return identifier;
+    }
+
+    private String trim(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() > 1000 ? text.substring(0, 1000) : text;
     }
 
     private <T> T execute(String bearerToken, String vmId, String requiredPermission, SessionOperation<T> operation) {
