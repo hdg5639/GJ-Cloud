@@ -79,7 +79,9 @@ export default function AdminUpgradeRequestsPage() {
       {loading ? (
         <PageLoader />
       ) : requests.length === 0 ? (
-        <Panel className="p-8 text-center">
+        <Panel className="flex flex-col items-center gap-3 p-16 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/controlbox-symbol.svg" alt="" width={52} height={52} className="opacity-90" />
           <p className="text-muted">대기 중인 요청이 없습니다</p>
         </Panel>
       ) : (

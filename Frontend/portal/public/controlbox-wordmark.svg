@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 548 112" role="img" aria-labelledby="title desc">
+  <title id="title">ControlBox primary wordmark</title>
+  <desc id="desc">ControlBox admin console wordmark in the GamjaBox brand family.</desc>
+  <defs>
+    <linearGradient id="shell" x1="11" y1="8" x2="75" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#23342A"/>
+      <stop offset=".52" stop-color="#17211B"/>
+      <stop offset="1" stop-color="#0E1712"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="24" y1="20" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1EDB78"/>
+      <stop offset=".52" stop-color="#08B85B"/>
+      <stop offset="1" stop-color="#078C47"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#06150D" flood-opacity=".19"/>
+    </filter>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;display=swap');
+      .brand-name { font-family: Manrope, Inter, Arial, sans-serif; font-size: 58px; font-weight: 800; letter-spacing: -3.2px; }
+      .descriptor { font-family: Manrope, Inter, Arial, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px; }
+      .wm-symbol{transform-origin:49px 51px;opacity:0;animation:wmSymbolIn .62s cubic-bezier(.34,1.56,.64,1) .05s both}
+      .wm-name{opacity:0;animation:wmSlideIn .5s cubic-bezier(.16,1,.3,1) .34s both}
+      .wm-desc{opacity:0;animation:wmFadeIn .5s ease-out .6s both}
+      @keyframes wmSymbolIn{0%{opacity:0;transform:scale(.55) rotate(-8deg)}60%{opacity:1;transform:scale(1.07) rotate(1deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+      @keyframes wmSlideIn{0%{opacity:0;transform:translateX(-10px)}100%{opacity:1;transform:translateX(0)}}
+      @keyframes wmFadeIn{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}
+      @media (prefers-reduced-motion:reduce){.wm-symbol,.wm-name,.wm-desc{animation:none!important;opacity:1!important}}
+    </style>
+  </defs>
+
+  <g class="wm-symbol">
+    <g transform="translate(8 13)" filter="url(#shadow)">
+      <path d="M19.5 5.5C29.4-1.2 46.2-1.7 58.1 4.1C70.4 10 77.4 23.8 75.7 38C74 52.2 65.2 65.5 51.2 69.6C37.3 73.7 22.2 69.1 14.1 58C6 46.9 5.3 30.1 11.3 17.6C13.6 12.8 16.2 7.9 19.5 5.5Z" fill="url(#shell)"/>
+      <circle cx="19.5" cy="33" r="2.2" fill="#07100B" opacity=".28"/>
+      <circle cx="57.8" cy="20.5" r="2" fill="#07100B" opacity=".24"/>
+      <circle cx="59" cy="51.5" r="2.5" fill="#07100B" opacity=".22"/>
+
+      <rect x="21" y="19" width="35" height="35" rx="10" fill="white"/>
+      <rect x="25" y="23" width="27" height="27" rx="8" fill="url(#panel)"/>
+
+      <path d="M30 30H47" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="37" cy="30" r="3.4" fill="white"/>
+      <circle cx="37" cy="30" r="1.4" fill="#078C47"/>
+
+      <path d="M30 36.5H47" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="43" cy="36.5" r="3.4" fill="white"/>
+      <circle cx="43" cy="36.5" r="1.4" fill="#078C47"/>
+
+      <path d="M30 43H47" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="34" cy="43" r="3.4" fill="white"/>
+      <circle cx="34" cy="43" r="1.4" fill="#078C47"/>
+    </g>
+  </g>
+
+  <text x="100" y="70" class="brand-name wm-name">
+    <tspan fill="#17211B">Control</tspan><tspan fill="#08B85B">Box</tspan>
+  </text>
+  <text x="103" y="93" class="descriptor wm-desc" fill="#718078">GAMJABOX ADMIN CONTROL PLANE</text>
+</svg>

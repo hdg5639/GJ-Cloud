@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 112" role="img" aria-labelledby="title desc">
+  <title id="title">GamjaBox primary wordmark</title>
+  <desc id="desc">GamjaBox wordmark with a green infrastructure symbol.</desc>
+  <defs>
+    <linearGradient id="g" x1="11" y1="9" x2="75" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#19CF70"/>
+      <stop offset=".52" stop-color="#08B85B"/>
+      <stop offset="1" stop-color="#078C47"/>
+    </linearGradient>
+    <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#064C2A" flood-opacity=".16"/>
+    </filter>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&amp;display=swap');
+      .brand-name { font-family: Manrope, Inter, Arial, sans-serif; font-size: 58px; font-weight: 800; letter-spacing: -3.1px; }
+      .descriptor { font-family: Manrope, Inter, Arial, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3.1px; }
+      .wm-symbol{transform-origin:49px 51px;opacity:0;animation:wmSymbolIn .62s cubic-bezier(.34,1.56,.64,1) .05s both}
+      .wm-name{opacity:0;animation:wmSlideIn .5s cubic-bezier(.16,1,.3,1) .34s both}
+      .wm-desc{opacity:0;animation:wmFadeIn .5s ease-out .6s both}
+      @keyframes wmSymbolIn{0%{opacity:0;transform:scale(.55) rotate(-8deg)}60%{opacity:1;transform:scale(1.07) rotate(1deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+      @keyframes wmSlideIn{0%{opacity:0;transform:translateX(-10px)}100%{opacity:1;transform:translateX(0)}}
+      @keyframes wmFadeIn{0%{opacity:0;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}
+      @media (prefers-reduced-motion:reduce){.wm-symbol,.wm-name,.wm-desc{animation:none!important;opacity:1!important}}
+    </style>
+  </defs>
+
+  <g class="wm-symbol">
+    <g transform="translate(8 13)" filter="url(#s)">
+      <path d="M19.5 5.5C29.4-1.2 46.2-1.7 58.1 4.1C70.4 10 77.4 23.8 75.7 38C74 52.2 65.2 65.5 51.2 69.6C37.3 73.7 22.2 69.1 14.1 58C6 46.9 5.3 30.1 11.3 17.6C13.6 12.8 16.2 7.9 19.5 5.5Z" fill="url(#g)"/>
+      <circle cx="19.5" cy="33" r="2.2" fill="#046C37" opacity=".28"/>
+      <circle cx="57.8" cy="20.5" r="2" fill="#046C37" opacity=".24"/>
+      <circle cx="59" cy="51.5" r="2.5" fill="#046C37" opacity=".22"/>
+      <rect x="21" y="19" width="35" height="33" rx="9" fill="white"/>
+      <rect x="27" y="26" width="23" height="4.5" rx="2.25" fill="#087E43"/>
+      <circle cx="48" cy="28.25" r="1.7" fill="#20D778"/>
+      <rect x="27" y="34" width="23" height="4.5" rx="2.25" fill="#BCEFD0"/>
+      <circle cx="48" cy="36.25" r="1.7" fill="#08B85B"/>
+      <rect x="27" y="42" width="16" height="4.5" rx="2.25" fill="#087E43"/>
+      <path d="M47 44.25H50" stroke="#20D778" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <text x="100" y="70" class="brand-name wm-name">
+    <tspan fill="#17211B">Gamja</tspan><tspan fill="#08B85B">Box</tspan>
+  </text>
+  <text x="103" y="93" class="descriptor wm-desc" fill="#718078">PRIVATE CLOUD PLATFORM</text>
+</svg>

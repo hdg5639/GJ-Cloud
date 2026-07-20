@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const ADMIN_DOMAIN = process.env.ADMIN_DOMAIN;
+const STATIC_ASSET_RE = /\.(svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$/;
 
 export function middleware(request: NextRequest) {
+  if (STATIC_ASSET_RE.test(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   if (!ADMIN_DOMAIN) {
     // 환경변수 누락 시 관리자 라우팅 비활성화 (fail-safe)
     if (request.nextUrl.pathname.startsWith("/admin")) {

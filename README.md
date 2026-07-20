@@ -1,9 +1,14 @@
-# GamjaBox
+<p align="center">
+  <img src="Frontend/portal/public/gamjabox-wordmark.svg" alt="GamjaBox" width="320">
+</p>
 
-> 개인 Proxmox 서버 위에 구축한 셀프호스팅 IaaS 서비스.
-> VM 생성부터 SSH 접속, 포트 노출, 배포, 팀 협업까지 — AWS EC2 + 간이 PaaS를 직접 만든 인프라 위에서.
+<p align="center">
+  <img src="Frontend/portal/public/favicon-32x32.png" alt="" width="16" height="16">
+  개인 Proxmox 서버 위에 구축한 셀프호스팅 IaaS 서비스.<br>
+  VM 생성부터 SSH 접속, 포트 노출, 배포, 팀 협업까지 — AWS EC2 + 간이 PaaS를 직접 만든 인프라 위에서.
+</p>
 
-**라이브 서비스** → [gamjabox.cloud](https://portal.gamjabox.cloud)
+<p align="center"><b>라이브 서비스</b> → <a href="https://portal.gamjabox.cloud">gamjabox.cloud</a></p>
 
 ---
 
@@ -58,7 +63,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 
 서비스 간 호출은 사용자 토큰을 그대로 넘기지 않고, 각 서비스가 자체 client-credentials로 발급받은 audience-scoped 토큰을 사용한다(예: VM → Ops 내부 API).
 
-사용자 포털 외에, 플랜 변경 승인 등을 처리하는 별도 관리자 콘솔이 비공개 도메인으로 분리 운영된다.
+사용자 포털 외에, <img src="Frontend/portal/public/controlbox-symbol.svg" alt="ControlBox" width="18" height="18" align="absmiddle"> **ControlBox** — 플랜 변경 승인 등을 처리하는 별도 관리자 콘솔이 비공개 도메인으로 분리 운영된다.
 
 **데이터베이스**
 

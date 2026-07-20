@@ -47,17 +47,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <aside className="sticky top-0 flex h-screen w-[238px] shrink-0 flex-col gap-[22px] overflow-y-auto border-r border-line bg-panel px-5 pb-[18px] pt-[26px]">
-        <div className="flex items-center gap-[11px] px-[5px]">
-          <div
-            className="grid h-9 w-9 place-items-center rounded-[11px] font-black text-white"
-            style={{ backgroundImage: "linear-gradient(135deg, #12ce70, #08a34f)" }}
-          >
-            G
-          </div>
-          <div>
-            <strong className="block">gamjabox</strong>
-            <small className="mt-0.5 block text-muted-soft">Cloud Console</small>
-          </div>
+        <div className="flex items-center px-[5px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/gamjabox-wordmark.svg" alt="GamjaBox" className="h-auto w-[176px]" />
         </div>
 
         <nav className="grid gap-1.5">

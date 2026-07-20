@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 548 96" role="img" aria-labelledby="title">
+  <title id="title">ControlBox white wordmark</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@800&amp;display=swap');
+    .brand-name { font-family: Manrope, Inter, Arial, sans-serif; font-size: 58px; font-weight: 800; letter-spacing: -3.2px; }
+    .wm-symbol{transform-origin:47px 49px;opacity:0;animation:wmSymbolIn .62s cubic-bezier(.34,1.56,.64,1) .05s both}
+    .wm-name{opacity:0;animation:wmSlideIn .5s cubic-bezier(.16,1,.3,1) .34s both}
+    @keyframes wmSymbolIn{0%{opacity:0;transform:scale(.55) rotate(-8deg)}60%{opacity:1;transform:scale(1.07) rotate(1deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+    @keyframes wmSlideIn{0%{opacity:0;transform:translateX(-10px)}100%{opacity:1;transform:translateX(0)}}
+    @media (prefers-reduced-motion:reduce){.wm-symbol,.wm-name{animation:none!important;opacity:1!important}}
+  </style>
+
+  <g class="wm-symbol">
+    <g transform="translate(8 11)">
+      <path d="M19.5 5.5C29.4-1.2 46.2-1.7 58.1 4.1C70.4 10 77.4 23.8 75.7 38C74 52.2 65.2 65.5 51.2 69.6C37.3 73.7 22.2 69.1 14.1 58C6 46.9 5.3 30.1 11.3 17.6C13.6 12.8 16.2 7.9 19.5 5.5Z" fill="#FFFFFF"/>
+      <rect x="21" y="19" width="35" height="35" rx="10" fill="#FFFFFF"/>
+      <rect x="25" y="23" width="27" height="27" rx="8" fill="#17211B"/>
+
+      <path d="M30 30H47" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="37" cy="30" r="3.4" fill="#FFFFFF"/>
+      <path d="M30 36.5H47" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="43" cy="36.5" r="3.4" fill="#FFFFFF"/>
+      <path d="M30 43H47" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="34" cy="43" r="3.4" fill="#FFFFFF"/>
+    </g>
+  </g>
+
+  <text x="100" y="67" class="brand-name wm-name" fill="#FFFFFF">ControlBox</text>
+</svg>

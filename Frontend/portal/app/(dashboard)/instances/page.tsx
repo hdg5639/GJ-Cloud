@@ -171,12 +171,16 @@ export default function InstancesPage() {
               <tr>
                 <Td colSpan={8} className="py-16 text-center text-muted-soft">
                   {activeVms.length === 0 ? (
-                    <>
-                      인스턴스가 없습니다.{" "}
-                      <Link href="/instances/new" className="font-bold text-brand-strong">
-                        첫 인스턴스 생성하기 →
-                      </Link>
-                    </>
+                    <div className="flex flex-col items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/gamjabox-symbol.svg" alt="" width={56} height={56} className="opacity-90" />
+                      <span>
+                        인스턴스가 없습니다.{" "}
+                        <Link href="/instances/new" className="font-bold text-brand-strong">
+                          첫 인스턴스 생성하기 →
+                        </Link>
+                      </span>
+                    </div>
                   ) : (
                     "조건에 맞는 인스턴스가 없습니다."
                   )}
