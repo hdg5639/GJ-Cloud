@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
@@ -23,6 +23,7 @@ import { Field, Input, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Table, Th, Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
+import { cn } from "@/components/ui/cn";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
   QUEUED: "off",
@@ -66,6 +67,17 @@ const emptyEnvFile = (): EnvironmentFile => ({ vmPath: ".env", content: "" });
 const emptyServiceCard = (): ServiceCard => ({ name: "", runtime: "docker", context: ".", containerPort: 3000, expose: true });
 const emptyInfra = (): InfraSelection => ({ type: "postgres", version: "" });
 
+// 모달 내 섹션 하나가 어떤 역할인지 한눈에 보이도록 제목+설명을 통일된 형태로 감싸는 래퍼
+function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <section className="rounded-panel border border-line bg-panel p-5">
+      <h3 className="mb-1 text-sm font-extrabold">{title}</h3>
+      <p className="mb-4 text-xs text-muted">{description}</p>
+      {children}
+    </section>
+  );
+}
+
 export default function DeploymentsPage() {
   const params = useParams();
   const router = useRouter();
@@ -90,6 +102,7 @@ export default function DeploymentsPage() {
 
   // Raw Compose
   const [composeContent, setComposeContent] = useState("");
+  const [context, setContext] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [envFiles, setEnvFiles] = useState<EnvironmentFile[]>([]);
   const [routes, setRoutes] = useState<ExposedRoute[]>([]);
@@ -143,6 +156,7 @@ export default function DeploymentsPage() {
 
   function applyComposeSpec(spec: ComposeSpecResponse) {
     setComposeContent(spec.composeContent);
+    setContext(spec.context ?? "");
     setEnvFiles(spec.environmentFiles);
     setRoutes(spec.exposedRoutes);
     setHealthChecks(spec.healthChecks);
@@ -185,6 +199,7 @@ export default function DeploymentsPage() {
     setBranch("main");
     setPatToken("");
     setComposeContent("");
+    setContext("");
     setShowAdvanced(false);
     setEnvFiles([]);
     setRoutes([]);
@@ -200,6 +215,11 @@ export default function DeploymentsPage() {
     setRetryNotice(false);
   }
 
+  function closeCreate() {
+    setShowCreate(false);
+    resetCreateForm();
+  }
+
   async function handleCreateFromCompose(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken || !repoUrl || !branch || !composeContent) return;
@@ -211,6 +231,7 @@ export default function DeploymentsPage() {
         branch,
         patToken: patToken || undefined,
         composeContent,
+        context: context.trim() || undefined,
         environmentFiles: envFiles.filter((f) => f.vmPath && f.content),
         exposedRoutes: routes.filter((r) => r.serviceName && r.nickname),
         healthChecks: healthChecks.filter((h) => h.serviceName && h.path),
@@ -296,24 +317,25 @@ export default function DeploymentsPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.back()} className="p-2 hover:bg-[#f2f6f3] rounded-lg transition-colors shrink-0" aria-label="뒤로가기">
-            <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
+        <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
+          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+            <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-lg font-bold shrink-0">배포</h1>
+          <h1 className="text-[15px] font-bold whitespace-nowrap">배포</h1>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button onClick={load} title="새로고침" className="h-8 w-8 flex items-center justify-center border border-line-strong rounded-md hover:bg-[#f2f6f3]">
-            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="ml-auto flex h-10 shrink-0 items-center">
+          <button onClick={() => setShowCreate(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-[#f2f6f3]">
+            ＋ 새 배포
+          </button>
+          <div className="h-5 w-px shrink-0 bg-line" />
+          <button onClick={load} title="새로고침" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-[#f2f6f3] rounded-r-panel">
+            <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
-          <Button variant="primary" size="small" onClick={() => setShowCreate(true)}>
-            + 새 배포
-          </Button>
         </div>
       </div>
 
@@ -384,306 +406,372 @@ export default function DeploymentsPage() {
         )}
       </div>
 
-      {/* 배포 생성 모달 */}
-      <Modal open={showCreate} onClose={() => { setShowCreate(false); resetCreateForm(); }}>
-        <div className="mx-auto flex max-h-[85vh] w-full max-w-2xl flex-col rounded-panel bg-panel p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold">{retryNotice ? "재시도 / 수정 후 재배포" : "새 배포"}</h2>
-            <button onClick={() => { setShowCreate(false); resetCreateForm(); }} className="text-muted-soft hover:text-[#3f4c43]">✕</button>
-          </div>
-
-          {retryNotice && (
-            <div className="bg-[#fffaf0] border border-[#f3dfa8] rounded-md px-3 py-2.5 text-xs text-[#9c6b1f] mb-3 shrink-0">
-              이전 배포의 compose 내용을 불러왔습니다. Git 저장소 URL/브랜치/PAT는 보안상 저장되지 않아 다시 입력해야 합니다. 필요하면 내용을 수정한 뒤 배포를 시작하세요.
+      {/* 배포 생성 모달 — 목업의 위저드 톤(큰 패널, eyebrow+제목+설명 헤더, 섹션별 설명)을 따르되
+          실제 흐름(Compose 직접 작성 / AI 자동생성 두 갈래, 각기 다른 하위 단계 수)은 그대로 유지 */}
+      <Modal open={showCreate} onClose={closeCreate}>
+        <div className="mx-auto flex h-[min(880px,92vh)] w-[min(980px,96vw)] flex-col overflow-hidden rounded-[20px] bg-[#f8faf9]">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between border-b border-line bg-panel px-6 py-5 shrink-0">
+            <div>
+              <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">DEPLOYMENT</span>
+              <h2 className="mt-[5px] text-xl font-extrabold">{retryNotice ? "재시도 / 수정 후 재배포" : "새 배포"}</h2>
+              <p className="mt-1 text-sm text-muted">
+                {createTab === "compose"
+                  ? "직접 작성한 docker-compose.yaml로 서비스를 배포합니다. 세부 설정을 완전히 제어할 수 있어요."
+                  : "저장소를 분석해 AI가 배포 구성을 자동으로 만들어 드립니다. 검토 후 배포하세요."}
+              </p>
             </div>
-          )}
-
-          <div className="flex gap-1 mb-4 shrink-0">
-            <button
-              onClick={() => setCreateTab("compose")}
-              className={`text-xs px-3 h-7 rounded-md transition-colors ${createTab === "compose" ? "bg-[#445248] text-white" : "bg-panel border border-line-strong text-muted"}`}
-            >
-              사용자 지정 (Compose)
-            </button>
-            <button
-              onClick={() => setCreateTab("ai")}
-              className={`text-xs px-3 h-7 rounded-md transition-colors ${createTab === "ai" ? "bg-[#445248] text-white" : "bg-panel border border-line-strong text-muted"}`}
-            >
-              AI 자동생성
+            <button onClick={closeCreate} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-lg text-muted-soft hover:bg-[#f1f4f2]">
+              ×
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-1">
-            {/* 공통 레포 설정 */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <Field label="Git 저장소 URL" htmlFor="deploy-repo-url">
-                <Input
-                  id="deploy-repo-url"
-                  name="deploy-repo-url"
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  placeholder="https://github.com/user/repo.git"
-                />
-              </Field>
-              <Field label="브랜치" htmlFor="deploy-branch">
-                <Input id="deploy-branch" name="deploy-branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
-              </Field>
-              <Field label="PAT (비공개 저장소인 경우)" htmlFor="deploy-pat" className="col-span-2">
-                <Input
-                  id="deploy-pat"
-                  name="deploy-pat"
-                  type="password"
-                  value={patToken}
-                  onChange={(e) => setPatToken(e.target.value)}
-                  placeholder="공개 저장소면 비워두세요"
-                />
-              </Field>
-            </div>
-
-            {createTab === "compose" ? (
-              <form onSubmit={handleCreateFromCompose} className="flex flex-col gap-3">
-                <Field label="docker-compose.yaml" htmlFor="deploy-compose">
-                  <Textarea
-                    id="deploy-compose"
-                    name="deploy-compose"
-                    value={composeContent}
-                    onChange={(e) => setComposeContent(e.target.value)}
-                    rows={10}
-                    spellCheck={false}
-                    placeholder={"services:\n  web:\n    build: .\n    ports:\n      - \"3000:3000\""}
-                    className="font-mono resize-none"
-                  />
-                </Field>
-
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced((v) => !v)}
-                  className="text-xs text-muted hover:text-[#3f4c43] text-left"
-                >
-                  고급 설정 (환경변수 파일 · 라우트 노출 · 헬스체크) {showAdvanced ? "▴" : "▾"}
-                </button>
-
-                {showAdvanced && (
-                  <div className="space-y-4 rounded-md border border-line p-3">
-                    {/* 환경변수 파일 */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-bold text-[#3f4c43]">환경변수 파일</p>
-                        <button type="button" onClick={() => setEnvFiles((prev) => [...prev, emptyEnvFile()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
-                      </div>
-                      {envFiles.map((f, i) => (
-                        <div key={i} className="flex gap-2 mb-2">
-                          <input
-                            value={f.vmPath}
-                            onChange={(e) => setEnvFiles((prev) => prev.map((x, xi) => (xi === i ? { ...x, vmPath: e.target.value } : x)))}
-                            placeholder="경로 (예: .env)"
-                            className="w-32 h-8 px-2 border border-line-strong rounded text-xs shrink-0"
-                          />
-                          <textarea
-                            value={f.content}
-                            onChange={(e) => setEnvFiles((prev) => prev.map((x, xi) => (xi === i ? { ...x, content: e.target.value } : x)))}
-                            placeholder="KEY=value"
-                            rows={2}
-                            className="flex-1 px-2 py-1.5 border border-line-strong rounded text-xs font-mono resize-none"
-                          />
-                          <button type="button" onClick={() => setEnvFiles((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger self-start mt-1.5">✕</button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* 라우트 노출 */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-bold text-[#3f4c43]">라우트 노출</p>
-                        <button type="button" onClick={() => setRoutes((prev) => [...prev, emptyExposedRoute()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
-                      </div>
-                      {routes.map((r, i) => (
-                        <div key={i} className="grid grid-cols-6 gap-1.5 mb-2 items-center">
-                          <input value={r.serviceName} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                          <input type="number" value={r.port} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, port: Number(e.target.value) } : x)))} placeholder="포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                          <select value={r.protocol} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, protocol: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
-                            <option value="HTTP">HTTP</option>
-                            <option value="TCP">TCP</option>
-                          </select>
-                          <select value={r.visibility} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, visibility: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
-                            <option value="PUBLIC">공개</option>
-                            <option value="PRIVATE">비공개</option>
-                          </select>
-                          <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                          <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* 헬스체크 */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-bold text-[#3f4c43]">헬스체크</p>
-                        <button type="button" onClick={() => setHealthChecks((prev) => [...prev, emptyHealthCheck()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
-                      </div>
-                      {healthChecks.map((h, i) => (
-                        <div key={i} className="grid grid-cols-5 gap-1.5 mb-2 items-center">
-                          <input value={h.serviceName} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                          <input value={h.path} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, path: e.target.value } : x)))} placeholder="경로 (예: /health)" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                          <input type="number" value={h.hostPort ?? ""} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, hostPort: e.target.value ? Number(e.target.value) : undefined } : x)))} placeholder="호스트포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                          <input type="number" value={h.containerPort ?? ""} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, containerPort: e.target.value ? Number(e.target.value) : undefined } : x)))} placeholder="컨테이너포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                          <button type="button" onClick={() => setHealthChecks((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <Button type="submit" variant="primary" disabled={submitting || !repoUrl || !branch || !composeContent} className="mt-2">
-                  {submitting ? "배포 시작 중..." : "배포 시작"}
-                </Button>
-              </form>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-bold text-[#3f4c43]">서비스</p>
-                    <button type="button" onClick={() => setServiceCards((prev) => [...prev, emptyServiceCard()])} className="text-xs text-brand-strong font-bold">+ 서비스 추가</button>
-                  </div>
-                  {serviceCards.map((s, i) => (
-                    <div key={i} className="rounded-md border border-line p-3 mb-2 space-y-2">
-                      <div className="grid grid-cols-3 gap-2">
-                        <input value={s.name} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, name: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                        <select value={s.runtime} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, runtime: e.target.value } : x)))} className="h-8 px-2 border border-line-strong rounded text-xs">
-                          <option value="docker">Docker (직접 빌드)</option>
-                          <option value="java">Java</option>
-                          <option value="node">Node.js</option>
-                          <option value="python">Python</option>
-                        </select>
-                        <input value={s.context} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, context: e.target.value } : x)))} placeholder="경로 (예: .)" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <input type="number" value={s.containerPort} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, containerPort: Number(e.target.value) } : x)))} placeholder="컨테이너 포트" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                        <input value={s.buildCommand ?? ""} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, buildCommand: e.target.value } : x)))} placeholder="빌드 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                        <input value={s.startCommand ?? ""} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, startCommand: e.target.value } : x)))} placeholder="시작 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-1.5 text-xs text-muted">
-                          <input type="checkbox" checked={s.expose} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, expose: e.target.checked } : x)))} className="accent-brand" />
-                          외부 노출
-                        </label>
-                        <button type="button" onClick={() => setServiceCards((prev) => prev.filter((_, xi) => xi !== i))} className="text-xs text-muted-soft hover:text-danger">삭제</button>
-                      </div>
-                    </div>
-                  ))}
+          {/* 본문 (스크롤 영역) */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="mx-auto max-w-[820px] space-y-4">
+              {retryNotice && (
+                <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] px-3 py-2.5 text-xs text-[#9c6b1f]">
+                  이전 배포의 compose 내용을 불러왔습니다. Git 저장소 URL/브랜치/PAT는 보안상 저장되지 않아 다시 입력해야 합니다. 필요하면 내용을 수정한 뒤 배포를 시작하세요.
                 </div>
+              )}
 
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-xs font-bold text-[#3f4c43]">공유 인프라</p>
-                    <button type="button" onClick={() => setInfraSelections((prev) => [...prev, emptyInfra()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
-                  </div>
-                  {infraSelections.map((inf, i) => (
-                    <div key={i} className="flex gap-2 mb-2">
-                      <select value={inf.type} onChange={(e) => setInfraSelections((prev) => prev.map((x, xi) => (xi === i ? { ...x, type: e.target.value } : x)))} className="h-8 px-2 border border-line-strong rounded text-xs">
-                        <option value="postgres">PostgreSQL</option>
-                        <option value="mysql">MySQL</option>
-                        <option value="redis">Redis</option>
-                        <option value="mongodb">MongoDB</option>
-                      </select>
-                      <input value={inf.version ?? ""} onChange={(e) => setInfraSelections((prev) => prev.map((x, xi) => (xi === i ? { ...x, version: e.target.value } : x)))} placeholder="버전 (선택, 비우면 AI가 선택)" className="flex-1 h-8 px-2 border border-line-strong rounded text-xs" />
-                      <button type="button" onClick={() => setInfraSelections((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger">✕</button>
-                    </div>
-                  ))}
+              {/* 배포 방식 선택 */}
+              <div>
+                <h3 className="mb-1 text-sm font-extrabold">배포 방식</h3>
+                <p className="mb-3 text-xs text-muted">두 가지 방식 중 하나를 선택하세요. 언제든 전환할 수 있습니다.</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreateTab("compose")}
+                    className={cn(
+                      "rounded-[12px] border p-4 text-left transition-colors",
+                      createTab === "compose" ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)] bg-panel" : "border-line-strong bg-panel hover:border-[#b9c4bd]"
+                    )}
+                  >
+                    <p className="mb-1 text-sm font-bold">Compose 직접 작성</p>
+                    <p className="text-xs text-muted">docker-compose.yaml을 직접 작성해 배포합니다.</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateTab("ai")}
+                    className={cn(
+                      "rounded-[12px] border p-4 text-left transition-colors",
+                      createTab === "ai" ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)] bg-panel" : "border-line-strong bg-panel hover:border-[#b9c4bd]"
+                    )}
+                  >
+                    <p className="mb-1 text-sm font-bold">AI 자동 생성</p>
+                    <p className="text-xs text-muted">저장소를 분석해 배포 구성을 자동으로 만들어 줍니다.</p>
+                  </button>
                 </div>
+              </div>
 
-                <Button
-                  type="button"
-                  onClick={handleGenerateSpec}
-                  disabled={generating || !repoUrl || !branch || serviceCards.every((s) => !s.name)}
-                  title={!repoUrl || !branch ? "위쪽 공통 레포 설정에 Git 저장소 URL/브랜치를 먼저 입력하세요" : undefined}
-                >
-                  {generating ? "저장소 분석 + AI 생성 중..." : "AI 스펙 생성"}
-                </Button>
+              {/* 공통: 저장소 연결 */}
+              <Section title="1. 저장소 연결" description="배포할 Git 저장소와 브랜치를 입력하세요. PAT는 저장되지 않고 이번 배포에만 사용됩니다.">
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Git 저장소 URL" htmlFor="deploy-repo-url">
+                    <Input
+                      id="deploy-repo-url"
+                      name="deploy-repo-url"
+                      value={repoUrl}
+                      onChange={(e) => setRepoUrl(e.target.value)}
+                      placeholder="https://github.com/user/repo.git"
+                    />
+                  </Field>
+                  <Field label="브랜치" htmlFor="deploy-branch">
+                    <Input id="deploy-branch" name="deploy-branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
+                  </Field>
+                  <Field label="PAT (비공개 저장소인 경우)" htmlFor="deploy-pat" className="col-span-2">
+                    <Input
+                      id="deploy-pat"
+                      name="deploy-pat"
+                      type="password"
+                      value={patToken}
+                      onChange={(e) => setPatToken(e.target.value)}
+                      placeholder="공개 저장소면 비워두세요"
+                    />
+                  </Field>
+                  {createTab === "compose" && (
+                    <Field label="배포 디렉토리 (선택)" htmlFor="deploy-context" className="col-span-2">
+                      <Input
+                        id="deploy-context"
+                        name="deploy-context"
+                        value={context}
+                        onChange={(e) => setContext(e.target.value)}
+                        placeholder="예: backend (비워두면 저장소 루트에서 배포)"
+                      />
+                      <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
+                        모노레포에서 특정 폴더만 배포하고 싶을 때 입력하세요. Compose 파일 업로드와 이미지 빌드가 이 디렉토리를 기준으로 실행됩니다.
+                      </p>
+                    </Field>
+                  )}
+                </div>
+              </Section>
 
-                {/* 결정론적 저장소 분석 결과 — AI 호출 여부와 무관하게 항상 먼저 보여줌 */}
-                {evidenceRefs.length > 0 && (
-                  <div className="rounded-md border border-[#bcd6f5] bg-[#eef5fd] p-3 text-xs text-[#2c5a8a] space-y-1">
-                    <p className="font-bold">저장소 분석 결과</p>
-                    {evidenceRefs.map((ref, i) => {
-                      const [context, detectedType, confidence] = ref.split(":");
-                      return (
-                        <p key={i}>
-                          · <span className="font-mono">{context || "."}</span> → {detectedType}
-                          {confidence && <span className="text-[#5c8ab8]"> (신뢰도: {confidence})</span>}
-                        </p>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {generationWarnings.length > 0 && (
-                  <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] p-3 text-xs text-[#9c6b1f] space-y-1">
-                    {generationWarnings.map((w, i) => <p key={i}>⚠ {w}</p>)}
-                  </div>
-                )}
-
-                {/* 근거 부족/충돌 등으로 확정하지 못한 경우 — 억지로 스펙을 만들어내지 않고 사유를 그대로 보여줌 */}
-                {generationStatus && generationStatus !== "READY" && (
-                  <div className="rounded-md border border-danger-soft bg-[#fdf4f4] p-3 text-xs text-danger space-y-1.5">
-                    <p className="font-bold">
-                      {generationStatus === "NEEDS_INPUT" && "추가 정보가 필요합니다"}
-                      {generationStatus === "UNSUPPORTED" && "이 구성은 자동 배포를 지원하지 않습니다"}
-                      {generationStatus === "CONFLICT" && "입력값이 저장소 분석 결과와 충돌합니다"}
-                      {generationStatus === "INVALID_RESPONSE" && "스펙 생성에 실패했습니다"}
-                    </p>
-                    {unresolvedFields.map((f, i) => (
-                      <p key={i}>· [{f.field}] {f.reason}</p>
-                    ))}
-                  </div>
-                )}
-
-                {generatedSpec && (
-                  <>
-                    <Field
-                      label="생성된 스펙 (검토 후 필요 시 수정 가능 — 결정론적 규칙으로 확정된 부분과 AI 확정 부분이 합쳐져 있습니다)"
-                      htmlFor="deploy-generated-spec"
-                    >
+              {createTab === "compose" ? (
+                <form id="deploy-compose-form" onSubmit={handleCreateFromCompose}>
+                  <Section title="2. Compose 작성" description="저장소(또는 위에서 지정한 디렉토리)에서 실행할 서비스를 docker-compose.yaml 형식으로 작성하세요.">
+                    <Field label="docker-compose.yaml" htmlFor="deploy-compose">
                       <Textarea
-                        id="deploy-generated-spec"
-                        name="deploy-generated-spec"
-                        value={generatedSpec}
-                        onChange={(e) => setGeneratedSpec(e.target.value)}
-                        rows={12}
+                        id="deploy-compose"
+                        name="deploy-compose"
+                        value={composeContent}
+                        onChange={(e) => setComposeContent(e.target.value)}
+                        rows={10}
                         spellCheck={false}
+                        placeholder={"services:\n  web:\n    build: .\n    ports:\n      - \"3000:3000\""}
                         className="font-mono resize-none"
                       />
                     </Field>
-                    <Button type="button" onClick={handleReviewSpec} disabled={reviewing}>
-                      {reviewing ? "AI 검수 중..." : "AI 검수 요청 (선택)"}
-                    </Button>
-                    {reviewFindings && (
-                      <div className="rounded-md border border-line bg-[#fbfcfb] p-3 text-xs text-[#3d4941] space-y-2">
-                        <p className="text-[11px] text-muted-soft">AI 검수는 참고용이며 배포를 막지 않습니다.</p>
-                        {reviewFindings.length === 0 ? (
-                          <p className="text-muted-soft">특이사항이 없습니다.</p>
-                        ) : (
-                          reviewFindings.map((finding, i) => (
-                            <div key={i} className="border-l-2 pl-2" style={{
-                              borderColor: finding.severity === "CRITICAL" ? "#e34949" : finding.severity === "WARNING" ? "#e0a940" : "#9aa59e",
-                            }}>
-                              <p className="font-bold text-[#3d4941]">
-                                [{finding.severity}] {finding.service && <span className="font-mono">{finding.service}</span>} {finding.message}
-                              </p>
-                              {finding.remediation && <p className="text-muted mt-0.5">→ {finding.remediation}</p>}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced((v) => !v)}
+                      className="text-xs text-muted hover:text-[#3f4c43] text-left"
+                    >
+                      고급 설정 (환경변수 파일 · 라우트 노출 · 헬스체크) {showAdvanced ? "▴" : "▾"}
+                    </button>
+
+                    {showAdvanced && (
+                      <div className="mt-3 space-y-4 rounded-md border border-line p-3">
+                        <p className="text-[11px] text-muted-soft">모두 선택 사항입니다. 필요한 항목만 채우세요.</p>
+                        {/* 환경변수 파일 */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-bold text-[#3f4c43]">환경변수 파일</p>
+                            <button type="button" onClick={() => setEnvFiles((prev) => [...prev, emptyEnvFile()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
+                          </div>
+                          <p className="mb-1.5 text-[11px] text-muted-soft">VM에 업로드할 .env 파일의 경로와 내용을 지정합니다.</p>
+                          {envFiles.map((f, i) => (
+                            <div key={i} className="flex gap-2 mb-2">
+                              <input
+                                value={f.vmPath}
+                                onChange={(e) => setEnvFiles((prev) => prev.map((x, xi) => (xi === i ? { ...x, vmPath: e.target.value } : x)))}
+                                placeholder="경로 (예: .env)"
+                                className="w-32 h-8 px-2 border border-line-strong rounded text-xs shrink-0"
+                              />
+                              <textarea
+                                value={f.content}
+                                onChange={(e) => setEnvFiles((prev) => prev.map((x, xi) => (xi === i ? { ...x, content: e.target.value } : x)))}
+                                placeholder="KEY=value"
+                                rows={2}
+                                className="flex-1 px-2 py-1.5 border border-line-strong rounded text-xs font-mono resize-none"
+                              />
+                              <button type="button" onClick={() => setEnvFiles((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger self-start mt-1.5">✕</button>
                             </div>
-                          ))
-                        )}
+                          ))}
+                        </div>
+
+                        {/* 라우트 노출 */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-bold text-[#3f4c43]">라우트 노출</p>
+                            <button type="button" onClick={() => setRoutes((prev) => [...prev, emptyExposedRoute()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
+                          </div>
+                          <p className="mb-1.5 text-[11px] text-muted-soft">외부에서 접근 가능하게 노출할 서비스 포트를 지정합니다.</p>
+                          {routes.map((r, i) => (
+                            <div key={i} className="grid grid-cols-6 gap-1.5 mb-2 items-center">
+                              <input value={r.serviceName} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <input type="number" value={r.port} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, port: Number(e.target.value) } : x)))} placeholder="포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <select value={r.protocol} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, protocol: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
+                                <option value="HTTP">HTTP</option>
+                                <option value="TCP">TCP</option>
+                              </select>
+                              <select value={r.visibility} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, visibility: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
+                                <option value="PUBLIC">공개</option>
+                                <option value="PRIVATE">비공개</option>
+                              </select>
+                              <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 헬스체크 */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-bold text-[#3f4c43]">헬스체크</p>
+                            <button type="button" onClick={() => setHealthChecks((prev) => [...prev, emptyHealthCheck()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
+                          </div>
+                          <p className="mb-1.5 text-[11px] text-muted-soft">컨테이너 교체 후 정상 기동을 확인할 방법을 지정합니다. 실패 시 자동 롤백됩니다.</p>
+                          {healthChecks.map((h, i) => (
+                            <div key={i} className="grid grid-cols-5 gap-1.5 mb-2 items-center">
+                              <input value={h.serviceName} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <input value={h.path} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, path: e.target.value } : x)))} placeholder="경로 (예: /health)" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <input type="number" value={h.hostPort ?? ""} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, hostPort: e.target.value ? Number(e.target.value) : undefined } : x)))} placeholder="호스트포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <input type="number" value={h.containerPort ?? ""} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, containerPort: e.target.value ? Number(e.target.value) : undefined } : x)))} placeholder="컨테이너포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <button type="button" onClick={() => setHealthChecks((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    <form onSubmit={handleCreateFromSpec}>
-                      <Button type="submit" variant="primary" disabled={submitting || !repoUrl || !branch} className="w-full">
-                        {submitting ? "배포 시작 중..." : "이 스펙으로 배포 시작"}
-                      </Button>
-                    </form>
-                  </>
-                )}
-              </div>
+                  </Section>
+                </form>
+              ) : (
+                <>
+                  <Section title="2. 서비스 힌트 (선택)" description="AI가 저장소를 자동으로 분석하지만, 감지가 어려운 서비스가 있다면 힌트를 입력해 정확도를 높일 수 있습니다.">
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-bold text-[#3f4c43]">서비스</p>
+                        <button type="button" onClick={() => setServiceCards((prev) => [...prev, emptyServiceCard()])} className="text-xs text-brand-strong font-bold">+ 서비스 추가</button>
+                      </div>
+                      {serviceCards.map((s, i) => (
+                        <div key={i} className="rounded-md border border-line p-3 mb-2 space-y-2">
+                          <div className="grid grid-cols-3 gap-2">
+                            <input value={s.name} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, name: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <select value={s.runtime} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, runtime: e.target.value } : x)))} className="h-8 px-2 border border-line-strong rounded text-xs">
+                              <option value="docker">Docker (직접 빌드)</option>
+                              <option value="java">Java</option>
+                              <option value="node">Node.js</option>
+                              <option value="python">Python</option>
+                            </select>
+                            <input value={s.context} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, context: e.target.value } : x)))} placeholder="경로 (예: .)" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input type="number" value={s.containerPort} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, containerPort: Number(e.target.value) } : x)))} placeholder="컨테이너 포트" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <input value={s.buildCommand ?? ""} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, buildCommand: e.target.value } : x)))} placeholder="빌드 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <input value={s.startCommand ?? ""} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, startCommand: e.target.value } : x)))} placeholder="시작 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center gap-1.5 text-xs text-muted">
+                              <input type="checkbox" checked={s.expose} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, expose: e.target.checked } : x)))} className="accent-brand" />
+                              외부 노출
+                            </label>
+                            <button type="button" onClick={() => setServiceCards((prev) => prev.filter((_, xi) => xi !== i))} className="text-xs text-muted-soft hover:text-danger">삭제</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-bold text-[#3f4c43]">공유 인프라</p>
+                        <button type="button" onClick={() => setInfraSelections((prev) => [...prev, emptyInfra()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
+                      </div>
+                      <p className="mb-1.5 text-[11px] text-muted-soft">서비스가 함께 사용할 DB/캐시 등 공유 인프라를 지정합니다.</p>
+                      {infraSelections.map((inf, i) => (
+                        <div key={i} className="flex gap-2 mb-2">
+                          <select value={inf.type} onChange={(e) => setInfraSelections((prev) => prev.map((x, xi) => (xi === i ? { ...x, type: e.target.value } : x)))} className="h-8 px-2 border border-line-strong rounded text-xs">
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="mysql">MySQL</option>
+                            <option value="redis">Redis</option>
+                            <option value="mongodb">MongoDB</option>
+                          </select>
+                          <input value={inf.version ?? ""} onChange={(e) => setInfraSelections((prev) => prev.map((x, xi) => (xi === i ? { ...x, version: e.target.value } : x)))} placeholder="버전 (선택, 비우면 AI가 선택)" className="flex-1 h-8 px-2 border border-line-strong rounded text-xs" />
+                          <button type="button" onClick={() => setInfraSelections((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger">✕</button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleGenerateSpec}
+                      disabled={generating || !repoUrl || !branch || serviceCards.every((s) => !s.name)}
+                      title={!repoUrl || !branch ? "위쪽 저장소 연결에 Git 저장소 URL/브랜치를 먼저 입력하세요" : undefined}
+                    >
+                      {generating ? "저장소 분석 + AI 생성 중..." : "AI 스펙 생성"}
+                    </Button>
+                  </Section>
+
+                  {/* 결정론적 저장소 분석 결과 — AI 호출 여부와 무관하게 항상 먼저 보여줌 */}
+                  {evidenceRefs.length > 0 && (
+                    <Section title="저장소 분석 결과" description="AI 호출 전에 저장소를 결정론적 규칙으로 먼저 분석한 근거입니다.">
+                      <div className="space-y-1 text-xs text-[#2c5a8a]">
+                        {evidenceRefs.map((ref, i) => {
+                          const [ctx, detectedType, confidence] = ref.split(":");
+                          return (
+                            <p key={i}>
+                              · <span className="font-mono">{ctx || "."}</span> → {detectedType}
+                              {confidence && <span className="text-[#5c8ab8]"> (신뢰도: {confidence})</span>}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    </Section>
+                  )}
+
+                  {generationWarnings.length > 0 && (
+                    <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] p-3 text-xs text-[#9c6b1f] space-y-1">
+                      {generationWarnings.map((w, i) => <p key={i}>⚠ {w}</p>)}
+                    </div>
+                  )}
+
+                  {/* 근거 부족/충돌 등으로 확정하지 못한 경우 — 억지로 스펙을 만들어내지 않고 사유를 그대로 보여줌 */}
+                  {generationStatus && generationStatus !== "READY" && (
+                    <div className="rounded-md border border-danger-soft bg-[#fdf4f4] p-3 text-xs text-danger space-y-1.5">
+                      <p className="font-bold">
+                        {generationStatus === "NEEDS_INPUT" && "추가 정보가 필요합니다"}
+                        {generationStatus === "UNSUPPORTED" && "이 구성은 자동 배포를 지원하지 않습니다"}
+                        {generationStatus === "CONFLICT" && "입력값이 저장소 분석 결과와 충돌합니다"}
+                        {generationStatus === "INVALID_RESPONSE" && "스펙 생성에 실패했습니다"}
+                      </p>
+                      {unresolvedFields.map((f, i) => (
+                        <p key={i}>· [{f.field}] {f.reason}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  {generatedSpec && (
+                    <Section title="3. 생성된 배포 구성" description="결정론적 규칙으로 확정된 부분과 AI가 확정한 부분이 합쳐진 결과입니다. 검토 후 필요하면 직접 수정할 수 있습니다.">
+                      <form id="deploy-spec-form" onSubmit={handleCreateFromSpec} className="space-y-3">
+                        <Textarea
+                          id="deploy-generated-spec"
+                          name="deploy-generated-spec"
+                          value={generatedSpec}
+                          onChange={(e) => setGeneratedSpec(e.target.value)}
+                          rows={12}
+                          spellCheck={false}
+                          className="font-mono resize-none"
+                        />
+                        <Button type="button" onClick={handleReviewSpec} disabled={reviewing}>
+                          {reviewing ? "AI 검수 중..." : "AI 검수 요청 (선택 — 결과가 배포를 막지 않습니다)"}
+                        </Button>
+                        {reviewFindings && (
+                          <div className="rounded-md border border-line bg-[#fbfcfb] p-3 text-xs text-[#3d4941] space-y-2">
+                            <p className="text-[11px] text-muted-soft">AI 검수는 참고용이며 배포를 막지 않습니다.</p>
+                            {reviewFindings.length === 0 ? (
+                              <p className="text-muted-soft">특이사항이 없습니다.</p>
+                            ) : (
+                              reviewFindings.map((finding, i) => (
+                                <div key={i} className="border-l-2 pl-2" style={{
+                                  borderColor: finding.severity === "CRITICAL" ? "#e34949" : finding.severity === "WARNING" ? "#e0a940" : "#9aa59e",
+                                }}>
+                                  <p className="font-bold text-[#3d4941]">
+                                    [{finding.severity}] {finding.service && <span className="font-mono">{finding.service}</span>} {finding.message}
+                                  </p>
+                                  {finding.remediation && <p className="text-muted mt-0.5">→ {finding.remediation}</p>}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </form>
+                    </Section>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 푸터 */}
+          <div className="flex shrink-0 items-center gap-2 border-t border-line bg-panel px-6 py-4">
+            <span className="flex-1 text-xs text-muted-soft">
+              {createTab === "compose"
+                ? "배포를 시작하면 소스 체크아웃부터 헬스체크까지 자동으로 진행되고, 실시간 로그로 확인할 수 있어요."
+                : "AI가 생성한 스펙으로 배포하면 위와 동일한 파이프라인으로 진행됩니다."}
+            </span>
+            <Button onClick={closeCreate}>취소</Button>
+            {createTab === "compose" ? (
+              <Button form="deploy-compose-form" type="submit" variant="primary" disabled={submitting || !repoUrl || !branch || !composeContent}>
+                {submitting ? "배포 시작 중..." : "배포 시작"}
+              </Button>
+            ) : (
+              generatedSpec && (
+                <Button form="deploy-spec-form" type="submit" variant="primary" disabled={submitting || !repoUrl || !branch}>
+                  {submitting ? "배포 시작 중..." : "이 스펙으로 배포 시작"}
+                </Button>
+              )
             )}
           </div>
         </div>

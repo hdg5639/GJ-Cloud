@@ -8,6 +8,7 @@ public record ComposeSpecResponse(
         String composeContent,
         List<EnvironmentFile> environmentFiles,
         List<ExposedRoute> exposedRoutes,
-        List<HealthCheck> healthChecks
+        List<HealthCheck> healthChecks,
+        String context
 ) {
 }

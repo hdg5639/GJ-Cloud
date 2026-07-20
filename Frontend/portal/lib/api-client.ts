@@ -520,6 +520,7 @@ export const api = {
           environmentFiles?: EnvironmentFile[];
           exposedRoutes?: ExposedRoute[];
           healthChecks?: HealthCheck[];
+          context?: string;
         }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/deployments`, {

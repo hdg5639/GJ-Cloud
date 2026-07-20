@@ -107,7 +107,7 @@ public class DeploymentExecutor {
 
         DeploymentEntity deployment = deploymentRepository.save(
                 DeploymentEntity.createQueued(vmId, artifact.sourceType(), sourceCiphertext, previousDeploymentId,
-                        environmentFilesCiphertext, exposedRoutesJson, healthChecksJson));
+                        environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, repoConfig.context()));
 
         if (!lockService.tryLock(vmId, deployment.getId())) {
             deployment = deploymentRepository.save(deployment.withFailed("이미 배포가 진행 중입니다."));
@@ -137,7 +137,7 @@ public class DeploymentExecutor {
         List<HealthCheck> healthChecks = entity.getHealthChecksJson() != null
                 ? readJsonList(entity.getHealthChecksJson(), HealthCheck.class)
                 : List.of();
-        return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks);
+        return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks, entity.getContext());
     }
 
     // 사용자가 임의로 지정한 과거 SUCCEEDED 배포로 수동 롤백. 기존 자동 롤백(RollbackService)과 동일하게
@@ -220,12 +220,14 @@ public class DeploymentExecutor {
             eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
                     "소스 체크아웃 완료 (" + repoConfig.branch() + " → " + shortSha(commitSha) + ")");
 
+            String contextDir = resolveContextDir(releaseDir, repoConfig.context());
+
             updateStatus(deploymentId, DeploymentStatus.UPLOADING, "파일 전송 중...");
-            uploadFiles(session, releaseDir, artifact);
+            uploadFiles(session, releaseDir, contextDir, artifact);
             eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "파일 전송 완료");
 
             updateStatus(deploymentId, DeploymentStatus.VALIDATING, "compose 검증 중...");
-            String composeFilePath = releaseDir + "/" + COMPOSE_FILE_NAME;
+            String composeFilePath = contextDir + "/" + COMPOSE_FILE_NAME;
             CommandResult configCheck = sshCommandExecutor.exec(session,
                     "docker compose -p gj_" + appId + " -f '" + composeFilePath + "' config", 60_000);
             if (!configCheck.isSuccess()) {
@@ -237,12 +239,12 @@ public class DeploymentExecutor {
             updateStatus(deploymentId, DeploymentStatus.BUILDING, "이미지 빌드 중...");
             ResolvedCompose resolved;
             try {
-                resolved = composeImageBuilder.buildAndResolve(session, appId, deploymentId, releaseDir, artifact.composeContent());
+                resolved = composeImageBuilder.buildAndResolve(session, appId, deploymentId, contextDir, artifact.composeContent());
             } catch (Exception e) {
                 failImmediately(deploymentId, "이미지 빌드 실패: " + e.getMessage());
                 return;
             }
-            String resolvedFilePath = releaseDir + "/" + RESOLVED_COMPOSE_FILE_NAME;
+            String resolvedFilePath = contextDir + "/" + RESOLVED_COMPOSE_FILE_NAME;
             writeRemoteFile(session, resolvedFilePath, resolved.resolvedComposeContent());
             String imageRefsJson = objectMapper.writeValueAsString(resolved.serviceImageRefs());
             String resolvedCiphertext = cipher.encrypt(resolved.resolvedComposeContent().getBytes(StandardCharsets.UTF_8));
@@ -327,13 +329,18 @@ public class DeploymentExecutor {
 
     // compose 원문 + 업로드 파일들을 release 디렉토리에 SFTP로 전송. 소스 체크아웃 "이후"에 전송해
     // 체크아웃 결과를 덮어쓰는 순서를 보장함 (D.4)
-    private void uploadFiles(Session session, String releaseDir, ComposeArtifact artifact) {
+    // compose 파일 자체는 사용자가 선택한 컨텍스트 디렉토리(contextDir)에 두어 build context가 자동으로
+    // 그 디렉토리 기준으로 잡히게 함. 환경변수 파일은 기존과 동일하게 release 루트 기준 상대경로 유지.
+    private void uploadFiles(Session session, String releaseDir, String contextDir, ComposeArtifact artifact) {
+        if (!contextDir.equals(releaseDir)) {
+            sshCommandExecutor.execOrThrow(session, "mkdir -p '" + contextDir + "'", 10_000);
+        }
         ChannelSftp sftp = null;
         try {
             sftp = (ChannelSftp) session.openChannel("sftp");
             sftp.connect(10_000);
 
-            writeSftpFile(sftp, releaseDir + "/" + COMPOSE_FILE_NAME, artifact.composeContent().getBytes(StandardCharsets.UTF_8));
+            writeSftpFile(sftp, contextDir + "/" + COMPOSE_FILE_NAME, artifact.composeContent().getBytes(StandardCharsets.UTF_8));
 
             for (EnvironmentFile file : artifact.environmentFiles()) {
                 String targetPath = resolveVmPath(releaseDir, file.vmPath());
@@ -376,6 +383,23 @@ public class DeploymentExecutor {
     private void ensureParentDir(Session session, String targetPath) {
         String parent = targetPath.substring(0, targetPath.lastIndexOf('/'));
         sshCommandExecutor.execOrThrow(session, "mkdir -p '" + parent + "'", 10_000);
+    }
+
+    // context는 release 디렉토리 기준 상대 경로의 서브디렉토리 하나만 가리킴 ("backend", "services/api" 등).
+    // null/빈 값/"."이면 저장소 루트에서 배포. resolveVmPath와 동일한 이유로 루트 탈출·셸 메타문자를 차단.
+    private String resolveContextDir(String releaseDir, String context) {
+        if (context == null || context.isBlank() || context.equals(".")) {
+            return releaseDir;
+        }
+        String cleaned = context.trim();
+        if (cleaned.contains("..") || cleaned.startsWith("/") || cleaned.contains("~") || UNSAFE_SHELL_CHARS.matcher(cleaned).find()) {
+            throw new OpsException(OpsErrorCode.INVALID_PATH);
+        }
+        cleaned = cleaned.startsWith("./") ? cleaned.substring(2) : cleaned;
+        while (cleaned.endsWith("/")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+        return cleaned.isBlank() ? releaseDir : releaseDir + "/" + cleaned;
     }
 
     // vmPath는 release 디렉토리 기준 상대 경로로 취급 ("./auth/.env", "nginx/nginx.conf" 등). 루트 탈출 방지.

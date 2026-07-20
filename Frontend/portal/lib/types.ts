@@ -382,6 +382,7 @@ export interface ComposeSpecResponse {
   environmentFiles: EnvironmentFile[];
   exposedRoutes: ExposedRoute[];
   healthChecks: HealthCheck[];
+  context: string | null;
 }
 
 // 11절 수동 DB 백업 — 덤프 파일은 VM 파일시스템에 저장되고 다운로드는 파일 브라우저 API를 재사용함

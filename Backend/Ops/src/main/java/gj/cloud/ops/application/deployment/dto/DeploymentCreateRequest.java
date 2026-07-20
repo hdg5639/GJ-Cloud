@@ -13,6 +13,8 @@ public record DeploymentCreateRequest(
         @NotBlank String composeContent,
         List<EnvironmentFile> environmentFiles,
         List<ExposedRoute> exposedRoutes,
-        List<HealthCheck> healthChecks
+        List<HealthCheck> healthChecks,
+        // 저장소 내 배포 컨텍스트 서브디렉토리 (예: "backend"). 비어있거나 "."이면 저장소 루트.
+        String context
 ) {
 }

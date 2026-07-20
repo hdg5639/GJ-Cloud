@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     exposed_routes_json         TEXT,
     health_checks_json          TEXT,
     release_dir                 VARCHAR(500),
+    context                     VARCHAR(255),
     env_version                 INTEGER,
     previous_deployment_id      VARCHAR(36),
     error_message               TEXT,
@@ -43,6 +44,8 @@ CREATE TABLE IF NOT EXISTS deployments (
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS environment_files_ciphertext TEXT;
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS exposed_routes_json TEXT;
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS health_checks_json TEXT;
+-- Raw Compose 배포 시 저장소 내 특정 서브디렉토리를 배포 컨텍스트로 선택하는 기능 추가
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS context VARCHAR(255);
 
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id_created_at ON deployments(vm_id, created_at DESC);

@@ -62,6 +62,10 @@ public class DeploymentEntity {
     @Column(name = "release_dir")
     private String releaseDir;
 
+    // Raw Compose 배포 시 사용자가 선택한 저장소 내 서브디렉토리 (release_dir 기준 상대경로) — null/"."이면 저장소 루트
+    @Column(name = "context")
+    private String context;
+
     @Column(name = "env_version")
     private Integer envVersion;
 
@@ -82,12 +86,19 @@ public class DeploymentEntity {
 
     public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
                                                  String previousDeploymentId) {
-        return createQueued(vmId, sourceType, sourceComposeCiphertext, previousDeploymentId, null, null, null);
+        return createQueued(vmId, sourceType, sourceComposeCiphertext, previousDeploymentId, null, null, null, null);
     }
 
     public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
                                                  String previousDeploymentId, String environmentFilesCiphertext,
                                                  String exposedRoutesJson, String healthChecksJson) {
+        return createQueued(vmId, sourceType, sourceComposeCiphertext, previousDeploymentId,
+                environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, null);
+    }
+
+    public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
+                                                 String previousDeploymentId, String environmentFilesCiphertext,
+                                                 String exposedRoutesJson, String healthChecksJson, String context) {
         LocalDateTime now = LocalDateTime.now();
         return DeploymentEntity.builder()
                 .id(UUID.randomUUID().toString())
@@ -99,6 +110,7 @@ public class DeploymentEntity {
                 .environmentFilesCiphertext(environmentFilesCiphertext)
                 .exposedRoutesJson(exposedRoutesJson)
                 .healthChecksJson(healthChecksJson)
+                .context(context)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
