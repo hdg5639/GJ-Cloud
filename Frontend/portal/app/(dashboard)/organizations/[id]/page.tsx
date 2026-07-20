@@ -355,19 +355,20 @@ export default function OrganizationDetailPage() {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="초대할 이메일"
                 required
-                className="flex-1"
+                className="min-w-0 flex-1"
               />
-              <Select
-                id="org-invite-role"
-                name="org-invite-role"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as MemberRole)}
-                className="w-auto"
-              >
-                <option value="MEMBER">멤버</option>
-                <option value="ADMIN">관리자</option>
-              </Select>
-              <Button type="submit" variant="primary" disabled={inviting}>
+              <div className="w-32 shrink-0">
+                <Select
+                  id="org-invite-role"
+                  name="org-invite-role"
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value as MemberRole)}
+                >
+                  <option value="MEMBER">멤버</option>
+                  <option value="ADMIN">관리자</option>
+                </Select>
+              </div>
+              <Button type="submit" variant="primary" disabled={inviting} className="shrink-0">
                 {inviting ? "초대 중..." : "초대"}
               </Button>
             </form>

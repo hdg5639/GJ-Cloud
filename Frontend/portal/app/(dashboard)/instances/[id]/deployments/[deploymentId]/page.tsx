@@ -8,7 +8,6 @@ import type { DeploymentResponse, DeploymentEventPayload } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import { StatusBadge } from "@/components/ui/badge";
 import { StatGrid, StatCard } from "@/components/ui/stat-card";
-import { Button } from "@/components/ui/button";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
   QUEUED: "off",
@@ -137,32 +136,32 @@ export default function DeploymentDetailPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.back()} className="p-2 hover:bg-[#f2f6f3] rounded-lg transition-colors shrink-0" aria-label="뒤로가기">
-            <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
+        <div className="flex h-10 min-w-0 shrink items-center gap-2.5 pl-4 pr-3.5">
+          <button onClick={() => router.back()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+            <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-lg font-bold shrink-0">배포 상세</h1>
-          <StatusBadge tone={STATUS_TONE[deployment.status] ?? "off"}>{deployment.status}</StatusBadge>
+          <h1 className="text-[15px] font-bold whitespace-nowrap shrink-0">배포 상세</h1>
+          <StatusBadge tone={STATUS_TONE[deployment.status] ?? "off"} className="whitespace-nowrap">{deployment.status}</StatusBadge>
           {inProgress && (
-            <span className="flex items-center gap-1 text-[11px] text-muted-soft">
+            <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-soft whitespace-nowrap">
               <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-brand animate-pulse" : "bg-line-strong"}`} />
               {connected ? "실시간 연결됨" : "연결 끊김"}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="ml-auto flex h-10 shrink-0 items-center">
           {deployment.status === "FAILED" && (
-            <Button size="small" onClick={handleRetry} disabled={retrying}>
+            <button onClick={handleRetry} disabled={retrying} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3] disabled:opacity-50 rounded-r-panel">
               {retrying ? "불러오는 중..." : "재시도 / 수정 후 재배포"}
-            </Button>
+            </button>
           )}
           {deployment.status === "SUCCEEDED" && (
-            <Button size="small" onClick={handleRollback} disabled={rollingBack}>
+            <button onClick={handleRollback} disabled={rollingBack} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3] disabled:opacity-50 rounded-r-panel">
               {rollingBack ? "롤백 요청 중..." : "이 배포로 롤백"}
-            </Button>
+            </button>
           )}
         </div>
       </div>

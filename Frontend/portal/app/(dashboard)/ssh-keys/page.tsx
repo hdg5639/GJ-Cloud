@@ -44,7 +44,7 @@ export default function SshKeysPage() {
 
   return (
     <div className="mx-auto max-w-[1380px]">
-      <header className="mb-[22px] flex items-center gap-6">
+      <header className="mb-[22px] flex items-center justify-between gap-6">
         <div>
           <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">ACCESS</span>
           <h1 className="my-[5px] text-[29px] font-extrabold tracking-tight">SSH 키</h1>

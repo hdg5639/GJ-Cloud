@@ -100,7 +100,7 @@ export default function InstancesPage() {
 
   return (
     <div className="mx-auto max-w-[1380px]">
-      <header className="mb-[22px] flex items-center gap-6">
+      <header className="mb-[22px] flex items-center justify-between gap-6">
         <div>
           <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">COMPUTE</span>
           <h1 className="my-[5px] text-[29px] font-extrabold tracking-tight">인스턴스</h1>
