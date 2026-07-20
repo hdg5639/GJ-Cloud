@@ -5,6 +5,9 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { AdminUserResponse, AdminVmResponse } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
+import { StatGrid, StatCard } from "@/components/ui/stat-card";
+import { Panel } from "@/components/ui/panel";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 
 export default function AdminDashboardPage() {
   const { accessToken } = useAuth();
@@ -42,65 +45,62 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-white mb-6">대시보드</h1>
+      <h1 className="text-xl font-extrabold mb-6">대시보드</h1>
 
       {loading ? (
-        <PageLoader dark />
+        <PageLoader />
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-4 mb-8">
+          <StatGrid cols={3} className="mb-8">
             {stats.map((s) => (
-              <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                <p className="text-xs text-gray-500 mb-1">{s.label}</p>
-                <p className={`text-2xl font-semibold ${s.warn ? "text-red-400" : "text-white"}`}>
-                  {s.value}
-                </p>
-              </div>
+              <StatCard
+                key={s.label}
+                compact
+                label={s.label}
+                value={<span className={s.warn ? "text-danger" : undefined}>{s.value}</span>}
+              />
             ))}
-          </div>
+          </StatGrid>
 
           <div className="grid grid-cols-2 gap-6">
             {/* 최근 사용자 */}
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <h2 className="text-sm font-medium text-gray-300 mb-3">최근 가입 사용자</h2>
+            <Panel className="p-4">
+              <h2 className="text-sm font-bold mb-3">최근 가입 사용자</h2>
               <div className="space-y-2">
                 {users.slice(0, 8).map((u) => (
                   <div key={u.userId} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300 truncate max-w-[180px]">{u.email}</span>
+                    <span className="text-sm text-[#3d4941] truncate max-w-[180px]">{u.email}</span>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        u.planType === "PRO" ? "bg-violet-900 text-violet-300" : "bg-gray-700 text-gray-400"
-                      }`}>{u.planType}</span>
+                      {u.planType === "PRO" ? <Badge>PRO</Badge> : <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-[#eef1ef] text-muted">FREE</span>}
                       {u.suspended && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-red-900 text-red-400">정지</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-[#fdf4f4] text-danger">정지</span>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </Panel>
 
             {/* VM 상태 */}
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <h2 className="text-sm font-medium text-gray-300 mb-3">VM 현황</h2>
+            <Panel className="p-4">
+              <h2 className="text-sm font-bold mb-3">VM 현황</h2>
               <div className="space-y-2">
                 {vms.slice(0, 8).map((v) => (
                   <div key={v.id} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300 truncate max-w-[160px]">{v.name}</span>
+                    <span className="text-sm text-[#3d4941] truncate max-w-[160px]">{v.name}</span>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        v.planType === "PRO" ? "bg-violet-900 text-violet-300" : "bg-gray-700 text-gray-400"
-                      }`}>{v.planType}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                        v.status === "RUNNING" ? "bg-green-900 text-green-400"
-                        : v.status === "FAILED" ? "bg-red-900 text-red-400"
-                        : "bg-gray-700 text-gray-400"
-                      }`}>{v.status}</span>
+                      {v.planType === "PRO" ? <Badge>PRO</Badge> : <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-[#eef1ef] text-muted">FREE</span>}
+                      <StatusBadge
+                        tone={v.status === "RUNNING" ? "ok" : "off"}
+                        className={v.status === "FAILED" ? "bg-[#fdf4f4] text-danger" : undefined}
+                      >
+                        {v.status}
+                      </StatusBadge>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </Panel>
           </div>
         </>
       )}

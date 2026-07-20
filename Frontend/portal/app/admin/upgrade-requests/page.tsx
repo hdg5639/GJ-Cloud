@@ -5,6 +5,10 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { UpgradeRequestResponse, PagedResponse } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
+import { Panel } from "@/components/ui/panel";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/field";
+import { Pager } from "@/components/ui/pager";
 
 export default function AdminUpgradeRequestsPage() {
   const { accessToken } = useAuth();
@@ -68,72 +72,77 @@ export default function AdminUpgradeRequestsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-white">플랜 변경 요청</h1>
-        <span className="text-sm text-gray-500">총 {requests.length}건</span>
+        <h1 className="text-xl font-extrabold">플랜 변경 요청</h1>
+        <span className="text-sm text-muted-soft">총 {requests.length}건</span>
       </div>
 
       {loading ? (
-        <PageLoader dark />
+        <PageLoader />
       ) : requests.length === 0 ? (
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-8 text-center">
-          <p className="text-gray-400">대기 중인 요청이 없습니다</p>
-        </div>
+        <Panel className="p-8 text-center">
+          <p className="text-muted">대기 중인 요청이 없습니다</p>
+        </Panel>
       ) : (
-        <div className="space-y-3">
-          {requests.map((request) => (
-            <div key={request.id} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-200">{request.userId}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {request.type === "UPGRADE" ? "업그레이드" : "다운그레이드"} 요청: {request.targetPlanType}
-                  </p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    요청일: {new Date(request.createdAt).toLocaleString("ko-KR")}
-                  </p>
-                </div>
-                <span className="text-xs px-2 py-1 rounded font-medium bg-amber-900 text-amber-300">
-                  {request.status}
-                </span>
-              </div>
-
-              {request.status === "PENDING" && (
-                <div className="space-y-3 pt-3 border-t border-gray-800">
-                  <input
-                    id={`reject-reason-${request.id}`}
-                    name={`reject-reason-${request.id}`}
-                    type="text"
-                    placeholder="거절 사유 (선택)"
-                    value={rejectReason[request.id] || ""}
-                    onChange={(e) =>
-                      setRejectReason((prev) => ({
-                        ...prev,
-                        [request.id]: e.target.value,
-                      }))
-                    }
-                    className="w-full text-xs px-2 py-1.5 rounded bg-gray-800 border border-gray-700 text-gray-300 placeholder-gray-500"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleApprove(request)}
-                      disabled={actionLoading === request.id}
-                      className="flex-1 h-8 bg-green-600 text-white rounded text-xs font-medium disabled:opacity-60 hover:bg-green-700"
-                    >
-                      {actionLoading === request.id ? "처리 중..." : "승인"}
-                    </button>
-                    <button
-                      onClick={() => handleReject(request)}
-                      disabled={actionLoading === request.id}
-                      className="flex-1 h-8 bg-red-600 text-white rounded text-xs font-medium disabled:opacity-60 hover:bg-red-700"
-                    >
-                      {actionLoading === request.id ? "처리 중..." : "거절"}
-                    </button>
+        <>
+          <div className="space-y-3">
+            {requests.map((request) => (
+              <Panel key={request.id} className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-bold">{request.userId}</p>
+                    <p className="text-xs text-muted mt-0.5">
+                      {request.type === "UPGRADE" ? "업그레이드" : "다운그레이드"} 요청: {request.targetPlanType}
+                    </p>
+                    <p className="text-xs text-muted-soft mt-1">
+                      요청일: {new Date(request.createdAt).toLocaleString("ko-KR")}
+                    </p>
                   </div>
+                  <span className="text-xs px-2 py-1 rounded font-bold bg-[#fffaf0] text-[#9c6b1f]">
+                    {request.status}
+                  </span>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+
+                {request.status === "PENDING" && (
+                  <div className="space-y-3 pt-3 border-t border-line">
+                    <Input
+                      id={`reject-reason-${request.id}`}
+                      name={`reject-reason-${request.id}`}
+                      type="text"
+                      placeholder="거절 사유 (선택)"
+                      value={rejectReason[request.id] || ""}
+                      onChange={(e) =>
+                        setRejectReason((prev) => ({
+                          ...prev,
+                          [request.id]: e.target.value,
+                        }))
+                      }
+                      className="text-xs h-8"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="primary"
+                        onClick={() => handleApprove(request)}
+                        disabled={actionLoading === request.id}
+                        className="flex-1"
+                      >
+                        {actionLoading === request.id ? "처리 중..." : "승인"}
+                      </Button>
+                      <Button
+                        variant="danger-solid"
+                        onClick={() => handleReject(request)}
+                        disabled={actionLoading === request.id}
+                        className="flex-1"
+                      >
+                        {actionLoading === request.id ? "처리 중..." : "거절"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Panel>
+            ))}
+          </div>
+          <Pager page={page} totalPages={totalPages} onChange={setPage} />
+        </>
       )}
     </div>
   );

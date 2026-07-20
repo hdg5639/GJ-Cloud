@@ -5,13 +5,18 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { AdminVmResponse, AdminUserResponse } from "@/lib/types";
 import { SkeletonRow } from "@/components/ui/loader";
+import { Panel } from "@/components/ui/panel";
+import { Table, Th, Td } from "@/components/ui/table";
+import { Badge, StatusBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 
-const STATUS_COLOR: Record<string, string> = {
-  RUNNING: "bg-green-900 text-green-400",
-  FAILED: "bg-red-900 text-red-400",
-  DELETING: "bg-red-900/50 text-red-400",
-  STOPPED: "bg-gray-700 text-gray-400",
-  SUSPENDED: "bg-gray-700 text-gray-400",
+const STATUS_TONE: Record<string, "ok" | "off"> = {
+  RUNNING: "ok",
+  FAILED: "off",
+  DELETING: "off",
+  STOPPED: "off",
+  SUSPENDED: "off",
 };
 
 export default function AdminVmsPage() {
@@ -52,97 +57,90 @@ export default function AdminVmsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-white">VM 관리</h1>
-        <span className="text-sm text-gray-500">{vms.length}대</span>
+        <h1 className="text-xl font-extrabold">VM 관리</h1>
+        <span className="text-sm text-muted-soft">{vms.length}대</span>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <Panel className="overflow-hidden">
+        <Table>
           <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">이름</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">소유자</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">플랜</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">상태</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">IP</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">디스크</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">생성일</th>
-                <th className="px-4 py-3" />
+            <tr>
+              <Th>이름</Th>
+              <Th>소유자</Th>
+              <Th>플랜</Th>
+              <Th>상태</Th>
+              <Th>IP</Th>
+              <Th>디스크</Th>
+              <Th>생성일</Th>
+              <Th />
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? [0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} cols={8} />)
+              : vms.map((vm) => (
+              <tr key={vm.id} className="hover:bg-[#fbfdfc]">
+                <Td>
+                  <p className="text-[#3d4941]">{vm.name}</p>
+                  {vm.subdomain && (
+                    <p className="text-xs text-muted-soft">{vm.subdomain}</p>
+                  )}
+                </Td>
+                <Td className="text-muted text-xs">
+                  {userMap[vm.userId] ?? vm.userId.slice(0, 8) + "…"}
+                </Td>
+                <Td>
+                  {vm.planType === "PRO" ? <Badge>PRO</Badge> : <span className="text-[11px] px-2 py-0.5 rounded font-bold bg-[#eef1ef] text-muted">FREE</span>}
+                </Td>
+                <Td>
+                  <StatusBadge
+                    tone={STATUS_TONE[vm.status] ?? "off"}
+                    className={STATUS_TONE[vm.status] === undefined ? "bg-[#fffaf0] text-[#9c6b1f]" : undefined}
+                  >
+                    {vm.status}
+                  </StatusBadge>
+                </Td>
+                <Td className="text-muted font-mono text-xs">{vm.internalIp ?? "-"}</Td>
+                <Td className="text-muted text-xs">{vm.diskSizeGb}GB</Td>
+                <Td className="text-muted-soft text-xs">
+                  {new Date(vm.createdAt).toLocaleDateString("ko-KR")}
+                </Td>
+                <Td className="text-right">
+                  <button
+                    onClick={() => setDeleteTarget(vm)}
+                    className="text-xs px-3 py-1.5 rounded font-bold bg-[#fdf4f4] text-danger hover:bg-[#fbe5e5] transition-colors"
+                  >
+                    강제 삭제
+                  </button>
+                </Td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {loading
-                ? [0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} cols={8} dark />)
-                : vms.map((vm) => (
-                <tr key={vm.id} className="hover:bg-gray-800/50">
-                  <td className="px-4 py-3">
-                    <p className="text-gray-200">{vm.name}</p>
-                    {vm.subdomain && (
-                      <p className="text-xs text-gray-500">{vm.subdomain}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">
-                    {userMap[vm.userId] ?? vm.userId.slice(0, 8) + "…"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                      vm.planType === "PRO" ? "bg-violet-900 text-violet-300" : "bg-gray-700 text-gray-400"
-                    }`}>{vm.planType}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-                      STATUS_COLOR[vm.status] ?? "bg-amber-900 text-amber-400"
-                    }`}>{vm.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 font-mono text-xs">{vm.internalIp ?? "-"}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{vm.diskSizeGb}GB</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {new Date(vm.createdAt).toLocaleDateString("ko-KR")}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setDeleteTarget(vm)}
-                      className="text-xs px-3 py-1.5 rounded font-medium bg-red-900/50 text-red-400 hover:bg-red-900 transition-colors"
-                    >
-                      강제 삭제
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </Table>
+      </Panel>
 
       {/* 강제 삭제 확인 모달 */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-[400px]">
-            <h2 className="text-base font-semibold text-white mb-2">VM 강제 삭제</h2>
-            <p className="text-sm text-gray-400 mb-1">
-              <span className="text-white font-medium">{deleteTarget.name}</span> 을(를) 강제 삭제합니다.
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        {deleteTarget && (
+          <div className="mx-auto w-[400px] rounded-panel bg-panel p-6">
+            <h2 className="text-base font-bold mb-2">VM 강제 삭제</h2>
+            <p className="text-sm text-muted mb-1">
+              <span className="text-[#3f4c43] font-bold">{deleteTarget.name}</span> 을(를) 강제 삭제합니다.
             </p>
-            <p className="text-xs text-red-400 mb-6">
+            <p className="text-xs text-danger mb-6">
               소유자 확인 없이 즉시 삭제되며, Cloudflare 리소스도 함께 정리됩니다. 복구 불가.
             </p>
             <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-                className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 transition-colors"
-              >
+              <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
                 취소
-              </button>
-              <button
-                onClick={handleForceDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
+              </Button>
+              <Button variant="danger-solid" onClick={handleForceDelete} disabled={deleting}>
                 {deleting ? "삭제 중..." : "강제 삭제"}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }
