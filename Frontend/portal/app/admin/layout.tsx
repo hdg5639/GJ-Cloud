@@ -6,10 +6,10 @@ import { useAuth } from "@/lib/auth-context";
 import { useEffect } from "react";
 
 const NAV_ITEMS = [
-  { href: "/", label: "대시보드", exact: true },
-  { href: "/users", label: "사용자 관리" },
-  { href: "/vms", label: "VM 관리" },
-  { href: "/upgrade-requests", label: "플랜 변경 요청" },
+  { href: "/", icon: "▣", label: "대시보드", exact: true },
+  { href: "/users", icon: "◫", label: "사용자 관리" },
+  { href: "/vms", icon: "⌘", label: "VM 관리" },
+  { href: "/upgrade-requests", icon: "⚙", label: "플랜 변경 요청" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -31,53 +31,48 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-950">
-      <aside className="w-[220px] bg-gray-900 border-r border-gray-800 py-5 flex flex-col">
-        <div className="flex items-center gap-2 px-5 mb-6">
-          <div className="w-6 h-6 rounded-md bg-red-500 flex items-center justify-center">
-            <span className="text-white text-xs font-bold">A</span>
-          </div>
+    <div className="flex h-screen overflow-hidden bg-background">
+      <aside className="sticky top-0 flex h-screen w-[238px] shrink-0 flex-col gap-[22px] overflow-y-auto border-r border-line bg-panel px-5 pb-[18px] pt-[26px]">
+        <div className="flex items-center gap-[11px] px-[5px]">
+          <div className="grid h-9 w-9 place-items-center rounded-[11px] bg-danger font-black text-white">A</div>
           <div>
-            <span className="font-semibold text-sm text-white">gamjabox</span>
-            <span className="block text-[10px] text-red-400 font-medium tracking-widest uppercase">admin</span>
+            <strong className="block">gamjabox</strong>
+            <small className="mt-0.5 block font-bold uppercase tracking-widest text-danger">admin</small>
           </div>
         </div>
 
-        <nav className="px-3 flex flex-col gap-0.5 flex-1">
+        <nav className="grid gap-1.5">
           {NAV_ITEMS.map((item) => {
             const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm ${
-                  active
-                    ? "bg-red-500/10 text-red-400 font-medium"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+                className={`flex w-full items-center gap-2.5 rounded-[10px] px-3 py-[11px] text-left text-sm font-bold ${
+                  active ? "bg-[#fdecec] text-danger" : "text-[#445248] hover:bg-[#f2f6f3]"
                 }`}
               >
+                <span aria-hidden>{item.icon}</span>
                 {item.label}
               </Link>
             );
           })}
         </nav>
 
-        {user && (
-          <div className="px-4 mb-2">
-            <p className="text-[11px] text-gray-500 truncate">{user.email}</p>
+        <div className="mt-auto flex items-center gap-2.5 px-[5px] py-2">
+          <div className="grid h-[34px] w-[34px] place-items-center rounded-full bg-[#eef2ef] text-xs font-extrabold">
+            {user?.email?.[0]?.toUpperCase() ?? "?"}
           </div>
-        )}
-        <div className="px-3">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center px-3 py-2 rounded-md text-sm text-gray-500 hover:bg-gray-800 hover:text-gray-300"
-          >
-            로그아웃
-          </button>
+          <div className="min-w-0 flex-1">
+            <strong className="block truncate text-sm">{user?.email ?? ""}</strong>
+            <button onClick={handleLogout} className="mt-0.5 block text-xs text-muted-soft hover:text-muted">
+              로그아웃
+            </button>
+          </div>
         </div>
       </aside>
 
-      <main className="flex-1 p-6 overflow-auto text-gray-100">{children}</main>
+      <main className="flex-1 overflow-y-auto px-[38px] pb-[60px] pt-[34px]">{children}</main>
     </div>
   );
 }
