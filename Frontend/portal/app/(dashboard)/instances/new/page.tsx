@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { VmAvailabilityResponse, SshKeyResponse } from "@/lib/types";
+import { Card } from "@/components/ui/panel";
+import { Field, Input, Select } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 const PLAN_INFO = {
   FREE: { cores: 4, memory: "5GB", diskMin: 20, diskMax: 50 },
@@ -68,7 +71,7 @@ export default function CreateInstancePage() {
     <div className="max-w-xl">
       <button
         onClick={() => router.push("/instances")}
-        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4 transition-colors"
+        className="flex items-center gap-1.5 text-sm text-muted hover:text-[#3f4c43] mb-4 transition-colors"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -76,31 +79,28 @@ export default function CreateInstancePage() {
         인스턴스 목록
       </button>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <h1 className="text-lg font-medium text-gray-900 mb-1">인스턴스 생성</h1>
-        <p className="text-sm text-gray-500 mb-5">플랜과 디스크 크기를 선택하세요</p>
+      <Card>
+        <h1 className="mb-1 text-lg font-bold">인스턴스 생성</h1>
+        <p className="mb-5 text-sm text-muted">플랜과 디스크 크기를 선택하세요</p>
 
-        <div className="flex flex-col gap-1.5 mb-5">
-          <label htmlFor="new-instance-name" className="text-xs text-gray-500">인스턴스 이름</label>
-          <input
+        <Field label="인스턴스 이름" htmlFor="new-instance-name">
+          <Input
             id="new-instance-name"
             name="new-instance-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="my-server"
-            className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
           />
-        </div>
+        </Field>
 
         <div className="mb-5">
-          <span className="text-xs text-gray-500 block mb-2">플랜</span>
+          <span className="text-xs font-bold text-muted block mb-2">플랜</span>
           <div className="grid grid-cols-2 gap-2.5">
             {(["FREE", "PRO"] as const).map((plan) => {
               const info = PLAN_INFO[plan];
               const isFree = plan === "FREE";
-              const isPro = plan === "PRO";
               const full = isFree ? freeFull : proFull;
-              const planLocked = isPro && userPlan === "FREE";
+              const planLocked = plan === "PRO" && userPlan === "FREE";
               const used = availability?.[plan.toLowerCase() as "free" | "pro"].used ?? 0;
               const total = availability?.[plan.toLowerCase() as "free" | "pro"].total ?? 0;
               const selected = planType === plan;
@@ -110,22 +110,22 @@ export default function CreateInstancePage() {
                   key={plan}
                   disabled={full || planLocked}
                   onClick={() => handlePlanChange(plan)}
-                  className={`relative border rounded-lg p-4 text-left transition-colors ${
-                    selected ? "border-2 border-[#03C75A]" : "border-gray-200 hover:border-gray-300"
+                  className={`relative rounded-[12px] border p-4 text-left transition-colors ${
+                    selected ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)]" : "border-line-strong hover:border-[#b9c4bd]"
                   } ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {selected && (
-                    <span className="absolute -top-2.5 left-3 z-10 bg-[#e6faf0] text-[#03C75A] text-[11px] font-medium px-2 py-0.5 rounded-md">
+                    <span className="absolute -top-2.5 left-3 z-10 bg-soft text-brand-strong text-[11px] font-bold px-2 py-0.5 rounded-md">
                       선택됨
                     </span>
                   )}
                   {planLocked && (
-                    <span className="absolute -top-2.5 right-3 z-10 bg-amber-100 text-amber-700 text-[11px] font-medium px-2 py-0.5 rounded-md">
+                    <span className="absolute -top-2.5 right-3 z-10 bg-[#fffaf0] text-[#9c6b1f] text-[11px] font-bold px-2 py-0.5 rounded-md">
                       프로 플랜만
                     </span>
                   )}
-                  <p className="text-sm font-medium text-gray-900 mb-1">{plan}</p>
-                  <p className="text-xs text-gray-500 mb-2">
+                  <p className="text-sm font-bold mb-1">{plan}</p>
+                  <p className="text-xs text-muted mb-2">
                     {info.cores} vCPU · {info.memory} RAM
                   </p>
                   <div className="flex items-center gap-1.5">
@@ -134,12 +134,12 @@ export default function CreateInstancePage() {
                         <span
                           key={i}
                           className={`w-1.5 h-1.5 rounded-full ${
-                            i < used ? (full ? "bg-red-500" : "bg-[#03C75A]") : "bg-gray-200"
+                            i < used ? (full ? "bg-danger" : "bg-brand") : "bg-line-strong"
                           }`}
                         />
                       ))}
                     </div>
-                    <span className={`text-[11px] ${full ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                    <span className={`text-[11px] ${full ? "text-danger font-bold" : "text-muted-soft"}`}>
                       {full ? `자리 없음 (${used}/${total})` : `${used}/${total} 사용 중`}
                     </span>
                   </div>
@@ -151,8 +151,8 @@ export default function CreateInstancePage() {
 
         <div className="mb-5">
           <div className="flex items-center justify-between mb-2">
-            <label htmlFor="new-instance-disk" className="text-xs text-gray-500">디스크 크기</label>
-            <span className="text-sm font-medium text-gray-900">{diskSizeGb}GB</span>
+            <label htmlFor="new-instance-disk" className="text-xs font-bold text-muted">디스크 크기</label>
+            <span className="text-sm font-bold">{diskSizeGb}GB</span>
           </div>
           <input
             id="new-instance-disk"
@@ -163,50 +163,49 @@ export default function CreateInstancePage() {
             step={5}
             value={diskSizeGb}
             onChange={(e) => setDiskSizeGb(Number(e.target.value))}
-            className="w-full accent-[#03C75A]"
+            className="w-full accent-brand"
           />
-          <div className="flex justify-between text-[11px] text-gray-400 mt-1">
+          <div className="flex justify-between text-[11px] text-muted-soft mt-1">
             <span>{planInfo.diskMin}GB</span>
             <span>{planInfo.diskMax}GB</span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 mb-5">
-          <label htmlFor="new-instance-ssh-key" className="text-xs text-gray-500">SSH 키</label>
+        <Field label="SSH 키" htmlFor="new-instance-ssh-key">
           {sshKeys.length === 0 ? (
-            <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-md px-3 py-2.5">
+            <div className="text-xs text-muted-soft border border-dashed border-line-strong rounded-md px-3 py-2.5 font-normal">
               등록된 SSH 키가 없습니다.{" "}
-              <a href="/ssh-keys" className="text-[#03C75A] font-medium">
+              <a href="/ssh-keys" className="text-brand-strong font-bold">
                 SSH 키 등록하기
               </a>
             </div>
           ) : (
-            <select
+            <Select
               id="new-instance-ssh-key"
               name="new-instance-ssh-key"
               value={sshKeyId}
               onChange={(e) => setSshKeyId(e.target.value)}
-              className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
             >
               {sshKeys.map((key) => (
                 <option key={key.id} value={key.id}>
                   {key.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
-        </div>
+        </Field>
 
-        {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+        {error && <p className="text-xs text-danger mb-3">{error}</p>}
 
-        <button
+        <Button
+          variant="primary"
           onClick={handleSubmit}
           disabled={loading || !name || !sshKeyId}
-          className="w-full h-[38px] bg-[#03C75A] text-white rounded-md text-sm font-medium disabled:opacity-60"
+          className="w-full"
         >
           {loading ? "생성 중..." : "인스턴스 생성"}
-        </button>
-      </div>
+        </Button>
+      </Card>
     </div>
   );
 }

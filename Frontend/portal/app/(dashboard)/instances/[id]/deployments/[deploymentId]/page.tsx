@@ -6,20 +6,23 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { DeploymentResponse, DeploymentEventPayload } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
+import { StatusBadge } from "@/components/ui/badge";
+import { StatGrid, StatCard } from "@/components/ui/stat-card";
+import { Button } from "@/components/ui/button";
 
-const STATUS_STYLE: Record<string, string> = {
-  QUEUED: "bg-gray-100 text-gray-600",
-  CLONING: "bg-amber-100 text-amber-700",
-  UPLOADING: "bg-amber-100 text-amber-700",
-  VALIDATING: "bg-amber-100 text-amber-700",
-  BUILDING: "bg-amber-100 text-amber-700",
-  SWAPPING: "bg-amber-100 text-amber-700",
-  HEALTH_CHECKING: "bg-amber-100 text-amber-700",
-  ROUTING: "bg-amber-100 text-amber-700",
-  SUCCEEDED: "bg-[#03C75A]/10 text-[#03C75A]",
-  FAILED: "bg-red-100 text-red-700",
-  ROLLING_BACK: "bg-red-100 text-red-700",
-  ROLLED_BACK: "bg-gray-100 text-gray-600",
+const STATUS_TONE: Record<string, "ok" | "off"> = {
+  QUEUED: "off",
+  CLONING: "off",
+  UPLOADING: "off",
+  VALIDATING: "off",
+  BUILDING: "off",
+  SWAPPING: "off",
+  HEALTH_CHECKING: "off",
+  ROUTING: "off",
+  SUCCEEDED: "ok",
+  FAILED: "off",
+  ROLLING_BACK: "off",
+  ROLLED_BACK: "off",
 };
 
 const IN_PROGRESS_STATUSES = new Set([
@@ -27,10 +30,10 @@ const IN_PROGRESS_STATUSES = new Set([
 ]);
 
 const EVENT_TYPE_STYLE: Record<string, string> = {
-  STAGE_CHANGE: "text-blue-600",
+  STAGE_CHANGE: "text-[#7ab3f5]",
   BUILD_LOG: "text-gray-400",
-  ERROR: "text-red-500",
-  DONE: "text-[#03C75A]",
+  ERROR: "text-[#f28b8b]",
+  DONE: "text-[#4fd88a]",
 };
 
 function formatDateTime(iso: string): string {
@@ -125,7 +128,7 @@ export default function DeploymentDetailPage() {
   if (!deployment) {
     return (
       <div className="p-6">
-        <p className="text-sm text-red-600">{error ?? "배포를 찾을 수 없습니다."}</p>
+        <p className="text-sm text-danger">{error ?? "배포를 찾을 수 없습니다."}</p>
       </div>
     );
   }
@@ -136,75 +139,53 @@ export default function DeploymentDetailPage() {
     <div className="flex flex-col h-[calc(100vh-120px)]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0" aria-label="뒤로가기">
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button onClick={() => router.back()} className="p-2 hover:bg-[#f2f6f3] rounded-lg transition-colors shrink-0" aria-label="뒤로가기">
+            <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-lg font-medium text-gray-900 shrink-0">배포 상세</h1>
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-md ${STATUS_STYLE[deployment.status] ?? "bg-gray-100 text-gray-600"}`}>
-            {deployment.status}
-          </span>
+          <h1 className="text-lg font-bold shrink-0">배포 상세</h1>
+          <StatusBadge tone={STATUS_TONE[deployment.status] ?? "off"}>{deployment.status}</StatusBadge>
           {inProgress && (
-            <span className="flex items-center gap-1 text-[11px] text-gray-400">
-              <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-[#03C75A] animate-pulse" : "bg-gray-300"}`} />
+            <span className="flex items-center gap-1 text-[11px] text-muted-soft">
+              <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-brand animate-pulse" : "bg-line-strong"}`} />
               {connected ? "실시간 연결됨" : "연결 끊김"}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {deployment.status === "FAILED" && (
-            <button
-              onClick={handleRetry}
-              disabled={retrying}
-              className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-            >
+            <Button size="small" onClick={handleRetry} disabled={retrying}>
               {retrying ? "불러오는 중..." : "재시도 / 수정 후 재배포"}
-            </button>
+            </Button>
           )}
           {deployment.status === "SUCCEEDED" && (
-            <button
-              onClick={handleRollback}
-              disabled={rollingBack}
-              className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-            >
+            <Button size="small" onClick={handleRollback} disabled={rollingBack}>
               {rollingBack ? "롤백 요청 중..." : "이 배포로 롤백"}
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-3 text-sm">{error}</div>
+        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">{error}</div>
       )}
 
       {deployment.errorMessage && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-3">
-          <p className="text-sm font-medium text-red-800">오류</p>
-          <p className="text-xs text-red-700 mt-0.5">{deployment.errorMessage}</p>
+        <div className="rounded-panel border border-danger-soft bg-[#fdf4f4] p-4 mb-3">
+          <p className="text-sm font-bold text-danger">오류</p>
+          <p className="mt-0.5 text-xs text-[#b23a3a]">{deployment.errorMessage}</p>
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-3 mb-4 shrink-0">
-        <div className="bg-gray-50 rounded-md p-3">
-          <p className="text-xs text-gray-500 mb-1">방식</p>
-          <p className="text-sm font-medium text-gray-900">{deployment.sourceType}</p>
-        </div>
-        <div className="bg-gray-50 rounded-md p-3">
-          <p className="text-xs text-gray-500 mb-1">리비전</p>
-          <p className="text-sm font-mono text-gray-900 truncate">{deployment.sourceRevision ?? "—"}</p>
-        </div>
-        <div className="bg-gray-50 rounded-md p-3">
-          <p className="text-xs text-gray-500 mb-1">이전 배포</p>
-          <p className="text-sm font-mono text-gray-900 truncate">{deployment.previousDeploymentId?.slice(0, 8) ?? "—"}</p>
-        </div>
-        <div className="bg-gray-50 rounded-md p-3">
-          <p className="text-xs text-gray-500 mb-1">배포 완료</p>
-          <p className="text-sm text-gray-900">{deployment.deployedAt ? formatDateTime(deployment.deployedAt) : "—"}</p>
-        </div>
-      </div>
+      <StatGrid cols={4} className="mb-4 shrink-0">
+        <StatCard compact label="방식" value={deployment.sourceType} />
+        <StatCard compact label="리비전" value={<span className="font-mono truncate block">{deployment.sourceRevision ?? "—"}</span>} />
+        <StatCard compact label="이전 배포" value={<span className="font-mono truncate block">{deployment.previousDeploymentId?.slice(0, 8) ?? "—"}</span>} />
+        <StatCard compact label="배포 완료" value={deployment.deployedAt ? formatDateTime(deployment.deployedAt) : "—"} />
+      </StatGrid>
 
-      <div className="flex-1 bg-gray-900 rounded-lg p-3 overflow-auto" ref={logRef}>
+      <div className="flex-1 bg-[#121814] rounded-panel p-3 overflow-auto" ref={logRef}>
         {events.length === 0 ? (
           <p className="text-xs text-gray-500 text-center py-10">
             {connected ? "이벤트를 기다리는 중..." : "표시할 이벤트가 없습니다."}
