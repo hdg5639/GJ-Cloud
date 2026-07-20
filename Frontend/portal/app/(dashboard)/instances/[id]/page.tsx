@@ -12,6 +12,15 @@ import { PageLoader } from "@/components/ui/loader";
 import CollaborationWriteModal from "@/components/collaboration-write-modal";
 import CollaborationCard from "@/components/collaboration-card";
 import type { CollaborationResponse, CollaborationType } from "@/lib/types";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Panel } from "@/components/ui/panel";
+import { StatGrid, StatCard } from "@/components/ui/stat-card";
+import { KeyValueList } from "@/components/ui/kv";
+import { CodeBlock as CodeBox } from "@/components/ui/code-block";
+import { Field, Input, Select } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
+import { StatusBadge } from "@/components/ui/badge";
 
 function CodeBlock({
   id,
@@ -31,14 +40,12 @@ function CodeBlock({
     setTimeout(() => onCopy(null), 1500);
   }
   return (
-    <div className="relative group bg-slate-50 border border-slate-200 rounded-lg px-3 py-3 pr-20 overflow-x-auto">
-      <pre className="font-mono text-xs text-slate-800 whitespace-pre-wrap break-all leading-relaxed">{value}</pre>
+    <div className="group relative overflow-x-auto">
+      <CodeBox className="whitespace-pre-wrap break-all pr-20">{value}</CodeBox>
       <button
         onClick={handleCopy}
-        className={`absolute right-2 top-2 text-[11px] font-medium px-2 py-1 rounded transition-all ${
-          isCopied
-            ? "bg-[#03C75A]/10 text-[#03C75A]"
-            : "text-slate-400 hover:text-slate-700 hover:bg-slate-200"
+        className={`absolute right-2 top-2 rounded px-2 py-1 text-[11px] font-bold transition-all ${
+          isCopied ? "bg-soft text-brand-strong" : "text-muted-soft hover:bg-line hover:text-muted"
         }`}
       >
         {isCopied ? "✓ 복사됨" : "복사"}
@@ -50,30 +57,34 @@ function CodeBlock({
 function GuideStep({ num, title, children }: { num: number; title: string; children: ReactNode }) {
   return (
     <div className="flex gap-3">
-      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-700 text-white text-[11px] font-semibold flex items-center justify-center mt-0.5">
+      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#445248] text-[11px] font-bold text-white">
         {num}
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-800 mb-1.5">{title}</p>
+      <div className="min-w-0 flex-1">
+        <p className="mb-1.5 text-xs font-bold text-[#3d4941]">{title}</p>
         {children}
       </div>
     </div>
   );
 }
 
-const STATUS_STYLE: Record<string, string> = {
-  PENDING: "bg-amber-100 text-amber-700",
-  CREATING: "bg-amber-100 text-amber-700",
-  BOOTING: "bg-amber-100 text-amber-700",
-  RUNNING: "bg-[#03C75A]/10 text-[#03C75A]",
-  STARTING: "bg-amber-100 text-amber-700",
-  STOPPING: "bg-amber-100 text-amber-700",
-  STOPPED: "bg-gray-100 text-gray-600",
-  SUSPENDING: "bg-amber-100 text-amber-700",
-  SUSPENDED: "bg-gray-100 text-gray-600",
-  FAILED: "bg-red-100 text-red-700",
-  DELETING: "bg-red-100 text-red-700",
-  DELETED: "bg-gray-100 text-gray-400",
+function isOnlineStatus(status: string) {
+  return status === "RUNNING" || status === "STARTING" || status === "BOOTING" || status === "CREATING";
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: "대기 중",
+  CREATING: "생성 중",
+  BOOTING: "부팅 중",
+  RUNNING: "실행 중",
+  STARTING: "시작 중",
+  STOPPING: "중지 중",
+  STOPPED: "중지됨",
+  SUSPENDING: "일시정지 중",
+  SUSPENDED: "일시정지됨",
+  FAILED: "실패",
+  DELETING: "삭제 중",
+  DELETED: "삭제됨",
 };
 
 // 툴바 축소 우선순위: 앞에 있을수록 공간이 부족할 때 먼저 "더보기"로 이동
@@ -430,28 +441,22 @@ export default function InstanceDetailPage() {
   const showMoreButton = hiddenToolbarIds.size > 0 || toolbarDeleteCollapsed;
 
   return (
-    <div>
+    <div className="mx-auto max-w-[1380px]">
       {/* 헤더 */}
-      <div className="flex items-center gap-2 mb-1">
-        <button onClick={() => router.push(backPath)} className="text-xs text-gray-500 hover:text-gray-700">
-          {backLabel}
-        </button>
-        <span className="text-xs text-gray-400">/</span>
-        <span className="text-xs text-gray-700">{vm.name}</span>
-      </div>
+      <Breadcrumb items={[{ label: backLabel, onClick: () => router.push(backPath) }, { label: vm.name }]} />
 
       <div className="mb-5">
-        <div ref={toolbarRef} className="relative flex items-center w-full bg-white border border-gray-200 rounded-lg">
+        <div ref={toolbarRef} className="relative flex w-full items-center rounded-panel border border-line bg-panel">
           {/* 왼쪽: 이름 · 상태 · 새로고침 */}
-          <div ref={leftSectionRef} className="flex items-center gap-2.5 pl-4 pr-3.5 h-10 shrink-0">
-            <h1 className="text-[15px] font-medium text-gray-900 truncate max-w-[200px]" title={vm.name}>{vm.name}</h1>
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${STATUS_STYLE[vm.status] ?? "bg-gray-100 text-gray-600"}`}>
-              {vm.status}
-            </span>
+          <div ref={leftSectionRef} className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
+            <h1 className="max-w-[200px] truncate text-[15px] font-bold" title={vm.name}>{vm.name}</h1>
+            <StatusBadge tone={isOnlineStatus(vm.status) ? "ok" : "off"} className="whitespace-nowrap">
+              {STATUS_LABEL[vm.status] ?? vm.status}
+            </StatusBadge>
             <button
               onClick={reconnectSse}
               title="상태 동기화"
-              className="flex items-center justify-center w-7 h-7 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors shrink-0"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted"
             >
               <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                 <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -466,28 +471,28 @@ export default function InstanceDetailPage() {
               <button
                 onClick={() => setShowPowerMenu((v) => !v)}
                 disabled={isTransitioning || vm.status === "DELETED"}
-                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
-                  showPowerMenu ? "bg-gray-100" : ""
+                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
+                  showPowerMenu ? "bg-[#f2f6f3]" : ""
                 }`}
               >
-                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
                 </svg>
                 전원
-                <svg className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${showPowerMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-3 h-3 text-muted-soft transition-transform shrink-0 ${showPowerMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               {showPowerMenu && (
-                <div className="absolute left-0 mt-1 min-w-full bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
+                <div className="absolute left-0 z-20 mt-1 min-w-full overflow-hidden rounded-md border border-line bg-panel shadow-md">
                   {isRunning ? (
                     <>
-                      <button onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap">정지</button>
-                      <div className="h-px bg-gray-100 mx-2" />
-                      <button onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap">재시작</button>
+                      <button onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap">정지</button>
+                      <div className="h-px bg-[#edf1ee] mx-2" />
+                      <button onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap">재시작</button>
                     </>
                   ) : (
-                    <button onClick={() => { handlePower("START"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap">시작</button>
+                    <button onClick={() => { handlePower("START"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap">시작</button>
                   )}
                 </div>
               )}
@@ -498,9 +503,9 @@ export default function InstanceDetailPage() {
               onClick={() => router.push(`/instances/${id}/console`)}
               disabled={!isRunning}
               title={isRunning ? undefined : "VM이 실행 중일 때만 콘솔에 접속할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
             >
-              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+              <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                 <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
               </svg>
               콘솔
@@ -511,9 +516,9 @@ export default function InstanceDetailPage() {
               onClick={() => router.push(`/instances/${id}/files`)}
               disabled={!isRunning}
               title={isRunning ? undefined : "VM이 실행 중일 때만 파일 브라우저를 이용할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
             >
-              <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+              <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                 <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"/>
               </svg>
               파일
@@ -525,16 +530,16 @@ export default function InstanceDetailPage() {
                 onClick={() => router.push(`/instances/${id}/docker`)}
                 disabled={!isRunning}
                 title={isRunning ? undefined : "VM이 실행 중일 때만 Docker 관리를 이용할 수 있어요"}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               >
-                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2"/><line x1="8" y1="12" x2="16" y2="12"/>
                 </svg>
                 Docker
               </button>
             )}
 
-            {(restVisibleAny || showMoreButton) && <div className="w-px h-5 bg-gray-200 shrink-0" />}
+            {(restVisibleAny || showMoreButton) && <div className="w-px h-5 bg-line shrink-0" />}
 
             {/* 배포 */}
             {showDeploy && (
@@ -542,9 +547,9 @@ export default function InstanceDetailPage() {
                 onClick={() => router.push(`/instances/${id}/deployments`)}
                 disabled={!isRunning}
                 title={isRunning ? undefined : "VM이 실행 중일 때만 배포를 이용할 수 있어요"}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               >
-                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
                 </svg>
                 배포
@@ -557,9 +562,9 @@ export default function InstanceDetailPage() {
                 onClick={() => router.push(`/instances/${id}/backups`)}
                 disabled={!isRunning}
                 title={isRunning ? undefined : "VM이 실행 중일 때만 DB 백업을 이용할 수 있어요"}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               >
-                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
                 </svg>
                 백업
@@ -570,9 +575,9 @@ export default function InstanceDetailPage() {
             {showPerformance && (
               <button
                 onClick={() => router.push(`/instances/${id}/metrics`)}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] transition-colors"
               >
-                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/>
                 </svg>
                 성능
@@ -583,9 +588,9 @@ export default function InstanceDetailPage() {
             {showSpecChange && (
               <button
                 onClick={() => setShowUpgradeModal(true)}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] transition-colors"
               >
-                <svg className="w-[15px] h-[15px] text-gray-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
+                <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
                 스펙 변경
@@ -597,22 +602,22 @@ export default function InstanceDetailPage() {
               <div className="relative" ref={moreMenuRef}>
                 <button
                   onClick={() => setShowMoreMenu((v) => !v)}
-                  className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-gray-600 hover:bg-gray-50 transition-colors ${
-                    showMoreMenu ? "bg-gray-100" : ""
+                  className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] transition-colors ${
+                    showMoreMenu ? "bg-[#f2f6f3]" : ""
                   }`}
                 >
                   더보기
-                  <svg className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${showMoreMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-3 h-3 text-muted-soft transition-transform shrink-0 ${showMoreMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
                 {showMoreMenu && (
-                  <div className="absolute right-0 mt-1 min-w-[160px] bg-white border border-gray-200 rounded-md shadow-md z-20 overflow-hidden">
+                  <div className="absolute right-0 z-20 mt-1 min-w-[160px] overflow-hidden rounded-md border border-line bg-panel shadow-md">
                     {!showDocker && (
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/docker`); }}
                         disabled={!isRunning}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
                       >
                         Docker
                       </button>
@@ -621,7 +626,7 @@ export default function InstanceDetailPage() {
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/deployments`); }}
                         disabled={!isRunning}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
                       >
                         배포
                       </button>
@@ -630,7 +635,7 @@ export default function InstanceDetailPage() {
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/backups`); }}
                         disabled={!isRunning}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
                       >
                         백업
                       </button>
@@ -638,7 +643,7 @@ export default function InstanceDetailPage() {
                     {!showPerformance && (
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/metrics`); }}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap"
                       >
                         성능
                       </button>
@@ -646,17 +651,17 @@ export default function InstanceDetailPage() {
                     {!showSpecChange && (
                       <button
                         onClick={() => { setShowMoreMenu(false); setShowUpgradeModal(true); }}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-gray-50 text-gray-700 whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap"
                       >
                         스펙 변경
                       </button>
                     )}
                     {toolbarDeleteCollapsed && (
                       <>
-                        <div className="h-px bg-gray-100 mx-2 my-1" />
+                        <div className="h-px bg-[#edf1ee] mx-2 my-1" />
                         <button
                           onClick={() => { setShowMoreMenu(false); setConfirmDelete(true); }}
-                          className="w-full text-left text-sm px-4 py-2 hover:bg-red-50 text-red-600 whitespace-nowrap"
+                          className="w-full text-left text-sm px-4 py-2 hover:bg-[#fdf4f4] text-danger whitespace-nowrap"
                         >
                           삭제
                         </button>
@@ -670,10 +675,10 @@ export default function InstanceDetailPage() {
             {/* 삭제 */}
             {!toolbarDeleteCollapsed && (
               <>
-                <div className="w-px h-5 bg-gray-200 shrink-0" />
+                <div className="w-px h-5 bg-line shrink-0" />
                 <button
                   onClick={() => setConfirmDelete(true)}
-                  className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-red-600 hover:bg-red-50 rounded-r-lg transition-colors"
+                  className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-danger hover:bg-[#fdf4f4] rounded-r-panel transition-colors"
                 >
                   <svg className="w-[15px] h-[15px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                     <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
@@ -735,47 +740,32 @@ export default function InstanceDetailPage() {
 
       {/* needsReboot 배너 */}
       {vm.needsReboot && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-between rounded-panel border border-[#f3dfa8] bg-[#fffaf0] p-4">
           <div>
-            <p className="text-sm font-medium text-amber-800">재부팅이 필요합니다</p>
-            <p className="text-xs text-amber-700 mt-0.5">플랜 변경(CPU/RAM)을 적용하려면 인스턴스를 재부팅해야 해요</p>
+            <p className="text-sm font-bold text-[#8a5a10]">재부팅이 필요합니다</p>
+            <p className="mt-0.5 text-xs text-[#9c6b1f]">플랜 변경(CPU/RAM)을 적용하려면 인스턴스를 재부팅해야 해요</p>
           </div>
-          <button
-            onClick={() => handlePower("REBOOT")}
-            className="bg-amber-500 text-amber-950 text-xs font-medium px-3.5 h-8 rounded-md shrink-0"
-          >
+          <Button size="small" onClick={() => handlePower("REBOOT")} className="shrink-0 border-[#f0c674] bg-[#f0c674] text-[#5c3d0a] hover:bg-[#e8b855]">
             지금 재부팅
-          </button>
+          </Button>
         </div>
       )}
 
       {/* ERROR 에러 메시지 */}
       {vm.status === "FAILED" && vm.errorMessage && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-5">
-          <p className="text-sm font-medium text-red-800">오류 발생</p>
-          <p className="text-xs text-red-700 mt-0.5">{vm.errorMessage}</p>
+        <div className="mb-5 rounded-panel border border-danger-soft bg-[#fdf4f4] p-4">
+          <p className="text-sm font-bold text-danger">오류 발생</p>
+          <p className="mt-0.5 text-xs text-[#b23a3a]">{vm.errorMessage}</p>
         </div>
       )}
 
       {/* 정보 카드 */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <div className="bg-gray-50 rounded-md p-4">
-          <p className="text-xs text-gray-500 mb-1">플랜</p>
-          <p className="text-base font-medium text-gray-900">{vm.planType}</p>
-        </div>
-        <div className="bg-gray-50 rounded-md p-4">
-          <p className="text-xs text-gray-500 mb-1">디스크</p>
-          <p className="text-base font-medium text-gray-900">{vm.diskSizeGb}GB</p>
-        </div>
-        <div className="bg-gray-50 rounded-md p-4">
-          <p className="text-xs text-gray-500 mb-1">내부 IP</p>
-          <p className="text-base font-medium text-gray-900">{vm.internalIp ?? "할당 중"}</p>
-        </div>
-        <div className="bg-gray-50 rounded-md p-4">
-          <p className="text-xs text-gray-500 mb-1">서브도메인</p>
-          <p className="text-base font-medium text-gray-900">{vm.subdomain ?? "-"}</p>
-        </div>
-      </div>
+      <StatGrid cols={4} className="mb-6">
+        <StatCard compact label="플랜" value={vm.planType} />
+        <StatCard compact label="디스크" value={`${vm.diskSizeGb}GB`} />
+        <StatCard compact label="내부 IP" value={vm.internalIp ?? "할당 중"} />
+        <StatCard compact label="서브도메인" value={vm.subdomain ?? "-"} />
+      </StatGrid>
 
       {/* 2단 레이아웃 */}
       <div className="flex gap-4 items-start">
@@ -783,28 +773,19 @@ export default function InstanceDetailPage() {
       <div className="flex-[11] min-w-0 space-y-3">
 
       {/* SSH 접속 정보 */}
-      <div className="bg-white border border-gray-200/70 rounded-xl p-4 px-5">
-        <p className="text-sm font-medium text-gray-900 mb-3">SSH 접속 정보</p>
-        <table className="w-full text-[13px]">
-          <tbody>
-            <tr>
-              <td className="text-gray-500 py-1.5 w-24">호스트네임</td>
-              <td className="text-right font-mono text-gray-900">{vm.subdomain}.gamjabox.cloud</td>
-            </tr>
-            <tr>
-              <td className="text-gray-500 py-1.5">사용자</td>
-              <td className="text-right font-mono text-gray-900">ubuntu</td>
-            </tr>
-            <tr>
-              <td className="text-gray-500 py-1.5">인증 방식</td>
-              <td className="text-right text-gray-900">등록한 SSH 키</td>
-            </tr>
-          </tbody>
-        </table>
+      <Panel className="p-4 px-5">
+        <p className="mb-3 text-sm font-bold">SSH 접속 정보</p>
+        <KeyValueList
+          items={[
+            { label: "호스트네임", value: <span className="font-mono">{vm.subdomain}.gamjabox.cloud</span> },
+            { label: "사용자", value: <span className="font-mono">ubuntu</span> },
+            { label: "인증 방식", value: "등록한 SSH 키" },
+          ]}
+        />
 
         <button
           onClick={() => setAccordionOpen(!accordionOpen)}
-          className="flex items-center justify-between w-full mt-3 pt-3 border-t border-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+          className="flex items-center justify-between w-full mt-3 pt-3 border-t border-[#edf1ee] text-muted hover:text-[#3f4c43] transition-colors"
         >
           <span className="flex items-center gap-1.5 text-[13px]">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1017,7 +998,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                   <div key={symptom} className="px-3 py-2.5 grid grid-cols-3 gap-2">
                     <span className="text-gray-800 font-medium">{symptom}</span>
                     <span className="text-gray-500">{cause}</span>
-                    <span className="text-[#03C75A] font-medium">{fix}</span>
+                    <span className="text-brand-strong font-bold">{fix}</span>
                   </div>
                 ))}
               </div>
@@ -1025,21 +1006,21 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
           </div>
         )}
-      </div>
+      </Panel>
 
       {/* SSH 접근 이메일 관리 */}
-      <div className="bg-white border border-gray-200/70 rounded-xl p-4 px-5">
-        <p className="text-sm font-medium text-gray-900 mb-3">SSH 접근 허용 이메일</p>
+      <Panel className="p-4 px-5">
+        <p className="mb-3 text-sm font-bold">SSH 접근 허용 이메일</p>
         <div className="mb-2">
           {sshEmails.length === 0 && (
-            <p className="text-[13px] text-gray-400 py-1">허용된 이메일이 없습니다.</p>
+            <p className="text-[13px] text-muted-soft py-1">허용된 이메일이 없습니다.</p>
           )}
           {sshEmails.map((email) => (
-            <div key={email} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-              <span className="text-[13px] text-gray-800">{email}</span>
+            <div key={email} className="flex items-center justify-between py-2 border-b border-[#edf1ee] last:border-0">
+              <span className="text-[13px] text-[#3d4941]">{email}</span>
               <button
                 onClick={() => handleRemoveSshEmail(email)}
-                className="text-gray-400 hover:text-red-500 p-0.5"
+                className="text-muted-soft hover:text-danger p-0.5"
                 title="삭제"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
@@ -1051,63 +1032,59 @@ sudo apt-get update && sudo apt-get install cloudflared`}
         </div>
         {sshEmails.length < 10 && (
           <form onSubmit={handleAddSshEmail} className="flex gap-2 mt-2">
-            <input
+            <Input
               id="instance-ssh-email"
               name="instance-ssh-email"
               type="email"
               value={newSshEmail}
               onChange={(e) => setNewSshEmail(e.target.value)}
               placeholder="추가할 이메일"
-              className="flex-1 h-8 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-[#03C75A]"
+              className="flex-1 h-8"
             />
-            <button
-              type="submit"
-              disabled={sshEmailLoading || !newSshEmail}
-              className="h-8 px-4 bg-[#03C75A] text-white rounded-md text-sm disabled:opacity-60"
-            >
+            <Button type="submit" variant="primary" size="small" disabled={sshEmailLoading || !newSshEmail}>
               추가
-            </button>
+            </Button>
           </form>
         )}
-      </div>
+      </Panel>
 
       {/* 포트 관리 */}
-      <div className="bg-white border border-gray-200/70 rounded-xl p-4 px-5">
+      <Panel className="p-4 px-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-medium text-gray-900">포트 노출</p>
+          <p className="text-sm font-bold">포트 노출</p>
           {ports.length < 5 && (
-            <button onClick={() => setShowPortModal(true)} className="text-xs text-[#03C75A] font-medium">
+            <button onClick={() => setShowPortModal(true)} className="text-xs text-brand-strong font-bold">
               + 포트 추가
             </button>
           )}
         </div>
 
         {ports.length === 0 ? (
-          <p className="text-xs text-gray-400">노출된 포트가 없습니다.</p>
+          <p className="text-xs text-muted-soft">노출된 포트가 없습니다.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {ports.map((port) => (
-              <div key={port.id} className="bg-white border border-gray-200 rounded-md">
+              <div key={port.id} className="rounded-[11px] border border-line bg-panel">
                 <div className="flex items-center justify-between px-3 py-2.5">
                   <div>
-                    <span className="text-sm font-medium text-gray-900">{port.nickname}</span>
-                    <span className="text-xs text-gray-500 ml-2">
+                    <span className="text-sm font-bold">{port.nickname}</span>
+                    <span className="text-xs text-muted ml-2">
                       :{port.port} · {port.protocol} · {port.visibility === "PUBLIC" ? "공개" : "비공개"}
                     </span>
-                    <p className="font-mono text-[11px] text-gray-400 mt-0.5">{port.fullDomain}</p>
+                    <p className="font-mono text-[11px] text-muted-soft mt-0.5">{port.fullDomain}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {port.visibility === "PRIVATE" && (
                       <button
                         onClick={() => setExpandedPortId(expandedPortId === port.id ? null : port.id)}
-                        className="text-xs text-gray-500 hover:text-gray-700"
+                        className="text-xs text-muted hover:text-[#3f4c43]"
                       >
                         이메일 {expandedPortId === port.id ? "▴" : "▾"}
                       </button>
                     )}
                     <button
                       onClick={() => handleDeletePort(port.id)}
-                      className="text-xs text-gray-400 hover:text-red-500"
+                      className="text-xs text-muted-soft hover:text-danger"
                     >
                       삭제
                     </button>
@@ -1116,42 +1093,44 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
                 {/* 비공개 포트 이메일 관리 */}
                 {port.visibility === "PRIVATE" && expandedPortId === port.id && (
-                  <div className="border-t border-gray-100 px-3 pb-3 pt-2">
-                    <p className="text-[11px] text-gray-400 mb-2">접근 허용 이메일</p>
+                  <div className="border-t border-[#edf1ee] px-3 pb-3 pt-2">
+                    <p className="text-[11px] text-muted-soft mb-2">접근 허용 이메일</p>
                     <div className="flex flex-col gap-1 mb-2">
                       {port.accessEmails.map((email) => (
                         <div key={email} className="flex items-center justify-between py-1">
-                          <span className="text-xs text-gray-700">{email}</span>
+                          <span className="text-xs text-[#3d4941]">{email}</span>
                           <button
                             onClick={() => handleRemovePortEmail(port.id, email)}
-                            className="text-[11px] text-gray-400 hover:text-red-500"
+                            className="text-[11px] text-muted-soft hover:text-danger"
                           >
                             삭제
                           </button>
                         </div>
                       ))}
                       {port.accessEmails.length === 0 && (
-                        <p className="text-xs text-gray-400">허용된 이메일이 없습니다.</p>
+                        <p className="text-xs text-muted-soft">허용된 이메일이 없습니다.</p>
                       )}
                     </div>
                     {port.accessEmails.length < 10 && (
                       <div className="flex gap-2">
-                        <input
+                        <Input
                           id={`port-email-${port.id}`}
                           name={`port-email-${port.id}`}
                           type="email"
                           value={newPortEmail[port.id] ?? ""}
                           onChange={(e) => setNewPortEmail((prev) => ({ ...prev, [port.id]: e.target.value }))}
                           placeholder="이메일 추가"
-                          className="flex-1 h-7 px-2 border border-gray-300 rounded text-xs focus:outline-none focus:border-[#03C75A]"
+                          className="flex-1 h-7 text-xs"
                         />
-                        <button
+                        <Button
+                          size="small"
+                          variant="primary"
                           onClick={() => handleAddPortEmail(port.id)}
                           disabled={portEmailLoading[port.id] || !newPortEmail[port.id]}
-                          className="h-7 px-2.5 bg-[#03C75A] text-white rounded text-xs disabled:opacity-60"
+                          className="h-7 px-2.5"
                         >
                           추가
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -1160,19 +1139,19 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             ))}
           </div>
         )}
-      </div>
+      </Panel>
 
       </div>{/* end left col */}
 
       {/* ── 우측: 협업 패널 (sticky) ── */}
       <div className="flex-[10] min-w-0">
-        <div className="sticky top-0 bg-gray-50 rounded-xl p-4">
+        <div className="sticky top-0 rounded-panel bg-[#fbfcfb] border border-line p-4">
           {/* 패널 헤더 */}
           <div className="flex items-center justify-between mb-2.5">
-            <span className="text-[15px] font-medium text-gray-900">협업</span>
+            <span className="text-[15px] font-bold">협업</span>
             <button
               onClick={() => { setEditingCollab(undefined); setShowCollabWrite(true); }}
-              className="text-[13px] px-3 h-[30px] bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+              className="text-[13px] px-3 h-[30px] bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
               style={{ width: "auto" }}
             >
               + 작성
@@ -1187,8 +1166,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 style={{ width: "auto", padding: "0 12px", height: 28, fontSize: 12 }}
                 className={`rounded-md transition-colors ${
                   collabTypeFilter === t
-                    ? "bg-white border border-gray-300 text-gray-800"
-                    : "bg-transparent border-0 text-gray-500 hover:text-gray-700"
+                    ? "bg-panel border border-line-strong text-[#3d4941]"
+                    : "bg-transparent border-0 text-muted hover:text-[#3f4c43]"
                 }`}
               >
                 {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
@@ -1202,7 +1181,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 ? collabItems.filter((i) => i.type === collabTypeFilter)
                 : collabItems;
               return filtered.length === 0 ? (
-                <p className="text-[13px] text-gray-400 py-10 text-center">협업 항목이 없습니다.</p>
+                <p className="text-[13px] text-muted-soft py-10 text-center">협업 항목이 없습니다.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {filtered.map((item) => (
@@ -1247,169 +1226,150 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       )}
 
       {/* 포트 추가 모달 */}
-      {showPortModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[420px]">
-            <h2 className="text-base font-medium text-gray-900 mb-4">포트 추가</h2>
-            <form onSubmit={handleAddPort} className="flex flex-col gap-3">
-              <div>
-                <label htmlFor="port-nickname" className="text-xs text-gray-500 block mb-1">닉네임</label>
-                <input
-                  id="port-nickname"
-                  name="port-nickname"
-                  type="text"
-                  value={portForm.nickname}
-                  onChange={(e) => setPortForm((f) => ({ ...f, nickname: e.target.value.toLowerCase() }))}
-                  placeholder="예: myapp (소문자·숫자·하이픈, 최대 20자)"
-                  maxLength={20}
-                  pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
-                  required
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
-                />
-                <p className="text-[11px] text-gray-400 mt-1">
-                  서브도메인: {portForm.customSubdomain
-                    ? `${portForm.customSubdomain}.gamjabox.cloud`
-                    : portForm.nickname
-                      ? `${vm.subdomain}-${portForm.nickname}.gamjabox.cloud`
-                      : "—"}
-                </p>
-              </div>
-              <div className={profile?.planType !== "PRO" ? "opacity-50 pointer-events-none select-none" : ""}>
-                <label htmlFor="port-custom-subdomain" className="text-xs text-gray-500 block mb-1">
+      <Modal open={showPortModal} onClose={() => setShowPortModal(false)}>
+        <div className="mx-auto w-[420px] rounded-panel bg-panel p-6">
+          <h2 className="mb-4 text-base font-bold">포트 추가</h2>
+          <form onSubmit={handleAddPort} className="flex flex-col gap-1">
+            <Field label="닉네임" htmlFor="port-nickname">
+              <Input
+                id="port-nickname"
+                name="port-nickname"
+                type="text"
+                value={portForm.nickname}
+                onChange={(e) => setPortForm((f) => ({ ...f, nickname: e.target.value.toLowerCase() }))}
+                placeholder="예: myapp (소문자·숫자·하이픈, 최대 20자)"
+                maxLength={20}
+                pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
+                required
+              />
+              <p className="text-[11px] text-muted-soft font-normal normal-case">
+                서브도메인: {portForm.customSubdomain
+                  ? `${portForm.customSubdomain}.gamjabox.cloud`
+                  : portForm.nickname
+                    ? `${vm.subdomain}-${portForm.nickname}.gamjabox.cloud`
+                    : "—"}
+              </p>
+            </Field>
+            <Field
+              label={
+                <span className="flex items-center">
                   커스텀 서브도메인
                   {profile?.planType !== "PRO"
-                    ? <span className="ml-1.5 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">PRO 전용</span>
-                    : <span className="text-[10px] text-blue-500 ml-1">PRO</span>
+                    ? <span className="ml-1.5 text-[10px] font-bold text-[#9c6b1f] bg-[#fffaf0] border border-[#f3dfa8] px-1.5 py-0.5 rounded">PRO 전용</span>
+                    : <span className="text-[10px] text-accent ml-1">PRO</span>
                   }
-                </label>
-                <input
-                  id="port-custom-subdomain"
-                  name="port-custom-subdomain"
-                  type="text"
-                  value={portForm.customSubdomain}
-                  onChange={(e) => handleCustomSubdomainChange(e.target.value)}
-                  placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
-                  maxLength={30}
-                  pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
-                  disabled={profile?.planType !== "PRO"}
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm disabled:bg-gray-50"
-                />
-                {portForm.customSubdomain && (
-                  <p className={`text-[11px] mt-1 ${
-                    subdomainCheck === "available" ? "text-green-600" :
-                    subdomainCheck === "checking" ? "text-gray-400" :
-                    "text-red-500"
-                  }`}>
-                    {subdomainCheck === "checking" && "확인 중..."}
-                    {subdomainCheck === "available" && "✓ 사용 가능"}
-                    {subdomainCheck === "taken" && "이미 사용 중인 서브도메인입니다"}
-                    {subdomainCheck === "reserved" && "예약된 서브도메인입니다"}
-                    {subdomainCheck === "pro-only" && "PRO 플랜 전용입니다"}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="port-number" className="text-xs text-gray-500 block mb-1">포트 번호</label>
-                <input
-                  id="port-number"
-                  name="port-number"
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={portForm.port}
-                  onChange={(e) => setPortForm((f) => ({ ...f, port: e.target.value }))}
-                  placeholder="예: 3000"
-                  required
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
-                />
-              </div>
-              <div>
-                <label htmlFor="port-protocol" className="text-xs text-gray-500 block mb-1">프로토콜</label>
-                <select
-                  id="port-protocol"
-                  name="port-protocol"
-                  value={portForm.protocol}
-                  onChange={(e) => setPortForm((f) => ({ ...f, protocol: e.target.value as "HTTP" | "TCP" }))}
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
-                >
-                  <option value="HTTP">HTTP</option>
-                  <option value="TCP">TCP</option>
-                </select>
-              </div>
-              <div>
-                <label htmlFor="port-visibility" className="text-xs text-gray-500 block mb-1">공개 설정</label>
-                <select
-                  id="port-visibility"
-                  name="port-visibility"
-                  value={portForm.visibility}
-                  onChange={(e) => setPortForm((f) => ({ ...f, visibility: e.target.value as "PUBLIC" | "PRIVATE" }))}
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
-                >
-                  <option value="PUBLIC">공개 (누구나 접근)</option>
-                  <option value="PRIVATE">비공개 (이메일 인증 필요)</option>
-                </select>
-              </div>
-              {portForm.visibility === "PRIVATE" && (
-                <div>
-                  <label htmlFor="port-initial-emails" className="text-xs text-gray-500 block mb-1">초기 허용 이메일 (쉼표로 구분, 미입력 시 본인 자동 추가)</label>
-                  <input
-                    id="port-initial-emails"
-                    name="port-initial-emails"
-                    type="text"
-                    value={portForm.initialEmails}
-                    onChange={(e) => setPortForm((f) => ({ ...f, initialEmails: e.target.value }))}
-                    placeholder="a@example.com, b@example.com"
-                    className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
-                  />
-                </div>
+                </span>
+              }
+              htmlFor="port-custom-subdomain"
+              className={profile?.planType !== "PRO" ? "opacity-50 pointer-events-none select-none" : ""}
+            >
+              <Input
+                id="port-custom-subdomain"
+                name="port-custom-subdomain"
+                type="text"
+                value={portForm.customSubdomain}
+                onChange={(e) => handleCustomSubdomainChange(e.target.value)}
+                placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
+                maxLength={30}
+                pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
+                disabled={profile?.planType !== "PRO"}
+                className="disabled:bg-[#fbfcfb]"
+              />
+              {portForm.customSubdomain && (
+                <p className={`text-[11px] font-normal normal-case ${
+                  subdomainCheck === "available" ? "text-brand-strong" :
+                  subdomainCheck === "checking" ? "text-muted-soft" :
+                  "text-danger"
+                }`}>
+                  {subdomainCheck === "checking" && "확인 중..."}
+                  {subdomainCheck === "available" && "✓ 사용 가능"}
+                  {subdomainCheck === "taken" && "이미 사용 중인 서브도메인입니다"}
+                  {subdomainCheck === "reserved" && "예약된 서브도메인입니다"}
+                  {subdomainCheck === "pro-only" && "PRO 플랜 전용입니다"}
+                </p>
               )}
-              <div className="flex gap-2 mt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowPortModal(false)}
-                  className="flex-1 h-9 border border-gray-300 rounded-md text-sm text-gray-600"
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  disabled={portLoading || !portForm.port || !portForm.nickname || (!!portForm.customSubdomain && subdomainCheck !== "available")}
-                  className="flex-1 h-9 bg-[#03C75A] text-white rounded-md text-sm disabled:opacity-60"
-                >
-                  {portLoading ? "추가 중..." : "추가"}
-                </button>
-              </div>
-            </form>
-          </div>
+            </Field>
+            <Field label="포트 번호" htmlFor="port-number">
+              <Input
+                id="port-number"
+                name="port-number"
+                type="number"
+                min={1}
+                max={65535}
+                value={portForm.port}
+                onChange={(e) => setPortForm((f) => ({ ...f, port: e.target.value }))}
+                placeholder="예: 3000"
+                required
+              />
+            </Field>
+            <Field label="프로토콜" htmlFor="port-protocol">
+              <Select
+                id="port-protocol"
+                name="port-protocol"
+                value={portForm.protocol}
+                onChange={(e) => setPortForm((f) => ({ ...f, protocol: e.target.value as "HTTP" | "TCP" }))}
+              >
+                <option value="HTTP">HTTP</option>
+                <option value="TCP">TCP</option>
+              </Select>
+            </Field>
+            <Field label="공개 설정" htmlFor="port-visibility">
+              <Select
+                id="port-visibility"
+                name="port-visibility"
+                value={portForm.visibility}
+                onChange={(e) => setPortForm((f) => ({ ...f, visibility: e.target.value as "PUBLIC" | "PRIVATE" }))}
+              >
+                <option value="PUBLIC">공개 (누구나 접근)</option>
+                <option value="PRIVATE">비공개 (이메일 인증 필요)</option>
+              </Select>
+            </Field>
+            {portForm.visibility === "PRIVATE" && (
+              <Field label="초기 허용 이메일 (쉼표로 구분, 미입력 시 본인 자동 추가)" htmlFor="port-initial-emails">
+                <Input
+                  id="port-initial-emails"
+                  name="port-initial-emails"
+                  type="text"
+                  value={portForm.initialEmails}
+                  onChange={(e) => setPortForm((f) => ({ ...f, initialEmails: e.target.value }))}
+                  placeholder="a@example.com, b@example.com"
+                />
+              </Field>
+            )}
+            <div className="flex gap-2 mt-1">
+              <Button type="button" onClick={() => setShowPortModal(false)} className="flex-1">
+                취소
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={portLoading || !portForm.port || !portForm.nickname || (!!portForm.customSubdomain && subdomainCheck !== "available")}
+                className="flex-1"
+              >
+                {portLoading ? "추가 중..." : "추가"}
+              </Button>
+            </div>
+          </form>
         </div>
-      )}
+      </Modal>
 
       {/* 삭제 확인 모달 */}
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[340px]">
-            <h2 className="text-base font-medium text-gray-900 mb-2">인스턴스 삭제</h2>
-            <p className="text-sm text-gray-500 mb-5">
-              <span className="font-medium text-gray-800">{vm.name}</span>을 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="flex-1 h-9 border border-gray-300 rounded-md text-sm text-gray-600"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex-1 h-9 bg-red-500 text-white rounded-md text-sm disabled:opacity-60"
-              >
-                {deleting ? "삭제 중..." : "삭제"}
-              </button>
-            </div>
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)}>
+        <div className="mx-auto w-[340px] rounded-panel bg-panel p-6">
+          <h2 className="mb-2 text-base font-bold">인스턴스 삭제</h2>
+          <p className="mb-5 text-sm text-muted">
+            <span className="font-bold text-[#3f4c43]">{vm.name}</span>을 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={() => setConfirmDelete(false)} className="flex-1">
+              취소
+            </Button>
+            <Button variant="danger-solid" onClick={handleDelete} disabled={deleting} className="flex-1">
+              {deleting ? "삭제 중..." : "삭제"}
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* 스펙 변경 모달 */}
       {showUpgradeModal && vm && (
