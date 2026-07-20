@@ -16,12 +16,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
   const { accessToken, user, isLoading, logout } = useAuth();
+  const isLoginPage = pathname.endsWith("/login");
 
   useEffect(() => {
-    if (!isLoading && !accessToken) {
+    if (!isLoginPage && !isLoading && !accessToken) {
       router.replace("/login");
     }
-  }, [accessToken, isLoading, router]);
+  }, [isLoginPage, accessToken, isLoading, router]);
+
+  if (isLoginPage) return <>{children}</>;
 
   if (isLoading) return null;
 
