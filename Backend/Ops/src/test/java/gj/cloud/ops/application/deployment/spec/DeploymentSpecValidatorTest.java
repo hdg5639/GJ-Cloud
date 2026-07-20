@@ -20,13 +20,13 @@ class DeploymentSpecValidatorTest {
 
     @Test
     void validStaticSpecHasNoErrors() {
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(staticService("web", true)), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(staticService("web", true)), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).isEmpty();
     }
 
     @Test
     void rejectsUnsupportedSchemaVersion() {
-        DeploymentSpec spec = new DeploymentSpec("1.0", List.of(staticService("web", true)), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("1.0", List.of(staticService("web", true)), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("schemaVersion"));
     }
 
@@ -37,7 +37,7 @@ class DeploymentSpecValidatorTest {
                 new ArtifactSpec(ArtifactType.CONTAINER_IMAGE, "."),
                 new RunSpec(RuntimeKind.NODEJS, BuildRunStrategy.NPM_START, null),
                 ".", new ExposeSpec(true, "http", "/"));
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("containerPort"));
     }
 
@@ -48,7 +48,7 @@ class DeploymentSpecValidatorTest {
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
                 ".", new ExposeSpec(false, "http", "/health"));
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("healthCheckPath"));
     }
 
@@ -60,7 +60,7 @@ class DeploymentSpecValidatorTest {
                 new ArtifactSpec(ArtifactType.PYTHON_APPLICATION, "."),
                 new RunSpec(RuntimeKind.PYTHON, BuildRunStrategy.UVICORN, 8000),
                 ".", null);
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("build.strategy"));
     }
 
@@ -71,7 +71,7 @@ class DeploymentSpecValidatorTest {
                 new ArtifactSpec(ArtifactType.JAR, "build/libs"),
                 new RunSpec(RuntimeKind.JAVA, BuildRunStrategy.JAVA_JAR, 8080),
                 ".", null);
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("ARTIFACT_ONLY"));
     }
 }

@@ -147,17 +147,21 @@ public class AiSpecGeneratorClient {
             }
         }
 
+        boolean externalNetwork = request.existingNetworkName() != null && !request.existingNetworkName().isBlank();
+        String networkName = externalNetwork ? request.existingNetworkName() : NETWORK_NAME;
+
         AiGenerationResult result = aiCards.isEmpty()
                 // 전부 결정론적으로 확정 — AI 호출 0회 (신고된 오분류 버그의 핵심 방지책)
-                ? finalizeDeterministic(vmId, resolvedSpecs, request.infrastructure(), evidenceRefs)
-                : generateWithAi(vmId, request, resolvedSpecs, aiCards, aiEvidence, evidenceRefs, earlyUnresolved);
+                ? finalizeDeterministic(vmId, resolvedSpecs, request.infrastructure(), evidenceRefs, networkName, externalNetwork)
+                : generateWithAi(vmId, request, resolvedSpecs, aiCards, aiEvidence, evidenceRefs, earlyUnresolved, networkName, externalNetwork);
         generationCache.put(request, result);
         return result;
     }
 
     private AiGenerationResult finalizeDeterministic(String vmId, List<ServiceSpec> resolvedSpecs,
-                                                      List<InfraSelection> infrastructure, List<String> evidenceRefs) {
-        DeploymentSpec spec = assembleSpec(resolvedSpecs, infrastructure);
+                                                      List<InfraSelection> infrastructure, List<String> evidenceRefs,
+                                                      String networkName, boolean externalNetwork) {
+        DeploymentSpec spec = assembleSpec(resolvedSpecs, infrastructure, networkName, externalNetwork);
         List<ValidationError> errors = collectAllErrors(spec);
         boolean ok = errors.isEmpty();
         logRepository.save(AiSpecGenerationLogEntity.create(vmId, AiCallKind.GENERATION, "deterministic-rules",
@@ -173,7 +177,7 @@ public class AiSpecGeneratorClient {
     private AiGenerationResult generateWithAi(String vmId, GenerateDeploymentSpecRequest request,
                                                List<ServiceSpec> resolvedSpecs, List<ServiceCard> aiCards,
                                                Map<String, RepositoryEvidence> aiEvidence, List<String> evidenceRefs,
-                                               List<UnresolvedField> earlyUnresolved) {
+                                               List<UnresolvedField> earlyUnresolved, String networkName, boolean externalNetwork) {
         int ambiguity = ambiguityScorer.score(aiCards.stream().map(ServiceCard::context).toList(), aiEvidence, request);
         ModelChoice choice = initialChoiceFor(ambiguity);
         String prompt = buildUserPrompt(aiCards, aiEvidence, request.infrastructure());
@@ -219,7 +223,7 @@ public class AiSpecGeneratorClient {
 
             List<ServiceSpec> allServices = new ArrayList<>(resolvedSpecs);
             allServices.addAll(output.services());
-            DeploymentSpec spec = assembleSpec(allServices, request.infrastructure());
+            DeploymentSpec spec = assembleSpec(allServices, request.infrastructure(), networkName, externalNetwork);
             List<ValidationError> specErrors = collectAllErrors(spec);
             if (!specErrors.isEmpty()) {
                 return new AiGenerationResult(GenerationStatus.INVALID_RESPONSE, null,
@@ -234,13 +238,14 @@ public class AiSpecGeneratorClient {
         }
     }
 
-    private DeploymentSpec assembleSpec(List<ServiceSpec> services, List<InfraSelection> infrastructure) {
+    private DeploymentSpec assembleSpec(List<ServiceSpec> services, List<InfraSelection> infrastructure,
+                                         String networkName, boolean externalNetwork) {
         List<InfrastructureSpec> infra = infrastructure == null ? List.of() : infrastructure.stream()
                 .map(i -> new InfrastructureSpec(i.type(),
                         i.version() != null && !i.version().isBlank() ? i.version() : defaultInfraVersion(i.type()),
                         new ExposeSpec(false, null, null)))
                 .toList();
-        return new DeploymentSpec(SCHEMA_VERSION, services, infra, NETWORK_NAME);
+        return new DeploymentSpec(SCHEMA_VERSION, services, infra, networkName, externalNetwork);
     }
 
     private String defaultInfraVersion(String type) {
@@ -291,7 +296,7 @@ public class AiSpecGeneratorClient {
                         "요청한 서비스 수와 응답의 services 개수가 일치하지 않습니다",
                         "The number of requested services does not match the number of services in the response"));
             } else {
-                DeploymentSpec probe = assembleSpec(output.services(), List.of());
+                DeploymentSpec probe = assembleSpec(output.services(), List.of(), NETWORK_NAME, false);
                 errors.addAll(deploymentSpecValidator.collectErrors(probe));
             }
         }

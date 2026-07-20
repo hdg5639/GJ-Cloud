@@ -107,7 +107,8 @@ public class DeploymentExecutor {
 
         DeploymentEntity deployment = deploymentRepository.save(
                 DeploymentEntity.createQueued(vmId, artifact.sourceType(), sourceCiphertext, previousDeploymentId,
-                        environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, repoConfig.context()));
+                        environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, repoConfig.context(),
+                        repoConfig.installPath()));
 
         if (!lockService.tryLock(vmId, deployment.getId())) {
             deployment = deploymentRepository.save(deployment.withFailed("이미 배포가 진행 중입니다."));
@@ -137,7 +138,7 @@ public class DeploymentExecutor {
         List<HealthCheck> healthChecks = entity.getHealthChecksJson() != null
                 ? readJsonList(entity.getHealthChecksJson(), HealthCheck.class)
                 : List.of();
-        return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks, entity.getContext());
+        return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks, entity.getContext(), entity.getInstallPath());
     }
 
     // 사용자가 임의로 지정한 과거 SUCCEEDED 배포로 수동 롤백. 기존 자동 롤백(RollbackService)과 동일하게
@@ -279,6 +280,19 @@ public class DeploymentExecutor {
             }
 
             gitReleaseManager.updateCurrentSymlink(session, appId, deploymentId);
+
+            if (repoConfig.installPath() != null && !repoConfig.installPath().isBlank()) {
+                try {
+                    gitReleaseManager.linkInstallPath(session, appId, repoConfig.installPath());
+                    eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                            "VM 배포 경로 연결 완료 (" + repoConfig.installPath() + ")");
+                } catch (Exception e) {
+                    // 앱 자체는 정상 기동했으므로 배포 실패로 취급하지 않고 경고만 남김 (라우트 등록 실패와 동일한 관례)
+                    eventPublisher.publish(deploymentId, DeploymentEventType.ERROR,
+                            "VM 배포 경로 연결 실패 (배포 자체는 완료됨): " + e.getMessage());
+                }
+            }
+
             updateEntity(deploymentId, DeploymentEntity::withSucceeded);
             eventPublisher.publish(deploymentId, DeploymentEventType.DONE, "배포 완료");
         } catch (Exception e) {

@@ -9,6 +9,7 @@ public record ComposeSpecResponse(
         List<EnvironmentFile> environmentFiles,
         List<ExposedRoute> exposedRoutes,
         List<HealthCheck> healthChecks,
-        String context
+        String context,
+        String installPath
 ) {
 }

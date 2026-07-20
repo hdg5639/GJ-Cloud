@@ -24,19 +24,19 @@ class DeploymentSpecPolicyValidatorTest {
 
     @Test
     void allowsNormalRelativeContext() {
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(serviceWithContext(".")), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(serviceWithContext(".")), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).isEmpty();
     }
 
     @Test
     void rejectsParentDirectoryTraversalInContext() {
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(serviceWithContext("../../etc")), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(serviceWithContext("../../etc")), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("context"));
     }
 
     @Test
     void rejectsAbsolutePathInContext() {
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(serviceWithContext("/etc/passwd")), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(serviceWithContext("/etc/passwd")), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).isNotEmpty();
     }
 
@@ -47,7 +47,7 @@ class DeploymentSpecPolicyValidatorTest {
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "dist"),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
                 ".", new ExposeSpec(true, "http", "/"));
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("build.outputPath"));
     }
 
@@ -58,7 +58,7 @@ class DeploymentSpecPolicyValidatorTest {
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
                 ".", new ExposeSpec(true, "http", "/"));
-        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network");
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("시크릿"));
     }
 }

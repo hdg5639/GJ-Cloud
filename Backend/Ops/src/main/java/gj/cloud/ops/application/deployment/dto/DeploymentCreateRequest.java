@@ -15,6 +15,9 @@ public record DeploymentCreateRequest(
         List<ExposedRoute> exposedRoutes,
         List<HealthCheck> healthChecks,
         // 저장소 내 배포 컨텍스트 서브디렉토리 (예: "backend"). 비어있거나 "."이면 저장소 루트.
-        String context
+        String context,
+        // VM 파일시스템 절대경로 (예: "/home/ubuntu/myapp"). 지정하면 현재 활성 release를 가리키는
+        // 심볼릭 링크가 이 경로에 생성됨.
+        String installPath
 ) {
 }

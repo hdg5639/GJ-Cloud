@@ -16,14 +16,17 @@ import type {
   GenerationStatus,
   UnresolvedField,
   ComposeReviewFinding,
+  NetworkInfo,
 } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import { Modal } from "@/components/ui/modal";
-import { Field, Input, Textarea } from "@/components/ui/field";
+import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Table, Th, Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
+
+type NetworkMode = "create" | "reuse";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
   QUEUED: "off",
@@ -100,6 +103,14 @@ export default function DeploymentsPage() {
   const [branch, setBranch] = useState("main");
   const [patToken, setPatToken] = useState("");
 
+  // 공통 — VM 내 배포 경로 (심볼릭 링크)
+  const [installPath, setInstallPath] = useState("");
+
+  // 공통 — Docker 네트워크 (AI는 실제로 선택 반영, Compose는 참고용 목록만 노출)
+  const [dockerNetworks, setDockerNetworks] = useState<NetworkInfo[]>([]);
+  const [networkMode, setNetworkMode] = useState<NetworkMode>("create");
+  const [existingNetworkName, setExistingNetworkName] = useState("");
+
   // Raw Compose
   const [composeContent, setComposeContent] = useState("");
   const [context, setContext] = useState("");
@@ -140,6 +151,13 @@ export default function DeploymentsPage() {
     load();
   }, [load]);
 
+  // 배포 생성 모달을 열 때 VM에 이미 존재하는 Docker 네트워크 목록을 가져옴 — Compose 탭에서는 참고용으로
+  // 그대로 보여주고, AI 탭에서는 "기존 네트워크 재사용" 선택지의 후보로 사용
+  useEffect(() => {
+    if (!showCreate || !accessToken) return;
+    api.ops.docker.listNetworks(accessToken, vmId).then(setDockerNetworks).catch(() => setDockerNetworks([]));
+  }, [showCreate, accessToken, vmId]);
+
   // 배포 상세 페이지의 "재시도" 버튼에서 넘어온 프리필 스펙을 페이지 진입 시 적용 (모달 상태는
   // 이 목록 페이지에만 있어서 페이지 간 전달에 sessionStorage를 사용)
   useEffect(() => {
@@ -157,6 +175,7 @@ export default function DeploymentsPage() {
   function applyComposeSpec(spec: ComposeSpecResponse) {
     setComposeContent(spec.composeContent);
     setContext(spec.context ?? "");
+    setInstallPath(spec.installPath ?? "");
     setEnvFiles(spec.environmentFiles);
     setRoutes(spec.exposedRoutes);
     setHealthChecks(spec.healthChecks);
@@ -200,6 +219,9 @@ export default function DeploymentsPage() {
     setPatToken("");
     setComposeContent("");
     setContext("");
+    setInstallPath("");
+    setNetworkMode("create");
+    setExistingNetworkName("");
     setShowAdvanced(false);
     setEnvFiles([]);
     setRoutes([]);
@@ -232,6 +254,7 @@ export default function DeploymentsPage() {
         patToken: patToken || undefined,
         composeContent,
         context: context.trim() || undefined,
+        installPath: installPath.trim() || undefined,
         environmentFiles: envFiles.filter((f) => f.vmPath && f.content),
         exposedRoutes: routes.filter((r) => r.serviceName && r.nickname),
         healthChecks: healthChecks.filter((h) => h.serviceName && h.path),
@@ -262,6 +285,7 @@ export default function DeploymentsPage() {
         patToken: patToken || undefined,
         services: serviceCards.filter((s) => s.name && s.runtime && s.context),
         infrastructure: infraSelections.filter((i) => i.type),
+        existingNetworkName: networkMode === "reuse" ? existingNetworkName || undefined : undefined,
       });
       setGenerationStatus(result.status);
       setEvidenceRefs(result.evidenceRefs);
@@ -302,6 +326,7 @@ export default function DeploymentsPage() {
         branch,
         patToken: patToken || undefined,
         spec,
+        installPath: installPath.trim() || undefined,
       });
       setShowCreate(false);
       resetCreateForm();
@@ -500,10 +525,22 @@ export default function DeploymentsPage() {
                         placeholder="예: backend (비워두면 저장소 루트에서 배포)"
                       />
                       <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
-                        모노레포에서 특정 폴더만 배포하고 싶을 때 입력하세요. Compose 파일 업로드와 이미지 빌드가 이 디렉토리를 기준으로 실행됩니다.
+                        모노레포에서 특정 폴더만 배포하고 싶을 때 입력하세요. Compose 파일 업로드와 이미지 빌드가 이 디렉토리를 기준으로 실행됩니다. (저장소 내부 경로)
                       </p>
                     </Field>
                   )}
+                  <Field label="VM 배포 경로 (선택)" htmlFor="deploy-install-path" className="col-span-2">
+                    <Input
+                      id="deploy-install-path"
+                      name="deploy-install-path"
+                      value={installPath}
+                      onChange={(e) => setInstallPath(e.target.value)}
+                      placeholder="예: /home/ubuntu/myapp (비워두면 gamjabox가 자동 관리하는 경로만 사용)"
+                    />
+                    <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
+                      VM 내부의 이 경로에 현재 배포를 가리키는 심볼릭 링크를 만듭니다. SSH로 직접 접속했을 때 익숙한 위치에서 배포 결과물을 찾을 수 있어요. (VM 파일시스템 절대경로)
+                    </p>
+                  </Field>
                 </div>
               </Section>
 
@@ -606,6 +643,23 @@ export default function DeploymentsPage() {
                       </div>
                     )}
                   </Section>
+
+                  <Section title="Docker 네트워크" description="VM에 이미 존재하는 네트워크를 재사용하려면 compose 파일에 아래처럼 external 네트워크로 선언하세요.">
+                    {dockerNetworks.length === 0 ? (
+                      <p className="text-xs text-muted-soft">이 VM에는 아직 조회 가능한 Docker 네트워크가 없습니다. (새로 생성하는 경우 무시해도 됩니다)</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {dockerNetworks.map((n) => (
+                          <span key={n.ID} className="rounded-md border border-line-strong bg-[#fbfcfb] px-2 py-1 text-xs font-mono text-[#3d4941]">
+                            {n.Name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <pre className="mt-3 overflow-x-auto rounded-[10px] border border-line bg-[#f7f9f8] p-3 font-mono text-[11px] leading-[1.6] text-[#3d4941]">
+{`networks:\n  default:\n    external: true\n    name: <재사용할 네트워크 이름>`}
+                    </pre>
+                  </Section>
                 </form>
               ) : (
                 <>
@@ -663,11 +717,54 @@ export default function DeploymentsPage() {
                       ))}
                     </div>
 
+                    <div className="mb-4">
+                      <p className="mb-1.5 text-xs font-bold text-[#3f4c43]">Docker 네트워크</p>
+                      <p className="mb-1.5 text-[11px] text-muted-soft">서비스들을 새 네트워크에 배치할지, VM에 이미 있는 네트워크를 재사용할지 선택하세요.</p>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="flex items-center gap-2 text-xs text-[#3d4941]">
+                          <input
+                            type="radio"
+                            name="deploy-network-mode"
+                            checked={networkMode === "create"}
+                            onChange={() => setNetworkMode("create")}
+                            className="accent-brand"
+                          />
+                          새 네트워크 생성
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-[#3d4941]">
+                          <input
+                            type="radio"
+                            name="deploy-network-mode"
+                            checked={networkMode === "reuse"}
+                            onChange={() => setNetworkMode("reuse")}
+                            disabled={dockerNetworks.length === 0}
+                            className="accent-brand"
+                          />
+                          기존 네트워크 재사용
+                        </label>
+                        {networkMode === "reuse" && (
+                          <Select
+                            value={existingNetworkName}
+                            onChange={(e) => setExistingNetworkName(e.target.value)}
+                            className="mt-1 w-64"
+                          >
+                            <option value="">네트워크 선택</option>
+                            {dockerNetworks.map((n) => (
+                              <option key={n.ID} value={n.Name}>{n.Name}</option>
+                            ))}
+                          </Select>
+                        )}
+                        {dockerNetworks.length === 0 && (
+                          <p className="text-[11px] text-muted-soft">이 VM에는 아직 조회 가능한 Docker 네트워크가 없어 재사용할 수 없습니다.</p>
+                        )}
+                      </div>
+                    </div>
+
                     <Button
                       type="button"
                       variant="primary"
                       onClick={handleGenerateSpec}
-                      disabled={generating || !repoUrl || !branch || serviceCards.every((s) => !s.name)}
+                      disabled={generating || !repoUrl || !branch || serviceCards.every((s) => !s.name) || (networkMode === "reuse" && !existingNetworkName)}
                       title={!repoUrl || !branch ? "위쪽 저장소 연결에 Git 저장소 URL/브랜치를 먼저 입력하세요" : undefined}
                     >
                       {generating ? "저장소 분석 + AI 생성 중..." : "AI 스펙 생성"}

@@ -521,6 +521,7 @@ export const api = {
           exposedRoutes?: ExposedRoute[];
           healthChecks?: HealthCheck[];
           context?: string;
+          installPath?: string;
         }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/deployments`, {
@@ -531,7 +532,7 @@ export const api = {
       createFromSpec: (
         accessToken: string,
         vmId: string,
-        body: { repoUrl: string; branch: string; patToken?: string; spec: DeploymentSpec }
+        body: { repoUrl: string; branch: string; patToken?: string; spec: DeploymentSpec; installPath?: string }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/deployments/from-spec`, {
           method: "POST",
@@ -547,6 +548,7 @@ export const api = {
           patToken?: string;
           services: ServiceCard[];
           infrastructure?: InfraSelection[];
+          existingNetworkName?: string;
         }
       ) =>
         request<AiGenerationResult>("ops", `/ops/${vmId}/deployments/ai-spec/generate`, {

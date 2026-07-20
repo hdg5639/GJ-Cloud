@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -34,6 +35,10 @@ public class GitReleaseManager {
     // 스킴을 아예 화이트리스트로 막아야 함 (D.3도 HTTPS + PAT 흐름만 다룸, ssh://·file:// 등은 스코프 밖)
     private static final Pattern SAFE_REPO_URL = Pattern.compile("^https://[A-Za-z0-9._/:@-]+$");
     private static final Pattern SAFE_BRANCH_NAME = Pattern.compile("^[A-Za-z0-9._/-]+$");
+    // installPath는 사용자가 지정한 VM 절대경로 — 그대로 ln/mkdir 셸 커맨드에 꽂히므로 반드시 검증
+    private static final Pattern UNSAFE_SHELL_CHARS = Pattern.compile("[;&`|$'\"\\\\]");
+    private static final Set<String> PROTECTED_INSTALL_PATHS = Set.of(
+            "/", "/etc", "/bin", "/usr", "/var", "/root", "/boot", "/sys", "/proc", "/dev", "/sbin", "/lib", "/lib64", "/home");
 
     private final SshCommandExecutor sshCommandExecutor;
     private final VmSshSessionFactory sshSessionFactory;
@@ -106,6 +111,37 @@ public class GitReleaseManager {
         String current = appBaseDir(appId) + "/current";
         String target = releaseDir(appId, deploymentId);
         sshCommandExecutor.execOrThrow(session, "ln -sfn '" + target + "' '" + current + "'", 10_000);
+    }
+
+    // 사용자가 지정한 VM 내 임의 경로에 "current"를 가리키는 심볼릭 링크를 추가로 생성 — release/rollback
+    // 디렉토리 체계(releases/{deploymentId} + current)는 그대로 두고, 접근하기 쉬운 별칭 경로만 하나 더 만드는
+    // 방식. current 자체를 가리키므로 이후 롤백으로 current가 재지정돼도 이 경로는 자동으로 최신 상태를 따라감.
+    public void linkInstallPath(Session session, String appId, String installPath) {
+        String validated = validateInstallPath(installPath);
+        String current = appBaseDir(appId) + "/current";
+        int lastSlash = validated.lastIndexOf('/');
+        String parent = lastSlash > 0 ? validated.substring(0, lastSlash) : null;
+        if (parent != null && !parent.isBlank()) {
+            sshCommandExecutor.execOrThrow(session, "mkdir -p '" + parent + "'", 10_000);
+        }
+        sshCommandExecutor.execOrThrow(session, "ln -sfn '" + current + "' '" + validated + "'", 10_000);
+    }
+
+    // installPath는 사용자 입력 그대로 셸 커맨드에 꽂히므로 절대경로·이스케이프 문자·주요 시스템 경로를 차단.
+    // VM SSH 세션이 이미 일반 사용자 권한이라 실제 시스템 디렉토리 접근은 OS 권한으로도 막히지만, 방어 계층을 더함.
+    private String validateInstallPath(String installPath) {
+        if (installPath == null) {
+            throw new OpsException(OpsErrorCode.INVALID_PATH);
+        }
+        String trimmed = installPath.trim();
+        if (!trimmed.startsWith("/") || trimmed.contains("..") || UNSAFE_SHELL_CHARS.matcher(trimmed).find()) {
+            throw new OpsException(OpsErrorCode.INVALID_PATH);
+        }
+        String normalized = trimmed.length() > 1 && trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+        if (PROTECTED_INSTALL_PATHS.contains(normalized)) {
+            throw new OpsException(OpsErrorCode.INVALID_PATH);
+        }
+        return normalized;
     }
 
     private void validateRepoUrl(String repoUrl) {

@@ -66,6 +66,10 @@ public class DeploymentEntity {
     @Column(name = "context")
     private String context;
 
+    // VM 파일시스템 절대경로 — 지정하면 이 경로가 current를 가리키는 심볼릭 링크가 됨
+    @Column(name = "install_path")
+    private String installPath;
+
     @Column(name = "env_version")
     private Integer envVersion;
 
@@ -86,19 +90,20 @@ public class DeploymentEntity {
 
     public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
                                                  String previousDeploymentId) {
-        return createQueued(vmId, sourceType, sourceComposeCiphertext, previousDeploymentId, null, null, null, null);
+        return createQueued(vmId, sourceType, sourceComposeCiphertext, previousDeploymentId, null, null, null, null, null);
     }
 
     public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
                                                  String previousDeploymentId, String environmentFilesCiphertext,
                                                  String exposedRoutesJson, String healthChecksJson) {
         return createQueued(vmId, sourceType, sourceComposeCiphertext, previousDeploymentId,
-                environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, null);
+                environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, null, null);
     }
 
     public static DeploymentEntity createQueued(String vmId, SourceType sourceType, String sourceComposeCiphertext,
                                                  String previousDeploymentId, String environmentFilesCiphertext,
-                                                 String exposedRoutesJson, String healthChecksJson, String context) {
+                                                 String exposedRoutesJson, String healthChecksJson, String context,
+                                                 String installPath) {
         LocalDateTime now = LocalDateTime.now();
         return DeploymentEntity.builder()
                 .id(UUID.randomUUID().toString())
@@ -111,6 +116,7 @@ public class DeploymentEntity {
                 .exposedRoutesJson(exposedRoutesJson)
                 .healthChecksJson(healthChecksJson)
                 .context(context)
+                .installPath(installPath)
                 .createdAt(now)
                 .updatedAt(now)
                 .build();

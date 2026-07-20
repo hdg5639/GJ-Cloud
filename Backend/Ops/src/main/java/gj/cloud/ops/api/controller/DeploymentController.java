@@ -73,7 +73,7 @@ public class DeploymentController {
                 body.healthChecks() != null ? body.healthChecks() : List.of(),
                 SourceType.RAW_COMPOSE
         );
-        RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken(), body.context());
+        RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken(), body.context(), body.installPath());
 
         DeploymentEntity deployment = deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact);
         return ApiResponse.ok(DeploymentResponse.from(deployment));
@@ -91,7 +91,7 @@ public class DeploymentController {
         deploymentSpecValidator.validate(body.spec());
         deploymentSpecPolicyValidator.validate(body.spec());
         ComposeArtifact artifact = deploymentSpecRenderer.render(body.spec());
-        RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken());
+        RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken(), null, body.installPath());
 
         DeploymentEntity deployment = deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact);
         return ApiResponse.ok(DeploymentResponse.from(deployment));

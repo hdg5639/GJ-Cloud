@@ -95,7 +95,8 @@ public class DeploymentSpecRenderer {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("services", services);
         Map<String, Object> networkDef = new LinkedHashMap<>();
-        networkDef.put(spec.network(), Map.of());
+        // externalNetwork=true면 VM에 이미 존재하는 네트워크를 새로 만들지 않고 그대로 재사용
+        networkDef.put(spec.network(), spec.externalNetwork() ? Map.of("external", true) : Map.of());
         root.put("networks", networkDef);
 
         DumperOptions options = new DumperOptions();

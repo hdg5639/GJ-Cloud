@@ -12,6 +12,8 @@ public record DeploymentSpec(
         @NotBlank String schemaVersion,
         @NotEmpty @Valid List<ServiceSpec> services,
         @Valid List<InfrastructureSpec> infrastructure,
-        @NotBlank String network
+        @NotBlank String network,
+        // true면 network가 VM에 이미 존재하는 Docker 네트워크 이름 — 새로 만들지 않고 external로 재사용.
+        boolean externalNetwork
 ) {
 }

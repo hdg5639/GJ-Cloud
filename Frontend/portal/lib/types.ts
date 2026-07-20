@@ -337,6 +337,7 @@ export interface DeploymentSpec {
   services: unknown[];
   infrastructure?: unknown[];
   network: string;
+  externalNetwork?: boolean;
 }
 
 // AI 자동생성 파이프라인 개선(결정론적 저장소 분석 + 명시적 불확실성 상태) — 생성 결과가 항상
@@ -383,6 +384,7 @@ export interface ComposeSpecResponse {
   exposedRoutes: ExposedRoute[];
   healthChecks: HealthCheck[];
   context: string | null;
+  installPath: string | null;
 }
 
 // 11절 수동 DB 백업 — 덤프 파일은 VM 파일시스템에 저장되고 다운로드는 파일 브라우저 API를 재사용함
