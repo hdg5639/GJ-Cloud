@@ -738,6 +738,24 @@ export default function InstanceDetailPage() {
         </div>
       </div>
 
+      {/* 프로비저닝 중 배너 — 세부 진행률을 알려주는 SSE 이벤트가 없어 가짜 단계 목록 대신 실제 status만 반영.
+          useVmEvents가 실시간으로 status를 갱신하므로 RUNNING/FAILED로 바뀌면 자동으로 사라짐 */}
+      {(["PENDING", "CREATING", "BOOTING"] as string[]).includes(vm.status) && (
+        <div className="mb-5 flex items-center gap-4 rounded-panel border border-line bg-panel p-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/gamjabox-loader.svg" alt="" width={64} height={64} className="shrink-0" />
+          <div>
+            <p className="text-sm font-bold">인스턴스를 준비하고 있어요</p>
+            <p className="mt-0.5 text-xs text-muted">
+              {vm.status === "PENDING" && "생성 요청을 처리하고 있어요. "}
+              {vm.status === "CREATING" && "Proxmox에서 VM을 생성하고 있어요. "}
+              {vm.status === "BOOTING" && "VM을 부팅하고 네트워크를 구성하고 있어요. "}
+              완료되면 이 화면이 자동으로 갱신됩니다.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* needsReboot 배너 */}
       {vm.needsReboot && (
         <div className="mb-5 flex items-center justify-between rounded-panel border border-[#f3dfa8] bg-[#fffaf0] p-4">

@@ -12,11 +12,12 @@ export function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-export function PageLoader({ label = "불러오는 중", dark = false }: { label?: string; dark?: boolean }) {
+export function PageLoader({ label = "불러오는 중", size = 72 }: { label?: string; size?: number }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 gap-3">
-      <Spinner className={`w-6 h-6 ${dark ? "text-gray-500" : "text-gray-300"}`} />
-      <p className={`text-sm ${dark ? "text-gray-500" : "text-gray-400"}`}>{label}</p>
+    <div className="flex flex-col items-center justify-center gap-2 py-16">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/gamjabox-loader.svg" alt="" width={size} height={size} />
+      <p className="text-sm text-muted-soft">{label}</p>
     </div>
   );
 }

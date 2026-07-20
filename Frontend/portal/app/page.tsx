@@ -17,5 +17,10 @@ export default function RootPage() {
     }
   }, [accessToken, isLoading, router]);
 
-  return null;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/gamjabox-loader.svg" alt="GamjaBox" width={96} height={96} />
+    </div>
+  );
 }
