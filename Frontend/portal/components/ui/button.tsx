@@ -1,8 +1,8 @@
 import { ButtonHTMLAttributes, forwardRef } from "react";
 import { cn } from "./cn";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "danger-solid" | "ghost";
-type ButtonSize = "default" | "small";
+export type ButtonVariant = "primary" | "secondary" | "danger" | "danger-solid" | "ghost";
+export type ButtonSize = "default" | "small";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -22,18 +22,27 @@ const sizeClasses: Record<ButtonSize, string> = {
   small: "min-h-[34px] px-3 text-xs",
 };
 
+// Link 등 <button>이 아닌 요소에 동일한 버튼 스타일을 적용할 때 사용 (예: <Link className={buttonClass({variant:"primary"})}>)
+export function buttonClass({
+  variant = "secondary",
+  size = "default",
+  className,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+} = {}) {
+  return cn(
+    "inline-flex items-center justify-center gap-1.5 rounded-[10px] font-bold whitespace-nowrap transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
+    variantClasses[variant],
+    sizeClasses[size],
+    className
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "secondary", size = "default", className, ...props }, ref) => (
-    <button
-      ref={ref}
-      className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-[10px] font-bold whitespace-nowrap transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
-        variantClasses[variant],
-        sizeClasses[size],
-        className
-      )}
-      {...props}
-    />
+    <button ref={ref} className={buttonClass({ variant, size, className })} {...props} />
   )
 );
 Button.displayName = "Button";
