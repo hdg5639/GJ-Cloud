@@ -9,13 +9,14 @@ import type { CollaborationResponse, CollaborationType, MemberResponse, MemberRo
 import { PageLoader } from "@/components/ui/loader";
 import CollaborationWriteModal from "@/components/collaboration-write-modal";
 import CollaborationCard from "@/components/collaboration-card";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, Th, Td } from "@/components/ui/table";
+import { Field, Input, Select } from "@/components/ui/field";
+import { Modal } from "@/components/ui/modal";
 
 const ROLE_LABEL: Record<MemberRole, string> = { OWNER: "소유자", ADMIN: "관리자", MEMBER: "멤버" };
-const ROLE_STYLE: Record<MemberRole, string> = {
-  OWNER: "bg-violet-100 text-violet-700",
-  ADMIN: "bg-blue-100 text-blue-700",
-  MEMBER: "bg-gray-100 text-gray-600",
-};
 
 type Tab = "collab" | "members" | "vms";
 
@@ -41,7 +42,7 @@ function IconMessagePlus() {
 
 // ── 뱃지 ─────────────────────────────────────────────────
 function CountBadge({ n }: { n: number }) {
-  return <span className="bg-gray-100 text-gray-500 text-[11px] font-medium px-1.5 py-0.5 rounded-full">{n}</span>;
+  return <span className="bg-[#eef1ef] text-muted text-[11px] font-bold px-1.5 py-0.5 rounded-full">{n}</span>;
 }
 
 export default function OrganizationDetailPage() {
@@ -244,43 +245,33 @@ export default function OrganizationDetailPage() {
 
   return (
     <div>
-      {/* 브레드크럼 */}
-      <div className="flex items-center gap-2 mb-1">
-        <button onClick={() => router.push("/organizations")} className="text-xs text-gray-500 hover:text-gray-700">
-          협업
-        </button>
-        <span className="text-xs text-gray-400">/</span>
-        <span className="text-xs text-gray-700">{org.name}</span>
-      </div>
+      <Breadcrumb items={[{ label: "협업", onClick: () => router.push("/organizations") }, { label: org.name }]} />
 
       {/* 헤더 */}
       <div className="mb-1">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-[22px] font-medium text-gray-900">{org.name}</h1>
-            <span className={`text-xs font-medium px-2.5 py-0.5 rounded-md ${ROLE_STYLE[org.myRole]}`}>{ROLE_LABEL[org.myRole]}</span>
+            <h1 className="text-[22px] font-extrabold tracking-tight">{org.name}</h1>
+            <Badge>{ROLE_LABEL[org.myRole]}</Badge>
           </div>
           {myRole === "OWNER" && (
-            <button
-              onClick={handleDeleteOrg}
-              className="flex items-center gap-1.5 text-sm px-3 h-8 border border-red-200 text-red-600 rounded-md hover:bg-red-50"
-            >
+            <Button variant="danger" size="small" onClick={handleDeleteOrg}>
               <IconTrash />삭제
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-0.5 border-b border-gray-200/70 mt-4 mb-6">
+      <div className="flex gap-0.5 border-b border-line mt-4 mb-6">
         {TABS.map(({ key, label, icon, badge }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-[14px] border-b-2 transition-colors -mb-px ${
               tab === key
-                ? "border-gray-900 text-gray-900 font-medium"
-                : "border-transparent text-gray-400 hover:text-gray-600"
+                ? "border-[#17211b] text-[#17211b] font-bold"
+                : "border-transparent text-muted-soft hover:text-muted"
             }`}
           >
             {icon}
@@ -302,8 +293,8 @@ export default function OrganizationDetailPage() {
                   style={{ width: "auto", padding: "0 14px", height: 32, fontSize: 13 }}
                   className={`rounded-md transition-colors ${
                     typeFilter === t
-                      ? "bg-gray-100 border border-gray-300 text-gray-800"
-                      : "bg-transparent border-0 text-gray-500 hover:text-gray-700"
+                      ? "bg-[#f2f6f3] border border-line-strong text-[#3d4941]"
+                      : "bg-transparent border-0 text-muted hover:text-[#3f4c43]"
                   }`}
                 >
                   {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
@@ -312,7 +303,7 @@ export default function OrganizationDetailPage() {
             </div>
             <button
               onClick={() => { setEditingItem(undefined); setShowWrite(true); }}
-              className="flex items-center gap-1 text-[13px] px-4 h-8 bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+              className="flex items-center gap-1 text-[13px] px-4 h-8 bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
               style={{ width: "auto" }}
             >
               <IconPlus />작성
@@ -320,13 +311,13 @@ export default function OrganizationDetailPage() {
           </div>
 
           {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 bg-gray-50 rounded-xl">
-              <span className="text-gray-300 mb-3"><IconMessagePlus /></span>
-              <p className="text-sm font-medium text-gray-700 mb-1">아직 협업 항목이 없어요</p>
-              <p className="text-[13px] text-gray-400 mb-4">메모, 공지, 요청을 작성해서 팀원과 공유해보세요</p>
+            <div className="flex flex-col items-center justify-center py-16 bg-[#fbfcfb] rounded-panel border border-line">
+              <span className="text-line-strong mb-3"><IconMessagePlus /></span>
+              <p className="text-sm font-bold mb-1">아직 협업 항목이 없어요</p>
+              <p className="text-[13px] text-muted-soft mb-4">메모, 공지, 요청을 작성해서 팀원과 공유해보세요</p>
               <button
                 onClick={() => { setEditingItem(undefined); setShowWrite(true); }}
-                className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+                className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
                 style={{ width: "auto" }}
               >
                 <IconPlus />첫 항목 작성하기
@@ -356,7 +347,7 @@ export default function OrganizationDetailPage() {
         <div className="space-y-4">
           {isOwnerOrAdmin && (
             <form onSubmit={handleInvite} className="flex gap-2">
-              <input
+              <Input
                 id="org-invite-email"
                 name="org-invite-email"
                 type="email"
@@ -364,72 +355,72 @@ export default function OrganizationDetailPage() {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="초대할 이메일"
                 required
-                className="flex-1 h-9 px-3 border border-gray-300 rounded-md text-sm"
+                className="flex-1"
               />
-              <select
+              <Select
                 id="org-invite-role"
                 name="org-invite-role"
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as MemberRole)}
-                className="h-9 px-2 border border-gray-300 rounded-md text-sm"
+                className="w-auto"
               >
                 <option value="MEMBER">멤버</option>
                 <option value="ADMIN">관리자</option>
-              </select>
-              <button type="submit" disabled={inviting} className="text-sm px-4 h-9 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] disabled:opacity-50" style={{ width: "auto" }}>
+              </Select>
+              <Button type="submit" variant="primary" disabled={inviting}>
                 {inviting ? "초대 중..." : "초대"}
-              </button>
+              </Button>
             </form>
           )}
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="rounded-panel border border-line overflow-hidden">
+            <Table>
               <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left px-4 py-2.5 text-xs text-gray-500 font-medium">이메일</th>
-                  <th className="text-left px-4 py-2.5 text-xs text-gray-500 font-medium">역할</th>
-                  <th className="text-left px-4 py-2.5 text-xs text-gray-500 font-medium">상태</th>
-                  <th className="px-4 py-2.5" />
+                <tr>
+                  <Th>이메일</Th>
+                  <Th>역할</Th>
+                  <Th>상태</Th>
+                  <Th />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {org.members.map((m) => (
-                  <tr key={m.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-800">{m.email}</td>
-                    <td className="px-4 py-3">
+                  <tr key={m.id} className="hover:bg-[#fbfdfc]">
+                    <Td>{m.email}</Td>
+                    <Td>
                       {myRole === "OWNER" && m.role !== "OWNER" ? (
                         <select
                           id={`org-member-role-${m.id}`}
                           name={`org-member-role-${m.id}`}
                           value={m.role}
                           onChange={(e) => handleRoleChange(m, e.target.value as MemberRole)}
-                          className="text-xs px-2 py-1 rounded border border-gray-200"
+                          className="text-xs px-2 py-1 rounded border border-line-strong"
                         >
                           <option value="ADMIN">관리자</option>
                           <option value="MEMBER">멤버</option>
                         </select>
                       ) : (
-                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${ROLE_STYLE[m.role]}`}>{ROLE_LABEL[m.role]}</span>
+                        <Badge>{ROLE_LABEL[m.role]}</Badge>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        m.status === "ACCEPTED" ? "bg-green-50 text-green-700" :
-                        m.status === "PENDING" ? "bg-amber-50 text-amber-700" : "bg-gray-50 text-gray-500"
+                    </Td>
+                    <Td>
+                      <span className={`text-xs px-2 py-0.5 rounded font-bold ${
+                        m.status === "ACCEPTED" ? "bg-soft text-brand-strong" :
+                        m.status === "PENDING" ? "bg-[#fffaf0] text-[#9c6b1f]" : "bg-[#eef1ef] text-muted"
                       }`}>
                         {m.status === "ACCEPTED" ? "활성" : m.status === "PENDING" ? "초대 대기" : "거절"}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    </Td>
+                    <Td className="text-right">
                       {isOwnerOrAdmin && m.role !== "OWNER" && (
-                        <button onClick={() => handleRemoveMember(m)} className="text-xs text-red-500 hover:text-red-700">
+                        <button onClick={() => handleRemoveMember(m)} className="text-xs text-danger hover:text-[#c53d3d] font-bold">
                           제거
                         </button>
                       )}
-                    </td>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </div>
         </div>
       )}
@@ -439,34 +430,26 @@ export default function OrganizationDetailPage() {
         <div className="space-y-3">
           {isOwnerOrAdmin && (
             <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => { setCreateVmName(""); setCreateVmPlan("FREE"); setCreateVmDisk(20); setCreateVmError(null); setShowCreateVm(true); }}
-                className="flex items-center gap-1.5 text-sm px-3 h-8 border border-gray-300 rounded-md hover:bg-gray-50"
-                style={{ width: "auto" }}
-              >
+              <Button size="small" onClick={() => { setCreateVmName(""); setCreateVmPlan("FREE"); setCreateVmDisk(20); setCreateVmError(null); setShowCreateVm(true); }}>
                 <IconPlus />새 VM 생성
-              </button>
-              <button
-                onClick={() => setShowAddVm(true)}
-                className="flex items-center gap-1.5 text-sm px-3 h-8 bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 border-0 font-medium"
-                style={{ width: "auto" }}
-              >
+              </Button>
+              <Button size="small" variant="ghost" onClick={() => setShowAddVm(true)}>
                 <IconPlus />기존 VM 연결
-              </button>
+              </Button>
             </div>
           )}
 
           {org.vms.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 bg-gray-50 rounded-xl">
-              <span className="text-gray-300 mb-3">
+            <div className="flex flex-col items-center justify-center py-16 bg-[#fbfcfb] rounded-panel border border-line">
+              <span className="text-line-strong mb-3">
                 <IconServer />
               </span>
-              <p className="text-sm font-medium text-gray-700 mb-1">연결된 VM이 없어요</p>
-              <p className="text-[13px] text-gray-400 mb-4">VM을 연결하면 팀원과 함께 협업할 수 있어요</p>
+              <p className="text-sm font-bold mb-1">연결된 VM이 없어요</p>
+              <p className="text-[13px] text-muted-soft mb-4">VM을 연결하면 팀원과 함께 협업할 수 있어요</p>
               {isOwnerOrAdmin && (
                 <button
                   onClick={() => setShowAddVm(true)}
-                  className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-[#03C75A]/10 text-[#03C75A] rounded-md hover:bg-[#03C75A]/20 font-medium border-0"
+                  className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
                   style={{ width: "auto" }}
                 >
                   <IconPlus />VM 연결하기
@@ -475,25 +458,25 @@ export default function OrganizationDetailPage() {
             </div>
           ) : (
             org.vms.map((vm) => (
-              <div key={vm.id} className="relative border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
+              <div key={vm.id} className="relative rounded-panel border border-line hover:border-line-strong transition-colors">
                 <Link
                   href={`/instances/${vm.id}?from=org&orgId=${id}`}
                   className="flex items-center justify-between px-4 py-3"
                 >
                   <div>
                     <div className="flex items-baseline gap-2">
-                      <p className="text-sm font-medium text-gray-900">{vm.name}</p>
+                      <p className="text-sm font-bold">{vm.name}</p>
                       {vm.subdomain && (
-                        <span className="text-xs text-gray-400 font-mono">{vm.subdomain}.gamjabox.cloud</span>
+                        <span className="text-xs text-muted-soft font-mono">{vm.subdomain}.gamjabox.cloud</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">{vm.planType} · {vm.status}</p>
+                    <p className="text-xs text-muted mt-0.5">{vm.planType} · {vm.status}</p>
                   </div>
                 </Link>
                 {myRole === "OWNER" && (
                   <button
                     onClick={(e) => { e.preventDefault(); handleRemoveVm(vm.id); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs px-3 h-7 border border-red-200 text-red-600 rounded-md hover:bg-red-50"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs px-3 h-7 border border-danger-soft text-danger rounded-md hover:bg-[#fdf4f4]"
                     style={{ width: "auto" }}
                   >
                     연결 해제
@@ -526,61 +509,59 @@ export default function OrganizationDetailPage() {
       )}
 
       {/* ── VM 연결 모달 ── */}
-      {showAddVm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-medium text-gray-900">기존 VM 연결</h2>
-              <button onClick={() => setShowAddVm(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
-            </div>
-            <form onSubmit={handleAddVm} className="p-5 space-y-4">
-              {availableVms.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-sm text-gray-500">연결 가능한 VM이 없습니다.</p>
-                  <p className="text-xs text-gray-400 mt-1">이미 모든 VM이 연결됐거나 VM이 없어요.</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {availableVms.map((vm) => (
-                    <label
-                      key={vm.id}
-                      htmlFor={`org-collab-vm-${vm.id}`}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
-                        selectedVmId === vm.id ? "border-[#03C75A] bg-[#03C75A]/5" : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <input
-                        id={`org-collab-vm-${vm.id}`}
-                        type="radio"
-                        name="vm"
-                        value={vm.id}
-                        checked={selectedVmId === vm.id}
-                        onChange={() => setSelectedVmId(vm.id)}
-                        className="accent-[#03C75A]"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{vm.name}</p>
-                        {vm.subdomain && <p className="text-xs text-gray-400 font-mono truncate">{vm.subdomain}.gamjabox.cloud</p>}
-                        <p className="text-xs text-gray-400">{vm.planType} · {vm.status}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2 justify-end pt-1">
-                <button type="button" onClick={() => setShowAddVm(false)} className="text-sm px-4 h-8 border border-gray-300 rounded-md hover:bg-gray-50" style={{ width: "auto" }}>
-                  취소
-                </button>
-                {availableVms.length > 0 && (
-                  <button type="submit" disabled={!selectedVmId || addingVm} className="text-sm px-4 h-8 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] disabled:opacity-50" style={{ width: "auto" }}>
-                    {addingVm ? "연결 중..." : "연결"}
-                  </button>
-                )}
-              </div>
-            </form>
+      <Modal open={showAddVm} onClose={() => setShowAddVm(false)}>
+        <div className="mx-auto w-full max-w-sm rounded-panel bg-panel">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+            <h2 className="text-sm font-bold">기존 VM 연결</h2>
+            <button onClick={() => setShowAddVm(false)} className="text-muted-soft hover:text-muted text-lg leading-none">×</button>
           </div>
+          <form onSubmit={handleAddVm} className="p-5 space-y-4">
+            {availableVms.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-sm text-muted">연결 가능한 VM이 없습니다.</p>
+                <p className="text-xs text-muted-soft mt-1">이미 모든 VM이 연결됐거나 VM이 없어요.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {availableVms.map((vm) => (
+                  <label
+                    key={vm.id}
+                    htmlFor={`org-collab-vm-${vm.id}`}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      selectedVmId === vm.id ? "border-brand bg-soft" : "border-line hover:border-line-strong"
+                    }`}
+                  >
+                    <input
+                      id={`org-collab-vm-${vm.id}`}
+                      type="radio"
+                      name="vm"
+                      value={vm.id}
+                      checked={selectedVmId === vm.id}
+                      onChange={() => setSelectedVmId(vm.id)}
+                      className="accent-brand"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate">{vm.name}</p>
+                      {vm.subdomain && <p className="text-xs text-muted-soft font-mono truncate">{vm.subdomain}.gamjabox.cloud</p>}
+                      <p className="text-xs text-muted-soft">{vm.planType} · {vm.status}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 justify-end pt-1">
+              <Button type="button" onClick={() => setShowAddVm(false)}>
+                취소
+              </Button>
+              {availableVms.length > 0 && (
+                <Button type="submit" variant="primary" disabled={!selectedVmId || addingVm}>
+                  {addingVm ? "연결 중..." : "연결"}
+                </Button>
+              )}
+            </div>
+          </form>
         </div>
-      )}
+      </Modal>
 
       {/* ── VM 생성 모달 ── */}
       {showCreateVm && (() => {
@@ -592,30 +573,27 @@ export default function OrganizationDetailPage() {
         const proFull = vmAvailability?.pro.isFull ?? false;
         const planInfo = PLAN_INFO[createVmPlan];
         return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <h2 className="text-sm font-medium text-gray-900">새 VM 생성 후 협업에 추가</h2>
-                <button onClick={() => setShowCreateVm(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+          <Modal open={showCreateVm} onClose={() => setShowCreateVm(false)}>
+            <div className="mx-auto w-full max-w-md rounded-panel bg-panel">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-line">
+                <h2 className="text-sm font-bold">새 VM 생성 후 협업에 추가</h2>
+                <button onClick={() => setShowCreateVm(false)} className="text-muted-soft hover:text-muted text-lg leading-none">×</button>
               </div>
               <form onSubmit={handleCreateVm} className="p-5 space-y-4">
-                {/* 이름 */}
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="org-create-vm-name" className="text-xs text-gray-500">인스턴스 이름</label>
-                  <input
+                <Field label="인스턴스 이름" htmlFor="org-create-vm-name">
+                  <Input
                     id="org-create-vm-name"
                     name="org-create-vm-name"
                     value={createVmName}
                     onChange={(e) => setCreateVmName(e.target.value)}
                     placeholder="my-server"
                     required
-                    className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
                   />
-                </div>
+                </Field>
 
                 {/* 플랜 */}
                 <div>
-                  <span className="text-xs text-gray-500 block mb-2">플랜</span>
+                  <span className="text-xs font-bold text-muted block mb-2">플랜</span>
                   <div className="grid grid-cols-2 gap-2">
                     {(["FREE", "PRO"] as const).map((plan) => {
                       const info = PLAN_INFO[plan];
@@ -630,19 +608,19 @@ export default function OrganizationDetailPage() {
                           type="button"
                           disabled={full || planLocked}
                           onClick={() => handleCreateVmPlanChange(plan)}
-                          className={`relative border rounded-lg p-3 text-left transition-colors ${selected ? "border-2 border-[#03C75A]" : "border-gray-200 hover:border-gray-300"} ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
+                          className={`relative rounded-[12px] border p-3 text-left transition-colors ${selected ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)]" : "border-line-strong hover:border-[#b9c4bd]"} ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
-                          {selected && <span className="absolute -top-2 left-2.5 bg-[#e6faf0] text-[#03C75A] text-[10px] font-medium px-1.5 py-0.5 rounded">선택됨</span>}
-                          {planLocked && <span className="absolute -top-2 right-2.5 bg-amber-100 text-amber-700 text-[10px] font-medium px-1.5 py-0.5 rounded">프로 플랜만</span>}
-                          <p className="text-sm font-medium text-gray-900 mb-0.5">{plan}</p>
-                          <p className="text-xs text-gray-500 mb-1.5">{info.cores} vCPU · {info.memory} RAM</p>
+                          {selected && <span className="absolute -top-2 left-2.5 bg-soft text-brand-strong text-[10px] font-bold px-1.5 py-0.5 rounded">선택됨</span>}
+                          {planLocked && <span className="absolute -top-2 right-2.5 bg-[#fffaf0] text-[#9c6b1f] text-[10px] font-bold px-1.5 py-0.5 rounded">프로 플랜만</span>}
+                          <p className="text-sm font-bold mb-0.5">{plan}</p>
+                          <p className="text-xs text-muted mb-1.5">{info.cores} vCPU · {info.memory} RAM</p>
                           <div className="flex items-center gap-1.5">
                             <div className="flex gap-0.5">
                               {Array.from({ length: total }).map((_, i) => (
-                                <span key={i} className={`w-1.5 h-1.5 rounded-full ${i < used ? (full ? "bg-red-500" : "bg-[#03C75A]") : "bg-gray-200"}`} />
+                                <span key={i} className={`w-1.5 h-1.5 rounded-full ${i < used ? (full ? "bg-danger" : "bg-brand") : "bg-line-strong"}`} />
                               ))}
                             </div>
-                            <span className={`text-[11px] ${full ? "text-red-600 font-medium" : "text-gray-400"}`}>
+                            <span className={`text-[11px] ${full ? "text-danger font-bold" : "text-muted-soft"}`}>
                               {full ? `자리 없음 (${used}/${total})` : `${used}/${total} 사용 중`}
                             </span>
                           </div>
@@ -655,8 +633,8 @@ export default function OrganizationDetailPage() {
                 {/* 디스크 */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label htmlFor="org-create-vm-disk" className="text-xs text-gray-500">디스크 크기</label>
-                    <span className="text-sm font-medium text-gray-900">{createVmDisk}GB</span>
+                    <label htmlFor="org-create-vm-disk" className="text-xs font-bold text-muted">디스크 크기</label>
+                    <span className="text-sm font-bold">{createVmDisk}GB</span>
                   </div>
                   <input
                     id="org-create-vm-disk"
@@ -667,55 +645,47 @@ export default function OrganizationDetailPage() {
                     step={5}
                     value={createVmDisk}
                     onChange={(e) => setCreateVmDisk(Number(e.target.value))}
-                    className="w-full accent-[#03C75A]"
+                    className="w-full accent-brand"
                   />
-                  <div className="flex justify-between text-[11px] text-gray-400 mt-0.5">
+                  <div className="flex justify-between text-[11px] text-muted-soft mt-0.5">
                     <span>{planInfo.diskMin}GB</span>
                     <span>{planInfo.diskMax}GB</span>
                   </div>
                 </div>
 
-                {/* SSH 키 */}
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="org-create-vm-ssh-key" className="text-xs text-gray-500">SSH 키</label>
+                <Field label="SSH 키" htmlFor="org-create-vm-ssh-key">
                   {sshKeys.length === 0 ? (
-                    <div className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-md px-3 py-2.5">
+                    <div className="text-xs text-muted-soft border border-dashed border-line-strong rounded-md px-3 py-2.5 font-normal">
                       등록된 SSH 키가 없습니다.{" "}
-                      <a href="/ssh-keys" className="text-[#03C75A] font-medium">SSH 키 등록하기</a>
+                      <a href="/ssh-keys" className="text-brand-strong font-bold">SSH 키 등록하기</a>
                     </div>
                   ) : (
-                    <select
+                    <Select
                       id="org-create-vm-ssh-key"
                       name="org-create-vm-ssh-key"
                       value={createVmSshKeyId}
                       onChange={(e) => setCreateVmSshKeyId(e.target.value)}
-                      className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
                     >
                       {sshKeys.map((key) => (
                         <option key={key.id} value={key.id}>{key.name}</option>
                       ))}
-                    </select>
+                    </Select>
                   )}
-                </div>
+                </Field>
 
-                {createVmError && <p className="text-xs text-red-600">{createVmError}</p>}
+                {createVmError && <p className="text-xs text-danger">{createVmError}</p>}
 
                 <div className="flex gap-2 justify-end pt-1">
-                  <button type="button" onClick={() => setShowCreateVm(false)} className="text-sm px-4 h-9 border border-gray-300 rounded-md hover:bg-gray-50" style={{ width: "auto" }}>
+                  <Button type="button" onClick={() => setShowCreateVm(false)}>
                     취소
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={createVmLoading || !createVmName || !createVmSshKeyId}
-                    className="text-sm px-4 h-9 bg-[#03C75A] text-white rounded-md hover:bg-[#02b351] disabled:opacity-50"
-                    style={{ width: "auto" }}
-                  >
+                  </Button>
+                  <Button type="submit" variant="primary" disabled={createVmLoading || !createVmName || !createVmSshKeyId}>
                     {createVmLoading ? "생성 중..." : "생성 및 추가"}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </div>
-          </div>
+          </Modal>
         );
       })()}
     </div>
