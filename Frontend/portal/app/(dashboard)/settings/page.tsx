@@ -6,8 +6,17 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { ProfileResponse, UpgradeRequestResponse } from "@/lib/types";
 import { PageLoader, Spinner } from "@/components/ui/loader";
+import { Card } from "@/components/ui/panel";
+import { Field, Input } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type Tab = "profile" | "upgrade-requests";
+
+const NAV_ITEMS: { key: Tab; label: string }[] = [
+  { key: "profile", label: "프로필" },
+  { key: "upgrade-requests", label: "플랜 및 사용량" },
+];
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -105,247 +114,216 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-lg">
-      <div className="flex gap-4 mb-6 border-b border-gray-200">
-        <button
-          onClick={() => setTab("profile")}
-          className={`pb-3 text-sm font-medium transition-colors ${
-            tab === "profile"
-              ? "text-gray-900 border-b-2 border-[#03C75A]"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          프로필 설정
-        </button>
-        <button
-          onClick={() => setTab("upgrade-requests")}
-          className={`pb-3 text-sm font-medium transition-colors ${
-            tab === "upgrade-requests"
-              ? "text-gray-900 border-b-2 border-[#03C75A]"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          플랜 변경 요청
-        </button>
-      </div>
+    <div className="mx-auto max-w-[1380px]">
+      <header className="mb-[22px]">
+        <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">ACCOUNT</span>
+        <h1 className="my-[5px] text-[29px] font-extrabold tracking-tight">설정</h1>
+        <p className="m-0 text-sm text-muted">프로필, 플랜 및 계정 설정을 관리합니다.</p>
+      </header>
 
-      {tab === "profile" && (
-      <>
-      {/* 프로필 카드 */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
-        <h2 className="text-sm font-medium text-gray-700 mb-4">계정 정보</h2>
-
-        <div className="flex flex-col gap-4">
-          {/* 이메일 (읽기 전용) */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">이메일</span>
-            <div className="h-9 px-3 flex items-center bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-500 select-all">
-              {profile.email}
-            </div>
-          </div>
-
-          {/* 닉네임 */}
-          <div className="flex flex-col gap-1">
-            <label htmlFor="settings-nickname" className="text-xs text-gray-500">닉네임</label>
-            <input
-              id="settings-nickname"
-              name="settings-nickname"
-              value={nickname}
-              onChange={(e) => { setNickname(e.target.value); setSaveMsg(null); }}
-              placeholder="닉네임 입력"
-              maxLength={32}
-              className="h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#03C75A]/30 focus:border-[#03C75A]"
-            />
-          </div>
-
-          {/* 플랜 (읽기 전용) */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">플랜</span>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                profile.planType === "PRO"
-                  ? "bg-violet-100 text-violet-700"
-                  : "bg-gray-100 text-gray-600"
-              }`}>
-                {profile.planType}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 mt-5">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="h-9 px-4 bg-[#03C75A] text-white text-sm font-medium rounded-md disabled:opacity-60"
-          >
-            {saving ? "저장 중..." : "저장"}
-          </button>
-          {saveMsg && (
-            <span className={`text-xs ${saveMsg.type === "ok" ? "text-[#03C75A]" : "text-red-500"}`}>
-              {saveMsg.text}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* 위험 영역 */}
-      <div className="bg-white border border-red-200 rounded-xl p-6">
-        <h2 className="text-sm font-medium text-red-700 mb-1">위험 영역</h2>
-        <p className="text-xs text-gray-400 mb-4">계정을 삭제하면 모든 데이터가 영구적으로 제거됩니다.</p>
-
-        {!withdrawConfirm ? (
-          <button
-            onClick={() => setWithdrawConfirm(true)}
-            className="h-9 px-4 border border-red-300 text-red-600 text-sm rounded-md hover:bg-red-50"
-          >
-            회원 탈퇴
-          </button>
-        ) : (
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-600">정말 탈퇴하시겠습니까?</span>
+      <div className="grid grid-cols-[210px_1fr] gap-[18px] items-start">
+        <nav className="grid gap-[5px] rounded-panel border border-line bg-panel p-2">
+          {NAV_ITEMS.map((item) => (
             <button
-              onClick={handleWithdraw}
-              disabled={withdrawing}
-              className="h-8 px-3 bg-red-500 text-white text-xs font-medium rounded-md disabled:opacity-60"
+              key={item.key}
+              onClick={() => setTab(item.key)}
+              className={`rounded-[9px] px-3 py-[11px] text-left text-sm font-bold transition-colors ${
+                tab === item.key ? "bg-soft text-brand-strong" : "text-[#445248] hover:bg-[#f2f6f3]"
+              }`}
             >
-              {withdrawing ? "처리 중..." : "네, 탈퇴합니다"}
+              {item.label}
             </button>
-            <button
-              onClick={() => setWithdrawConfirm(false)}
-              className="h-8 px-3 border border-gray-300 text-gray-600 text-xs rounded-md hover:bg-gray-50"
-            >
-              취소
-            </button>
-          </div>
-        )}
-      </div>
-      </>
-      )}
+          ))}
+        </nav>
 
-      {tab === "upgrade-requests" && (
-      <div className="space-y-6">
-        {/* 요청 보내기 */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h2 className="text-sm font-medium text-gray-900 mb-4">요청 보내기</h2>
-
-          {requests.some(r => r.status === "PENDING") ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-              <p className="text-sm text-amber-800">진행 중인 요청이 있습니다</p>
-              <p className="text-xs text-amber-700 mt-1">기존 요청이 처리될 때까지 새 요청을 보낼 수 없습니다.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs text-gray-500 mb-2">현재 플랜</p>
-                <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <p className="text-sm font-medium text-gray-900">{profile.planType}</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs text-gray-500 mb-2">변경할 플랜</p>
-                <div className="space-y-2">
-                  {profile.planType === "FREE" ? (
-                    <label htmlFor="settings-plan-pro" className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        id="settings-plan-pro"
-                        type="radio"
-                        name="plan"
-                        value="PRO"
-                        checked={selectedPlan === "PRO"}
-                        onChange={() => setSelectedPlan("PRO")}
-                        className="w-4 h-4"
-                      />
-                      <span className="ml-3 text-sm font-medium text-gray-900">PRO</span>
-                    </label>
-                  ) : (
-                    <label htmlFor="settings-plan-free" className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        id="settings-plan-free"
-                        type="radio"
-                        name="plan"
-                        value="FREE"
-                        checked={selectedPlan === "FREE"}
-                        onChange={() => setSelectedPlan("FREE")}
-                        className="w-4 h-4"
-                      />
-                      <span className="ml-3 text-sm font-medium text-gray-900">FREE</span>
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              <button
-                onClick={handleCreateRequest}
-                disabled={requestLoading || !selectedPlan}
-                className="w-full h-9 bg-[#03C75A] text-white rounded-md text-sm font-medium disabled:opacity-60"
-              >
-                {requestLoading ? "요청 중..." : "변경 요청"}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 요청 현황 */}
         <div>
-          <h2 className="text-sm font-medium text-gray-900 mb-4">요청 현황</h2>
+          {tab === "profile" && (
+            <div className="space-y-4">
+              <Card>
+                <h2 className="text-sm font-bold mb-4">계정 정보</h2>
 
-          {loadingRequests ? (
-            <div className="flex items-center gap-2 py-6 text-gray-400">
-              <Spinner className="w-4 h-4 text-gray-300" />
-              <span className="text-sm">불러오는 중</span>
-            </div>
-          ) : requests.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-              <p className="text-sm text-gray-500">요청이 없습니다</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {requests.map((req) => (
-                <div key={req.id} className="bg-white border border-gray-200 rounded-xl p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {req.type === "UPGRADE" ? "업그레이드" : "다운그레이드"} 요청
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        대상: <span className="font-medium">{req.targetPlanType}</span>
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        요청일: {new Date(req.createdAt).toLocaleString("ko-KR")}
-                      </p>
+                <div className="flex flex-col gap-4">
+                  <Field label="이메일" className="mb-0">
+                    <div className="h-[42px] px-3 flex items-center bg-[#fbfcfb] border border-line rounded-[9px] text-sm text-muted select-all">
+                      {profile.email}
                     </div>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded whitespace-nowrap ${
-                      req.status === "PENDING" ? "bg-amber-100 text-amber-700"
-                      : req.status === "APPROVED" ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-700"
-                    }`}>
-                      {req.status === "PENDING" ? "대기 중" : req.status === "APPROVED" ? "승인됨" : "거절됨"}
+                  </Field>
+
+                  <Field label="닉네임" htmlFor="settings-nickname" className="mb-0">
+                    <Input
+                      id="settings-nickname"
+                      name="settings-nickname"
+                      value={nickname}
+                      onChange={(e) => { setNickname(e.target.value); setSaveMsg(null); }}
+                      placeholder="닉네임 입력"
+                      maxLength={32}
+                    />
+                  </Field>
+
+                  <Field label="플랜" className="mb-0">
+                    <div>
+                      {profile.planType === "PRO" ? <Badge>PRO</Badge> : <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#eef1ef] text-muted">FREE</span>}
+                    </div>
+                  </Field>
+                </div>
+
+                <div className="flex items-center gap-3 mt-5">
+                  <Button variant="primary" onClick={handleSave} disabled={saving}>
+                    {saving ? "저장 중..." : "저장"}
+                  </Button>
+                  {saveMsg && (
+                    <span className={`text-xs ${saveMsg.type === "ok" ? "text-brand-strong" : "text-danger"}`}>
+                      {saveMsg.text}
                     </span>
-                  </div>
-                  {req.status === "REJECTED" && req.reason && (
-                    <p className="text-xs text-red-600 mt-3 p-2 bg-red-50 rounded">거절 사유: {req.reason}</p>
-                  )}
-                  {req.status === "APPROVED" && req.reviewedAt && (
-                    <p className="text-xs text-gray-500 mt-2">승인일: {new Date(req.reviewedAt).toLocaleString("ko-KR")}</p>
-                  )}
-                  {req.status === "PENDING" && (
-                    <button
-                      onClick={() => handleCancelRequest(req.id)}
-                      disabled={cancelingId === req.id}
-                      className="text-xs text-red-600 hover:text-red-700 mt-3 font-medium disabled:opacity-60"
-                    >
-                      {cancelingId === req.id ? "취소 중..." : "취소"}
-                    </button>
                   )}
                 </div>
-              ))}
+              </Card>
+
+              {/* 위험 영역 */}
+              <Card className="border-danger-soft">
+                <h2 className="text-sm font-bold text-danger mb-1">위험 영역</h2>
+                <p className="text-xs text-muted-soft mb-4">계정을 삭제하면 모든 데이터가 영구적으로 제거됩니다.</p>
+
+                {!withdrawConfirm ? (
+                  <Button variant="danger" onClick={() => setWithdrawConfirm(true)}>
+                    회원 탈퇴
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted">정말 탈퇴하시겠습니까?</span>
+                    <Button variant="danger-solid" size="small" onClick={handleWithdraw} disabled={withdrawing}>
+                      {withdrawing ? "처리 중..." : "네, 탈퇴합니다"}
+                    </Button>
+                    <Button size="small" onClick={() => setWithdrawConfirm(false)}>
+                      취소
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            </div>
+          )}
+
+          {tab === "upgrade-requests" && (
+            <div className="space-y-6">
+              {/* 요청 보내기 */}
+              <Card>
+                <h2 className="text-sm font-bold mb-4">요청 보내기</h2>
+
+                {requests.some(r => r.status === "PENDING") ? (
+                  <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] p-4">
+                    <p className="text-sm text-[#8a5a10]">진행 중인 요청이 있습니다</p>
+                    <p className="text-xs text-[#9c6b1f] mt-1">기존 요청이 처리될 때까지 새 요청을 보낼 수 없습니다.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-bold text-muted mb-2">현재 플랜</p>
+                      <div className="px-4 py-3 bg-[#fbfcfb] border border-line rounded-lg">
+                        <p className="text-sm font-bold">{profile.planType}</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold text-muted mb-2">변경할 플랜</p>
+                      <div className="space-y-2">
+                        {profile.planType === "FREE" ? (
+                          <label htmlFor="settings-plan-pro" className="flex items-center p-3 border border-line rounded-lg cursor-pointer hover:bg-[#fbfcfb]">
+                            <input
+                              id="settings-plan-pro"
+                              type="radio"
+                              name="plan"
+                              value="PRO"
+                              checked={selectedPlan === "PRO"}
+                              onChange={() => setSelectedPlan("PRO")}
+                              className="w-4 h-4 accent-brand"
+                            />
+                            <span className="ml-3 text-sm font-bold">PRO</span>
+                          </label>
+                        ) : (
+                          <label htmlFor="settings-plan-free" className="flex items-center p-3 border border-line rounded-lg cursor-pointer hover:bg-[#fbfcfb]">
+                            <input
+                              id="settings-plan-free"
+                              type="radio"
+                              name="plan"
+                              value="FREE"
+                              checked={selectedPlan === "FREE"}
+                              onChange={() => setSelectedPlan("FREE")}
+                              className="w-4 h-4 accent-brand"
+                            />
+                            <span className="ml-3 text-sm font-bold">FREE</span>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    <Button variant="primary" onClick={handleCreateRequest} disabled={requestLoading || !selectedPlan} className="w-full">
+                      {requestLoading ? "요청 중..." : "변경 요청"}
+                    </Button>
+                  </div>
+                )}
+              </Card>
+
+              {/* 요청 현황 */}
+              <div>
+                <h2 className="text-sm font-bold mb-4">요청 현황</h2>
+
+                {loadingRequests ? (
+                  <div className="flex items-center gap-2 py-6 text-muted-soft">
+                    <Spinner className="w-4 h-4 text-line-strong" />
+                    <span className="text-sm">불러오는 중</span>
+                  </div>
+                ) : requests.length === 0 ? (
+                  <Card className="text-center">
+                    <p className="text-sm text-muted">요청이 없습니다</p>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {requests.map((req) => (
+                      <Card key={req.id}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-sm font-bold">
+                              {req.type === "UPGRADE" ? "업그레이드" : "다운그레이드"} 요청
+                            </p>
+                            <p className="text-xs text-muted mt-1">
+                              대상: <span className="font-bold">{req.targetPlanType}</span>
+                            </p>
+                            <p className="text-xs text-muted-soft mt-1">
+                              요청일: {new Date(req.createdAt).toLocaleString("ko-KR")}
+                            </p>
+                          </div>
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded whitespace-nowrap ${
+                            req.status === "PENDING" ? "bg-[#fffaf0] text-[#9c6b1f]"
+                            : req.status === "APPROVED" ? "bg-soft text-brand-strong"
+                            : "bg-[#fdf4f4] text-danger"
+                          }`}>
+                            {req.status === "PENDING" ? "대기 중" : req.status === "APPROVED" ? "승인됨" : "거절됨"}
+                          </span>
+                        </div>
+                        {req.status === "REJECTED" && req.reason && (
+                          <p className="text-xs text-danger mt-3 p-2 bg-[#fdf4f4] rounded">거절 사유: {req.reason}</p>
+                        )}
+                        {req.status === "APPROVED" && req.reviewedAt && (
+                          <p className="text-xs text-muted mt-2">승인일: {new Date(req.reviewedAt).toLocaleString("ko-KR")}</p>
+                        )}
+                        {req.status === "PENDING" && (
+                          <button
+                            onClick={() => handleCancelRequest(req.id)}
+                            disabled={cancelingId === req.id}
+                            className="text-xs text-danger hover:text-[#c53d3d] mt-3 font-bold disabled:opacity-60"
+                          >
+                            {cancelingId === req.id ? "취소 중..." : "취소"}
+                          </button>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
-      )}
     </div>
   );
 }
