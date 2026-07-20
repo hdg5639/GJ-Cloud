@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import { PageLoader } from "@/components/ui/loader";
+import { StatusBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -118,12 +120,7 @@ export default function ConsolePage() {
 
   if (!accessToken) return <PageLoader />;
 
-  const statusStyle =
-    status === "connected"
-      ? "bg-[#03C75A]/10 text-[#03C75A]"
-      : status === "error"
-        ? "bg-red-50 text-red-600"
-        : "bg-gray-100 text-gray-600";
+  const statusTone = status === "connected" ? "ok" : "off";
   const statusLabel =
     status === "connecting" ? "연결 중" : status === "connected" ? "연결됨" : status === "closed" ? "연결 종료" : "오류";
 
@@ -131,28 +128,30 @@ export default function ConsolePage() {
     <div className="flex flex-col h-[calc(100vh-120px)]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" aria-label="뒤로가기">
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button onClick={() => router.back()} className="p-2 hover:bg-[#f2f6f3] rounded-lg transition-colors" aria-label="뒤로가기">
+            <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-lg font-medium text-gray-900">콘솔</h1>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${statusStyle}`}>{statusLabel}</span>
+          <h1 className="text-lg font-bold">콘솔</h1>
+          <StatusBadge tone={status === "error" ? "off" : statusTone} className={status === "error" ? "bg-[#fdf4f4] text-danger" : undefined}>
+            {statusLabel}
+          </StatusBadge>
         </div>
         {(status === "closed" || status === "error") && (
-          <button onClick={connect} className="text-sm px-3.5 h-8 border border-gray-300 rounded-md hover:bg-gray-50">
+          <Button size="small" onClick={connect}>
             다시 연결
-          </button>
+          </Button>
         )}
       </div>
 
       {errorMessage && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-3 text-sm">
+        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">
           {errorMessage}
         </div>
       )}
 
-      <div className="flex-1 rounded-lg overflow-hidden bg-[#0f172a] p-2">
+      <div className="flex-1 rounded-panel overflow-hidden bg-[#0f172a] p-2">
         <div ref={containerRef} className="w-full h-full" />
       </div>
     </div>

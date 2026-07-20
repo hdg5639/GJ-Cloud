@@ -7,6 +7,8 @@ import { getExchangedToken } from "@/lib/api-client";
 import type { VmMetricsHistoryResponse } from "@/lib/types";
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { PageLoader } from "@/components/ui/loader";
+import { Panel } from "@/components/ui/panel";
+import { StatGrid, StatCard } from "@/components/ui/stat-card";
 
 interface SSEMetrics {
   vmId: string;
@@ -150,81 +152,71 @@ export default function MetricsPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-[#f2f6f3] rounded-lg transition-colors"
             aria-label="뒤로가기"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-lg font-medium text-gray-900">메트릭</h1>
+          <h1 className="text-lg font-bold">메트릭</h1>
         </div>
         <button
           onClick={reconnect}
           title="동기화"
-          className="h-8 w-8 flex items-center justify-center border border-gray-300 rounded-md hover:bg-gray-50"
+          className="h-8 w-8 flex items-center justify-center border border-line-strong rounded-md hover:bg-[#f2f6f3]"
         >
-          <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6 text-sm">
+        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-6 text-sm">
           {error}
         </div>
       )}
 
       {/* 메트릭 카드 그리드 */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        <MetricCard label="CPU 사용률" value={`${cpuPercent}%`} subtext={`${currentMetrics.allocatedCpu} cores`} />
-        <MetricCard label="메모리" value={`${memPercent}%`} subtext={`${memoryGb} GB / ${maxMemoryGb} GB`} />
-        <MetricCard label="디스크" value={`${diskPercent}%`} subtext={`${(currentMetrics.diskUsedBytes / (1024 ** 3)).toFixed(1)} GB / ${(currentMetrics.diskAllocatedBytes / (1024 ** 3)).toFixed(1)} GB`} />
-        <MetricCard label="상태" value={currentMetrics.status.toUpperCase()} subtext="실시간" />
-      </div>
+      <StatGrid cols={4} className="mb-6">
+        <StatCard compact label="CPU 사용률" value={`${cpuPercent}%`} hint={`${currentMetrics.allocatedCpu} cores`} />
+        <StatCard compact label="메모리" value={`${memPercent}%`} hint={`${memoryGb} GB / ${maxMemoryGb} GB`} />
+        <StatCard compact label="디스크" value={`${diskPercent}%`} hint={`${(currentMetrics.diskUsedBytes / (1024 ** 3)).toFixed(1)} GB / ${(currentMetrics.diskAllocatedBytes / (1024 ** 3)).toFixed(1)} GB`} />
+        <StatCard compact label="상태" value={currentMetrics.status.toUpperCase()} hint="실시간" />
+      </StatGrid>
 
       {/* 차트 그리드 */}
       <div className="grid grid-cols-2 gap-3 mb-3">
-        <ChartCard title="CPU 사용률 (최근 1시간)" dataKey="cpu" color="#3b82f6" data={chartData} />
-        <ChartCard title="메모리 사용률 (최근 1시간)" dataKey="mem" color="#10b981" data={chartData} />
+        <ChartCard title="CPU 사용률 (최근 1시간)" dataKey="cpu" color="#08b85b" data={chartData} />
+        <ChartCard title="메모리 사용률 (최근 1시간)" dataKey="mem" color="#6c48dd" data={chartData} />
       </div>
 
       {/* 네트워크 차트 (풀 너비) */}
-      <div className="bg-gray-50 border border-slate-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-gray-900 mb-4">네트워크 트래픽 (최근 1시간)</p>
+      <Panel className="p-4">
+        <p className="text-sm font-bold mb-4">네트워크 트래픽 (최근 1시간)</p>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-            <XAxis dataKey="time" stroke="#9ca3af" style={{ fontSize: "12px" }} />
-            <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e4eae6" vertical={false} />
+            <XAxis dataKey="time" stroke="#9aa59e" style={{ fontSize: "12px" }} />
+            <YAxis stroke="#9aa59e" style={{ fontSize: "12px" }} />
             <Tooltip
-              contentStyle={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "6px" }}
-              labelStyle={{ color: "#111827" }}
+              contentStyle={{ backgroundColor: "#fbfcfb", border: "1px solid #e4eae6", borderRadius: "10px" }}
+              labelStyle={{ color: "#17211b" }}
             />
-            <Line type="monotone" dataKey="netin" stroke="#3b82f6" name="In (MB)" dot={false} strokeWidth={2} />
-            <Line type="monotone" dataKey="netout" stroke="#f59e0b" name="Out (MB)" dot={false} strokeWidth={2} />
+            <Line type="monotone" dataKey="netin" stroke="#08b85b" name="In (MB)" dot={false} strokeWidth={2} />
+            <Line type="monotone" dataKey="netout" stroke="#6c48dd" name="Out (MB)" dot={false} strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, subtext }: { label: string; value: string; subtext: string }) {
-  return (
-    <div className="bg-gray-50 border border-slate-200 rounded-lg p-4">
-      <p className="text-xs text-gray-500 mb-2 font-medium">{label}</p>
-      <p className="text-xl font-medium text-gray-900">{value}</p>
-      <p className="text-xs text-gray-600 mt-1">{subtext}</p>
+      </Panel>
     </div>
   );
 }
 
 function ChartCard({ title, dataKey, color, data }: { title: string; dataKey: string; color: string; data: ChartPoint[] }) {
   return (
-    <div className="bg-gray-50 border border-slate-200 rounded-lg p-4">
-      <p className="text-sm font-medium text-gray-900 mb-4">{title}</p>
+    <Panel className="p-4">
+      <p className="text-sm font-bold mb-4">{title}</p>
       <ResponsiveContainer width="100%" height={250}>
         <AreaChart data={data}>
           <defs>
@@ -233,12 +225,12 @@ function ChartCard({ title, dataKey, color, data }: { title: string; dataKey: st
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-          <XAxis dataKey="time" stroke="#9ca3af" style={{ fontSize: "12px" }} />
-          <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} domain={[0, 100]} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e4eae6" vertical={false} />
+          <XAxis dataKey="time" stroke="#9aa59e" style={{ fontSize: "12px" }} />
+          <YAxis stroke="#9aa59e" style={{ fontSize: "12px" }} domain={[0, 100]} />
           <Tooltip
-            contentStyle={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: "6px" }}
-            labelStyle={{ color: "#111827" }}
+            contentStyle={{ backgroundColor: "#fbfcfb", border: "1px solid #e4eae6", borderRadius: "10px" }}
+            labelStyle={{ color: "#17211b" }}
           />
           <Area
             type="monotone"
@@ -249,6 +241,6 @@ function ChartCard({ title, dataKey, color, data }: { title: string; dataKey: st
           />
         </AreaChart>
       </ResponsiveContainer>
-    </div>
+    </Panel>
   );
 }

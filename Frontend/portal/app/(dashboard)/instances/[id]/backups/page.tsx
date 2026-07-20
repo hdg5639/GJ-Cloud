@@ -6,6 +6,11 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { DbBackupResponse } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
+import { Table, Th, Td } from "@/components/ui/table";
+import { Modal } from "@/components/ui/modal";
+import { Field, Input, Select } from "@/components/ui/field";
+import { StatusBadge } from "@/components/ui/badge";
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -114,160 +119,148 @@ export default function DbBackupsPage() {
     <div className="flex flex-col h-[calc(100vh-120px)]">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0" aria-label="뒤로가기">
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button onClick={() => router.back()} className="p-2 hover:bg-[#f2f6f3] rounded-lg transition-colors shrink-0" aria-label="뒤로가기">
+            <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-lg font-medium text-gray-900 shrink-0">DB 백업</h1>
+          <h1 className="text-lg font-bold shrink-0">DB 백업</h1>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={load} title="새로고침" className="h-8 w-8 flex items-center justify-center border border-gray-300 rounded-md hover:bg-gray-50">
-            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button onClick={load} title="새로고침" className="h-8 w-8 flex items-center justify-center border border-line-strong rounded-md hover:bg-[#f2f6f3]">
+            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
-          <button onClick={() => setShowForm(true)} className="text-sm px-3.5 h-8 bg-[#03C75A] text-white rounded-md hover:opacity-90">
+          <Button variant="primary" size="small" onClick={() => setShowForm(true)}>
             + 백업 실행
-          </button>
+          </Button>
         </div>
       </div>
 
-      {notice && <div className="bg-[#03C75A]/10 text-[#03C75A] px-4 py-2 rounded-md mb-3 text-sm">{notice}</div>}
+      {notice && <div className="bg-soft text-brand-strong px-4 py-2 rounded-md mb-3 text-sm">{notice}</div>}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
+        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600">✕</button>
+          <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
         </div>
       )}
 
-      <div className="flex-1 border border-gray-200 rounded-lg overflow-auto">
+      <div className="flex-1 rounded-panel border border-line overflow-auto">
         {loading ? (
           <PageLoader label="불러오는 중" />
         ) : backups.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-16">백업 이력이 없습니다</p>
+          <p className="text-sm text-muted-soft text-center py-16">백업 이력이 없습니다</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 text-left text-xs text-gray-500">
+          <Table>
+            <thead className="sticky top-0">
               <tr>
-                <th className="px-4 py-2 font-medium">생성일시</th>
-                <th className="px-4 py-2 font-medium">서비스</th>
-                <th className="px-4 py-2 font-medium">DB 종류</th>
-                <th className="px-4 py-2 font-medium">크기</th>
-                <th className="px-4 py-2 font-medium">상태</th>
-                <th className="px-4 py-2 font-medium w-20">작업</th>
+                <Th>생성일시</Th>
+                <Th>서비스</Th>
+                <Th>DB 종류</Th>
+                <Th>크기</Th>
+                <Th>상태</Th>
+                <Th className="w-20">작업</Th>
               </tr>
             </thead>
             <tbody>
               {backups.map((b) => (
-                <tr key={b.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-500 text-xs">{formatDateTime(b.createdAt)}</td>
-                  <td className="px-4 py-2 text-gray-800">{b.serviceName}</td>
-                  <td className="px-4 py-2 text-gray-500">{b.dbType}</td>
-                  <td className="px-4 py-2 text-gray-500">{formatSize(b.fileSizeBytes)}</td>
-                  <td className="px-4 py-2">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${b.succeeded ? "bg-[#03C75A]/10 text-[#03C75A]" : "bg-red-100 text-red-700"}`}>
+                <tr key={b.id} className="hover:bg-[#fbfdfc]">
+                  <Td className="text-muted-soft text-xs">{formatDateTime(b.createdAt)}</Td>
+                  <Td className="text-[#3d4941]">{b.serviceName}</Td>
+                  <Td className="text-muted">{b.dbType}</Td>
+                  <Td className="text-muted">{formatSize(b.fileSizeBytes)}</Td>
+                  <Td>
+                    <StatusBadge tone={b.succeeded ? "ok" : "off"} className={!b.succeeded ? "bg-[#fdf4f4] text-danger" : undefined}>
                       {b.succeeded ? "성공" : "실패"}
-                    </span>
+                    </StatusBadge>
                     {!b.succeeded && b.errorMessage && (
-                      <span className="text-[11px] text-red-500 ml-2">{b.errorMessage}</span>
+                      <span className="text-[11px] text-danger ml-2">{b.errorMessage}</span>
                     )}
-                  </td>
-                  <td className="px-4 py-2">
+                  </Td>
+                  <Td>
                     {b.succeeded && b.filePath && (
-                      <button onClick={() => handleDownload(b)} className="text-xs text-[#03C75A] hover:underline">
+                      <button onClick={() => handleDownload(b)} className="text-xs text-brand-strong hover:underline font-bold">
                         다운로드
                       </button>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
 
       {/* 백업 실행 모달 */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[400px]">
-            <h2 className="text-base font-medium text-gray-900 mb-4">DB 백업 실행</h2>
-            <form onSubmit={handleTrigger} className="flex flex-col gap-3">
-              <div>
-                <label htmlFor="backup-service-name" className="text-xs text-gray-500 block mb-1">서비스명 (compose service name)</label>
-                <input
-                  id="backup-service-name"
-                  name="backup-service-name"
-                  autoFocus
-                  value={form.serviceName}
-                  onChange={(e) => setForm((f) => ({ ...f, serviceName: e.target.value }))}
-                  placeholder="예: db"
-                  required
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-[#03C75A]"
-                />
-              </div>
-              <div>
-                <label htmlFor="backup-db-type" className="text-xs text-gray-500 block mb-1">DB 종류</label>
-                <select
-                  id="backup-db-type"
-                  name="backup-db-type"
-                  value={form.dbType}
-                  onChange={(e) => setForm((f) => ({ ...f, dbType: e.target.value }))}
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm"
-                >
-                  {DB_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="backup-database" className="text-xs text-gray-500 block mb-1">데이터베이스명</label>
-                <input
-                  id="backup-database"
-                  name="backup-database"
-                  value={form.database}
-                  onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
-                  required
-                  className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-[#03C75A]"
-                />
-              </div>
-              {NEEDS_CREDENTIALS.has(form.dbType) && (
-                <>
-                  <div>
-                    <label htmlFor="backup-username" className="text-xs text-gray-500 block mb-1">사용자명</label>
-                    <input
-                      id="backup-username"
-                      name="backup-username"
-                      value={form.username}
-                      onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                      className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-[#03C75A]"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="backup-password" className="text-xs text-gray-500 block mb-1">비밀번호</label>
-                    <input
-                      id="backup-password"
-                      name="backup-password"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                      className="w-full h-9 px-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-[#03C75A]"
-                    />
-                  </div>
-                </>
-              )}
-              <div className="flex gap-2 mt-1">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 h-9 border border-gray-300 rounded-md text-sm text-gray-600">
-                  취소
-                </button>
-                <button type="submit" disabled={triggering || !form.serviceName || !form.database} className="flex-1 h-9 bg-[#03C75A] text-white rounded-md text-sm disabled:opacity-60">
-                  {triggering ? "백업 중..." : "백업 실행"}
-                </button>
-              </div>
-            </form>
-          </div>
+      <Modal open={showForm} onClose={() => setShowForm(false)}>
+        <div className="mx-auto w-[400px] rounded-panel bg-panel p-6">
+          <h2 className="text-base font-bold mb-4">DB 백업 실행</h2>
+          <form onSubmit={handleTrigger} className="flex flex-col gap-1">
+            <Field label="서비스명 (compose service name)" htmlFor="backup-service-name">
+              <Input
+                id="backup-service-name"
+                name="backup-service-name"
+                autoFocus
+                value={form.serviceName}
+                onChange={(e) => setForm((f) => ({ ...f, serviceName: e.target.value }))}
+                placeholder="예: db"
+                required
+              />
+            </Field>
+            <Field label="DB 종류" htmlFor="backup-db-type">
+              <Select
+                id="backup-db-type"
+                name="backup-db-type"
+                value={form.dbType}
+                onChange={(e) => setForm((f) => ({ ...f, dbType: e.target.value }))}
+              >
+                {DB_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="데이터베이스명" htmlFor="backup-database">
+              <Input
+                id="backup-database"
+                name="backup-database"
+                value={form.database}
+                onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+                required
+              />
+            </Field>
+            {NEEDS_CREDENTIALS.has(form.dbType) && (
+              <>
+                <Field label="사용자명" htmlFor="backup-username">
+                  <Input
+                    id="backup-username"
+                    name="backup-username"
+                    value={form.username}
+                    onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                  />
+                </Field>
+                <Field label="비밀번호" htmlFor="backup-password">
+                  <Input
+                    id="backup-password"
+                    name="backup-password"
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  />
+                </Field>
+              </>
+            )}
+            <div className="flex gap-2 mt-1">
+              <Button type="button" onClick={() => setShowForm(false)} className="flex-1">
+                취소
+              </Button>
+              <Button type="submit" variant="primary" disabled={triggering || !form.serviceName || !form.database} className="flex-1">
+                {triggering ? "백업 중..." : "백업 실행"}
+              </Button>
+            </div>
+          </form>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
