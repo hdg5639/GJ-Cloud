@@ -65,13 +65,13 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-[440px]">
-        <h2 className="text-base font-medium text-gray-900 mb-5">스펙 변경</h2>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-panel border border-line rounded-xl p-6 w-[440px]">
+        <h2 className="text-base font-medium text-foreground mb-5">스펙 변경</h2>
 
         {/* 플랜 선택 */}
         <div className="mb-5">
-          <p className="text-xs text-gray-500 mb-2">플랜</p>
+          <p className="text-xs text-muted mb-2">플랜</p>
           <div className="grid grid-cols-2 gap-2">
             {(["FREE", "PRO"] as const).map((plan) => {
               const disabled = plan === "FREE" && vm.planType === "PRO" && !canDowngrade;
@@ -83,16 +83,16 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
                   disabled={disabled}
                   className={`relative p-3 border rounded-lg text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                     selected
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:bg-gray-50"
+                      ? "border-brand bg-soft"
+                      : "border-line-strong hover:bg-white/[0.04]"
                   }`}
                 >
-                  <p className="text-sm font-medium text-gray-900">{plan}</p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
+                  <p className="text-sm font-medium text-foreground">{plan}</p>
+                  <p className="text-[11px] text-muted mt-0.5">
                     {plan === "FREE" ? "4 vCPU · 6GB RAM" : "8 vCPU · 16GB RAM"}
                   </p>
                   {disabled && (
-                    <p className="text-[10px] text-red-500 mt-1">
+                    <p className="text-[10px] text-danger mt-1">
                       현재 디스크 {vm.diskSizeGb}GB가 FREE 최대 {PLAN_DISK.FREE.max}GB 초과
                     </p>
                   )}
@@ -105,8 +105,8 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
         {/* 디스크 슬라이더 */}
         <div className="mb-5">
           <div className="flex items-center justify-between mb-2">
-            <label htmlFor="vm-spec-disk" className="text-xs text-gray-500">디스크</label>
-            <p className="text-sm font-medium text-gray-900">{diskSizeGb} GB</p>
+            <label htmlFor="vm-spec-disk" className="text-xs text-muted">디스크</label>
+            <p className="text-sm font-medium text-foreground">{diskSizeGb} GB</p>
           </div>
           <input
             id="vm-spec-disk"
@@ -117,29 +117,29 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
             step={diskStep}
             value={diskSizeGb}
             onChange={(e) => setDiskSizeGb(Number(e.target.value))}
-            className="w-full accent-blue-600"
+            className="w-full accent-brand"
           />
           <div className="flex justify-between mt-1">
-            <span className="text-[11px] text-gray-400">{diskMin} GB</span>
-            <span className="text-[11px] text-gray-400">{diskMax} GB</span>
+            <span className="text-[11px] text-muted-soft">{diskMin} GB</span>
+            <span className="text-[11px] text-muted-soft">{diskMax} GB</span>
           </div>
           {diskSizeGb === vm.diskSizeGb && (
-            <p className="text-[11px] text-gray-400 mt-1">현재 {vm.diskSizeGb}GB · 디스크는 축소 불가</p>
+            <p className="text-[11px] text-muted-soft mt-1">현재 {vm.diskSizeGb}GB · 디스크는 축소 불가</p>
           )}
         </div>
 
         {/* 재부팅 필요 안내 */}
         {planChanged && (
-          <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-4">
-            <span className="text-amber-500 text-sm mt-0.5">⚠</span>
-            <p className="text-[11px] text-amber-800">
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#d69e2e]/10 border border-[#d69e2e]/30 rounded-lg mb-4">
+            <span className="text-[#fbbf24] text-sm mt-0.5">⚠</span>
+            <p className="text-[11px] text-[#fbbf24]">
               플랜 변경(CPU/RAM)은 <strong>재부팅 후</strong> 적용됩니다.
             </p>
           </div>
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg mb-4">
+          <div className="bg-danger/10 border border-danger-soft text-danger text-sm px-3 py-2 rounded-lg mb-4">
             {error}
           </div>
         )}
@@ -148,14 +148,14 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 h-9 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+            className="flex-1 h-9 border border-line-strong rounded-md text-sm text-muted hover:bg-white/[0.04] disabled:opacity-60"
           >
             취소
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="flex-1 h-9 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:opacity-60"
+            className="flex-1 h-9 bg-brand text-[#0a0c08] font-bold rounded-md text-sm hover:bg-brand-strong disabled:opacity-60"
           >
             {loading ? "변경 중..." : "변경"}
           </button>

@@ -175,8 +175,8 @@ function GenerateKeyForm({
   if (privateKey) {
     return (
       <div>
-        <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] p-3 mb-3">
-          <p className="text-xs font-bold text-[#9c6b1f]">
+        <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] p-3 mb-3">
+          <p className="text-xs font-bold text-[#e8b657]">
             ⚠ 이 개인키는 다시 보여드릴 수 없습니다. 지금 반드시 다운로드하세요.
           </p>
         </div>

@@ -121,14 +121,14 @@ export default function SettingsPage() {
         <p className="m-0 text-sm text-muted">프로필, 플랜 및 계정 설정을 관리합니다.</p>
       </header>
 
-      <div className="grid grid-cols-[210px_1fr] gap-[18px] items-start">
-        <nav className="grid gap-[5px] rounded-panel border border-line bg-panel p-2">
+      <div className="grid grid-cols-1 gap-[18px] items-start lg:grid-cols-[210px_1fr]">
+        <nav className="grid grid-cols-2 gap-[5px] rounded-panel border border-line bg-panel p-2 lg:grid-cols-1">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.key}
               onClick={() => setTab(item.key)}
               className={`rounded-[9px] px-3 py-[11px] text-left text-sm font-bold transition-colors ${
-                tab === item.key ? "bg-soft text-brand-strong" : "text-[#445248] hover:bg-[#f2f6f3]"
+                tab === item.key ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04]"
               }`}
             >
               {item.label}
@@ -144,7 +144,7 @@ export default function SettingsPage() {
 
                 <div className="flex flex-col gap-4">
                   <Field label="이메일" className="mb-0">
-                    <div className="h-[42px] px-3 flex items-center bg-[#fbfcfb] border border-line rounded-[9px] text-sm text-muted select-all">
+                    <div className="h-[42px] px-3 flex items-center bg-white/[0.03] border border-line rounded-[9px] text-sm text-muted select-all">
                       {profile.email}
                     </div>
                   </Field>
@@ -162,7 +162,7 @@ export default function SettingsPage() {
 
                   <Field label="플랜" className="mb-0">
                     <div>
-                      {profile.planType === "PRO" ? <Badge>PRO</Badge> : <span className="text-xs font-bold px-2 py-0.5 rounded bg-[#eef1ef] text-muted">FREE</span>}
+                      {profile.planType === "PRO" ? <Badge>PRO</Badge> : <span className="text-xs font-bold px-2 py-0.5 rounded bg-white/[0.06] text-muted">FREE</span>}
                     </div>
                   </Field>
                 </div>
@@ -210,15 +210,15 @@ export default function SettingsPage() {
                 <h2 className="text-sm font-bold mb-4">요청 보내기</h2>
 
                 {requests.some(r => r.status === "PENDING") ? (
-                  <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] p-4">
-                    <p className="text-sm text-[#8a5a10]">진행 중인 요청이 있습니다</p>
-                    <p className="text-xs text-[#9c6b1f] mt-1">기존 요청이 처리될 때까지 새 요청을 보낼 수 없습니다.</p>
+                  <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] p-4">
+                    <p className="text-sm text-[#e8b657]">진행 중인 요청이 있습니다</p>
+                    <p className="text-xs text-[#e8b657]/80 mt-1">기존 요청이 처리될 때까지 새 요청을 보낼 수 없습니다.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <div>
                       <p className="text-xs font-bold text-muted mb-2">현재 플랜</p>
-                      <div className="px-4 py-3 bg-[#fbfcfb] border border-line rounded-lg">
+                      <div className="px-4 py-3 bg-white/[0.03] border border-line rounded-lg">
                         <p className="text-sm font-bold">{profile.planType}</p>
                       </div>
                     </div>
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                       <p className="text-xs font-bold text-muted mb-2">변경할 플랜</p>
                       <div className="space-y-2">
                         {profile.planType === "FREE" ? (
-                          <label htmlFor="settings-plan-pro" className="flex items-center p-3 border border-line rounded-lg cursor-pointer hover:bg-[#fbfcfb]">
+                          <label htmlFor="settings-plan-pro" className="flex items-center p-3 border border-line rounded-lg cursor-pointer hover:bg-white/[0.03]">
                             <input
                               id="settings-plan-pro"
                               type="radio"
@@ -240,7 +240,7 @@ export default function SettingsPage() {
                             <span className="ml-3 text-sm font-bold">PRO</span>
                           </label>
                         ) : (
-                          <label htmlFor="settings-plan-free" className="flex items-center p-3 border border-line rounded-lg cursor-pointer hover:bg-[#fbfcfb]">
+                          <label htmlFor="settings-plan-free" className="flex items-center p-3 border border-line rounded-lg cursor-pointer hover:bg-white/[0.03]">
                             <input
                               id="settings-plan-free"
                               type="radio"
@@ -293,15 +293,15 @@ export default function SettingsPage() {
                             </p>
                           </div>
                           <span className={`text-xs font-bold px-2.5 py-1 rounded whitespace-nowrap ${
-                            req.status === "PENDING" ? "bg-[#fffaf0] text-[#9c6b1f]"
+                            req.status === "PENDING" ? "bg-[#e8b657]/10 text-[#e8b657]"
                             : req.status === "APPROVED" ? "bg-soft text-brand-strong"
-                            : "bg-[#fdf4f4] text-danger"
+                            : "bg-danger/10 text-danger"
                           }`}>
                             {req.status === "PENDING" ? "대기 중" : req.status === "APPROVED" ? "승인됨" : "거절됨"}
                           </span>
                         </div>
                         {req.status === "REJECTED" && req.reason && (
-                          <p className="text-xs text-danger mt-3 p-2 bg-[#fdf4f4] rounded">거절 사유: {req.reason}</p>
+                          <p className="text-xs text-danger mt-3 p-2 bg-danger/10 rounded">거절 사유: {req.reason}</p>
                         )}
                         {req.status === "APPROVED" && req.reviewedAt && (
                           <p className="text-xs text-muted mt-2">승인일: {new Date(req.reviewedAt).toLocaleString("ko-KR")}</p>
@@ -310,7 +310,7 @@ export default function SettingsPage() {
                           <button
                             onClick={() => handleCancelRequest(req.id)}
                             disabled={cancelingId === req.id}
-                            className="text-xs text-danger hover:text-[#c53d3d] mt-3 font-bold disabled:opacity-60"
+                            className="text-xs text-danger hover:text-[#ff8686] mt-3 font-bold disabled:opacity-60"
                           >
                             {cancelingId === req.id ? "취소 중..." : "취소"}
                           </button>

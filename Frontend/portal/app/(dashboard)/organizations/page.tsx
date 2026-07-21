@@ -92,16 +92,16 @@ export default function OrganizationsPage() {
         <section className="mb-8">
           <h2 className="text-sm font-bold mb-3">
             받은 초대{" "}
-            <span className="ml-1.5 text-xs text-[#9c6b1f] bg-[#fffaf0] border border-[#f3dfa8] px-1.5 py-0.5 rounded">
+            <span className="ml-1.5 text-xs text-[#e8b657] bg-[#e8b657]/10 border border-[#e8b657]/25 px-1.5 py-0.5 rounded">
               {invitations.length}
             </span>
           </h2>
           <div className="flex flex-col gap-2">
             {invitations.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between rounded-panel border border-[#f3dfa8] bg-[#fffaf0] px-4 py-3">
+              <div key={inv.id} className="flex items-center justify-between rounded-panel border border-[#e8b657]/25 bg-[#e8b657]/[0.06] px-4 py-3">
                 <div>
                   <p className="text-sm font-bold">{inv.name}</p>
-                  <p className="mt-0.5 text-xs text-[#9c6b1f]">{ROLE_LABEL[inv.myRole]} 역할로 초대됨</p>
+                  <p className="mt-0.5 text-xs text-[#e8b657]">{ROLE_LABEL[inv.myRole]} 역할로 초대됨</p>
                 </div>
                 <div className="flex gap-2">
                   <Button size="small" onClick={() => handleRespond(inv.id, inv.pendingMemberId ?? "", false)}>
@@ -181,7 +181,7 @@ export default function OrganizationsPage() {
                         )}
                         className="rounded accent-brand"
                       />
-                      <span className="text-[#3d4941]">{vm.name}</span>
+                      <span className="text-foreground">{vm.name}</span>
                       <span className="text-xs text-muted-soft">{vm.planType}</span>
                     </label>
                   ))}

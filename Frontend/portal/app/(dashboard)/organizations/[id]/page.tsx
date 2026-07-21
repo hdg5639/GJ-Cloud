@@ -42,7 +42,7 @@ function IconMessagePlus() {
 
 // ── 뱃지 ─────────────────────────────────────────────────
 function CountBadge({ n }: { n: number }) {
-  return <span className="bg-[#eef1ef] text-muted text-[11px] font-bold px-1.5 py-0.5 rounded-full">{n}</span>;
+  return <span className="bg-white/[0.06] text-muted text-[11px] font-bold px-1.5 py-0.5 rounded-full">{n}</span>;
 }
 
 export default function OrganizationDetailPage() {
@@ -270,7 +270,7 @@ export default function OrganizationDetailPage() {
             onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-[14px] border-b-2 transition-colors -mb-px ${
               tab === key
-                ? "border-[#17211b] text-[#17211b] font-bold"
+                ? "border-foreground text-foreground font-bold"
                 : "border-transparent text-muted-soft hover:text-muted"
             }`}
           >
@@ -293,8 +293,8 @@ export default function OrganizationDetailPage() {
                   style={{ width: "auto", padding: "0 14px", height: 32, fontSize: 13 }}
                   className={`rounded-md transition-colors ${
                     typeFilter === t
-                      ? "bg-[#f2f6f3] border border-line-strong text-[#3d4941]"
-                      : "bg-transparent border-0 text-muted hover:text-[#3f4c43]"
+                      ? "bg-white/[0.06] border border-line-strong text-foreground"
+                      : "bg-transparent border-0 text-muted hover:text-foreground"
                   }`}
                 >
                   {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
@@ -303,7 +303,7 @@ export default function OrganizationDetailPage() {
             </div>
             <button
               onClick={() => { setEditingItem(undefined); setShowWrite(true); }}
-              className="flex items-center gap-1 text-[13px] px-4 h-8 bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
+              className="flex items-center gap-1 text-[13px] px-4 h-8 bg-soft text-brand-strong rounded-md hover:bg-brand/15 font-bold border-0"
               style={{ width: "auto" }}
             >
               <IconPlus />작성
@@ -311,13 +311,13 @@ export default function OrganizationDetailPage() {
           </div>
 
           {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 bg-[#fbfcfb] rounded-panel border border-line">
+            <div className="flex flex-col items-center justify-center py-16 bg-white/[0.02] rounded-panel border border-line">
               <span className="text-line-strong mb-3"><IconMessagePlus /></span>
               <p className="text-sm font-bold mb-1">아직 협업 항목이 없어요</p>
               <p className="text-[13px] text-muted-soft mb-4">메모, 공지, 요청을 작성해서 팀원과 공유해보세요</p>
               <button
                 onClick={() => { setEditingItem(undefined); setShowWrite(true); }}
-                className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
+                className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-soft text-brand-strong rounded-md hover:bg-brand/15 font-bold border-0"
                 style={{ width: "auto" }}
               >
                 <IconPlus />첫 항목 작성하기
@@ -385,7 +385,7 @@ export default function OrganizationDetailPage() {
               </thead>
               <tbody>
                 {org.members.map((m) => (
-                  <tr key={m.id} className="hover:bg-[#fbfdfc]">
+                  <tr key={m.id} className="hover:bg-white/[0.03]">
                     <Td>{m.email}</Td>
                     <Td>
                       {myRole === "OWNER" && m.role !== "OWNER" ? (
@@ -406,14 +406,14 @@ export default function OrganizationDetailPage() {
                     <Td>
                       <span className={`text-xs px-2 py-0.5 rounded font-bold ${
                         m.status === "ACCEPTED" ? "bg-soft text-brand-strong" :
-                        m.status === "PENDING" ? "bg-[#fffaf0] text-[#9c6b1f]" : "bg-[#eef1ef] text-muted"
+                        m.status === "PENDING" ? "bg-[#e8b657]/10 text-[#e8b657]" : "bg-white/[0.06] text-muted"
                       }`}>
                         {m.status === "ACCEPTED" ? "활성" : m.status === "PENDING" ? "초대 대기" : "거절"}
                       </span>
                     </Td>
                     <Td className="text-right">
                       {isOwnerOrAdmin && m.role !== "OWNER" && (
-                        <button onClick={() => handleRemoveMember(m)} className="text-xs text-danger hover:text-[#c53d3d] font-bold">
+                        <button onClick={() => handleRemoveMember(m)} className="text-xs text-danger hover:text-[#ff8686] font-bold">
                           제거
                         </button>
                       )}
@@ -441,7 +441,7 @@ export default function OrganizationDetailPage() {
           )}
 
           {org.vms.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 bg-[#fbfcfb] rounded-panel border border-line">
+            <div className="flex flex-col items-center justify-center py-16 bg-white/[0.02] rounded-panel border border-line">
               <span className="text-line-strong mb-3">
                 <IconServer />
               </span>
@@ -450,7 +450,7 @@ export default function OrganizationDetailPage() {
               {isOwnerOrAdmin && (
                 <button
                   onClick={() => setShowAddVm(true)}
-                  className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
+                  className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-soft text-brand-strong rounded-md hover:bg-brand/15 font-bold border-0"
                   style={{ width: "auto" }}
                 >
                   <IconPlus />VM 연결하기
@@ -477,7 +477,7 @@ export default function OrganizationDetailPage() {
                 {myRole === "OWNER" && (
                   <button
                     onClick={(e) => { e.preventDefault(); handleRemoveVm(vm.id); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs px-3 h-7 border border-danger-soft text-danger rounded-md hover:bg-[#fdf4f4]"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs px-3 h-7 border border-danger-soft text-danger rounded-md hover:bg-danger/10"
                     style={{ width: "auto" }}
                   >
                     연결 해제
@@ -609,10 +609,10 @@ export default function OrganizationDetailPage() {
                           type="button"
                           disabled={full || planLocked}
                           onClick={() => handleCreateVmPlanChange(plan)}
-                          className={`relative rounded-[12px] border p-3 text-left transition-colors ${selected ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)]" : "border-line-strong hover:border-[#b9c4bd]"} ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
+                          className={`relative rounded-[12px] border p-3 text-left transition-colors ${selected ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)]" : "border-line-strong hover:border-white/20"} ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
-                          {selected && <span className="absolute -top-2 left-2.5 bg-soft text-brand-strong text-[10px] font-bold px-1.5 py-0.5 rounded">선택됨</span>}
-                          {planLocked && <span className="absolute -top-2 right-2.5 bg-[#fffaf0] text-[#9c6b1f] text-[10px] font-bold px-1.5 py-0.5 rounded">프로 플랜만</span>}
+                          {selected && <span className="absolute -top-2 left-2.5 bg-brand text-[#0a0c08] text-[10px] font-bold px-1.5 py-0.5 rounded">선택됨</span>}
+                          {planLocked && <span className="absolute -top-2 right-2.5 bg-[#e8b657]/10 text-[#e8b657] text-[10px] font-bold px-1.5 py-0.5 rounded">프로 플랜만</span>}
                           <p className="text-sm font-bold mb-0.5">{plan}</p>
                           <p className="text-xs text-muted mb-1.5">{info.cores} vCPU · {info.memory} RAM</p>
                           <div className="flex items-center gap-1.5">

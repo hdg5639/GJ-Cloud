@@ -26,18 +26,18 @@ function relativeTime(iso: string) {
 const TYPE_META = {
   NOTE: {
     label: "메모",
-    badge: { bg: "#DBEAFE", color: "#1e40af" },
-    pinned: { bg: "#EFF6FF", border: "#3b82f6", text: "#1e3a8a", sub: "#1e40af", icon: "#2563eb" },
+    badge: { bg: "rgba(59,130,246,0.16)", color: "#93c5fd" },
+    pinned: { bg: "rgba(59,130,246,0.08)", border: "#3b82f6", text: "#dbeafe", sub: "#93c5fd", icon: "#60a5fa" },
   },
   NOTICE: {
     label: "공지",
-    badge: { bg: "#FAC775", color: "#412402" },
-    pinned: { bg: "#FAEEDA", border: "#BA7517", text: "#412402", sub: "#633806", icon: "#854F0B" },
+    badge: { bg: "rgba(250,199,117,0.18)", color: "#fbbf24" },
+    pinned: { bg: "rgba(250,199,117,0.08)", border: "#d69e2e", text: "#fde68a", sub: "#fbbf24", icon: "#f0b429" },
   },
   REQUEST: {
     label: "요청",
-    badge: { bg: "#F7C1C1", color: "#501313" },
-    pinned: { bg: "#FDF2F8", border: "#a855f7", text: "#581c87", sub: "#6b21a8", icon: "#7c3aed" },
+    badge: { bg: "rgba(248,113,113,0.16)", color: "#fca5a5" },
+    pinned: { bg: "rgba(168,85,247,0.08)", border: "#a855f7", text: "#e9d5ff", sub: "#d8b4fe", icon: "#c084fc" },
   },
 };
 
@@ -99,10 +99,10 @@ export default function CollaborationCard({ item, accessToken, isOwnerOrAdmin, c
 
   const containerStyle: React.CSSProperties = item.pinned
     ? { backgroundColor: meta.pinned.bg, borderLeft: `3px solid ${meta.pinned.border}`, borderRadius: "0 8px 8px 0", padding: "12px 14px", position: "relative" }
-    : { backgroundColor: "#fff", border: "0.5px solid #e5e7eb", borderRadius: 8, padding: "12px 14px", position: "relative" };
+    : { backgroundColor: "var(--panel)", border: "0.5px solid var(--line)", borderRadius: 8, padding: "12px 14px", position: "relative" };
 
-  const titleColor = item.pinned ? meta.pinned.text : "#111827";
-  const contentColor = item.pinned ? meta.pinned.sub : "#6b7280";
+  const titleColor = item.pinned ? meta.pinned.text : "var(--foreground)";
+  const contentColor = item.pinned ? meta.pinned.sub : "var(--muted)";
   const metaColor = item.pinned ? meta.pinned.icon : "#9ca3af";
 
   return (
@@ -129,10 +129,10 @@ export default function CollaborationCard({ item, accessToken, isOwnerOrAdmin, c
           </span>
         )}
         {item.type === "REQUEST" && item.status === "UNSOLVED" && (
-          <span style={{ backgroundColor: "#fee2e2", color: "#991b1b", fontSize: 11, padding: "2px 8px", borderRadius: 6 }}>미해결</span>
+          <span style={{ backgroundColor: "rgba(248,113,113,0.16)", color: "#fca5a5", fontSize: 11, padding: "2px 8px", borderRadius: 6 }}>미해결</span>
         )}
         {item.type === "REQUEST" && item.status === "SOLVED" && (
-          <span style={{ backgroundColor: "#dcfce7", color: "#166534", fontSize: 11, padding: "2px 8px", borderRadius: 6 }}>해결됨</span>
+          <span style={{ backgroundColor: "rgba(121,217,94,0.14)", color: "#86efac", fontSize: 11, padding: "2px 8px", borderRadius: 6 }}>해결됨</span>
         )}
       </div>
 
@@ -151,7 +151,7 @@ export default function CollaborationCard({ item, accessToken, isOwnerOrAdmin, c
             <button
               onClick={handleResolve}
               style={{ height: 24, padding: "0 10px", fontSize: 11, width: "auto", cursor: "pointer" }}
-              className="border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
+              className="border border-line-strong rounded text-muted hover:bg-white/[0.06]"
             >
               해결 완료
             </button>

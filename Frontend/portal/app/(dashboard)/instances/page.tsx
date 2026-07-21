@@ -100,7 +100,7 @@ export default function InstancesPage() {
 
   return (
     <div className="mx-auto max-w-[1380px]">
-      <header className="mb-[22px] flex items-center justify-between gap-6">
+      <header className="mb-[22px] flex flex-wrap items-center justify-between gap-4">
         <div>
           <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">COMPUTE</span>
           <h1 className="my-[5px] text-[29px] font-extrabold tracking-tight">인스턴스</h1>
@@ -135,9 +135,9 @@ export default function InstancesPage() {
       </StatGrid>
 
       <Panel>
-        <div className="flex items-center justify-between gap-4 border-b border-line p-[15px]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-[15px]">
           <SearchInput
-            className="w-[420px]"
+            className="w-full sm:w-[420px]"
             placeholder="이름, IP, 서브도메인으로 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

@@ -71,7 +71,7 @@ export default function CreateInstancePage() {
     <div className="max-w-xl">
       <button
         onClick={() => router.push("/instances")}
-        className="flex items-center gap-1.5 text-sm text-muted hover:text-[#3f4c43] mb-4 transition-colors"
+        className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground mb-4 transition-colors"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -111,16 +111,16 @@ export default function CreateInstancePage() {
                   disabled={full || planLocked}
                   onClick={() => handlePlanChange(plan)}
                   className={`relative rounded-[12px] border p-4 text-left transition-colors ${
-                    selected ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)]" : "border-line-strong hover:border-[#b9c4bd]"
+                    selected ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)]" : "border-line-strong hover:border-white/20"
                   } ${(full || planLocked) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {selected && (
-                    <span className="absolute -top-2.5 left-3 z-10 bg-soft text-brand-strong text-[11px] font-bold px-2 py-0.5 rounded-md">
+                    <span className="absolute -top-2.5 left-3 z-10 bg-brand text-[#0a0c08] text-[11px] font-bold px-2 py-0.5 rounded-md">
                       선택됨
                     </span>
                   )}
                   {planLocked && (
-                    <span className="absolute -top-2.5 right-3 z-10 bg-[#fffaf0] text-[#9c6b1f] text-[11px] font-bold px-2 py-0.5 rounded-md">
+                    <span className="absolute -top-2.5 right-3 z-10 bg-[#e8b657]/10 text-[#e8b657] text-[11px] font-bold px-2 py-0.5 rounded-md">
                       프로 플랜만
                     </span>
                   )}
