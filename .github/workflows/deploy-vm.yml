@@ -33,8 +33,11 @@ jobs:
 
           HOST_PORT=$(docker compose port "$SERVICE" 8080 | cut -d: -f2)
           HEALTHY=0
-          for i in $(seq 1 10); do
-            sleep 3
+          # vm은 R2DBC+Redis+WebClient까지 초기화하는 리액티브 앱이라 콜드 스타트가
+          # 30초(10회x3초) 창에 걸치는 경계값 근처였고, 실제로 이 타이밍 때문에 정상
+          # 이미지가 헬스체크 실패로 오판돼 롤백당한 적이 있어 100초로 넉넉하게 늘림.
+          for i in $(seq 1 20); do
+            sleep 5
             if curl -fsS "http://localhost:${HOST_PORT}${HEALTH_PATH}" > /dev/null 2>&1; then
               HEALTHY=1
               break
