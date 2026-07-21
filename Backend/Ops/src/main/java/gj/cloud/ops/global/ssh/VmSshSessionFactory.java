@@ -1,8 +1,11 @@
 package gj.cloud.ops.global.ssh;
 
+import com.jcraft.jsch.HostKey;
+import com.jcraft.jsch.HostKeyRepository;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
+import com.jcraft.jsch.UserInfo;
 import gj.cloud.ops.application.managementkey.service.ManagementKeyService;
 import gj.cloud.ops.domain.managementkey.entity.VmManagementKeyEntity;
 import gj.cloud.ops.global.exception.OpsException;
@@ -41,9 +44,13 @@ public class VmSshSessionFactory {
 
             JSch jsch = new JSch();
             jsch.addIdentity("ops-mgmt-" + vmId, privateKeyBytes, null, null);
+            // SEC-011: StrictHostKeyChecking=no는 어떤 호스트 키든 무조건 수락해 MITM에 취약했음.
+            // 최초 연결에서 지문을 캡처(TOFU)해 저장하고, 이후 연결은 저장된 지문과 정확히 일치할
+            // 때만 허용하는 커스텀 저장소로 대체.
+            jsch.setHostKeyRepository(new PinnedHostKeyRepository(jsch, vmId, managementKey.getSshHostKeyFingerprint()));
 
             Session session = jsch.getSession(vmSshUsername, internalIp, SSH_PORT);
-            session.setConfig("StrictHostKeyChecking", "no");
+            session.setConfig("StrictHostKeyChecking", "yes");
             session.connect(CONNECT_TIMEOUT_MS);
             return session;
         } catch (JSchException e) {
@@ -54,6 +61,70 @@ public class VmSshSessionFactory {
             if (privateKeyBytes != null) {
                 Arrays.fill(privateKeyBytes, (byte) 0);
             }
+        }
+    }
+
+    // SEC-011: known_hosts 파일 대신 vm_management_keys.ssh_host_key_fingerprint 컬럼을 신뢰 저장소로 사용.
+    // storedFingerprint가 없으면(최초 연결) 수락 후 즉시 DB에 캡처하고, 있으면 정확히 일치할 때만 수락한다.
+    private class PinnedHostKeyRepository implements HostKeyRepository {
+        private final JSch jsch;
+        private final String vmId;
+        private final String storedFingerprint;
+
+        PinnedHostKeyRepository(JSch jsch, String vmId, String storedFingerprint) {
+            this.jsch = jsch;
+            this.vmId = vmId;
+            this.storedFingerprint = storedFingerprint;
+        }
+
+        @Override
+        public int check(String host, byte[] key) {
+            String fingerprint;
+            try {
+                fingerprint = new HostKey(host, key).getFingerPrint(jsch);
+            } catch (JSchException e) {
+                log.warn("SSH 호스트 키 파싱 실패: vmId={}, error={}", vmId, e.getMessage());
+                return CHANGED;
+            }
+
+            if (storedFingerprint == null) {
+                log.info("SSH 호스트 키 최초 캡처(TOFU): vmId={}, fingerprint={}", vmId, fingerprint);
+                managementKeyService.recordHostKeyFingerprint(vmId, fingerprint);
+                return OK;
+            }
+            if (storedFingerprint.equals(fingerprint)) {
+                return OK;
+            }
+            log.error("SSH 호스트 키 불일치(변조 의심): vmId={}, 저장된 지문={}, 수신 지문={}", vmId, storedFingerprint, fingerprint);
+            return CHANGED;
+        }
+
+        @Override
+        public void add(HostKey hostkey, UserInfo userInfo) {
+            // 지문 저장은 check()에서 이미 처리
+        }
+
+        @Override
+        public void remove(String host, String type) {
+        }
+
+        @Override
+        public void remove(String host, String type, byte[] key) {
+        }
+
+        @Override
+        public String getKnownHostsRepositoryID() {
+            return "vm-management-key:" + vmId;
+        }
+
+        @Override
+        public HostKey[] getHostKey() {
+            return new HostKey[0];
+        }
+
+        @Override
+        public HostKey[] getHostKey(String host, String type) {
+            return new HostKey[0];
         }
     }
 }

@@ -109,6 +109,9 @@ public class FileStreamService {
             try (InputStream in = sftp.get(realPath, null, start)) {
                 response.setContentType(contentTypeFor(realPath));
                 response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
+                // SEC-012: 티켓 기반 인증이라 브라우저/중간 프록시 캐시에 남으면 재생 종료 후에도
+                // 재요청 없이 이전 응답이 재사용될 수 있음 — 캐시 저장 자체를 금지.
+                response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
                 response.setContentLengthLong(length);
                 if (partial) {
                     response.setStatus(HttpStatus.PARTIAL_CONTENT.value());

@@ -71,4 +71,10 @@ public class ManagementKeyService {
     public byte[] decryptPrivateKey(VmManagementKeyEntity key) {
         return cipher.decrypt(key.getEncryptedPrivateKey());
     }
+
+    // SEC-011: 최초 SSH 연결(TOFU) 시 캡처한 호스트 키 지문을 저장 — VmSshSessionFactory에서 호출
+    @Transactional
+    public void recordHostKeyFingerprint(String vmId, String fingerprint) {
+        repository.findByVmId(vmId).ifPresent(key -> repository.save(key.withHostKeyFingerprint(fingerprint)));
+    }
 }

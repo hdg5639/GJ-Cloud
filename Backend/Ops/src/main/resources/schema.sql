@@ -1,14 +1,18 @@
 CREATE TABLE IF NOT EXISTS vm_management_keys (
-    id                      VARCHAR(36) PRIMARY KEY,
-    vm_id                   VARCHAR(36) NOT NULL UNIQUE,
-    public_key              TEXT        NOT NULL,
-    encrypted_private_key   TEXT        NOT NULL,
-    status                  VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-    created_at              TIMESTAMP   NOT NULL DEFAULT now(),
-    updated_at              TIMESTAMP   NOT NULL DEFAULT now(),
+    id                       VARCHAR(36) PRIMARY KEY,
+    vm_id                    VARCHAR(36) NOT NULL UNIQUE,
+    public_key               TEXT        NOT NULL,
+    encrypted_private_key    TEXT        NOT NULL,
+    status                   VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    ssh_host_key_fingerprint VARCHAR(200),
+    created_at               TIMESTAMP   NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMP   NOT NULL DEFAULT now(),
 
     CONSTRAINT chk_key_status CHECK (status IN ('ACTIVE', 'REVOKE_PENDING', 'REVOKED', 'ORPHANED'))
 );
+
+-- SEC-011: 기존에 배포된 테이블에는 CREATE TABLE IF NOT EXISTS가 컬럼을 추가해주지 않으므로 별도 처리
+ALTER TABLE vm_management_keys ADD COLUMN IF NOT EXISTS ssh_host_key_fingerprint VARCHAR(200);
 
 CREATE INDEX IF NOT EXISTS idx_vm_management_keys_status ON vm_management_keys(status);
 
