@@ -19,4 +19,5 @@ public class ProxmoxProperties {
     private String pool = "user-vm";
     private int vmidRangeStart;
     private int vmidRangeEnd;
+    private boolean tlsInsecure = false;
 }

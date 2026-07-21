@@ -63,6 +63,10 @@ public class UserEntity {
         this.status = UserStatus.ACTIVE;
     }
 
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
+
     public void anonymizeAndDelete() {
         this.email = "deleted_" + this.id + "@deleted";
         this.password = "DELETED";

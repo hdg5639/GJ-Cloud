@@ -10,4 +10,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AuthProperties {
     private String serverUrl;
     private long jwksCacheTtl;
+    private String serviceClientId;
+    private String serviceClientSecret;
 }

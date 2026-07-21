@@ -18,11 +18,18 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
 import java.util.List;
 
+// /internal/** 전용 — Auth 서비스가 회원 탈퇴 시 사용자 데이터 정리를 요청할 때 검증.
+// SEC-001/SEC-002: 예전에는 aud=user-service(사용자가 /auth/token/exchange로 자가 발급 가능)만
+// 확인해서, 임의의 로그인 사용자가 스스로 발급받은 토큰으로 이 내부 API(교차 유저 삭제)를 직접 호출할
+// 수 있었음(권한 상승). 지금은 Auth의 client-credentials로 Auth 서비스만 발급받을 수 있는
+// aud=vm-service(자기 자신) + token_type=service + client_id=auth-service 토큰만 인정함.
 @Component
 @RequiredArgsConstructor
 public class InternalJwtValidator {
 
-    private static final String EXPECTED_AUDIENCE = "user-service";
+    private static final String EXPECTED_AUDIENCE = "vm-service";
+    private static final String EXPECTED_TOKEN_TYPE = "service";
+    private static final String EXPECTED_CLIENT_ID = "auth-service";
 
     private final AuthProperties authProperties;
     private final WebClient webClient = WebClient.create();
@@ -50,6 +57,17 @@ public class InternalJwtValidator {
             if (audience == null || !audience.contains(EXPECTED_AUDIENCE)) {
                 throw new VmException(VmErrorCode.INVALID_AUDIENCE);
             }
+
+            String tokenType = claims.getStringClaim("token_type");
+            if (!EXPECTED_TOKEN_TYPE.equals(tokenType)) {
+                throw new VmException(VmErrorCode.INVALID_TOKEN);
+            }
+
+            String clientId = claims.getStringClaim("client_id");
+            if (!EXPECTED_CLIENT_ID.equals(clientId)) {
+                throw new VmException(VmErrorCode.INVALID_TOKEN);
+            }
+
             return claims;
         } catch (VmException e) {
             throw e;

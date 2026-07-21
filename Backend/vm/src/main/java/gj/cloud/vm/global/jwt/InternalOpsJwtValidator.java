@@ -18,6 +18,13 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
 import java.util.List;
 
+// /internal/ops/** 전용 — Ops가 최종 사용자를 대신해 호출할 때 검증.
+// 이 경로는 SEC-001의 순수 서비스 신원 패턴과 다름: Ops는 자기 자신의 client-credentials가 아니라
+// "호출한 최종 사용자가 원래 갖고 있던 aud=ops-service 토큰"을 그대로 포워딩하고, VM은 그 토큰의
+// sub/email(실제 사용자 신원)을 VmAccessService.resolveContext로 owner/조직 멤버십과 대조해 자체
+// 인가 판정을 내린다(InternalOpsController 참고). 따라서 token_type=service/client_id 허용목록을
+// 강제하면 이 위임 패턴 자체가 깨진다 — 사용자가 이 토큰을 직접 만들어 Ops를 건너뛰고 호출해도
+// VM의 자체 인가 검사가 실제 소유권/멤버십을 재확인하므로 추가 권한 상승은 발생하지 않는다.
 @Component
 @RequiredArgsConstructor
 public class InternalOpsJwtValidator {
