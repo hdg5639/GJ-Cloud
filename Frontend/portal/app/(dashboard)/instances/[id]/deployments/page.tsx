@@ -158,19 +158,16 @@ export default function DeploymentsPage() {
     api.ops.docker.listNetworks(accessToken, vmId).then(setDockerNetworks).catch(() => setDockerNetworks([]));
   }, [showCreate, accessToken, vmId]);
 
-  // 배포 상세 페이지의 "재시도" 버튼에서 넘어온 프리필 스펙을 페이지 진입 시 적용 (모달 상태는
-  // 이 목록 페이지에만 있어서 페이지 간 전달에 sessionStorage를 사용)
+  // SEC-010: 배포 상세 페이지의 "재시도" 버튼에서 넘어올 때 복호화된 스펙(시크릿 포함 가능)을
+  // sessionStorage에 담지 않고 deploymentId만 전달받아, 여기서 handleRetry로 직접 새로 조회한다.
   useEffect(() => {
-    const raw = sessionStorage.getItem(retryStorageKey(vmId));
-    if (!raw) return;
+    if (!accessToken) return;
+    const deploymentId = sessionStorage.getItem(retryStorageKey(vmId));
+    if (!deploymentId) return;
     sessionStorage.removeItem(retryStorageKey(vmId));
-    try {
-      const spec: ComposeSpecResponse = JSON.parse(raw);
-      applyComposeSpec(spec);
-    } catch {
-      // 손상된 데이터는 무시
-    }
-  }, [vmId]);
+    handleRetry(deploymentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vmId, accessToken]);
 
   function applyComposeSpec(spec: ComposeSpecResponse) {
     setComposeContent(spec.composeContent);

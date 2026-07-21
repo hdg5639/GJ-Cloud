@@ -54,7 +54,6 @@ export default function DeploymentDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<DeploymentEventPayload[]>([]);
   const [connected, setConnected] = useState(false);
-  const [retrying, setRetrying] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const stopRef = useRef<(() => void) | null>(null);
@@ -93,20 +92,11 @@ export default function DeploymentDetailPage() {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [events]);
 
-  // 배포 목록 페이지의 "새 배포" 모달에 프리필하기 위해 sessionStorage로 스펙을 전달
-  // (같은 키 형식을 deployments/page.tsx에서도 그대로 사용)
-  async function handleRetry() {
-    if (!accessToken) return;
-    setRetrying(true);
-    setError(null);
-    try {
-      const spec = await api.ops.deployments.getComposeSpec(accessToken, vmId, deploymentId);
-      sessionStorage.setItem(`retryDeployment:${vmId}`, JSON.stringify(spec));
-      router.push(`/instances/${vmId}/deployments`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "이전 배포 스펙을 불러오지 못했습니다.");
-      setRetrying(false);
-    }
+  // SEC-010: 복호화된 스펙(.env 등 시크릿 포함 가능)을 sessionStorage에 그대로 담지 않고
+  // deploymentId만 전달 — 목록 페이지가 진입 시 그 ID로 스펙을 직접 새로 조회한다(handleRetry).
+  function handleRetry() {
+    sessionStorage.setItem(`retryDeployment:${vmId}`, deploymentId);
+    router.push(`/instances/${vmId}/deployments`);
   }
 
   async function handleRollback() {
@@ -154,8 +144,8 @@ export default function DeploymentDetailPage() {
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
           {deployment.status === "FAILED" && (
-            <button onClick={handleRetry} disabled={retrying} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3] disabled:opacity-50 rounded-r-panel">
-              {retrying ? "불러오는 중..." : "재시도 / 수정 후 재배포"}
+            <button onClick={handleRetry} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3] disabled:opacity-50 rounded-r-panel">
+              재시도 / 수정 후 재배포
             </button>
           )}
           {deployment.status === "SUCCEEDED" && (
