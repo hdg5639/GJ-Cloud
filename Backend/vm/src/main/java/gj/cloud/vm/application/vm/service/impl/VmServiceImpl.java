@@ -456,6 +456,8 @@ public class VmServiceImpl implements VmService {
                 });
     }
 
+    // OBS-001: 관리자가 다른 사용자의 VM을 강제 삭제하는 고위험 조치 — 구조화 로그 라인으로 추적성 확보
+    // (DB 감사로그는 Auth에만 있음, vm은 로그 라인만).
     @Override
     public Mono<Void> forceDeleteVm(UUID vmId) {
         return vmRepository.findById(vmId)
@@ -482,7 +484,8 @@ public class VmServiceImpl implements VmService {
                                 return Mono.error(new VmException(VmErrorCode.PROXMOX_DELETE_FAILED));
                             })
                             .then();
-                });
+                })
+                .doOnSuccess(v -> log.info("AUDIT action=VM_FORCE_DELETED targetType=VM targetId={} result=SUCCESS", vmId));
     }
 
     // 사용자 세션 토큰이 없는 내부 호출 경로라 Ops 키 폐기를 여기서 요청하지 않음.

@@ -171,6 +171,9 @@ public class FileBrowserService {
 
     private void requireSecretReadIfSensitive(VmContextResponse context, String resolvedPath) {
         if (SensitiveFilePolicy.isSensitive(resolvedPath) && !context.hasPermission(PERMISSION_SECRET_READ)) {
+            // OBS-001: SECRET_READ 없이 민감 파일 내용을 시도한 거부 이벤트 — 구조화 로그 라인으로 기록
+            log.warn("AUDIT action=SECRET_FILE_ACCESS_DENIED targetType=VM targetId={} role={} path={} result=DENIED",
+                    context.vmId(), context.role(), resolvedPath);
             throw new OpsException(OpsErrorCode.FORBIDDEN);
         }
     }

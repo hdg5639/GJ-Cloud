@@ -161,11 +161,14 @@ public class DockerService {
         runDockerAdmin(bearerToken, vmId, "docker network rm " + sanitize(networkId));
     }
 
+    // OBS-001: start/stop/restart/remove(container·image)/network 생성·삭제 전부 이 헬퍼를 거치므로
+    // 여기 한 곳에서 구조화 로그 라인으로 기록 — VM root 권한과 동급인 조치들이라 추적성이 중요함.
     private void runDockerAdmin(String bearerToken, String vmId, String command) {
         execute(bearerToken, vmId, PERMISSION_DOCKER_ADMIN, session -> {
             runDockerOrThrow(session, command);
             return null;
         });
+        log.info("AUDIT action=DOCKER_ADMIN_COMMAND targetType=VM targetId={} command={} result=SUCCESS", vmId, command);
     }
 
     private String runDockerOrThrow(Session session, String command) {

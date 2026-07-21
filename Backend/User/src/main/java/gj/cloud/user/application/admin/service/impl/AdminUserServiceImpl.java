@@ -9,11 +9,15 @@ import gj.cloud.user.global.auth.AuthServiceClient;
 import gj.cloud.user.global.exception.UserException;
 import gj.cloud.user.global.exception.enums.UserErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+// OBS-001: DB 감사로그는 Auth에만 있음(계정 상태의 단일 진실 공급원) — User는 구조화된 로그 라인으로만
+// 추적성 확보(AUDIT action=... actorId=... target=... result=... reason=... 고정 포맷).
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminUserServiceImpl implements AdminUserService {
@@ -48,6 +52,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         profile.suspend();
         AdminUserResponse response = AdminUserResponse.from(profileRepository.save(profile));
         authServiceClient.syncStatus(userId, "SUSPENDED");
+        log.info("AUDIT action=ACCOUNT_SUSPENDED targetType=USER targetId={} result=SUCCESS", userId);
         return response;
     }
 
@@ -59,6 +64,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         profile.activate();
         AdminUserResponse response = AdminUserResponse.from(profileRepository.save(profile));
         authServiceClient.syncStatus(userId, "ACTIVE");
+        log.info("AUDIT action=ACCOUNT_RESTORED targetType=USER targetId={} result=SUCCESS", userId);
         return response;
     }
 

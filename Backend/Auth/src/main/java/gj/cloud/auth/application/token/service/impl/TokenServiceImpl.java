@@ -1,11 +1,15 @@
 package gj.cloud.auth.application.token.service.impl;
 
 import com.nimbusds.jwt.JWTClaimsSet;
+import gj.cloud.auth.application.auditlog.service.SecurityAuditLogService;
 import gj.cloud.auth.application.auth.dto.TokenExchangeRequest;
 import gj.cloud.auth.application.token.dto.RefreshResult;
 import gj.cloud.auth.application.token.dto.ServiceTokenRequest;
 import gj.cloud.auth.application.token.dto.TokenResponse;
 import gj.cloud.auth.application.token.service.TokenService;
+import gj.cloud.auth.domain.auditlog.enums.AuditAction;
+import gj.cloud.auth.domain.auditlog.enums.AuditActorType;
+import gj.cloud.auth.domain.auditlog.enums.AuditResult;
 import gj.cloud.auth.domain.token.enums.ServiceAudience;
 import gj.cloud.auth.domain.user.entity.UserEntity;
 import gj.cloud.auth.domain.user.enums.UserRole;
@@ -67,6 +71,7 @@ public class TokenServiceImpl implements TokenService {
     private final ServiceClientProperties serviceClientProperties;
     private final StringRedisTemplate redisTemplate;
     private final UserRepository userRepository;
+    private final SecurityAuditLogService securityAuditLogService;
 
     @Override
     public String issueAccessToken(String userId, String email, UserRole role, ServiceAudience audience) {
@@ -101,7 +106,12 @@ public class TokenServiceImpl implements TokenService {
             // SEC-007: 이전에는 탈취 감지 시 사용자 전체 세션을 죽였음 — family ID로 범위를 좁혀
             // 탈취된 토큰 체인만 무효화하고, 같은 사용자의 다른 정상 로그인(다른 기기 등)은 유지한다.
             String stolenMetadata = result.substring(REUSE_MARKER.length());
-            revokeFamilyOrAll(parseField(stolenMetadata, "userId"), parseField(stolenMetadata, "familyId"));
+            String stolenUserId = parseField(stolenMetadata, "userId");
+            revokeFamilyOrAll(stolenUserId, parseField(stolenMetadata, "familyId"));
+            // OBS-001: 가장 심각한 이벤트(탈취 의심)인데도 예전엔 예외만 던지고 로그가 전혀 안 남았음.
+            securityAuditLogService.record(AuditActorType.USER, stolenUserId, AuditAction.REFRESH_REUSE_DETECTED,
+                    "USER", stolenUserId, AuditResult.DENIED, null,
+                    "이미 소비된 refresh token 재사용 시도 감지 — 해당 family 세션 무효화");
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
         }
 
