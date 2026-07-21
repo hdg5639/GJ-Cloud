@@ -4,13 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { AuthBrand, AuthCard } from "@/components/ui/auth-card";
+import { AuthBrand } from "@/components/ui/auth-card";
+import { AuthMarketingPanel, AuthSplitLayout, useBrandIntroPhase } from "@/components/ui/auth-split-layout";
 import { Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const introPhase = useBrandIntroPhase();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -38,8 +40,10 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthCard>
-      <AuthBrand />
+    <AuthSplitLayout visual={<AuthMarketingPanel introPhase={introPhase} />} introPhase={introPhase}>
+      <div className="mb-7 lg:hidden">
+        <AuthBrand />
+      </div>
 
       <h1 className="mb-1 text-lg font-bold">로그인</h1>
       <p className="mb-5 text-sm text-muted">계정에 로그인하고 인스턴스를 관리하세요</p>
@@ -95,6 +99,6 @@ export default function LoginPage() {
           회원가입
         </a>
       </p>
-    </AuthCard>
+    </AuthSplitLayout>
   );
 }

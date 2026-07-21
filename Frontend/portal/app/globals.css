@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+/* :root는 관리자(ControlBox) 패널이 계속 쓰는 기존 라이트 테마 — 이번 다크 리스킨 범위 밖이라
+   전역 토큰 자체를 바꾸지 않고, 유저 대시보드/로그인 쪽에만 .theme-dark로 범위를 좁혀 덮어씀. */
 :root {
   --background: #f6f8f7;
   --foreground: #17211b;
@@ -16,10 +18,37 @@
   --danger-soft: #efb1b1;
   --accent: #6c48dd;
   --accent-soft: #f0ebff;
+  /* VM/배포/컨테이너 등 "정상 동작 중" 상태 전용 — CTA/포커스용 --brand와 의미를 분리 */
+  --success: #08b85b;
+  --success-soft: #eaf8ef;
 
   --radius-panel-size: 16px;
 
   color-scheme: light;
+}
+
+.theme-dark {
+  --background: #07080b;
+  --foreground: #f4f7f1;
+
+  --brand: #baff4a;
+  --brand-strong: #a3e63f;
+  --panel: #11141a;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --muted: #9aa39a;
+  --muted-soft: #6e776f;
+  --soft: rgba(186, 255, 74, 0.08);
+  --danger: #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, 0.35);
+  --accent: #b39dff;
+  --accent-soft: rgba(179, 157, 255, 0.14);
+  --success: #79d95e;
+  --success-soft: rgba(121, 217, 94, 0.12);
+
+  color-scheme: dark;
+  background: var(--background);
+  color: var(--foreground);
 }
 
 @theme inline {
@@ -38,6 +67,8 @@
   --color-danger-soft: var(--danger-soft);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
 
   --radius-panel: var(--radius-panel-size);
 
@@ -50,4 +81,91 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@keyframes auth-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 로그인 화면 브랜드 인트로 — 3단계:
+   1) 아이콘만 화면 정중앙에 크게 뜬 채로 잠깐 정지
+   2) 그 자리에서 텍스트("GamjaBox")가 max-width 성장으로 좌→우 드러나며 완전한 워드마크를 이룸
+      — 텍스트가 실제 레이아웃 폭을 차지하며 자라기 때문에, 중앙 정렬 축(translate(-50%))이
+      매 프레임 새로 계산되어 아이콘이 자연스럽게 옆으로 비켜서는 효과가 별도 처리 없이 생김
+   3) 완성된 워드마크 전체가 좌상단 제자리로 이동 + 원래 크기로 축소 */
+@keyframes brand-intro-icon {
+  0%,
+  58% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(3.2);
+  }
+  100% {
+    left: 40px;
+    top: 40px;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes brand-intro-text {
+  0%,
+  22% {
+    max-width: 0;
+    opacity: 0;
+  }
+  26% {
+    opacity: 1;
+  }
+  58% {
+    max-width: 300px;
+  }
+  100% {
+    max-width: 300px;
+    opacity: 1;
+  }
+}
+
+/* 로고가 완전히 제자리(좌상단)에 도착한 다음(브랜드 인트로 전체 재생시간 2.6s 이후)에야
+   뒤이어 나타나는 좌측 배경 글로우/소개문구/하단 문구/우측 로그인 폼 공통 등장 애니메이션. */
+@keyframes auth-content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-reveal {
+  opacity: 0;
+  animation: auth-content-reveal 0.6s ease-out 2.6s both;
+}
+
+/* 우측 로그인 폼 전용 — 좌측 인트로 패널 자체가 lg 미만에서 숨겨지므로, 폼의 등장 지연도
+   lg 이상에서만 걸어야 함(모바일에서까지 이유 없이 2.6초씩 폼을 숨겨둘 필요 없음). */
+@media (min-width: 1024px) {
+  .auth-reveal-form {
+    opacity: 0;
+    animation: auth-content-reveal 0.6s ease-out 2.6s both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-intro-icon,
+  .brand-intro-text,
+  .auth-reveal,
+  .auth-reveal-form {
+    animation: none !important;
+    opacity: 1 !important;
+    max-width: none !important;
+  }
 }

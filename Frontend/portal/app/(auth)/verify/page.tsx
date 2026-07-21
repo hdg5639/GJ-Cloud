@@ -3,7 +3,8 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api-client";
-import { AuthBrand, AuthCard } from "@/components/ui/auth-card";
+import { AuthBrand } from "@/components/ui/auth-card";
+import { AuthSplitLayout, AuthStepsPanel } from "@/components/ui/auth-split-layout";
 import { Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
@@ -45,25 +46,9 @@ function VerifyForm() {
   }
 
   return (
-    <AuthCard>
-      <AuthBrand />
-
-      <div className="mb-6 flex items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <path d="M5 13l4 4L19 7" />
-            </svg>
-          </span>
-          <span className="text-xs font-bold">정보 입력</span>
-        </div>
-        <span className="h-px flex-1 bg-brand" />
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">
-            2
-          </span>
-          <span className="text-xs font-bold">이메일 인증</span>
-        </div>
+    <AuthSplitLayout visual={<AuthStepsPanel currentStep={2} />}>
+      <div className="mb-7 lg:hidden">
+        <AuthBrand />
       </div>
 
       <h1 className="mb-1 text-lg font-bold">이메일 인증</h1>
@@ -99,16 +84,20 @@ function VerifyForm() {
           {resending ? "발송 중..." : resent ? "발송됨!" : "재발송"}
         </button>
       </p>
-    </AuthCard>
+    </AuthSplitLayout>
   );
 }
 
 export default function VerifyPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <Suspense fallback={<div className="h-40 w-[360px] rounded-panel border border-line bg-panel" />}>
-        <VerifyForm />
-      </Suspense>
-    </div>
+    <Suspense
+      fallback={
+        <div className="theme-dark flex min-h-screen items-center justify-center bg-background">
+          <div className="h-40 w-[360px] rounded-panel border border-line bg-panel" />
+        </div>
+      }
+    >
+      <VerifyForm />
+    </Suspense>
   );
 }

@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api-client";
-import { AuthBrand, AuthCard } from "@/components/ui/auth-card";
+import { AuthBrand } from "@/components/ui/auth-card";
+import { AuthSplitLayout, AuthStepsPanel } from "@/components/ui/auth-split-layout";
 import { Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
@@ -34,23 +35,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthCard>
-      <AuthBrand />
-
-      <div className="mb-6 flex items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">
-            1
-          </span>
-          <span className="text-xs font-bold">정보 입력</span>
-        </div>
-        <span className="h-px flex-1 bg-line-strong" />
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full border border-line-strong bg-background text-[11px] font-bold text-muted-soft">
-            2
-          </span>
-          <span className="text-xs text-muted-soft">이메일 인증</span>
-        </div>
+    <AuthSplitLayout visual={<AuthStepsPanel currentStep={1} />}>
+      <div className="mb-7 lg:hidden">
+        <AuthBrand />
       </div>
 
       <h1 className="mb-4 text-lg font-bold">회원가입</h1>
@@ -106,6 +93,6 @@ export default function RegisterPage() {
           로그인
         </a>
       </p>
-    </AuthCard>
+    </AuthSplitLayout>
   );
 }
