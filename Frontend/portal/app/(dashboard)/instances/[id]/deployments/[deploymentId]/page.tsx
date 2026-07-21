@@ -128,7 +128,7 @@ export default function DeploymentDetailPage() {
     <div className="flex flex-col h-[calc(100vh-120px)]">
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 min-w-0 shrink items-center gap-2.5 pl-4 pr-3.5">
-          <button onClick={() => router.back()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+          <button onClick={() => router.back()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -144,12 +144,12 @@ export default function DeploymentDetailPage() {
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
           {deployment.status === "FAILED" && (
-            <button onClick={handleRetry} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3] disabled:opacity-50 rounded-r-panel">
+            <button onClick={handleRetry} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-muted transition-colors hover:bg-white/[0.06] disabled:opacity-50 rounded-r-panel">
               재시도 / 수정 후 재배포
             </button>
           )}
           {deployment.status === "SUCCEEDED" && (
-            <button onClick={handleRollback} disabled={rollingBack} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3] disabled:opacity-50 rounded-r-panel">
+            <button onClick={handleRollback} disabled={rollingBack} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-muted transition-colors hover:bg-white/[0.06] disabled:opacity-50 rounded-r-panel">
               {rollingBack ? "롤백 요청 중..." : "이 배포로 롤백"}
             </button>
           )}
@@ -157,13 +157,13 @@ export default function DeploymentDetailPage() {
       </div>
 
       {error && (
-        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">{error}</div>
+        <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">{error}</div>
       )}
 
       {deployment.errorMessage && (
-        <div className="rounded-panel border border-danger-soft bg-[#fdf4f4] p-4 mb-3">
+        <div className="rounded-panel border border-danger-soft bg-danger/10 p-4 mb-3">
           <p className="text-sm font-bold text-danger">오류</p>
-          <p className="mt-0.5 text-xs text-[#b23a3a]">{deployment.errorMessage}</p>
+          <p className="mt-0.5 text-xs text-danger/80">{deployment.errorMessage}</p>
         </div>
       )}
 

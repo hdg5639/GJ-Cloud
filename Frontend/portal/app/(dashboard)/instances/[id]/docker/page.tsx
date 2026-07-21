@@ -11,6 +11,7 @@ import { Table, Th, Td } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select } from "@/components/ui/field";
 import { StatusBadge } from "@/components/ui/badge";
+import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 
 type Tab = "containers" | "images" | "networks" | "compose";
 
@@ -202,10 +203,11 @@ export default function DockerManagementPage() {
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-[calc(100vh-170px)]">
+      <InstanceSectionNav vmId={vmId} />
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
-          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -220,7 +222,7 @@ export default function DockerManagementPage() {
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`text-xs px-3 h-7 rounded-md whitespace-nowrap transition-colors ${
-                  tab === t.key ? "bg-[#445248] text-white" : "text-muted hover:bg-[#f2f6f3]"
+                  tab === t.key ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.06]"
                 }`}
               >
                 {t.label}
@@ -235,7 +237,7 @@ export default function DockerManagementPage() {
               <>
                 <button
                   onClick={() => setShowCreateNetwork(true)}
-                  className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3]"
+                  className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-muted transition-colors hover:bg-white/[0.06]"
                 >
                   ＋ 네트워크 생성
                 </button>
@@ -245,7 +247,7 @@ export default function DockerManagementPage() {
             <button
               onClick={() => loadTab(tab)}
               title="새로고침"
-              className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-[#f2f6f3] rounded-r-panel"
+              className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel"
             >
               <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -257,7 +259,7 @@ export default function DockerManagementPage() {
 
       {notice && <div className="bg-soft text-brand-strong px-4 py-2 rounded-md mb-3 text-sm">{notice}</div>}
       {error && (
-        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
+        <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
         </div>
@@ -294,8 +296,8 @@ export default function DockerManagementPage() {
                     const isRunning = state === "running";
                     const isBusy = busyId === c.ID;
                     return (
-                      <tr key={c.ID} className="hover:bg-[#fbfdfc]">
-                        <Td className="text-[#3d4941]">{c.Names}</Td>
+                      <tr key={c.ID} className="hover:bg-white/[0.03]">
+                        <Td className="text-foreground">{c.Names}</Td>
                         <Td className="text-muted-soft font-mono text-xs">{c.Image}</Td>
                         <Td>
                           <StatusBadge tone={STATE_TONE[state] ?? "off"}>{c.Status}</StatusBadge>
@@ -305,13 +307,13 @@ export default function DockerManagementPage() {
                           <div className="flex items-center gap-2 text-xs">
                             {isRunning ? (
                               <>
-                                <button disabled={isBusy} onClick={() => handleContainerAction(c, "restart")} className="text-muted-soft hover:text-[#3f4c43] disabled:opacity-40">재시작</button>
-                                <button disabled={isBusy} onClick={() => handleContainerAction(c, "stop")} className="text-muted-soft hover:text-[#9c6b1f] disabled:opacity-40">정지</button>
+                                <button disabled={isBusy} onClick={() => handleContainerAction(c, "restart")} className="text-muted-soft hover:text-foreground disabled:opacity-40">재시작</button>
+                                <button disabled={isBusy} onClick={() => handleContainerAction(c, "stop")} className="text-muted-soft hover:text-[#e8b657] disabled:opacity-40">정지</button>
                               </>
                             ) : (
                               <button disabled={isBusy} onClick={() => handleContainerAction(c, "start")} className="text-muted-soft hover:text-brand-strong disabled:opacity-40">시작</button>
                             )}
-                            <button onClick={() => openLogs(c)} className="text-muted-soft hover:text-[#3f4c43]">로그</button>
+                            <button onClick={() => openLogs(c)} className="text-muted-soft hover:text-foreground">로그</button>
                             <button disabled={isBusy} onClick={() => setDeleteTarget({ type: "container", id: c.ID, label: c.Names })} className="text-muted-soft hover:text-danger disabled:opacity-40">삭제</button>
                           </div>
                         </Td>
@@ -337,8 +339,8 @@ export default function DockerManagementPage() {
                 </thead>
                 <tbody>
                   {images.map((img) => (
-                    <tr key={img.ID} className="hover:bg-[#fbfdfc]">
-                      <Td className="text-[#3d4941] font-mono text-xs">{img.Repository}</Td>
+                    <tr key={img.ID} className="hover:bg-white/[0.03]">
+                      <Td className="text-foreground font-mono text-xs">{img.Repository}</Td>
                       <Td className="text-muted-soft font-mono text-xs">{img.Tag}</Td>
                       <Td className="text-muted">{img.Size}</Td>
                       <Td className="text-muted text-xs">{img.CreatedAt}</Td>
@@ -371,8 +373,8 @@ export default function DockerManagementPage() {
                 </thead>
                 <tbody>
                   {networks.map((net) => (
-                    <tr key={net.ID} className="hover:bg-[#fbfdfc]">
-                      <Td className="text-[#3d4941]">{net.Name}</Td>
+                    <tr key={net.ID} className="hover:bg-white/[0.03]">
+                      <Td className="text-foreground">{net.Name}</Td>
                       <Td className="text-muted">{net.Driver}</Td>
                       <Td className="text-muted">{net.Scope}</Td>
                       <Td>
@@ -402,8 +404,8 @@ export default function DockerManagementPage() {
               </thead>
               <tbody>
                 {composeStacks.map((stack) => (
-                  <tr key={stack.Name} className="hover:bg-[#fbfdfc]">
-                    <Td className="text-[#3d4941]">{stack.Name}</Td>
+                  <tr key={stack.Name} className="hover:bg-white/[0.03]">
+                    <Td className="text-foreground">{stack.Name}</Td>
                     <Td className="text-muted">{stack.Status}</Td>
                     <Td className="text-muted font-mono text-xs truncate max-w-xs">{stack.ConfigFiles}</Td>
                   </tr>
@@ -462,7 +464,7 @@ export default function DockerManagementPage() {
               {deleteTarget.type === "container" ? "컨테이너 삭제" : deleteTarget.type === "image" ? "이미지 삭제" : "네트워크 삭제"}
             </h2>
             <p className="text-sm text-muted mb-5">
-              <span className="font-bold text-[#3f4c43]">{deleteTarget.label}</span>을(를) 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
+              <span className="font-bold text-foreground">{deleteTarget.label}</span>을(를) 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
             </p>
             <div className="flex gap-2">
               <Button onClick={() => setDeleteTarget(null)} className="flex-1">
@@ -496,7 +498,7 @@ export default function DockerManagementPage() {
                   <option value={1000}>최근 1000줄</option>
                   <option value={5000}>최근 5000줄</option>
                 </select>
-                <button onClick={() => fetchLogs(logsTarget, logsTail)} className="text-xs text-muted hover:text-[#3f4c43]">새로고침</button>
+                <button onClick={() => fetchLogs(logsTarget, logsTail)} className="text-xs text-muted hover:text-foreground">새로고침</button>
                 <button onClick={() => setLogsTarget(null)} className="text-muted-soft hover:text-muted">✕</button>
               </div>
             </div>

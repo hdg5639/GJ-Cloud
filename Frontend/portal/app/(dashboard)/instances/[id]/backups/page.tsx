@@ -11,6 +11,7 @@ import { Table, Th, Td } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select } from "@/components/ui/field";
 import { StatusBadge } from "@/components/ui/badge";
+import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -116,10 +117,11 @@ export default function DbBackupsPage() {
   if (!accessToken) return <PageLoader />;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-[calc(100vh-170px)]">
+      <InstanceSectionNav vmId={vmId} />
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
-          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -127,11 +129,11 @@ export default function DbBackupsPage() {
           <h1 className="text-[15px] font-bold whitespace-nowrap">DB 백업</h1>
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
-          <button onClick={() => setShowForm(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-[#f2f6f3]">
+          <button onClick={() => setShowForm(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-white/[0.06]">
             ＋ 백업 실행
           </button>
           <div className="h-5 w-px shrink-0 bg-line" />
-          <button onClick={load} title="새로고침" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-[#f2f6f3] rounded-r-panel">
+          <button onClick={load} title="새로고침" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -141,7 +143,7 @@ export default function DbBackupsPage() {
 
       {notice && <div className="bg-soft text-brand-strong px-4 py-2 rounded-md mb-3 text-sm">{notice}</div>}
       {error && (
-        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
+        <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
         </div>
@@ -166,13 +168,13 @@ export default function DbBackupsPage() {
             </thead>
             <tbody>
               {backups.map((b) => (
-                <tr key={b.id} className="hover:bg-[#fbfdfc]">
+                <tr key={b.id} className="hover:bg-white/[0.03]">
                   <Td className="text-muted-soft text-xs">{formatDateTime(b.createdAt)}</Td>
-                  <Td className="text-[#3d4941]">{b.serviceName}</Td>
+                  <Td className="text-foreground">{b.serviceName}</Td>
                   <Td className="text-muted">{b.dbType}</Td>
                   <Td className="text-muted">{formatSize(b.fileSizeBytes)}</Td>
                   <Td>
-                    <StatusBadge tone={b.succeeded ? "ok" : "off"} className={!b.succeeded ? "bg-[#fdf4f4] text-danger" : undefined}>
+                    <StatusBadge tone={b.succeeded ? "ok" : "off"} className={!b.succeeded ? "bg-danger/10 text-danger" : undefined}>
                       {b.succeeded ? "성공" : "실패"}
                     </StatusBadge>
                     {!b.succeeded && b.errorMessage && (

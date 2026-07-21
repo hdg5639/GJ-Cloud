@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, Th, Td } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/field";
+import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -233,23 +234,24 @@ export default function FileBrowserPage() {
   const isAbsolute = currentPath.startsWith("/");
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-[calc(100vh-170px)]">
+      <InstanceSectionNav vmId={vmId} />
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 min-w-0 shrink items-center gap-2.5 pl-4 pr-3.5">
-          <button onClick={() => router.back()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+          <button onClick={() => router.back()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <h1 className="text-[15px] font-bold whitespace-nowrap shrink-0">파일 브라우저</h1>
           <div className="flex items-center gap-1 text-xs text-muted overflow-x-auto whitespace-nowrap">
-            <button onClick={() => load("")} className="hover:text-[#3f4c43] hover:underline">홈</button>
+            <button onClick={() => load("")} className="hover:text-foreground hover:underline">홈</button>
             {segments.map((seg, i) => (
               <span key={i} className="flex items-center gap-1">
                 <span className="text-line-strong">/</span>
                 <button
                   onClick={() => load((isAbsolute ? "/" : "") + segments.slice(0, i + 1).join("/"))}
-                  className="hover:text-[#3f4c43] hover:underline"
+                  className="hover:text-foreground hover:underline"
                 >
                   {seg}
                 </button>
@@ -258,15 +260,15 @@ export default function FileBrowserPage() {
           </div>
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
-          <button onClick={() => setShowNewFolder(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-[#445248] transition-colors hover:bg-[#f2f6f3]">
+          <button onClick={() => setShowNewFolder(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-muted transition-colors hover:bg-white/[0.06]">
             새 폴더
           </button>
           <div className="h-5 w-px shrink-0 bg-line" />
-          <button onClick={() => fileInputRef.current?.click()} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-[#f2f6f3]">
+          <button onClick={() => fileInputRef.current?.click()} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-white/[0.06]">
             ＋ 업로드
           </button>
           <div className="h-5 w-px shrink-0 bg-line" />
-          <button onClick={() => load(currentPath)} title="새로고침" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-[#f2f6f3] rounded-r-panel">
+          <button onClick={() => load(currentPath)} title="새로고침" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -279,7 +281,7 @@ export default function FileBrowserPage() {
         <div className="bg-soft text-brand-strong px-4 py-2 rounded-md mb-3 text-sm">{notice}</div>
       )}
       {error && (
-        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
+        <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
         </div>
@@ -302,13 +304,13 @@ export default function FileBrowserPage() {
             </thead>
             <tbody>
               {currentPath && currentPath !== rootPath && (
-                <tr className="hover:bg-[#fbfdfc]">
+                <tr className="hover:bg-white/[0.03]">
                   <Td colSpan={4}>
                     <button onClick={goToParent} className="flex items-center gap-2 text-left hover:underline">
                       <svg className="w-4 h-4 text-[#e0a940] shrink-0" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" />
                       </svg>
-                      <span className="text-[#3d4941]">..</span>
+                      <span className="text-foreground">..</span>
                     </button>
                   </Td>
                 </tr>
@@ -321,7 +323,7 @@ export default function FileBrowserPage() {
                 </tr>
               )}
               {entries.map((entry) => (
-                <tr key={entry.path} className="hover:bg-[#fbfdfc]">
+                <tr key={entry.path} className="hover:bg-white/[0.03]">
                   <Td>
                     <button onClick={() => openEntry(entry)} className="flex items-center gap-2 text-left hover:underline">
                       {entry.directory ? (
@@ -333,7 +335,7 @@ export default function FileBrowserPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" />
                         </svg>
                       )}
-                      <span className="text-[#3d4941]">{entry.name}</span>
+                      <span className="text-foreground">{entry.name}</span>
                     </button>
                   </Td>
                   <Td className="text-muted">{entry.directory ? "—" : formatSize(entry.size)}</Td>
@@ -341,7 +343,7 @@ export default function FileBrowserPage() {
                   <Td>
                     <div className="flex items-center gap-2">
                       {!entry.directory && (
-                        <button onClick={() => handleDownload(entry)} title="다운로드" className="text-muted-soft hover:text-[#3f4c43]">
+                        <button onClick={() => handleDownload(entry)} title="다운로드" className="text-muted-soft hover:text-foreground">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" />
                           </svg>
@@ -392,7 +394,7 @@ export default function FileBrowserPage() {
               {deleteTarget.directory ? "폴더 삭제" : "파일 삭제"}
             </h2>
             <p className="text-sm text-muted mb-5">
-              <span className="font-bold text-[#3f4c43]">{deleteTarget.name}</span>
+              <span className="font-bold text-foreground">{deleteTarget.name}</span>
               {deleteTarget.directory ? "과 하위 항목을" : "을"} 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
             </p>
             <div className="flex gap-2">

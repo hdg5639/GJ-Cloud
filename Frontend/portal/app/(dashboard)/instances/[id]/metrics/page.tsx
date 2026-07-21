@@ -9,6 +9,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 import { PageLoader } from "@/components/ui/loader";
 import { Panel } from "@/components/ui/panel";
 import { StatGrid, StatCard } from "@/components/ui/stat-card";
+import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 
 interface SSEMetrics {
   vmId: string;
@@ -148,11 +149,12 @@ export default function MetricsPage() {
 
   return (
     <div>
+      <InstanceSectionNav vmId={vmId} />
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
           <button
             onClick={() => router.back()}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted"
             aria-label="뒤로가기"
           >
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,7 +167,7 @@ export default function MetricsPage() {
           <button
             onClick={reconnect}
             title="동기화"
-            className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-[#f2f6f3] rounded-r-panel"
+            className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel"
           >
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -175,7 +177,7 @@ export default function MetricsPage() {
       </div>
 
       {error && (
-        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-6 text-sm">
+        <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-6 text-sm">
           {error}
         </div>
       )}
@@ -189,9 +191,9 @@ export default function MetricsPage() {
       </StatGrid>
 
       {/* 차트 그리드 */}
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <ChartCard title="CPU 사용률 (최근 1시간)" dataKey="cpu" color="#08b85b" data={chartData} />
-        <ChartCard title="메모리 사용률 (최근 1시간)" dataKey="mem" color="#6c48dd" data={chartData} />
+      <div className="grid grid-cols-1 gap-3 mb-3 lg:grid-cols-2">
+        <ChartCard title="CPU 사용률 (최근 1시간)" dataKey="cpu" color="#baff4a" data={chartData} />
+        <ChartCard title="메모리 사용률 (최근 1시간)" dataKey="mem" color="#b39dff" data={chartData} />
       </div>
 
       {/* 네트워크 차트 (풀 너비) */}
@@ -199,15 +201,15 @@ export default function MetricsPage() {
         <p className="text-sm font-bold mb-4">네트워크 트래픽 (최근 1시간)</p>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e4eae6" vertical={false} />
-            <XAxis dataKey="time" stroke="#9aa59e" style={{ fontSize: "12px" }} />
-            <YAxis stroke="#9aa59e" style={{ fontSize: "12px" }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.09)" vertical={false} />
+            <XAxis dataKey="time" stroke="#9aa39a" style={{ fontSize: "12px" }} />
+            <YAxis stroke="#9aa39a" style={{ fontSize: "12px" }} />
             <Tooltip
-              contentStyle={{ backgroundColor: "#fbfcfb", border: "1px solid #e4eae6", borderRadius: "10px" }}
-              labelStyle={{ color: "#17211b" }}
+              contentStyle={{ backgroundColor: "#11141a", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "10px" }}
+              labelStyle={{ color: "#f4f7f1" }}
             />
-            <Line type="monotone" dataKey="netin" stroke="#08b85b" name="In (MB)" dot={false} strokeWidth={2} />
-            <Line type="monotone" dataKey="netout" stroke="#6c48dd" name="Out (MB)" dot={false} strokeWidth={2} />
+            <Line type="monotone" dataKey="netin" stroke="#baff4a" name="In (MB)" dot={false} strokeWidth={2} />
+            <Line type="monotone" dataKey="netout" stroke="#b39dff" name="Out (MB)" dot={false} strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       </Panel>
@@ -227,12 +229,12 @@ function ChartCard({ title, dataKey, color, data }: { title: string; dataKey: st
               <stop offset="95%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e4eae6" vertical={false} />
-          <XAxis dataKey="time" stroke="#9aa59e" style={{ fontSize: "12px" }} />
-          <YAxis stroke="#9aa59e" style={{ fontSize: "12px" }} domain={[0, 100]} />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.09)" vertical={false} />
+          <XAxis dataKey="time" stroke="#9aa39a" style={{ fontSize: "12px" }} />
+          <YAxis stroke="#9aa39a" style={{ fontSize: "12px" }} domain={[0, 100]} />
           <Tooltip
-            contentStyle={{ backgroundColor: "#fbfcfb", border: "1px solid #e4eae6", borderRadius: "10px" }}
-            labelStyle={{ color: "#17211b" }}
+            contentStyle={{ backgroundColor: "#11141a", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "10px" }}
+            labelStyle={{ color: "#f4f7f1" }}
           />
           <Area
             type="monotone"

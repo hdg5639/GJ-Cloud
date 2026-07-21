@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import { PageLoader } from "@/components/ui/loader";
 import { StatusBadge } from "@/components/ui/badge";
+import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -124,21 +125,22 @@ export default function ConsolePage() {
     status === "connecting" ? "연결 중" : status === "connected" ? "연결됨" : status === "closed" ? "연결 종료" : "오류";
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-[calc(100vh-170px)]">
+      <InstanceSectionNav vmId={vmId} />
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
-          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <h1 className="text-[15px] font-bold whitespace-nowrap">콘솔</h1>
-          <StatusBadge tone={status === "error" ? "off" : statusTone} className={status === "error" ? "bg-[#fdf4f4] text-danger" : undefined}>
+          <StatusBadge tone={status === "error" ? "off" : statusTone} className={status === "error" ? "bg-danger/10 text-danger" : undefined}>
             {statusLabel}
           </StatusBadge>
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
-          <button onClick={connect} title="다시 연결" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-[#f2f6f3] rounded-r-panel">
+          <button onClick={connect} title="다시 연결" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -147,7 +149,7 @@ export default function ConsolePage() {
       </div>
 
       {errorMessage && (
-        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">
+        <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">
           {errorMessage}
         </div>
       )}

@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Table, Th, Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
+import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 
 type NetworkMode = "create" | "reuse";
 
@@ -338,10 +339,11 @@ export default function DeploymentsPage() {
   if (!accessToken) return <PageLoader />;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="flex flex-col h-[calc(100vh-170px)]">
+      <InstanceSectionNav vmId={vmId} />
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
-          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted" aria-label="뒤로가기">
+          <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -349,11 +351,11 @@ export default function DeploymentsPage() {
           <h1 className="text-[15px] font-bold whitespace-nowrap">배포</h1>
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
-          <button onClick={() => setShowCreate(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-[#f2f6f3]">
+          <button onClick={() => setShowCreate(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-white/[0.06]">
             ＋ 새 배포
           </button>
           <div className="h-5 w-px shrink-0 bg-line" />
-          <button onClick={load} title="새로고침" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-[#f2f6f3] rounded-r-panel">
+          <button onClick={load} title="새로고침" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
@@ -362,7 +364,7 @@ export default function DeploymentsPage() {
       </div>
 
       {error && (
-        <div className="bg-[#fdf4f4] border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
+        <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
         </div>
@@ -386,7 +388,7 @@ export default function DeploymentsPage() {
             </thead>
             <tbody>
               {deployments.map((d) => (
-                <tr key={d.id} className="hover:bg-[#fbfdfc]">
+                <tr key={d.id} className="hover:bg-white/[0.03]">
                   <Td className="text-xs text-muted-soft">{formatDate(d.createdAt)}</Td>
                   <Td>{SOURCE_TYPE_LABEL[d.sourceType] ?? d.sourceType}</Td>
                   <Td className="text-muted-soft font-mono text-xs">{d.sourceRevision?.slice(0, 10) ?? "—"}</Td>
@@ -431,7 +433,7 @@ export default function DeploymentsPage() {
       {/* 배포 생성 모달 — 목업의 위저드 톤(큰 패널, eyebrow+제목+설명 헤더, 섹션별 설명)을 따르되
           실제 흐름(Compose 직접 작성 / AI 자동생성 두 갈래, 각기 다른 하위 단계 수)은 그대로 유지 */}
       <Modal open={showCreate} onClose={closeCreate}>
-        <div className="mx-auto flex h-[min(880px,92vh)] w-[min(980px,96vw)] flex-col overflow-hidden rounded-[20px] bg-[#f8faf9]">
+        <div className="mx-auto flex h-[min(880px,92vh)] w-[min(980px,96vw)] flex-col overflow-hidden rounded-[20px] bg-background">
           {/* 헤더 */}
           <div className="flex items-center justify-between border-b border-line bg-panel px-6 py-5 shrink-0">
             <div>
@@ -443,7 +445,7 @@ export default function DeploymentsPage() {
                   : "저장소를 분석해 AI가 배포 구성을 자동으로 만들어 드립니다. 검토 후 배포하세요."}
               </p>
             </div>
-            <button onClick={closeCreate} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-lg text-muted-soft hover:bg-[#f1f4f2]">
+            <button onClick={closeCreate} className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] text-lg text-muted-soft hover:bg-white/[0.06]">
               ×
             </button>
           </div>
@@ -452,7 +454,7 @@ export default function DeploymentsPage() {
           <div className="flex-1 overflow-y-auto p-6">
             <div className="mx-auto max-w-[820px] space-y-4">
               {retryNotice && (
-                <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] px-3 py-2.5 text-xs text-[#9c6b1f]">
+                <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] px-3 py-2.5 text-xs text-[#e8b657]">
                   이전 배포의 compose 내용을 불러왔습니다. Git 저장소 URL/브랜치/PAT는 보안상 저장되지 않아 다시 입력해야 합니다. 필요하면 내용을 수정한 뒤 배포를 시작하세요.
                 </div>
               )}
@@ -467,7 +469,7 @@ export default function DeploymentsPage() {
                     onClick={() => setCreateTab("compose")}
                     className={cn(
                       "rounded-[12px] border p-4 text-left transition-colors",
-                      createTab === "compose" ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)] bg-panel" : "border-line-strong bg-panel hover:border-[#b9c4bd]"
+                      createTab === "compose" ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)] bg-panel" : "border-line-strong bg-panel hover:border-white/20"
                     )}
                   >
                     <p className="mb-1 text-sm font-bold">Compose 직접 작성</p>
@@ -478,7 +480,7 @@ export default function DeploymentsPage() {
                     onClick={() => setCreateTab("ai")}
                     className={cn(
                       "rounded-[12px] border p-4 text-left transition-colors",
-                      createTab === "ai" ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)] bg-panel" : "border-line-strong bg-panel hover:border-[#b9c4bd]"
+                      createTab === "ai" ? "border-brand shadow-[inset_0_0_0_1px_var(--brand)] bg-panel" : "border-line-strong bg-panel hover:border-white/20"
                     )}
                   >
                     <p className="mb-1 text-sm font-bold">AI 자동 생성</p>
@@ -560,7 +562,7 @@ export default function DeploymentsPage() {
                     <button
                       type="button"
                       onClick={() => setShowAdvanced((v) => !v)}
-                      className="text-xs text-muted hover:text-[#3f4c43] text-left"
+                      className="text-xs text-muted hover:text-foreground text-left"
                     >
                       고급 설정 (환경변수 파일 · 라우트 노출 · 헬스체크) {showAdvanced ? "▴" : "▾"}
                     </button>
@@ -571,7 +573,7 @@ export default function DeploymentsPage() {
                         {/* 환경변수 파일 */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs font-bold text-[#3f4c43]">환경변수 파일</p>
+                            <p className="text-xs font-bold text-foreground">환경변수 파일</p>
                             <button type="button" onClick={() => setEnvFiles((prev) => [...prev, emptyEnvFile()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
                           </div>
                           <p className="mb-1.5 text-[11px] text-muted-soft">VM에 업로드할 .env 파일의 경로와 내용을 지정합니다.</p>
@@ -598,7 +600,7 @@ export default function DeploymentsPage() {
                         {/* 라우트 노출 */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs font-bold text-[#3f4c43]">라우트 노출</p>
+                            <p className="text-xs font-bold text-foreground">라우트 노출</p>
                             <button type="button" onClick={() => setRoutes((prev) => [...prev, emptyExposedRoute()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
                           </div>
                           <p className="mb-1.5 text-[11px] text-muted-soft">외부에서 접근 가능하게 노출할 서비스 포트를 지정합니다.</p>
@@ -623,7 +625,7 @@ export default function DeploymentsPage() {
                         {/* 헬스체크 */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs font-bold text-[#3f4c43]">헬스체크</p>
+                            <p className="text-xs font-bold text-foreground">헬스체크</p>
                             <button type="button" onClick={() => setHealthChecks((prev) => [...prev, emptyHealthCheck()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
                           </div>
                           <p className="mb-1.5 text-[11px] text-muted-soft">컨테이너 교체 후 정상 기동을 확인할 방법을 지정합니다. 실패 시 자동 롤백됩니다.</p>
@@ -647,13 +649,13 @@ export default function DeploymentsPage() {
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {dockerNetworks.map((n) => (
-                          <span key={n.ID} className="rounded-md border border-line-strong bg-[#fbfcfb] px-2 py-1 text-xs font-mono text-[#3d4941]">
+                          <span key={n.ID} className="rounded-md border border-line-strong bg-white/[0.03] px-2 py-1 text-xs font-mono text-foreground">
                             {n.Name}
                           </span>
                         ))}
                       </div>
                     )}
-                    <pre className="mt-3 overflow-x-auto rounded-[10px] border border-line bg-[#f7f9f8] p-3 font-mono text-[11px] leading-[1.6] text-[#3d4941]">
+                    <pre className="mt-3 overflow-x-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
 {`networks:\n  default:\n    external: true\n    name: <재사용할 네트워크 이름>`}
                     </pre>
                   </Section>
@@ -663,7 +665,7 @@ export default function DeploymentsPage() {
                   <Section title="2. 서비스 힌트 (선택)" description="AI가 저장소를 자동으로 분석하지만, 감지가 어려운 서비스가 있다면 힌트를 입력해 정확도를 높일 수 있습니다.">
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-bold text-[#3f4c43]">서비스</p>
+                        <p className="text-xs font-bold text-foreground">서비스</p>
                         <button type="button" onClick={() => setServiceCards((prev) => [...prev, emptyServiceCard()])} className="text-xs text-brand-strong font-bold">+ 서비스 추가</button>
                       </div>
                       {serviceCards.map((s, i) => (
@@ -696,7 +698,7 @@ export default function DeploymentsPage() {
 
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-bold text-[#3f4c43]">공유 인프라</p>
+                        <p className="text-xs font-bold text-foreground">공유 인프라</p>
                         <button type="button" onClick={() => setInfraSelections((prev) => [...prev, emptyInfra()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
                       </div>
                       <p className="mb-1.5 text-[11px] text-muted-soft">서비스가 함께 사용할 DB/캐시 등 공유 인프라를 지정합니다.</p>
@@ -715,10 +717,10 @@ export default function DeploymentsPage() {
                     </div>
 
                     <div className="mb-4">
-                      <p className="mb-1.5 text-xs font-bold text-[#3f4c43]">Docker 네트워크</p>
+                      <p className="mb-1.5 text-xs font-bold text-foreground">Docker 네트워크</p>
                       <p className="mb-1.5 text-[11px] text-muted-soft">서비스들을 새 네트워크에 배치할지, VM에 이미 있는 네트워크를 재사용할지 선택하세요.</p>
                       <div className="flex flex-col gap-1.5">
-                        <label className="flex items-center gap-2 text-xs text-[#3d4941]">
+                        <label className="flex items-center gap-2 text-xs text-foreground">
                           <input
                             type="radio"
                             name="deploy-network-mode"
@@ -728,7 +730,7 @@ export default function DeploymentsPage() {
                           />
                           새 네트워크 생성
                         </label>
-                        <label className="flex items-center gap-2 text-xs text-[#3d4941]">
+                        <label className="flex items-center gap-2 text-xs text-foreground">
                           <input
                             type="radio"
                             name="deploy-network-mode"
@@ -771,13 +773,13 @@ export default function DeploymentsPage() {
                   {/* 결정론적 저장소 분석 결과 — AI 호출 여부와 무관하게 항상 먼저 보여줌 */}
                   {evidenceRefs.length > 0 && (
                     <Section title="저장소 분석 결과" description="AI 호출 전에 저장소를 결정론적 규칙으로 먼저 분석한 근거입니다.">
-                      <div className="space-y-1 text-xs text-[#2c5a8a]">
+                      <div className="space-y-1 text-xs text-[#7ab3f5]">
                         {evidenceRefs.map((ref, i) => {
                           const [ctx, detectedType, confidence] = ref.split(":");
                           return (
                             <p key={i}>
                               · <span className="font-mono">{ctx || "."}</span> → {detectedType}
-                              {confidence && <span className="text-[#5c8ab8]"> (신뢰도: {confidence})</span>}
+                              {confidence && <span className="text-[#7ab3f5]/70"> (신뢰도: {confidence})</span>}
                             </p>
                           );
                         })}
@@ -786,14 +788,14 @@ export default function DeploymentsPage() {
                   )}
 
                   {generationWarnings.length > 0 && (
-                    <div className="rounded-md border border-[#f3dfa8] bg-[#fffaf0] p-3 text-xs text-[#9c6b1f] space-y-1">
+                    <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] p-3 text-xs text-[#e8b657] space-y-1">
                       {generationWarnings.map((w, i) => <p key={i}>⚠ {w}</p>)}
                     </div>
                   )}
 
                   {/* 근거 부족/충돌 등으로 확정하지 못한 경우 — 억지로 스펙을 만들어내지 않고 사유를 그대로 보여줌 */}
                   {generationStatus && generationStatus !== "READY" && (
-                    <div className="rounded-md border border-danger-soft bg-[#fdf4f4] p-3 text-xs text-danger space-y-1.5">
+                    <div className="rounded-md border border-danger-soft bg-danger/10 p-3 text-xs text-danger space-y-1.5">
                       <p className="font-bold">
                         {generationStatus === "NEEDS_INPUT" && "추가 정보가 필요합니다"}
                         {generationStatus === "UNSUPPORTED" && "이 구성은 자동 배포를 지원하지 않습니다"}
@@ -822,16 +824,16 @@ export default function DeploymentsPage() {
                           {reviewing ? "AI 검수 중..." : "AI 검수 요청 (선택 — 결과가 배포를 막지 않습니다)"}
                         </Button>
                         {reviewFindings && (
-                          <div className="rounded-md border border-line bg-[#fbfcfb] p-3 text-xs text-[#3d4941] space-y-2">
+                          <div className="rounded-md border border-line bg-white/[0.03] p-3 text-xs text-foreground space-y-2">
                             <p className="text-[11px] text-muted-soft">AI 검수는 참고용이며 배포를 막지 않습니다.</p>
                             {reviewFindings.length === 0 ? (
                               <p className="text-muted-soft">특이사항이 없습니다.</p>
                             ) : (
                               reviewFindings.map((finding, i) => (
                                 <div key={i} className="border-l-2 pl-2" style={{
-                                  borderColor: finding.severity === "CRITICAL" ? "#e34949" : finding.severity === "WARNING" ? "#e0a940" : "#9aa59e",
+                                  borderColor: finding.severity === "CRITICAL" ? "#ff6b6b" : finding.severity === "WARNING" ? "#e8b657" : "#9aa39a",
                                 }}>
-                                  <p className="font-bold text-[#3d4941]">
+                                  <p className="font-bold text-foreground">
                                     [{finding.severity}] {finding.service && <span className="font-mono">{finding.service}</span>} {finding.message}
                                   </p>
                                   {finding.remediation && <p className="text-muted mt-0.5">→ {finding.remediation}</p>}

@@ -57,11 +57,11 @@ function CodeBlock({
 function GuideStep({ num, title, children }: { num: number; title: string; children: ReactNode }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#445248] text-[11px] font-bold text-white">
+      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.12] text-[11px] font-bold text-foreground">
         {num}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="mb-1.5 text-xs font-bold text-[#3d4941]">{title}</p>
+        <p className="mb-1.5 text-xs font-bold text-foreground">{title}</p>
         {children}
       </div>
     </div>
@@ -456,7 +456,7 @@ export default function InstanceDetailPage() {
             <button
               onClick={reconnectSse}
               title="상태 동기화"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-[#f2f6f3] hover:text-muted"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted"
             >
               <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                 <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -471,8 +471,8 @@ export default function InstanceDetailPage() {
               <button
                 onClick={() => setShowPowerMenu((v) => !v)}
                 disabled={isTransitioning || vm.status === "DELETED"}
-                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
-                  showPowerMenu ? "bg-[#f2f6f3]" : ""
+                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
+                  showPowerMenu ? "bg-white/[0.06]" : ""
                 }`}
               >
                 <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
@@ -487,12 +487,12 @@ export default function InstanceDetailPage() {
                 <div className="absolute left-0 z-20 mt-1 min-w-full overflow-hidden rounded-md border border-line bg-panel shadow-md">
                   {isRunning ? (
                     <>
-                      <button onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap">정지</button>
-                      <div className="h-px bg-[#edf1ee] mx-2" />
-                      <button onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap">재시작</button>
+                      <button onClick={() => { handlePower("STOP"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground whitespace-nowrap">정지</button>
+                      <div className="h-px bg-line mx-2" />
+                      <button onClick={() => { handlePower("REBOOT"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground whitespace-nowrap">재시작</button>
                     </>
                   ) : (
-                    <button onClick={() => { handlePower("START"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap">시작</button>
+                    <button onClick={() => { handlePower("START"); setShowPowerMenu(false); }} className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground whitespace-nowrap">시작</button>
                   )}
                 </div>
               )}
@@ -503,7 +503,7 @@ export default function InstanceDetailPage() {
               onClick={() => router.push(`/instances/${id}/console`)}
               disabled={!isRunning}
               title={isRunning ? undefined : "VM이 실행 중일 때만 콘솔에 접속할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
             >
               <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                 <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
@@ -516,7 +516,7 @@ export default function InstanceDetailPage() {
               onClick={() => router.push(`/instances/${id}/files`)}
               disabled={!isRunning}
               title={isRunning ? undefined : "VM이 실행 중일 때만 파일 브라우저를 이용할 수 있어요"}
-              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+              className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
             >
               <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                 <path d="M3 5a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"/>
@@ -530,7 +530,7 @@ export default function InstanceDetailPage() {
                 onClick={() => router.push(`/instances/${id}/docker`)}
                 disabled={!isRunning}
                 title={isRunning ? undefined : "VM이 실행 중일 때만 Docker 관리를 이용할 수 있어요"}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               >
                 <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2"/><line x1="8" y1="12" x2="16" y2="12"/>
@@ -547,7 +547,7 @@ export default function InstanceDetailPage() {
                 onClick={() => router.push(`/instances/${id}/deployments`)}
                 disabled={!isRunning}
                 title={isRunning ? undefined : "VM이 실행 중일 때만 배포를 이용할 수 있어요"}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               >
                 <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
@@ -562,7 +562,7 @@ export default function InstanceDetailPage() {
                 onClick={() => router.push(`/instances/${id}/backups`)}
                 disabled={!isRunning}
                 title={isRunning ? undefined : "VM이 실행 중일 때만 DB 백업을 이용할 수 있어요"}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               >
                 <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
@@ -575,7 +575,7 @@ export default function InstanceDetailPage() {
             {showPerformance && (
               <button
                 onClick={() => router.push(`/instances/${id}/metrics`)}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] transition-colors"
               >
                 <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <rect x="18" y="3" width="4" height="18" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="2" y="13" width="4" height="8" rx="1"/>
@@ -588,7 +588,7 @@ export default function InstanceDetailPage() {
             {showSpecChange && (
               <button
                 onClick={() => setShowUpgradeModal(true)}
-                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] transition-colors"
+                className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] transition-colors"
               >
                 <svg className="w-[15px] h-[15px] text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                   <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -602,8 +602,8 @@ export default function InstanceDetailPage() {
               <div className="relative" ref={moreMenuRef}>
                 <button
                   onClick={() => setShowMoreMenu((v) => !v)}
-                  className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-[#445248] hover:bg-[#f2f6f3] transition-colors ${
-                    showMoreMenu ? "bg-[#f2f6f3]" : ""
+                  className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] transition-colors ${
+                    showMoreMenu ? "bg-white/[0.06]" : ""
                   }`}
                 >
                   더보기
@@ -617,7 +617,7 @@ export default function InstanceDetailPage() {
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/docker`); }}
                         disabled={!isRunning}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
                       >
                         Docker
                       </button>
@@ -626,7 +626,7 @@ export default function InstanceDetailPage() {
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/deployments`); }}
                         disabled={!isRunning}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
                       >
                         배포
                       </button>
@@ -635,7 +635,7 @@ export default function InstanceDetailPage() {
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/backups`); }}
                         disabled={!isRunning}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
                       >
                         백업
                       </button>
@@ -643,7 +643,7 @@ export default function InstanceDetailPage() {
                     {!showPerformance && (
                       <button
                         onClick={() => { setShowMoreMenu(false); router.push(`/instances/${id}/metrics`); }}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground whitespace-nowrap"
                       >
                         성능
                       </button>
@@ -651,17 +651,17 @@ export default function InstanceDetailPage() {
                     {!showSpecChange && (
                       <button
                         onClick={() => { setShowMoreMenu(false); setShowUpgradeModal(true); }}
-                        className="w-full text-left text-sm px-4 py-2 hover:bg-[#f2f6f3] text-[#3f4c43] whitespace-nowrap"
+                        className="w-full text-left text-sm px-4 py-2 hover:bg-white/[0.06] text-foreground whitespace-nowrap"
                       >
                         스펙 변경
                       </button>
                     )}
                     {toolbarDeleteCollapsed && (
                       <>
-                        <div className="h-px bg-[#edf1ee] mx-2 my-1" />
+                        <div className="h-px bg-line mx-2 my-1" />
                         <button
                           onClick={() => { setShowMoreMenu(false); setConfirmDelete(true); }}
-                          className="w-full text-left text-sm px-4 py-2 hover:bg-[#fdf4f4] text-danger whitespace-nowrap"
+                          className="w-full text-left text-sm px-4 py-2 hover:bg-danger/10 text-danger whitespace-nowrap"
                         >
                           삭제
                         </button>
@@ -678,7 +678,7 @@ export default function InstanceDetailPage() {
                 <div className="w-px h-5 bg-line shrink-0" />
                 <button
                   onClick={() => setConfirmDelete(true)}
-                  className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-danger hover:bg-[#fdf4f4] rounded-r-panel transition-colors"
+                  className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-danger hover:bg-danger/10 rounded-r-panel transition-colors"
                 >
                   <svg className="w-[15px] h-[15px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
                     <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
@@ -758,12 +758,12 @@ export default function InstanceDetailPage() {
 
       {/* needsReboot 배너 */}
       {vm.needsReboot && (
-        <div className="mb-5 flex items-center justify-between rounded-panel border border-[#f3dfa8] bg-[#fffaf0] p-4">
+        <div className="mb-5 flex items-center justify-between rounded-panel border border-[#e8b657]/25 bg-[#e8b657]/[0.06] p-4">
           <div>
-            <p className="text-sm font-bold text-[#8a5a10]">재부팅이 필요합니다</p>
-            <p className="mt-0.5 text-xs text-[#9c6b1f]">플랜 변경(CPU/RAM)을 적용하려면 인스턴스를 재부팅해야 해요</p>
+            <p className="text-sm font-bold text-[#e8b657]">재부팅이 필요합니다</p>
+            <p className="mt-0.5 text-xs text-[#e8b657]/80">플랜 변경(CPU/RAM)을 적용하려면 인스턴스를 재부팅해야 해요</p>
           </div>
-          <Button size="small" onClick={() => handlePower("REBOOT")} className="shrink-0 border-[#f0c674] bg-[#f0c674] text-[#5c3d0a] hover:bg-[#e8b855]">
+          <Button size="small" onClick={() => handlePower("REBOOT")} className="shrink-0 border-[#e8b657] bg-[#e8b657] text-[#2b1d02] hover:bg-[#f0c674]">
             지금 재부팅
           </Button>
         </div>
@@ -771,9 +771,9 @@ export default function InstanceDetailPage() {
 
       {/* ERROR 에러 메시지 */}
       {vm.status === "FAILED" && vm.errorMessage && (
-        <div className="mb-5 rounded-panel border border-danger-soft bg-[#fdf4f4] p-4">
+        <div className="mb-5 rounded-panel border border-danger-soft bg-danger/10 p-4">
           <p className="text-sm font-bold text-danger">오류 발생</p>
-          <p className="mt-0.5 text-xs text-[#b23a3a]">{vm.errorMessage}</p>
+          <p className="mt-0.5 text-xs text-danger/80">{vm.errorMessage}</p>
         </div>
       )}
 
@@ -803,7 +803,7 @@ export default function InstanceDetailPage() {
 
         <button
           onClick={() => setAccordionOpen(!accordionOpen)}
-          className="flex items-center justify-between w-full mt-3 pt-3 border-t border-[#edf1ee] text-muted hover:text-[#3f4c43] transition-colors"
+          className="flex items-center justify-between w-full mt-3 pt-3 border-t border-line text-muted hover:text-foreground transition-colors"
         >
           <span className="flex items-center gap-1.5 text-[13px]">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -1034,8 +1034,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             <p className="text-[13px] text-muted-soft py-1">허용된 이메일이 없습니다.</p>
           )}
           {sshEmails.map((email) => (
-            <div key={email} className="flex items-center justify-between py-2 border-b border-[#edf1ee] last:border-0">
-              <span className="text-[13px] text-[#3d4941]">{email}</span>
+            <div key={email} className="flex items-center justify-between py-2 border-b border-line last:border-0">
+              <span className="text-[13px] text-foreground">{email}</span>
               <button
                 onClick={() => handleRemoveSshEmail(email)}
                 className="text-muted-soft hover:text-danger p-0.5"
@@ -1095,7 +1095,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                     {port.visibility === "PRIVATE" && (
                       <button
                         onClick={() => setExpandedPortId(expandedPortId === port.id ? null : port.id)}
-                        className="text-xs text-muted hover:text-[#3f4c43]"
+                        className="text-xs text-muted hover:text-foreground"
                       >
                         이메일 {expandedPortId === port.id ? "▴" : "▾"}
                       </button>
@@ -1111,12 +1111,12 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
                 {/* 비공개 포트 이메일 관리 */}
                 {port.visibility === "PRIVATE" && expandedPortId === port.id && (
-                  <div className="border-t border-[#edf1ee] px-3 pb-3 pt-2">
+                  <div className="border-t border-line px-3 pb-3 pt-2">
                     <p className="text-[11px] text-muted-soft mb-2">접근 허용 이메일</p>
                     <div className="flex flex-col gap-1 mb-2">
                       {port.accessEmails.map((email) => (
                         <div key={email} className="flex items-center justify-between py-1">
-                          <span className="text-xs text-[#3d4941]">{email}</span>
+                          <span className="text-xs text-foreground">{email}</span>
                           <button
                             onClick={() => handleRemovePortEmail(port.id, email)}
                             className="text-[11px] text-muted-soft hover:text-danger"
@@ -1163,13 +1163,13 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
       {/* ── 우측: 협업 패널 (sticky) ── */}
       <div className="flex-[10] min-w-0">
-        <div className="sticky top-0 rounded-panel bg-[#fbfcfb] border border-line p-4">
+        <div className="sticky top-0 rounded-panel bg-white/[0.03] border border-line p-4">
           {/* 패널 헤더 */}
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[15px] font-bold">협업</span>
             <button
               onClick={() => { setEditingCollab(undefined); setShowCollabWrite(true); }}
-              className="text-[13px] px-3 h-[30px] bg-soft text-brand-strong rounded-md hover:bg-[#dff3e6] font-bold border-0"
+              className="text-[13px] px-3 h-[30px] bg-soft text-brand-strong rounded-md hover:bg-brand/15 font-bold border-0"
               style={{ width: "auto" }}
             >
               + 작성
@@ -1184,8 +1184,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 style={{ width: "auto", padding: "0 12px", height: 28, fontSize: 12 }}
                 className={`rounded-md transition-colors ${
                   collabTypeFilter === t
-                    ? "bg-panel border border-line-strong text-[#3d4941]"
-                    : "bg-transparent border-0 text-muted hover:text-[#3f4c43]"
+                    ? "bg-panel border border-line-strong text-foreground"
+                    : "bg-transparent border-0 text-muted hover:text-foreground"
                 }`}
               >
                 {t === undefined ? "전체" : t === "NOTE" ? "메모" : t === "NOTICE" ? "공지" : "요청"}
@@ -1273,7 +1273,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 <span className="flex items-center">
                   커스텀 서브도메인
                   {profile?.planType !== "PRO"
-                    ? <span className="ml-1.5 text-[10px] font-bold text-[#9c6b1f] bg-[#fffaf0] border border-[#f3dfa8] px-1.5 py-0.5 rounded">PRO 전용</span>
+                    ? <span className="ml-1.5 text-[10px] font-bold text-[#e8b657] bg-[#e8b657]/10 border border-[#e8b657]/25 px-1.5 py-0.5 rounded">PRO 전용</span>
                     : <span className="text-[10px] text-accent ml-1">PRO</span>
                   }
                 </span>
@@ -1291,7 +1291,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 maxLength={30}
                 pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
                 disabled={profile?.planType !== "PRO"}
-                className="disabled:bg-[#fbfcfb]"
+                className="disabled:bg-white/[0.03]"
               />
               {portForm.customSubdomain && (
                 <p className={`text-[11px] font-normal normal-case ${
@@ -1376,7 +1376,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
         <div className="mx-auto w-[340px] rounded-panel bg-panel p-6">
           <h2 className="mb-2 text-base font-bold">인스턴스 삭제</h2>
           <p className="mb-5 text-sm text-muted">
-            <span className="font-bold text-[#3f4c43]">{vm.name}</span>을 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
+            <span className="font-bold text-foreground">{vm.name}</span>을 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
           </p>
           <div className="flex gap-2">
             <Button onClick={() => setConfirmDelete(false)} className="flex-1">
