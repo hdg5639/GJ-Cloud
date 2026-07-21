@@ -245,6 +245,12 @@ export const api = {
       }),
     metricsCurrent: (accessToken: string, id: string) =>
       request<VmMetricsCurrentResponse>("vm", `/vms/${id}/metrics/current`, { accessToken }),
+    // SEC-006: EventSource는 Authorization 헤더를 못 붙이므로, 구독 전 짧은 TTL의 1회용 티켓을
+    // 먼저 발급받아 ?ticket=으로만 연결한다(원본 액세스 토큰을 URL에 노출하지 않기 위함).
+    issueEventsTicket: (accessToken: string) =>
+      request<{ ticket: string }>("vm", "/vms/events/ticket", { method: "POST", accessToken }),
+    issueMetricsTicket: (accessToken: string, id: string) =>
+      request<{ ticket: string }>("vm", `/vms/${id}/metrics/ticket`, { method: "POST", accessToken }),
     metricsHistory: (accessToken: string, id: string, timeframe: string = "hour") =>
       request<VmMetricsHistoryResponse>("vm", `/vms/${id}/metrics/history?timeframe=${timeframe}`, {
         accessToken,

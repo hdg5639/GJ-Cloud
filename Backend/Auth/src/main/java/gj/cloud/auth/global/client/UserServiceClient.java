@@ -44,15 +44,18 @@ public class UserServiceClient {
         }
     }
 
-    public void deleteUser(String userId) {
+    // REL-001: 재시도 스케줄러가 성공 여부를 job 상태에 반영해야 하므로 boolean으로 결과를 알려준다.
+    public boolean deleteUser(String userId) {
         try {
             restClient.delete()
                     .uri(userServiceUrl + "/internal/users/{userId}", userId)
                     .header("Authorization", "Bearer " + serviceToken())
                     .retrieve()
                     .toBodilessEntity();
+            return true;
         } catch (Exception e) {
             log.warn("User 서비스 데이터 삭제 실패 (userId={}): {}", userId, e.getMessage());
+            return false;
         }
     }
 

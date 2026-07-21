@@ -30,7 +30,8 @@ public class VmServiceClient {
         this.vmServiceUrl = vmServiceUrl;
     }
 
-    public void deleteUserData(String userId, String email) {
+    // REL-001: 재시도 스케줄러가 성공 여부를 job 상태에 반영해야 하므로 boolean으로 결과를 알려준다.
+    public boolean deleteUserData(String userId, String email) {
         String correlationId = UUID.randomUUID().toString();
         String token = jwtProvider.issueServiceToken("auth-service", "vm-service", "user:cleanup");
         try {
@@ -41,8 +42,10 @@ public class VmServiceClient {
                     .retrieve()
                     .toBodilessEntity();
             log.info("VM 서비스 데이터 삭제 완료 (userId={}, correlationId={})", userId, correlationId);
+            return true;
         } catch (Exception e) {
             log.warn("VM 서비스 데이터 삭제 실패 (userId={}, correlationId={}): {}", userId, correlationId, e.getMessage());
+            return false;
         }
     }
 }

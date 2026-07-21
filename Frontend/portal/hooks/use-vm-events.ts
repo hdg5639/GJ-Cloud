@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import type { VmStatusEvent } from "@/lib/types";
-import { getExchangedToken, invalidateExchangeCache } from "@/lib/api-client";
+import { api } from "@/lib/api-client";
 
 const MAX_RETRIES = 5;
 const AUTO_CLOSE_MS = 99_000;
@@ -43,10 +43,10 @@ export function useVmEvents(
 
       try {
         const currentToken = accessTokenRef.current;
-        const vmToken = await getExchangedToken(currentToken, "vm-service");
+        const { ticket } = await api.vm.issueEventsTicket(currentToken);
         if (closed) return;
 
-        const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/events/subscribe?token=${vmToken}`;
+        const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/events/subscribe?ticket=${ticket}`;
         es = new EventSource(url);
 
         autoCloseTimer = setTimeout(() => {
@@ -64,9 +64,6 @@ export function useVmEvents(
           closeEs();
           if (closed || retries >= MAX_RETRIES) return;
           retries++;
-
-          const tok = accessTokenRef.current;
-          invalidateExchangeCache(tok);
 
           if (onRefreshRef.current) {
             const newToken = await onRefreshRef.current().catch(() => null);

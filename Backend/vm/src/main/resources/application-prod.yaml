@@ -7,6 +7,11 @@ spring:
     init:
       mode: always
       schema-locations: classpath:schema.sql
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD:}
 
 server:
   port: 8080
@@ -16,6 +21,9 @@ auth:
   jwks-cache-ttl: 3600000
   service-client-id: vm-service
   service-client-secret: ${VM_SERVICE_CLIENT_SECRET}
+
+sse:
+  ticket-ttl-seconds: 30
 
 user:
   service-url: ${USER_SERVICE_URL}

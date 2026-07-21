@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { getExchangedToken } from "@/lib/api-client";
+import { api } from "@/lib/api-client";
 import type { VmMetricsHistoryResponse } from "@/lib/types";
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { PageLoader } from "@/components/ui/loader";
@@ -66,10 +66,10 @@ export default function MetricsPage() {
     async function connect() {
       if (closed || !accessToken) return;
       try {
-        const vmToken = await getExchangedToken(accessToken, "vm-service");
+        const { ticket } = await api.vm.issueMetricsTicket(accessToken, vmId);
         if (closed) return;
 
-        const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream?token=${vmToken}`;
+        const url = `${process.env.NEXT_PUBLIC_VM_API}/vms/${vmId}/metrics/stream?ticket=${ticket}`;
         eventSource = new EventSource(url);
 
         autoCloseTimer = setTimeout(() => {

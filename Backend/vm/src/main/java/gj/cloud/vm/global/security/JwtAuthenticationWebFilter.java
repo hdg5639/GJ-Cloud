@@ -48,15 +48,14 @@ public class JwtAuthenticationWebFilter implements WebFilter {
                 .onErrorResume(VmException.class, e -> chain.filter(exchange));
     }
 
+    // SEC-006: 과거 SSE용 ?token= 쿼리파라미터 폴백은 이 필터가 적용되는 모든 비-internal 공개
+    // 엔드포인트에 걸려 있어 원본 액세스 토큰이 URL/로그에 노출되는 범위가 SSE보다 훨씬 넓었다.
+    // SSE 두 경로는 SseTicketAuthenticationWebFilter의 1회용 티켓으로 완전히 대체했으므로 여기서는
+    // Authorization 헤더만 인정한다.
     private String extractToken(ServerWebExchange exchange) {
         String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
             return header.substring(7);
-        }
-        // SSE: EventSource는 헤더 설정 불가 → 쿼리 파라미터 fallback
-        String queryToken = exchange.getRequest().getQueryParams().getFirst("token");
-        if (StringUtils.hasText(queryToken)) {
-            return queryToken;
         }
         return null;
     }

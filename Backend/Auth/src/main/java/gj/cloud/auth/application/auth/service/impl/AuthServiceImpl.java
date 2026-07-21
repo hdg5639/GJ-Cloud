@@ -4,13 +4,15 @@ import gj.cloud.auth.application.auth.dto.LoginRequest;
 import gj.cloud.auth.application.auth.dto.LoginResult;
 import gj.cloud.auth.application.auth.dto.RegisterRequest;
 import gj.cloud.auth.application.auth.service.AuthService;
+import gj.cloud.auth.application.deletion.service.AccountDeletionAttemptService;
 import gj.cloud.auth.application.token.service.TokenService;
+import gj.cloud.auth.domain.deletion.entity.AccountDeletionJobEntity;
+import gj.cloud.auth.domain.deletion.repository.AccountDeletionJobRepository;
 import gj.cloud.auth.domain.token.enums.ServiceAudience;
 import gj.cloud.auth.domain.user.entity.UserEntity;
 import gj.cloud.auth.domain.user.enums.UserStatus;
 import gj.cloud.auth.domain.user.repository.UserRepository;
 import gj.cloud.auth.global.client.UserServiceClient;
-import gj.cloud.auth.global.client.VmServiceClient;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import gj.cloud.auth.global.security.LoginRateLimiter;
@@ -31,7 +33,8 @@ public class AuthServiceImpl implements AuthService {
     private final TokenService tokenService;
     private final LoginRateLimiter loginRateLimiter;
     private final UserServiceClient userServiceClient;
-    private final VmServiceClient vmServiceClient;
+    private final AccountDeletionJobRepository accountDeletionJobRepository;
+    private final AccountDeletionAttemptService accountDeletionAttemptService;
 
     @Value("${app.email-verification.enabled:true}")
     private boolean emailVerificationEnabled;
@@ -94,6 +97,8 @@ public class AuthServiceImpl implements AuthService {
         tokenService.deleteAllUserTokens(userId);
     }
 
+    // REL-001: User/VM 정리 호출은 즉시 시도하되, 실패해도 여기서 예외를 던지지 않고(Auth 쪽 탈퇴 자체는
+    // 확정) job row에 결과를 남긴다. 실패분은 AccountDeletionRetryScheduler가 재시도한다.
     @Override
     @Transactional
     public void withdraw(String userId) {
@@ -102,7 +107,10 @@ public class AuthServiceImpl implements AuthService {
         String originalEmail = user.getEmail();
         user.anonymizeAndDelete();
         logout(userId);
-        deleteUserDataFromServices(userId, originalEmail);
+
+        AccountDeletionJobEntity job = AccountDeletionJobEntity.create(userId, originalEmail);
+        accountDeletionAttemptService.attempt(job);
+        accountDeletionJobRepository.save(job);
     }
 
     // SEC-004: User 서비스가 정지/복구 시 호출. Auth가 계정 접근 상태의 단일 진실 공급원이므로
@@ -122,11 +130,6 @@ public class AuthServiceImpl implements AuthService {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
         user.activate();
-    }
-
-    private void deleteUserDataFromServices(String userId, String email) {
-        userServiceClient.deleteUser(userId);
-        vmServiceClient.deleteUserData(userId, email);
     }
 
     private void createUserProfile(String userId, String email) {
