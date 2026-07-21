@@ -45,12 +45,18 @@ auth:
         secret: ${VM_SERVICE_CLIENT_SECRET}
         audience: ops-service
         scope: internal:management-key
+      # SEC-004: User가 계정 정지/복구 상태를 Auth에 동기화할 때 사용
+      user-service:
+        secret: ${USER_SERVICE_CLIENT_SECRET}
+        audience: auth-service
+        scope: user:status-sync
 
 app:
   email-verification:
     enabled: ${EMAIL_VERIFICATION_ENABLED:true}
   services:
     user-service-url: ${USER_SERVICE_URL:http://user:8080}
+    vm-service-url: ${VM_SERVICE_URL:http://vm:8080}
 
 server:
   port: 8080

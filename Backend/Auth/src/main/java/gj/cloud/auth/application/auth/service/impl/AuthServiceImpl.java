@@ -9,6 +9,8 @@ import gj.cloud.auth.domain.token.enums.ServiceAudience;
 import gj.cloud.auth.domain.user.entity.UserEntity;
 import gj.cloud.auth.domain.user.enums.UserStatus;
 import gj.cloud.auth.domain.user.repository.UserRepository;
+import gj.cloud.auth.global.client.UserServiceClient;
+import gj.cloud.auth.global.client.VmServiceClient;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import gj.cloud.auth.global.security.LoginRateLimiter;
@@ -18,9 +20,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
-
-import java.util.Map;
 
 @Slf4j
 @Service
@@ -31,16 +30,11 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final LoginRateLimiter loginRateLimiter;
-    private final RestClient restClient;
+    private final UserServiceClient userServiceClient;
+    private final VmServiceClient vmServiceClient;
 
     @Value("${app.email-verification.enabled:true}")
     private boolean emailVerificationEnabled;
-
-    @Value("${app.services.user-service-url:http://user:8080}")
-    private String userServiceUrl;
-
-    @Value("${app.services.vm-service-url:http://vm:8080}")
-    private String vmServiceUrl;
 
     @Override
     @Transactional
@@ -111,35 +105,31 @@ public class AuthServiceImpl implements AuthService {
         deleteUserDataFromServices(userId, originalEmail);
     }
 
+    // SEC-004: User 서비스가 정지/복구 시 호출. Auth가 계정 접근 상태의 단일 진실 공급원이므로
+    // 여기서 상태를 갱신하고, 정지 시에는 기존 세션(refresh/exchange 캐시)을 즉시 전부 무효화한다.
+    @Override
+    @Transactional
+    public void suspendUser(String userId) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
+        user.suspend();
+        tokenService.deleteAllUserTokens(userId);
+    }
+
+    @Override
+    @Transactional
+    public void restoreUser(String userId) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
+        user.activate();
+    }
+
     private void deleteUserDataFromServices(String userId, String email) {
-        try {
-            restClient.delete()
-                    .uri(userServiceUrl + "/internal/users/" + userId)
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.warn("User 서비스 데이터 삭제 실패 (userId={}): {}", userId, e.getMessage());
-        }
-        try {
-            restClient.delete()
-                    .uri(vmServiceUrl + "/internal/users?userId=" + userId + "&email=" + email)
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.warn("VM 서비스 데이터 삭제 실패 (userId={}): {}", userId, e.getMessage());
-        }
+        userServiceClient.deleteUser(userId);
+        vmServiceClient.deleteUserData(userId, email);
     }
 
     private void createUserProfile(String userId, String email) {
-        try {
-            restClient.post()
-                    .uri(userServiceUrl + "/internal/profiles")
-                    .header("Content-Type", "application/json")
-                    .body(Map.of("userId", userId, "email", email))
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.warn("User 서비스 프로필 생성 실패 (userId={}): {}", userId, e.getMessage());
-        }
+        userServiceClient.createProfile(userId, email);
     }
 }

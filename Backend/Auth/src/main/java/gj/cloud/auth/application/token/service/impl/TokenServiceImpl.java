@@ -9,6 +9,7 @@ import gj.cloud.auth.application.token.service.TokenService;
 import gj.cloud.auth.domain.token.enums.ServiceAudience;
 import gj.cloud.auth.domain.user.entity.UserEntity;
 import gj.cloud.auth.domain.user.enums.UserRole;
+import gj.cloud.auth.domain.user.enums.UserStatus;
 import gj.cloud.auth.domain.user.repository.UserRepository;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
@@ -88,6 +89,15 @@ public class TokenServiceImpl implements TokenService {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
 
+        // SEC-004: login()과 달리 refresh는 상태를 재확인하지 않아, 정지 이후에도 이미 발급된 refresh
+        // token으로 계속 갱신이 가능했던 문제. 여기서도 동일하게 재확인한다.
+        if (user.getStatus() == UserStatus.SUSPENDED) {
+            throw new AuthException(AuthErrorCode.ACCOUNT_SUSPENDED);
+        }
+        if (user.getStatus() == UserStatus.DELETED) {
+            throw new AuthException(AuthErrorCode.ACCOUNT_DELETED);
+        }
+
         // rememberMe=true → sliding (30일 리셋), false → 남은 TTL 유지
         long newTtlMs;
         if (rememberMe) {
@@ -117,6 +127,18 @@ public class TokenServiceImpl implements TokenService {
 
         ServiceAudience targetAudience = ServiceAudience.from(request.targetService());
         String userId = claims.getSubject();
+
+        // SEC-004: exchange도 refresh와 마찬가지로 원 토큰 발급 시점 이후의 계정 상태 변화(정지/탈퇴)를
+        // 반영하지 않고 있었음 — 매 교환마다 최신 상태를 재확인한다.
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
+        if (user.getStatus() == UserStatus.SUSPENDED) {
+            throw new AuthException(AuthErrorCode.ACCOUNT_SUSPENDED);
+        }
+        if (user.getStatus() == UserStatus.DELETED) {
+            throw new AuthException(AuthErrorCode.ACCOUNT_DELETED);
+        }
+
         String cacheKey = PREFIX_EXCHANGE + userId + ":" + targetAudience.getValue();
 
         String cached = redisTemplate.opsForValue().get(cacheKey);
@@ -127,16 +149,7 @@ public class TokenServiceImpl implements TokenService {
             }
         }
 
-        String email   = (String) claims.getClaim("email");
-        String roleStr = (String) claims.getClaim("role");
-        UserRole role;
-        try {
-            role = UserRole.valueOf(roleStr);
-        } catch (IllegalArgumentException e) {
-            throw new AuthException(AuthErrorCode.INVALID_ACCESS_TOKEN);
-        }
-
-        String newToken = jwtProvider.issueAccessToken(userId, email, role, targetAudience.getValue());
+        String newToken = jwtProvider.issueAccessToken(userId, user.getEmail(), user.getRole(), targetAudience.getValue());
         redisTemplate.opsForValue().set(cacheKey, newToken, jwtProperties.getExchangeTokenExpiry(), TimeUnit.MILLISECONDS);
         return new TokenResponse(newToken, "Bearer", jwtProperties.getExchangeTokenExpiry() / 1000);
     }

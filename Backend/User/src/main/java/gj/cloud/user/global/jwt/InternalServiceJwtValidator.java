@@ -16,17 +16,20 @@ import java.security.interfaces.RSAPublicKey;
 import java.util.Date;
 import java.util.List;
 
-// /internal/ssh-keys/**, /internal/users/plan 전용 — VM 서비스가 최종 사용자를 대신해 호출할 때 검증.
-// Ops→VM의 InternalOpsJwtValidator와 동일한 위임(delegation) 패턴: VM은 자기 자신의 client-credentials가
-// 아니라 "호출한 최종 사용자가 원래 갖고 있던 aud=vm-service 토큰"을 그대로 포워딩하고, User는 그 토큰의
-// sub(principal.userId())로 본인 소유 리소스(SSH 키, 플랜)만 조회한다(InternalSshKeyController 참고).
-// 순수 서비스 신원 검증(token_type=service/client_id 허용목록)이 필요한 프로필 생성/삭제는
-// InternalServiceJwtValidator가 별도로 담당.
+// /internal/profiles/**, /internal/users/{userId}(DELETE) 전용 — Auth 서비스가 회원가입/이메일인증 시
+// 프로필 생성, 회원 탈퇴 시 프로필 삭제를 요청할 때 검증하는 순수 서비스-간 신원 검증기.
+// SEC-001/SEC-005: 예전에는 POST /internal/profiles가 permitAll(인증 자체가 없었음)이었고, 다른 /internal/**
+// 엔드포인트도 aud만 확인해서(사용자가 exchange로 자가 발급 가능) 임의의 로그인 사용자가 직접 호출 가능했음.
+// 지금은 Auth의 client-credentials로 Auth 서비스만 발급받을 수 있는 aud=user-service(자기 자신) +
+// token_type=service + client_id=auth-service 토큰만 인정함 — InternalJwtValidator(ssh-key/plan 위임 조회)와
+// 달리 이 경로는 최종 사용자 위임이 아니라 순수 서비스 신원만으로 판단하는 파괴적/생성 작업이라 구분함.
 @Component
 @RequiredArgsConstructor
-public class InternalJwtValidator {
+public class InternalServiceJwtValidator {
 
-    private static final String EXPECTED_AUDIENCE = "vm-service";
+    private static final String EXPECTED_AUDIENCE = "user-service";
+    private static final String EXPECTED_TOKEN_TYPE = "service";
+    private static final String EXPECTED_CLIENT_ID = "auth-service";
 
     private final AuthProperties authProperties;
     private final RestClient restClient = RestClient.create();
@@ -52,6 +55,16 @@ public class InternalJwtValidator {
             List<String> audience = claims.getAudience();
             if (audience == null || !audience.contains(EXPECTED_AUDIENCE)) {
                 throw new UserException(UserErrorCode.INVALID_AUDIENCE);
+            }
+
+            String tokenType = claims.getStringClaim("token_type");
+            if (!EXPECTED_TOKEN_TYPE.equals(tokenType)) {
+                throw new UserException(UserErrorCode.INVALID_TOKEN);
+            }
+
+            String clientId = claims.getStringClaim("client_id");
+            if (!EXPECTED_CLIENT_ID.equals(clientId)) {
+                throw new UserException(UserErrorCode.INVALID_TOKEN);
             }
 
             return claims;

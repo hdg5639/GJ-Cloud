@@ -9,4 +9,6 @@ public interface AuthService {
     LoginResult login(LoginRequest request, String clientIp);
     void logout(String userId);
     void withdraw(String userId);
+    void suspendUser(String userId);
+    void restoreUser(String userId);
 }

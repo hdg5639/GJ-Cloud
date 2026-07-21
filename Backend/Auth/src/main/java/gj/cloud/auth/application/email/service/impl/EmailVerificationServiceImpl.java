@@ -3,6 +3,7 @@ package gj.cloud.auth.application.email.service.impl;
 import gj.cloud.auth.application.email.service.EmailVerificationService;
 import gj.cloud.auth.domain.user.entity.UserEntity;
 import gj.cloud.auth.domain.user.repository.UserRepository;
+import gj.cloud.auth.global.client.UserServiceClient;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import jakarta.mail.internet.MimeMessage;
@@ -15,11 +16,9 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -33,13 +32,10 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private final StringRedisTemplate redisTemplate;
     private final JavaMailSender mailSender;
     private final UserRepository userRepository;
-    private final RestClient restClient;
+    private final UserServiceClient userServiceClient;
 
     @Value("${spring.mail.from}")
     private String mailFrom;
-
-    @Value("${services.user-service.url:http://user:8080}")
-    private String userServiceUrl;
 
     @Override
     public void sendCode(String email) {
@@ -83,19 +79,6 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         user.activate();
         redisTemplate.delete(KEY_PREFIX + email);
 
-        createUserProfile(user.getId(), user.getEmail());
-    }
-
-    private void createUserProfile(String userId, String email) {
-        try {
-            restClient.post()
-                    .uri(userServiceUrl + "/internal/profiles")
-                    .header("Content-Type", "application/json")
-                    .body(Map.of("userId", userId, "email", email))
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            log.warn("User 서비스 프로필 생성 실패 (userId={}): {}", userId, e.getMessage());
-        }
+        userServiceClient.createProfile(user.getId(), user.getEmail());
     }
 }
