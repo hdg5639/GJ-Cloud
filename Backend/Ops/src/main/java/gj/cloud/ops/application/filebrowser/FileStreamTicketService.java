@@ -33,6 +33,7 @@ public class FileStreamTicketService {
 
     private static final String KEY_PREFIX = "file-stream-ticket:";
     private static final String PERMISSION_FILE_READ = "FILE_READ";
+    private static final String PERMISSION_SECRET_READ = "SECRET_READ";
     // SEC-012: 발급 시점 권한만 믿고 TTL 내내 재검증 없이 재생을 허용하면, 그 사이 권한이 회수돼도
     // (조직에서 제외 등) 계속 스트리밍이 가능했다. TTL도 10분 → 3분으로 축소해 노출 창을 줄인다.
     private static final Duration TICKET_TTL = Duration.ofMinutes(3);
@@ -59,6 +60,10 @@ public class FileStreamTicketService {
             sftp = (ChannelSftp) session.openChannel("sftp");
             sftp.connect(SFTP_CONNECT_TIMEOUT_MS);
             String real = pathResolver.resolveExisting(sftp, path);
+            // AUTHZ-001: .env/배포 시크릿/자격증명 디렉토리는 FILE_READ만으로 미리보기 스트리밍도 못 하게 함
+            if (SensitiveFilePolicy.isSensitive(real) && !context.hasPermission(PERMISSION_SECRET_READ)) {
+                throw new OpsException(OpsErrorCode.FORBIDDEN);
+            }
             SftpATTRS attrs;
             try {
                 attrs = sftp.lstat(real);

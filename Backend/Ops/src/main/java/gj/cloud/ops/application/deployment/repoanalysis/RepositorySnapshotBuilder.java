@@ -1,5 +1,6 @@
 package gj.cloud.ops.application.deployment.repoanalysis;
 
+import gj.cloud.ops.application.deployment.git.GitCloneSecurityValidator;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.process.LocalCommandExecutor;
@@ -44,6 +45,7 @@ public class RepositorySnapshotBuilder {
 
     private final LocalCommandExecutor localCommandExecutor;
     private final ManifestParser manifestParser;
+    private final GitCloneSecurityValidator gitCloneSecurityValidator;
 
     @Value("${ops.repo-analysis.clone-timeout-ms:60000}")
     private long cloneTimeoutMs;
@@ -59,6 +61,7 @@ public class RepositorySnapshotBuilder {
     public Map<String, RepositoryEvidence> analyze(String repoUrl, String branch, String patToken, List<String> contexts) {
         validateRepoUrl(repoUrl);
         validateBranch(branch);
+        gitCloneSecurityValidator.assertHostNotInternal(repoUrl);
 
         Path tempDir = null;
         Path askpassScript = null;
@@ -66,8 +69,10 @@ public class RepositorySnapshotBuilder {
             tempDir = Files.createTempDirectory("gj-repo-analysis-");
             askpassScript = patToken != null && !patToken.isBlank() ? writeAskpassScript(patToken) : null;
 
+            // DEP-001: 최초 연결 시 사전 DNS 검증을 통과해도, 서버가 응답에서 내부 주소로 리다이렉트하면
+            // 그 우회 경로로 SSRF가 가능하므로 리다이렉트 자체를 비활성화
             List<String> cloneCommand = List.of(
-                    "git", "clone", "--depth", "1", "--single-branch",
+                    "git", "-c", "http.followRedirects=false", "clone", "--depth", "1", "--single-branch",
                     "--branch", branch, repoUrl, tempDir.toString());
             Map<String, String> env = new LinkedHashMap<>();
             env.put("GIT_TERMINAL_PROMPT", "0");

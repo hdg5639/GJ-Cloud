@@ -34,6 +34,8 @@ public class DockerService {
 
     private static final String PERMISSION_DOCKER_READ = "DOCKER_READ";
     private static final String PERMISSION_DOCKER_ADMIN = "DOCKER_ADMIN";
+    // AUTHZ-001: 컨테이너 로그는 애플리케이션 시크릿이 그대로 노출될 수 있어 목록/상태 조회(DOCKER_READ)와 분리
+    private static final String PERMISSION_DOCKER_LOG_READ = "DOCKER_LOG_READ";
     private static final long DOCKER_CMD_TIMEOUT_MS = 30_000;
     private static final long INSTALL_TIMEOUT_MS = 600_000;
     private static final long LOGS_TIMEOUT_MS = 20_000;
@@ -53,22 +55,27 @@ public class DockerService {
 
     public void installDocker(String bearerToken, String vmId) {
         execute(bearerToken, vmId, PERMISSION_DOCKER_ADMIN, session -> {
-            // "curl ... | sh" 파이프는 sh(마지막 명령)의 종료 코드만 반영함 — curl이 네트워크 오류로
-            // 아무것도 못 받아와도 sh는 빈 입력을 그냥 성공(exit 0)으로 처리해버려서, 설치가 실제로는
-            // 하나도 안 됐는데도 성공으로 오판하는 문제가 있었음. 임시 파일로 받아 각 단계를 &&로 연결하고
-            // 마지막에 command -v docker로 실제 설치 여부까지 확인.
-            // get-docker.sh는 Docker만 설치하고 현재 접속 사용자를 docker 그룹에 자동으로 넣어주지 않아서,
-            // 그대로 두면 이후의 모든 docker 명령(배포 파이프라인 포함)이 소켓 권한 문제로 실패함 —
-            // 설치 직후 usermod로 그룹에 추가(다음 SSH 세션부터 적용, 이번 세션 자체엔 영향 없음).
-            // 갓 생성된 VM은 cloud-init이 부팅 직후 자체적으로 apt-get을 돌리고 있어 dpkg 락을 잡고
-            // 있을 수 있음 — cloud-init 완료를 먼저 기다리고, 그래도 락이 걸려있으면(unattended-upgrades 등)
-            // 짧게 재시도.
+            // DEP-004: 이전에는 get.docker.com에서 받은 설치 스크립트를 그대로 실행(curl | sh)했음 — 무결성
+            // 검증 없이 원격 셸 스크립트를 실행하는 공급망 취약점. Docker 공식 apt 저장소(GPG 서명 검증)로
+            // 대체 — apt가 패키지 서명을 검증하므로 변조된 패키지는 설치 자체가 거부된다.
+            // 정확한 버전 고정은 Ubuntu 코드네임(lsb_release -cs)마다 패키지 문자열이 달라 VM 템플릿이
+            // 바뀔 때마다 깨지기 쉬우므로, 대신 "공식 서명된 저장소에서만 설치"를 보안 경계로 삼는다.
+            //
+            // 아래는 기존과 동일하게: cloud-init 완료 대기 → dpkg 락 재시도 → 실제 설치 확인 → docker 그룹 추가.
             CommandResult result = sshCommandExecutor.exec(session,
                     "for i in 1 2 3 4 5 6 7 8 9 10; do "
                             + "cloud-init status --wait >/dev/null 2>&1; "
-                            + "if curl -fsSL https://get.docker.com -o /tmp/get-docker.sh "
-                            + "&& sh /tmp/get-docker.sh "
-                            + "&& rm -f /tmp/get-docker.sh "
+                            + "CODENAME=$(. /etc/os-release && echo $VERSION_CODENAME); "
+                            + "if sudo install -m 0755 -d /etc/apt/keyrings "
+                            + "&& curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /tmp/docker.gpg "
+                            + "&& sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg "
+                            + "&& rm -f /tmp/docker.gpg "
+                            + "&& sudo chmod a+r /etc/apt/keyrings/docker.gpg "
+                            + "&& echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] "
+                            + "https://download.docker.com/linux/ubuntu $CODENAME stable\" "
+                            + "| sudo tee /etc/apt/sources.list.d/docker.list > /dev/null "
+                            + "&& sudo apt-get update -y "
+                            + "&& sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin "
                             + "&& sudo usermod -aG docker $(whoami) "
                             + "&& command -v docker; then exit 0; fi; "
                             + "sleep 10; "
@@ -79,6 +86,7 @@ public class DockerService {
                         vmId, result.exitStatus(), trim(result.stderr()), trim(result.stdout()));
                 throw new OpsException(OpsErrorCode.DOCKER_INSTALL_FAILED);
             }
+            log.info("Docker 설치 완료(공식 apt 저장소, GPG 서명 검증): vmId={}", vmId);
             return null;
         });
     }
@@ -116,7 +124,7 @@ public class DockerService {
     public String getContainerLogs(String bearerToken, String vmId, String containerId, int tailLines) {
         String id = sanitize(containerId);
         int tail = Math.max(1, Math.min(tailLines, 2000));
-        return execute(bearerToken, vmId, PERMISSION_DOCKER_READ, session ->
+        return execute(bearerToken, vmId, PERMISSION_DOCKER_LOG_READ, session ->
                 sshCommandExecutor.exec(session, "docker logs --tail " + tail + " " + id + " 2>&1", LOGS_TIMEOUT_MS).stdout());
     }
 

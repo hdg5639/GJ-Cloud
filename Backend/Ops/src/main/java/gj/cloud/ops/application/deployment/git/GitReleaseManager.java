@@ -42,6 +42,7 @@ public class GitReleaseManager {
 
     private final SshCommandExecutor sshCommandExecutor;
     private final VmSshSessionFactory sshSessionFactory;
+    private final GitCloneSecurityValidator gitCloneSecurityValidator;
 
     public String appBaseDir(String appId) {
         return String.format(BASE_DIR_TEMPLATE, sshSessionFactory.vmSshUsername(), appId);
@@ -58,6 +59,9 @@ public class GitReleaseManager {
     // bare mirror가 이미 있으면 그대로 재사용 (매번 전체 clone 방지)
     public void ensureBareRepo(Session session, String appId, String repoUrl, String patToken) {
         validateRepoUrl(repoUrl);
+        // DEP-001: 고객 VM에서 실행되지만, 내부망(사설대역/링크로컬/클라우드 메타데이터) 주소로 클론을
+        // 요청하면 그 VM의 네트워크 위치에서 SSRF가 가능하므로 동일하게 사전 차단(방어 심층화)
+        gitCloneSecurityValidator.assertHostNotInternal(repoUrl);
         String baseDir = appBaseDir(appId);
         String bareDir = bareRepoDir(appId);
 
@@ -69,7 +73,8 @@ public class GitReleaseManager {
         sshCommandExecutor.execOrThrow(session, "mkdir -p '" + baseDir + "' '" + baseDir + "/releases'", 10_000);
 
         withAskpass(session, patToken, askpassPath -> {
-            String cloneCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git clone --mirror '"
+            // http.followRedirects=false: 사전 검증을 통과한 뒤 리다이렉트로 내부 주소로 우회하는 경로 차단
+            String cloneCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git -c http.followRedirects=false clone --mirror '"
                     + repoUrl + "' '" + bareDir + "'";
             sshCommandExecutor.execOrThrow(session, cloneCmd, GIT_TIMEOUT_MS);
         });
@@ -82,7 +87,7 @@ public class GitReleaseManager {
         String bareDir = bareRepoDir(appId);
 
         withAskpass(session, patToken, askpassPath -> {
-            String fetchCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git -C '" + bareDir
+            String fetchCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git -c http.followRedirects=false -C '" + bareDir
                     + "' fetch --prune origin";
             sshCommandExecutor.execOrThrow(session, fetchCmd, GIT_TIMEOUT_MS);
         });

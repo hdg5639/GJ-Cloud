@@ -39,6 +39,7 @@ public class FileBrowserService {
 
     private static final String PERMISSION_FILE_READ = "FILE_READ";
     private static final String PERMISSION_FILE_WRITE = "FILE_WRITE";
+    private static final String PERMISSION_SECRET_READ = "SECRET_READ";
     private static final int SFTP_CONNECT_TIMEOUT_MS = 10_000;
     private static final int BINARY_SNIFF_LENGTH = 8000;
 
@@ -53,7 +54,7 @@ public class FileBrowserService {
     private long maxUploadSizeBytes;
 
     public FileListResponse list(String bearerToken, String vmId, String path) {
-        return execute(bearerToken, vmId, PERMISSION_FILE_READ, sftp -> {
+        return execute(bearerToken, vmId, PERMISSION_FILE_READ, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
             List<FileEntry> entries = new ArrayList<>();
             for (Object o : sftp.ls(real)) {
@@ -72,8 +73,9 @@ public class FileBrowserService {
     }
 
     public FileContentResponse readContent(String bearerToken, String vmId, String path) {
-        return execute(bearerToken, vmId, PERMISSION_FILE_READ, sftp -> {
+        return execute(bearerToken, vmId, PERMISSION_FILE_READ, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
+            requireSecretReadIfSensitive(context, real);
             SftpATTRS attrs = statOrThrow(sftp, real);
             if (attrs.isDir()) {
                 throw new OpsException(OpsErrorCode.INVALID_PATH);
@@ -101,7 +103,7 @@ public class FileBrowserService {
         if (bytes.length > maxEditSizeBytes) {
             throw new OpsException(OpsErrorCode.FILE_TOO_LARGE);
         }
-        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, sftp -> {
+        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
             try {
                 sftp.put(new ByteArrayInputStream(bytes), real);
@@ -113,7 +115,7 @@ public class FileBrowserService {
     }
 
     public void createDirectory(String bearerToken, String vmId, String parentPath, String name) {
-        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, sftp -> {
+        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String target = pathResolver.resolveNewEntry(sftp, parentPath, name);
             try {
                 sftp.mkdir(target);
@@ -128,7 +130,7 @@ public class FileBrowserService {
         if (size > maxUploadSizeBytes) {
             throw new OpsException(OpsErrorCode.FILE_TOO_LARGE);
         }
-        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, sftp -> {
+        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String target = pathResolver.resolveNewEntry(sftp, parentPath, fileName);
             try {
                 sftp.put(content, target);
@@ -140,8 +142,9 @@ public class FileBrowserService {
     }
 
     public void download(String bearerToken, String vmId, String path, OutputStream out) {
-        execute(bearerToken, vmId, PERMISSION_FILE_READ, sftp -> {
+        execute(bearerToken, vmId, PERMISSION_FILE_READ, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
+            requireSecretReadIfSensitive(context, real);
             SftpATTRS attrs = statOrThrow(sftp, real);
             if (attrs.isDir()) {
                 throw new OpsException(OpsErrorCode.INVALID_PATH);
@@ -156,7 +159,7 @@ public class FileBrowserService {
     }
 
     public void delete(String bearerToken, String vmId, String path) {
-        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, sftp -> {
+        execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
             if (real.equals(pathResolver.rootPath())) {
                 throw new OpsException(OpsErrorCode.PATH_ACCESS_DENIED);
@@ -164,6 +167,12 @@ public class FileBrowserService {
             deleteRecursive(sftp, real);
             return null;
         });
+    }
+
+    private void requireSecretReadIfSensitive(VmContextResponse context, String resolvedPath) {
+        if (SensitiveFilePolicy.isSensitive(resolvedPath) && !context.hasPermission(PERMISSION_SECRET_READ)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
     }
 
     private void deleteRecursive(ChannelSftp sftp, String path) throws SftpException {
@@ -205,7 +214,7 @@ public class FileBrowserService {
         try {
             sftp = (ChannelSftp) session.openChannel("sftp");
             sftp.connect(SFTP_CONNECT_TIMEOUT_MS);
-            return operation.apply(sftp);
+            return operation.apply(sftp, context);
         } catch (JSchException | SftpException e) {
             log.error("SFTP 작업 실패: vmId={}, error={}", vmId, e.getMessage());
             throw new OpsException(OpsErrorCode.SFTP_OPERATION_FAILED);
@@ -239,6 +248,6 @@ public class FileBrowserService {
 
     @FunctionalInterface
     private interface SftpOperation<T> {
-        T apply(ChannelSftp sftp) throws SftpException;
+        T apply(ChannelSftp sftp, VmContextResponse context) throws SftpException;
     }
 }

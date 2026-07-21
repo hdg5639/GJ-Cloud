@@ -21,8 +21,12 @@ public class ComposeValidator {
     // OPS-SEC-003: 서비스명은 이후 ComposeImageBuilder에서 `docker build -t '<tag>'` 셸 문자열에 그대로 들어가므로
     // DANGEROUS_CHARS 블랙리스트(', ", \ 누락)가 아니라 허용목록으로 검증해야 함
     private static final Pattern SAFE_SERVICE_NAME = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,62}$");
-    private static final String DOCKER_SOCK_PATH = "/var/run/docker.sock";
     private static final Set<Integer> SENSITIVE_DB_PORTS = Set.of(5432, 3306, 6379, 27017);
+    // DEP-003: DEPLOY 권한 보유자(Owner/Admin)는 이미 자기 VM에 SSH 풀 액세스가 있어 이 필드들을 막아도
+    // 셸로 우회 가능함 — 여기 목적은 "악의적 사용자 차단"이 아니라 AI 생성/오타로 위험한 옵션이 실수로
+    // compose에 들어가는 것을 막는 것(실수 방지). 그래도 실제로 컨테이너 격리를 무력화하는 필드들이라 값을 본다.
+    private static final Set<String> SENSITIVE_BIND_MOUNT_SOURCES = Set.of(
+            "/", "/etc", "/root", "/home", "/boot", "/sys", "/proc", "/var/run/docker.sock");
 
     public ValidationResult validate(String composeContent) {
         List<ValidationError> errors = new ArrayList<>();
@@ -62,8 +66,13 @@ public class ComposeValidator {
             checkDangerousPaths(serviceDef.get("volumes"), errors);
             checkPrivileged(serviceDef.get("privileged"), serviceName, errors);
             checkHostNetwork(serviceDef.get("network_mode"), serviceName, errors);
-            checkDockerSocketMount(serviceDef.get("volumes"), serviceName, errors);
+            checkSensitiveBindMounts(serviceDef.get("volumes"), serviceName, errors);
             checkExposedDatabasePorts(serviceDef.get("ports"), serviceName, errors);
+            checkPidMode(serviceDef.get("pid"), serviceName, errors);
+            checkIpcMode(serviceDef.get("ipc"), serviceName, errors);
+            checkDevices(serviceDef.get("devices"), serviceName, errors);
+            checkCapAdd(serviceDef.get("cap_add"), serviceName, errors);
+            checkSecurityOpt(serviceDef.get("security_opt"), serviceName, errors);
         }
 
         return errors.isEmpty() ? ValidationResult.ok() : ValidationResult.fail(errors);
@@ -104,13 +113,55 @@ public class ComposeValidator {
         }
     }
 
-    private void checkDockerSocketMount(Object volumesObj, String serviceName, List<ValidationError> errors) {
+    // 바인드 마운트 소스가 민감 경로(호스트 전체를 사실상 노출하는 수준)인 경우 거부.
+    // "소스:대상[:옵션]" 형태의 문자열 volumes만 대상 — named volume(콜론 없이 볼륨명만 있는 형태)은 해당 없음.
+    private void checkSensitiveBindMounts(Object volumesObj, String serviceName, List<ValidationError> errors) {
         if (!(volumesObj instanceof List<?> volumes)) {
             return;
         }
         for (Object v : volumes) {
-            if (v != null && String.valueOf(v).contains(DOCKER_SOCK_PATH)) {
-                errors.add(new ValidationError(serviceName + ": Docker 소켓 마운트는 허용되지 않습니다."));
+            if (v == null) continue;
+            String[] parts = String.valueOf(v).split(":");
+            if (parts.length < 2) continue;
+            String source = parts[0];
+            if (SENSITIVE_BIND_MOUNT_SOURCES.contains(source)) {
+                errors.add(new ValidationError(serviceName + ": 민감한 호스트 경로 바인드 마운트는 허용되지 않습니다: " + source));
+            }
+        }
+    }
+
+    private void checkPidMode(Object pidObj, String serviceName, List<ValidationError> errors) {
+        if (pidObj != null && "host".equalsIgnoreCase(String.valueOf(pidObj))) {
+            errors.add(new ValidationError(serviceName + ": pid: host는 허용되지 않습니다."));
+        }
+    }
+
+    private void checkIpcMode(Object ipcObj, String serviceName, List<ValidationError> errors) {
+        if (ipcObj != null && "host".equalsIgnoreCase(String.valueOf(ipcObj))) {
+            errors.add(new ValidationError(serviceName + ": ipc: host는 허용되지 않습니다."));
+        }
+    }
+
+    private void checkDevices(Object devicesObj, String serviceName, List<ValidationError> errors) {
+        if (devicesObj instanceof List<?> devices && !devices.isEmpty()) {
+            errors.add(new ValidationError(serviceName + ": devices(호스트 디바이스 전달)는 허용되지 않습니다."));
+        }
+    }
+
+    private void checkCapAdd(Object capAddObj, String serviceName, List<ValidationError> errors) {
+        if (capAddObj instanceof List<?> caps && !caps.isEmpty()) {
+            errors.add(new ValidationError(serviceName + ": cap_add는 허용되지 않습니다."));
+        }
+    }
+
+    private void checkSecurityOpt(Object securityOptObj, String serviceName, List<ValidationError> errors) {
+        if (!(securityOptObj instanceof List<?> opts)) {
+            return;
+        }
+        for (Object opt : opts) {
+            String value = String.valueOf(opt).toLowerCase();
+            if (value.contains("seccomp:unconfined") || value.contains("apparmor:unconfined") || value.contains("apparmor=unconfined")) {
+                errors.add(new ValidationError(serviceName + ": seccomp/apparmor 프로필 해제는 허용되지 않습니다: " + opt));
             }
         }
     }

@@ -14,7 +14,9 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,11 +30,19 @@ import java.util.UUID;
 public class DeploymentSpecRenderer {
 
     private static final String DOCKERFILE_NAME = "Dockerfile.gamjabox";
-    // DB는 expose.enabled=false가 기본(내부 전용, 호스트/외부에 노출 안 됨)이므로 간단한 기본 자격증명을 사용해도
-    // 실질적 노출 위험이 낮음 — 네트워크 격리가 실제 보안 경계임 (전형적인 내부 전용 compose 관례)
-    private static final String DEFAULT_DB_PASSWORD = "gamjabox";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final DockerfileGenerator dockerfileGenerator;
+
+    // DEP-002: 이전에는 모든 배포가 동일한 고정 비밀번호("gamjabox")를 사용했고, infra.expose.enabled=true를
+    // 사용자가 직접 요청하면 그 고정 비밀번호 그대로 호스트에 노출되는 경로도 있었음 — expose 여부와 무관하게
+    // 항상 배포별 랜덤 비밀번호를 생성해 두 문제를 함께 해소한다. 값은 새 채널을 만들지 않고 기존
+    // composeContent(암호화 저장, 인증된 API로만 조회 가능 — SEC-010에서 확립된 경로)에 자연히 포함됨.
+    private String generateRandomPassword() {
+        byte[] bytes = new byte[24];
+        SECURE_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
 
     public ComposeArtifact render(DeploymentSpec spec) {
         Map<String, Object> services = new LinkedHashMap<>();
@@ -86,9 +96,13 @@ public class DeploymentSpecRenderer {
         }
 
         List<EnvironmentFile> environmentFiles = new ArrayList<>();
+        Map<String, Object> volumeDefs = new LinkedHashMap<>();
         if (spec.infrastructure() != null) {
+            // network 재사용(externalNetwork=true) 시 여러 배포가 같은 infra.type()을 쓸 수 있어, 볼륨명은
+            // network가 아니라 배포 단위로 매번 새로 뽑는 접미사로 구분해 데이터 공유 사고를 막는다.
+            String volumeSuffix = UUID.randomUUID().toString().substring(0, 8);
             for (InfrastructureSpec infra : spec.infrastructure()) {
-                renderInfrastructure(infra, spec.network(), services);
+                renderInfrastructure(infra, spec.network(), volumeSuffix, services, volumeDefs);
             }
         }
 
@@ -98,6 +112,9 @@ public class DeploymentSpecRenderer {
         // externalNetwork=true면 VM에 이미 존재하는 네트워크를 새로 만들지 않고 그대로 재사용
         networkDef.put(spec.network(), spec.externalNetwork() ? Map.of("external", true) : Map.of());
         root.put("networks", networkDef);
+        if (!volumeDefs.isEmpty()) {
+            root.put("volumes", volumeDefs);
+        }
 
         DumperOptions options = new DumperOptions();
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
@@ -106,24 +123,34 @@ public class DeploymentSpecRenderer {
         return new ComposeArtifact(composeContent, environmentFiles, uploadedFiles, exposedRoutes, healthChecks, SourceType.TEMPLATE_SPEC);
     }
 
-    private void renderInfrastructure(InfrastructureSpec infra, String network, Map<String, Object> services) {
+    private void renderInfrastructure(InfrastructureSpec infra, String network, String volumeSuffix,
+                                       Map<String, Object> services, Map<String, Object> volumeDefs) {
         Map<String, Object> block = new LinkedHashMap<>();
         Map<String, String> environment = new LinkedHashMap<>();
+        String volumeName = infra.type() + "_data_" + volumeSuffix;
 
         switch (infra.type()) {
             case "postgresql" -> {
                 block.put("image", "postgres:" + infra.version());
-                environment.put("POSTGRES_PASSWORD", DEFAULT_DB_PASSWORD);
+                environment.put("POSTGRES_PASSWORD", generateRandomPassword());
                 environment.put("POSTGRES_USER", "gamjabox");
                 environment.put("POSTGRES_DB", "gamjabox");
+                block.put("volumes", List.of(volumeName + ":/var/lib/postgresql/data"));
+                volumeDefs.put(volumeName, Map.of());
             }
             case "mysql" -> {
                 block.put("image", "mysql:" + infra.version());
-                environment.put("MYSQL_ROOT_PASSWORD", DEFAULT_DB_PASSWORD);
+                environment.put("MYSQL_ROOT_PASSWORD", generateRandomPassword());
                 environment.put("MYSQL_DATABASE", "gamjabox");
+                block.put("volumes", List.of(volumeName + ":/var/lib/mysql"));
+                volumeDefs.put(volumeName, Map.of());
             }
             case "redis" -> block.put("image", "redis:" + infra.version());
-            case "mongodb" -> block.put("image", "mongo:" + infra.version());
+            case "mongodb" -> {
+                block.put("image", "mongo:" + infra.version());
+                block.put("volumes", List.of(volumeName + ":/data/db"));
+                volumeDefs.put(volumeName, Map.of());
+            }
             default -> throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
         }
 
@@ -135,7 +162,8 @@ public class DeploymentSpecRenderer {
 
         boolean exposed = infra.expose() != null && infra.expose().enabled();
         if (exposed) {
-            // 인프라를 외부에 노출하는 건 이례적이지만 명시적으로 요청했다면 존중함 (D-3 expose.enabled 규약)
+            // 인프라를 외부에 노출하는 건 이례적이지만 명시적으로 요청했다면 존중함 (D-3 expose.enabled 규약).
+            // DEP-002: 비밀번호가 이제 배포별 랜덤값이라 expose=true여도 고정 자격증명 노출 문제는 없음.
             block.put("ports", List.of(defaultInfraPort(infra.type()) + ":" + defaultInfraPort(infra.type())));
         }
 
