@@ -18,13 +18,18 @@ import gj.cloud.auth.global.jwt.JwtProvider;
 import gj.cloud.auth.global.jwt.ServiceClientProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -36,6 +41,26 @@ public class TokenServiceImpl implements TokenService {
     private static final String PREFIX_REFRESH = "refresh:";
     private static final String PREFIX_USED    = "used:";
     private static final String PREFIX_EXCHANGE = "exchange:";
+    private static final String REUSE_MARKER   = "REUSE:";
+
+    // SEC-007: GET(존재 확인) → DELETE(소비) → SET(블랙리스트 등록)이 별개의 Redis 왕복이라
+    // 동시에 같은 refresh token으로 두 요청이 들어오면 둘 다 GET에서 값을 보고 통과할 수 있었음.
+    // 이 스크립트로 조회+소비+블랙리스트 등록을 하나의 원자적 실행으로 묶어 둘 중 하나만 성공하게 한다.
+    // used: 값도 원본 metadata(userId+familyId 포함)를 그대로 저장해, 재사용 감지 시 어느 family를
+    // 무효화해야 하는지 별도 조회 없이 바로 알 수 있게 한다.
+    private static final RedisScript<String> REFRESH_CONSUME_SCRIPT = new DefaultRedisScript<>("""
+            local metadata = redis.call('GET', KEYS[1])
+            if metadata then
+              redis.call('DEL', KEYS[1])
+              redis.call('SET', KEYS[2], metadata, 'PX', ARGV[1])
+              return metadata
+            end
+            local usedMetadata = redis.call('GET', KEYS[2])
+            if usedMetadata then
+              return 'REUSE:' .. usedMetadata
+            end
+            return false
+            """, String.class);
 
     private final JwtProvider jwtProvider;
     private final JwtProperties jwtProperties;
@@ -51,40 +76,41 @@ public class TokenServiceImpl implements TokenService {
     @Override
     public String issueRefreshToken(String userId, boolean rememberMe) {
         String tokenId = UUID.randomUUID().toString();
+        String familyId = UUID.randomUUID().toString();
         long ttlMs = rememberMe
                 ? jwtProperties.getRememberMeRefreshTokenExpiry()
                 : jwtProperties.getRefreshTokenExpiry();
         long now = Instant.now().toEpochMilli();
-        String metadata = buildMetadata(userId, rememberMe, now, now);
+        String metadata = buildMetadata(userId, familyId, rememberMe, now, now);
         redisTemplate.opsForValue().set(PREFIX_REFRESH + tokenId, metadata, ttlMs, TimeUnit.MILLISECONDS);
         return tokenId;
     }
 
     @Override
     public RefreshResult refresh(String tokenId) {
-        String metadataJson = redisTemplate.opsForValue().get(PREFIX_REFRESH + tokenId);
+        // rememberMe 여부와 무관하게 더 긴 쪽(30일)을 블랙리스트 TTL로 사용 — 짧게 잡아 탈취 감지 창이
+        // 실제 refresh token 수명보다 먼저 끝나는 사고를 피하기 위함(다소 보수적으로 길게 유지해도 무해함).
+        String result = redisTemplate.execute(REFRESH_CONSUME_SCRIPT,
+                List.of(PREFIX_REFRESH + tokenId, PREFIX_USED + tokenId),
+                String.valueOf(jwtProperties.getRememberMeRefreshTokenExpiry()));
 
-        if (metadataJson == null) {
-            // 탈취 감지: 이미 rotation으로 소비된 tokenId인지 확인
-            String stolenUserId = redisTemplate.opsForValue().get(PREFIX_USED + tokenId);
-            if (stolenUserId != null) {
-                deleteAllUserTokens(stolenUserId);
-                throw new AuthException(AuthErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
-            }
+        if (result == null || result.isBlank()) {
             throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
         }
+        if (result.startsWith(REUSE_MARKER)) {
+            // SEC-007: 이전에는 탈취 감지 시 사용자 전체 세션을 죽였음 — family ID로 범위를 좁혀
+            // 탈취된 토큰 체인만 무효화하고, 같은 사용자의 다른 정상 로그인(다른 기기 등)은 유지한다.
+            String stolenMetadata = result.substring(REUSE_MARKER.length());
+            revokeFamilyOrAll(parseField(stolenMetadata, "userId"), parseField(stolenMetadata, "familyId"));
+            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_REUSE_DETECTED);
+        }
 
-        String userId    = parseField(metadataJson, "userId");
+        String metadataJson = result;
+        String userId      = parseField(metadataJson, "userId");
+        String familyId     = parseField(metadataJson, "familyId");
         boolean rememberMe = "true".equals(parseField(metadataJson, "rememberMe"));
         long issuedAt  = Long.parseLong(parseField(metadataJson, "issuedAt"));
         long now       = Instant.now().toEpochMilli();
-
-        // 기존 토큰 삭제 + 사용 이력 블랙리스트 등록 (탈취 감지용)
-        redisTemplate.delete(PREFIX_REFRESH + tokenId);
-        long blacklistTtlMs = rememberMe
-                ? jwtProperties.getRememberMeRefreshTokenExpiry()
-                : jwtProperties.getRefreshTokenExpiry();
-        redisTemplate.opsForValue().set(PREFIX_USED + tokenId, userId, blacklistTtlMs, TimeUnit.MILLISECONDS);
 
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
@@ -109,11 +135,30 @@ public class TokenServiceImpl implements TokenService {
 
         String newAccessToken  = issueAccessToken(userId, user.getEmail(), user.getRole(), ServiceAudience.AUTH);
         String newTokenId      = UUID.randomUUID().toString();
-        String newMetadata     = buildMetadata(userId, rememberMe, issuedAt, now);
+        String newMetadata     = buildMetadata(userId, familyId, rememberMe, issuedAt, now);
         redisTemplate.opsForValue().set(PREFIX_REFRESH + newTokenId, newMetadata, newTtlMs, TimeUnit.MILLISECONDS);
 
         long cookieMaxAgeSeconds = newTtlMs / 1000;
         return new RefreshResult(newAccessToken, newTokenId, cookieMaxAgeSeconds);
+    }
+
+    // 탈취된 토큰의 family를 특정할 수 있으면 그 family만, 알 수 없으면(예: 배포 직후 과거 방식으로
+    // 저장된 레코드) 안전하게 사용자 전체 세션을 무효화한다.
+    private void revokeFamilyOrAll(String userId, String familyId) {
+        if (familyId == null || familyId.isBlank()) {
+            deleteAllUserTokens(userId);
+        } else {
+            revokeFamily(userId, familyId);
+        }
+    }
+
+    private void revokeFamily(String userId, String familyId) {
+        for (String key : scanKeys(PREFIX_REFRESH + "*")) {
+            String val = redisTemplate.opsForValue().get(key);
+            if (val != null && userId.equals(parseField(val, "userId")) && familyId.equals(parseField(val, "familyId"))) {
+                redisTemplate.delete(key);
+            }
+        }
     }
 
     @Override
@@ -186,19 +231,18 @@ public class TokenServiceImpl implements TokenService {
         return new TokenResponse(token, "Bearer", jwtProperties.getServiceTokenExpiry() / 1000);
     }
 
+    // 로그아웃/탈퇴/정지처럼 의도적으로 전체 세션을 끊어야 하는 경우 전용 — 탈취 감지 시의 좁은 범위
+    // revokeFamily와 구분됨.
     @Override
     public void deleteAllUserTokens(String userId) {
-        Set<String> refreshKeys = redisTemplate.keys(PREFIX_REFRESH + "*");
-        if (refreshKeys != null) {
-            refreshKeys.stream()
-                    .filter(k -> {
-                        String val = redisTemplate.opsForValue().get(k);
-                        return val != null && userId.equals(parseField(val, "userId"));
-                    })
-                    .forEach(redisTemplate::delete);
+        for (String key : scanKeys(PREFIX_REFRESH + "*")) {
+            String val = redisTemplate.opsForValue().get(key);
+            if (val != null && userId.equals(parseField(val, "userId"))) {
+                redisTemplate.delete(key);
+            }
         }
-        Set<String> exchangeKeys = redisTemplate.keys(PREFIX_EXCHANGE + userId + ":*");
-        if (exchangeKeys != null && !exchangeKeys.isEmpty()) {
+        List<String> exchangeKeys = scanKeys(PREFIX_EXCHANGE + userId + ":*");
+        if (!exchangeKeys.isEmpty()) {
             redisTemplate.delete(exchangeKeys);
         }
     }
@@ -208,10 +252,21 @@ public class TokenServiceImpl implements TokenService {
         return jwtProvider.getJwks();
     }
 
+    // SEC-007: 활성 refresh token 전체를 훑는 KEYS는 블로킹 커맨드라 운영 중인 Redis 인스턴스를
+    // 순간 정지시킬 수 있음 — SCAN 커서 기반으로 교체.
+    private List<String> scanKeys(String pattern) {
+        List<String> keys = new ArrayList<>();
+        try (Cursor<String> cursor = redisTemplate.scan(ScanOptions.scanOptions().match(pattern).count(200).build())) {
+            cursor.forEachRemaining(keys::add);
+        }
+        return keys;
+    }
+
     // ── 메타데이터 JSON 직렬화/역직렬화 ──────────────────────────────
 
-    private String buildMetadata(String userId, boolean rememberMe, long issuedAt, long lastUsedAt) {
+    private String buildMetadata(String userId, String familyId, boolean rememberMe, long issuedAt, long lastUsedAt) {
         return "{\"userId\":\"" + userId + "\""
+                + ",\"familyId\":\"" + familyId + "\""
                 + ",\"rememberMe\":" + rememberMe
                 + ",\"issuedAt\":" + issuedAt
                 + ",\"lastUsedAt\":" + lastUsedAt

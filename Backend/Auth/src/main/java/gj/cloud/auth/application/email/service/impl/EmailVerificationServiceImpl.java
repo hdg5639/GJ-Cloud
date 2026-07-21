@@ -6,6 +6,7 @@ import gj.cloud.auth.domain.user.repository.UserRepository;
 import gj.cloud.auth.global.client.UserServiceClient;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
+import gj.cloud.auth.global.security.EmailVerificationRateLimiter;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,17 +34,22 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private final JavaMailSender mailSender;
     private final UserRepository userRepository;
     private final UserServiceClient userServiceClient;
+    private final EmailVerificationRateLimiter rateLimiter;
 
     @Value("${spring.mail.from}")
     private String mailFrom;
 
     @Override
-    public void sendCode(String email) {
+    public void sendCode(String email, String clientIp) {
         userRepository.findByEmail(email)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
 
+        rateLimiter.checkAndThrowIfSendLocked(email, clientIp);
+
         String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
         redisTemplate.opsForValue().set(KEY_PREFIX + email, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
+        rateLimiter.clearAttempts(email);
+        rateLimiter.recordSend(email, clientIp);
 
         try {
             String template = new ClassPathResource("templates/email-verification.html")
@@ -71,6 +77,12 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             throw new AuthException(AuthErrorCode.VERIFICATION_CODE_EXPIRED);
         }
         if (!stored.equals(code)) {
+            // SEC-008: 시도 횟수 제한 없이는 6자리 코드를 TTL 내내 무제한으로 대입해볼 수 있었음.
+            // 한도를 넘기면 코드 자체를 무효화해 재발송을 요구한다.
+            if (rateLimiter.recordFailureAndCheckExceeded(email)) {
+                redisTemplate.delete(KEY_PREFIX + email);
+                throw new AuthException(AuthErrorCode.VERIFICATION_CODE_EXPIRED);
+            }
             throw new AuthException(AuthErrorCode.INVALID_VERIFICATION_CODE);
         }
 
@@ -78,6 +90,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
         user.activate();
         redisTemplate.delete(KEY_PREFIX + email);
+        rateLimiter.clearAttempts(email);
 
         userServiceClient.createProfile(user.getId(), user.getEmail());
     }

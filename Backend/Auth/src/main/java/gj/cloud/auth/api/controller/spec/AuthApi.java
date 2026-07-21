@@ -22,7 +22,7 @@ public interface AuthApi {
     @Operation(summary = "회원가입", description = "가입 후 이메일로 인증 코드 자동 발송")
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    ApiResponse<Void> register(@Valid @RequestBody RegisterRequest request);
+    ApiResponse<Void> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest);
 
     @Operation(summary = "로그인", description = "accessToken(Body) + refreshToken(httpOnly Cookie) 발급")
     @PostMapping("/login")
@@ -38,7 +38,7 @@ public interface AuthApi {
 
     @Operation(summary = "인증 코드 발송", description = "이메일로 6자리 코드 발송 (5분 유효)")
     @PostMapping("/email/verify/send")
-    ApiResponse<Void> sendVerifyCode(@Valid @RequestBody EmailVerifyRequest request);
+    ApiResponse<Void> sendVerifyCode(@Valid @RequestBody EmailVerifyRequest request, HttpServletRequest httpRequest);
 
     @Operation(summary = "인증 코드 확인", description = "코드 일치 시 계정 ACTIVE 전환")
     @PostMapping("/email/verify/confirm")

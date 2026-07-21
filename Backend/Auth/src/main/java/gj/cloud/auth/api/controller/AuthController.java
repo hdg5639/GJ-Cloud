@@ -10,6 +10,7 @@ import gj.cloud.auth.application.email.dto.EmailVerifyConfirmRequest;
 import gj.cloud.auth.application.email.dto.EmailVerifyRequest;
 import gj.cloud.auth.application.email.service.EmailVerificationService;
 import gj.cloud.auth.global.response.ApiResponse;
+import gj.cloud.auth.global.security.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -22,17 +23,18 @@ public class AuthController implements AuthApi {
 
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
+    private final ClientIpResolver clientIpResolver;
 
     @Override
-    public ApiResponse<Void> register(RegisterRequest request) {
+    public ApiResponse<Void> register(RegisterRequest request, HttpServletRequest httpRequest) {
         authService.register(request);
-        emailVerificationService.sendCode(request.email());
+        emailVerificationService.sendCode(request.email(), clientIpResolver.resolve(httpRequest));
         return ApiResponse.ok();
     }
 
     @Override
     public ApiResponse<LoginResponse> login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse response) {
-        String clientIp = resolveClientIp(httpRequest);
+        String clientIp = clientIpResolver.resolve(httpRequest);
         LoginResult result = authService.login(request, clientIp);
         setRefreshTokenCookie(response, result.refreshToken(), result.cookieMaxAgeSeconds());
         return ApiResponse.ok(new LoginResponse(result.accessToken(), "Bearer", 900L));
@@ -52,8 +54,8 @@ public class AuthController implements AuthApi {
     }
 
     @Override
-    public ApiResponse<Void> sendVerifyCode(EmailVerifyRequest request) {
-        emailVerificationService.sendCode(request.email());
+    public ApiResponse<Void> sendVerifyCode(EmailVerifyRequest request, HttpServletRequest httpRequest) {
+        emailVerificationService.sendCode(request.email(), clientIpResolver.resolve(httpRequest));
         return ApiResponse.ok();
     }
 
@@ -61,14 +63,6 @@ public class AuthController implements AuthApi {
     public ApiResponse<Void> confirmVerifyCode(EmailVerifyConfirmRequest request) {
         emailVerificationService.confirmCode(request.email(), request.code());
         return ApiResponse.ok();
-    }
-
-    private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
     }
 
     private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken, long maxAgeSeconds) {
