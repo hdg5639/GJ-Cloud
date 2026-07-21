@@ -23,10 +23,9 @@ export function PageLoader({ label = "불러오는 중", size = 72 }: { label?: 
 }
 
 export function SkeletonRow({ cols = 4, dark = false }: { cols?: number; dark?: boolean }) {
-  const bg = dark ? "bg-gray-800" : "bg-gray-100";
-  const border = dark ? "border-gray-800" : "border-gray-100";
+  const bg = dark ? "bg-white/[0.12]" : "bg-white/[0.06]";
   return (
-    <tr className={`border-b ${border}`}>
+    <tr className="border-b border-line">
       {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-4 py-3">
           <div
@@ -41,13 +40,13 @@ export function SkeletonRow({ cols = 4, dark = false }: { cols?: number; dark?: 
 
 export function SkeletonCard() {
   return (
-    <div className="border border-gray-100 rounded-xl p-5 space-y-3 animate-pulse">
+    <div className="border border-line rounded-xl p-5 space-y-3 animate-pulse">
       <div className="flex items-center justify-between">
-        <div className="h-4 bg-gray-100 rounded w-1/3" />
-        <div className="h-5 bg-gray-100 rounded-full w-16" />
+        <div className="h-4 bg-white/[0.06] rounded w-1/3" />
+        <div className="h-5 bg-white/[0.06] rounded-full w-16" />
       </div>
-      <div className="h-3 bg-gray-100 rounded w-1/2" />
-      <div className="h-3 bg-gray-100 rounded w-2/3" />
+      <div className="h-3 bg-white/[0.06] rounded w-1/2" />
+      <div className="h-3 bg-white/[0.06] rounded w-2/3" />
     </div>
   );
 }

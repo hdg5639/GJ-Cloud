@@ -5,7 +5,7 @@ export function CodeBlock({ className, ...props }: HTMLAttributes<HTMLPreElement
   return (
     <pre
       className={cn(
-        "overflow-auto whitespace-pre rounded-[11px] border border-line bg-[#f7f9f8] p-4 font-mono text-xs leading-[1.6]",
+        "overflow-auto whitespace-pre rounded-[11px] border border-line bg-[#0c0e12] p-4 font-mono text-xs leading-[1.6] text-[#d7dbd6]",
         className
       )}
       {...props}
@@ -17,7 +17,7 @@ export function InlineCode({ className, ...props }: HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={cn(
-        "rounded-[10px] border border-line bg-[#f7f9f8] px-[14px] py-[13px] font-mono text-xs leading-[1.6]",
+        "rounded-[10px] border border-line bg-[#0c0e12] px-[14px] py-[13px] font-mono text-xs leading-[1.6] text-[#d7dbd6]",
         className
       )}
       {...props}

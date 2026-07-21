@@ -15,13 +15,13 @@ export function ListItem({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 rounded-[11px] border border-line bg-[#fbfcfb] p-[13px]",
+        "flex items-center justify-between gap-3 rounded-[11px] border border-line bg-white/[0.02] p-[13px]",
         className
       )}
     >
       <div>
         <strong className="block font-bold">{title}</strong>
-        {subtitle && <span className="mt-0.5 block text-[11px] text-[#94a098]">{subtitle}</span>}
+        {subtitle && <span className="mt-0.5 block text-[11px] text-muted-soft">{subtitle}</span>}
       </div>
       {action}
     </div>

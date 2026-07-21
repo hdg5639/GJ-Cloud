@@ -7,7 +7,7 @@ export function Breadcrumb({ items }: { items: Array<{ label: ReactNode; onClick
         <Fragment key={i}>
           {i > 0 && <span>/</span>}
           {item.onClick ? (
-            <button type="button" onClick={item.onClick} className="border-0 bg-transparent text-[#6c786f]">
+            <button type="button" onClick={item.onClick} className="border-0 bg-transparent text-muted hover:text-foreground">
               {item.label}
             </button>
           ) : (

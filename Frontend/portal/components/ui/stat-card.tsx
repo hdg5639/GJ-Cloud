@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { CSSProperties, ReactNode } from "react";
 import { cn } from "./cn";
 
 export function StatGrid({
@@ -12,8 +12,11 @@ export function StatGrid({
 }) {
   return (
     <div
-      className={cn("mb-4 grid gap-3.5", className)}
-      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      className={cn(
+        "mb-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-[repeat(var(--stat-cols),minmax(0,1fr))]",
+        className
+      )}
+      style={{ "--stat-cols": cols } as CSSProperties}
     >
       {children}
     </div>
@@ -36,15 +39,14 @@ export function StatCard({
   return (
     <article
       className={cn(
-        "rounded-[15px] border border-line bg-panel",
+        "rounded-[15px] border border-line bg-panel bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0))]",
         compact ? "min-h-[92px] p-4" : "min-h-[120px] p-[19px]",
         className
       )}
-      style={{ backgroundImage: "linear-gradient(#ffffff, #fbfcfb)" }}
     >
       <span className="block text-[13px] text-muted">{label}</span>
       <strong className={cn("block", compact ? "my-2 text-lg" : "my-3 text-[29px]")}>{value}</strong>
-      {hint && <small className="block text-xs text-[#94a098]">{hint}</small>}
+      {hint && <small className="block text-xs text-muted-soft">{hint}</small>}
     </article>
   );
 }

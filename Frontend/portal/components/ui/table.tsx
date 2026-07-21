@@ -3,14 +3,18 @@ import { cn } from "./cn";
 import { StatusDot } from "./badge";
 
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
-  return <table className={cn("w-full border-collapse", className)} {...props} />;
+  return (
+    <div className="overflow-x-auto">
+      <table className={cn("w-full min-w-[560px] border-collapse", className)} {...props} />
+    </div>
+  );
 }
 
 export function Th({ className, ...props }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
       className={cn(
-        "whitespace-nowrap border-b border-[#edf1ee] bg-[#fafcfb] px-4 py-[15px] text-left text-[11px] font-medium text-muted",
+        "whitespace-nowrap border-b border-line bg-white/[0.02] px-4 py-[15px] text-left text-[11px] font-medium text-muted",
         className
       )}
       {...props}
@@ -22,7 +26,7 @@ export function Td({ className, ...props }: TdHTMLAttributes<HTMLTableCellElemen
   return (
     <td
       className={cn(
-        "whitespace-nowrap border-b border-[#edf1ee] px-4 py-[15px] text-[13px] text-[#3d4941]",
+        "whitespace-nowrap border-b border-line px-4 py-[15px] text-[13px] text-[#dfe5df]",
         className
       )}
       {...props}

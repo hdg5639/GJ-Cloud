@@ -32,7 +32,7 @@ export function Wizard({
 }) {
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="grid h-[min(760px,92vh)] w-[min(1040px,96vw)] grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-[20px] bg-[#f8faf9]">
+      <div className="grid h-[min(760px,92vh)] w-[min(1040px,96vw)] grid-rows-[auto_auto_1fr_auto] overflow-hidden rounded-[20px] bg-background">
         <div className="flex items-center justify-between border-b border-line bg-panel px-6 py-[21px]">
           <div>
             <h2 className="m-0 mb-[5px] text-xl font-bold">{title}</h2>
@@ -41,7 +41,7 @@ export function Wizard({
           <button
             type="button"
             onClick={onClose}
-            className="h-[34px] w-[34px] rounded-[9px] border-0 bg-transparent text-lg hover:bg-[#f1f4f2]"
+            className="h-[34px] w-[34px] rounded-[9px] border-0 bg-transparent text-lg hover:bg-white/[0.06]"
           >
             ×
           </button>
@@ -55,13 +55,13 @@ export function Wizard({
                 onClick={() => onStepClick?.(i)}
                 className={cn(
                   "flex items-center gap-2 border-0 bg-transparent text-sm",
-                  i <= currentStep ? "text-brand-strong" : "text-[#9ba59e]"
+                  i <= currentStep ? "text-brand-strong" : "text-muted-soft"
                 )}
               >
                 <span
                   className={cn(
                     "grid h-[27px] w-[27px] place-items-center rounded-full text-xs font-extrabold",
-                    i <= currentStep ? "bg-brand text-white" : "bg-[#edf1ee]"
+                    i <= currentStep ? "bg-brand text-[#0a0c08]" : "bg-white/[0.06] text-muted-soft"
                   )}
                 >
                   {i + 1}

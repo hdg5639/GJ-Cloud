@@ -17,7 +17,7 @@ export function Modal({ open, onClose, children }: { open: boolean; onClose: () 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(12,18,14,.5)] p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div onClick={(e) => e.stopPropagation()} className="w-full">

@@ -10,11 +10,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "border border-brand bg-brand text-white hover:bg-brand-strong",
-  secondary: "border border-line-strong bg-panel text-[#3f4c43] hover:bg-[#f2f6f3]",
-  danger: "border border-danger-soft bg-panel text-danger hover:bg-[#fdf4f4]",
-  "danger-solid": "border border-danger bg-danger text-white hover:bg-[#c53d3d]",
-  ghost: "border-0 bg-soft text-brand-strong hover:bg-[#dff3e6]",
+  primary: "border border-brand bg-brand text-[#0a0c08] hover:bg-brand-strong",
+  secondary: "border border-line-strong bg-panel text-[#e7ebe6] hover:bg-white/[0.04]",
+  danger: "border border-danger-soft bg-panel text-danger hover:bg-danger/10",
+  "danger-solid": "border border-danger bg-danger text-[#1a0a0a] hover:bg-[#ff8686]",
+  ghost: "border-0 bg-soft text-brand-strong hover:bg-brand/15",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
