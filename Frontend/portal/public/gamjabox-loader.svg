@@ -1,127 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 38 38" role="img" aria-labelledby="title desc">
   <title id="title">GamjaBox loading</title>
-  <desc id="desc">
-    The GamjaBox hexagon pops in, the G writes itself counter-clockwise,
-    then unwinds in reverse before the cycle repeats.
-  </desc>
-
+  <desc id="desc">The GamjaBox hexagon mark appears, then its G glyph draws in counter-clockwise and unwinds again.</desc>
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#c8ff58"/>
       <stop offset="1" stop-color="#62ffa8"/>
     </linearGradient>
-
-    <!--
-      G를 '외곽선 stroke'가 아니라 '채워진 글자'가 드러나는 느낌으로 만들기 위해
-      실제 G fill path에 mask를 씌우고, mask 쪽만 stroke 애니메이션으로 제어.
-    -->
-    <mask id="g-write-mask" maskUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="38" height="38" fill="#000"/>
-      <path
-        class="loader-g-trace"
-        pathLength="100"
-        d="M24.8 13.8
-           C23.5 12.7 21.7 12.1 19.6 12.1
-           C14.9 12.1 11.6 15.2 11.6 19.1
-           C11.6 23.4 14.9 26.1 19.2 26.1
-           C21.4 26.1 23.3 25.5 24.8 24.5
-           L24.8 19.5
-           L20.0 19.5"
-      />
-    </mask>
-
     <style>
       .loader-hex {
         transform-origin: 19px 18px;
-        opacity: 0;
-        transform: scale(.78);
-        animation: hexCycle 2.7s cubic-bezier(.65, 0, .35, 1) infinite;
+        opacity: 1;
+        transform: scale(1);
+        animation: hexPop 2.4s cubic-bezier(.65,0,.35,1) infinite;
       }
-
-      .loader-g-fill {
-        fill: #07100a;
-        mask: url(#g-write-mask);
-      }
-
-      .loader-g-trace {
+      .loader-g {
         fill: none;
-        stroke: #fff;
-        stroke-width: 8.8;
+        stroke: #07100a;
+        stroke-width: 2.2;
         stroke-linecap: round;
         stroke-linejoin: round;
-        stroke-dasharray: 0 100;
-        animation: gWrite 2.7s cubic-bezier(.65, 0, .35, 1) infinite;
+        stroke-dasharray: 100;
+        stroke-dashoffset: 0;
+        animation: gDraw 2.4s cubic-bezier(.65,0,.35,1) infinite;
       }
-
-      @keyframes hexCycle {
-        0% {
-          opacity: 0;
-          transform: scale(.78);
-        }
-        10% {
-          opacity: 1;
-          transform: scale(1);
-        }
-        78% {
-          opacity: 1;
-          transform: scale(1);
-        }
-        100% {
-          opacity: 0;
-          transform: scale(.78);
-        }
+      @keyframes hexPop {
+        0% { opacity: 0; transform: scale(.82); }
+        8% { opacity: 1; transform: scale(1); }
+        92% { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(.82); }
       }
-
-      /*
-        0~12%  : 육각형 먼저 등장
-        16~52% : G가 반시계 방향으로 써지듯 나타남
-        52~66% : 잠깐 유지
-        66~94% : 역순으로 되감기듯 사라짐
-      */
-      @keyframes gWrite {
-        0%, 12% {
-          stroke-dasharray: 0 100;
-        }
-        16% {
-          stroke-dasharray: 0 100;
-        }
-        52% {
-          stroke-dasharray: 100 0;
-        }
-        66% {
-          stroke-dasharray: 100 0;
-        }
-        94%, 100% {
-          stroke-dasharray: 0 100;
-        }
+      @keyframes gDraw {
+        0%, 10% { stroke-dashoffset: 100; }
+        50% { stroke-dashoffset: 0; }
+        90%, 100% { stroke-dashoffset: 100; }
       }
-
       @media (prefers-reduced-motion: reduce) {
-        .loader-hex,
-        .loader-g-trace {
-          animation: none !important;
-        }
-
-        .loader-hex {
-          opacity: 1 !important;
-          transform: none !important;
-        }
-
-        .loader-g-trace {
-          stroke-dasharray: 100 0 !important;
-        }
+        .loader-hex, .loader-g { animation: none !important; opacity: 1 !important; transform: none !important; stroke-dashoffset: 0 !important; }
       }
     </style>
   </defs>
-
-  <path
-    class="loader-hex"
-    fill="url(#g)"
-    d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"
-  />
-
-  <path
-    class="loader-g-fill"
-    d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"
-  />
+  <path class="loader-hex" fill="url(#g)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
+  <path class="loader-g" pathLength="100" d="M12.2,13.2 C10.9,14.7 10.2,16.6 10.2,18.8 C10.2,23.5 13.8,26.5 19,26.5 C21.8,26.5 24.1,25.8 25.8,24.6 L25.8,16.8 L19.6,16.8 L19.6,19.6 L22.6,19.6 L22.6,21.7 L16,21.7 L16,16.3 L25.8,16.3 L25.8,13.2 Z"/>
 </svg>
