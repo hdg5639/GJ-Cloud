@@ -7,7 +7,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -16,7 +15,10 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 
-@Component
+// CICD-003: 이 필터는 SecurityConfig가 특정 SecurityWebFilterChain에만 .addFilterAt으로 넣으려는
+// 의도였는데, @Component로 두면 Spring Boot가 WebFilter 타입 빈을 전부 전역 WebFlux 필터 체인에도
+// 자동 등록해버려서(체인 스코핑과 무관하게 모든 요청에 중복 적용) 의도한 경로 스코핑이 깨진다.
+// 그래서 컴포넌트 스캔 대상에서 빼고 SecurityConfig에서 직접 new로 생성해서 넣는다.
 @RequiredArgsConstructor
 public class JwtAuthenticationWebFilter implements WebFilter {
 

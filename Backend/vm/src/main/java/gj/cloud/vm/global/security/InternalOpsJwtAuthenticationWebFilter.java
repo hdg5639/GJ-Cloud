@@ -7,7 +7,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -16,7 +15,9 @@ import reactor.core.publisher.Mono;
 
 import java.util.List;
 
-@Component
+// CICD-003: @Component로 두면 SecurityConfig의 특정 체인 스코핑과 무관하게 전역 WebFlux 필터로도
+// 중복 등록돼버리므로(JwtAuthenticationWebFilter 참고) 컴포넌트 스캔에서 빼고 SecurityConfig에서
+// 직접 생성한다.
 @RequiredArgsConstructor
 public class InternalOpsJwtAuthenticationWebFilter implements WebFilter {
 

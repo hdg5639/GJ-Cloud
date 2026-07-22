@@ -1,10 +1,15 @@
 package gj.cloud.vm.global.config;
 
+import gj.cloud.vm.global.jwt.InternalJwtValidator;
+import gj.cloud.vm.global.jwt.InternalOpsJwtValidator;
+import gj.cloud.vm.global.jwt.InternalUserJwtValidator;
+import gj.cloud.vm.global.jwt.JwtValidator;
 import gj.cloud.vm.global.security.InternalJwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.InternalOpsJwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.InternalUserJwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.JwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.SseTicketAuthenticationWebFilter;
+import gj.cloud.vm.global.sse.SseTicketService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,11 +28,17 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationWebFilter jwtAuthenticationWebFilter;
-    private final InternalJwtAuthenticationWebFilter internalJwtAuthenticationWebFilter;
-    private final InternalOpsJwtAuthenticationWebFilter internalOpsJwtAuthenticationWebFilter;
-    private final InternalUserJwtAuthenticationWebFilter internalUserJwtAuthenticationWebFilter;
-    private final SseTicketAuthenticationWebFilter sseTicketAuthenticationWebFilter;
+    // CICD-003: 커스텀 인증 WebFilter들은 여기서 특정 SecurityWebFilterChain에만 .addFilterAt으로
+    // 넣을 의도였는데, 이 필터 클래스들이 @Component였을 때 Spring Boot가 WebFilter 타입 빈을
+    // 전역 WebFlux 필터 체인에도 자동으로 같이 등록해버려서, 체인 스코핑과 무관하게 모든 요청에
+    // 중복 적용되는 문제가 있었다(특히 SseTicketAuthenticationWebFilter는 티켓 없으면 무조건 401이라
+    // /actuator/health 같은 무관한 경로까지 간헐적으로 401을 받는 버그로 이어짐). 그래서 필터
+    // 클래스들은 컴포넌트 스캔에서 빼고, 실제 의존성(검증기/서비스)만 주입받아 여기서 직접 생성한다.
+    private final JwtValidator jwtValidator;
+    private final InternalJwtValidator internalJwtValidator;
+    private final InternalOpsJwtValidator internalOpsJwtValidator;
+    private final InternalUserJwtValidator internalUserJwtValidator;
+    private final SseTicketService sseTicketService;
 
     // /internal/ops/** 전용: Ops 서비스(aud=ops-service)만 호출 가능. 아래 일반 /internal/** 체인보다 먼저 매칭돼야 함
     @Bean
@@ -47,7 +58,7 @@ public class SecurityConfig {
                             return exchange.getResponse().setComplete();
                         })
                 )
-                .addFilterAt(internalOpsJwtAuthenticationWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                .addFilterAt(new InternalOpsJwtAuthenticationWebFilter(internalOpsJwtValidator), SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 
@@ -72,7 +83,7 @@ public class SecurityConfig {
                             return exchange.getResponse().setComplete();
                         })
                 )
-                .addFilterAt(internalUserJwtAuthenticationWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                .addFilterAt(new InternalUserJwtAuthenticationWebFilter(internalUserJwtValidator), SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 
@@ -93,7 +104,7 @@ public class SecurityConfig {
                             return exchange.getResponse().setComplete();
                         })
                 )
-                .addFilterAt(internalJwtAuthenticationWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                .addFilterAt(new InternalJwtAuthenticationWebFilter(internalJwtValidator), SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 
@@ -116,7 +127,7 @@ public class SecurityConfig {
                             return exchange.getResponse().setComplete();
                         })
                 )
-                .addFilterAt(sseTicketAuthenticationWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                .addFilterAt(new SseTicketAuthenticationWebFilter(sseTicketService), SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 
@@ -150,7 +161,7 @@ public class SecurityConfig {
                             return exchange.getResponse().setComplete();
                         })
                 )
-                .addFilterAt(jwtAuthenticationWebFilter, SecurityWebFiltersOrder.AUTHENTICATION)
+                .addFilterAt(new JwtAuthenticationWebFilter(jwtValidator), SecurityWebFiltersOrder.AUTHENTICATION)
                 .build();
     }
 

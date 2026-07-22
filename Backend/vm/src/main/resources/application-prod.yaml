@@ -53,8 +53,3 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
-
-# TEMP: /actuator/health가 permitAll인데도 401 나는 원인 진단용. 원인 파악되면 제거할 것.
-logging:
-  level:
-    org.springframework.security: DEBUG
