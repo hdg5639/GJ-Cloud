@@ -25,7 +25,7 @@ class RuleBasedSpecInferrerTest {
         DetectedFiles files = new DetectedFiles(false, false, false, false, false, false, false, false, true);
         RepositoryEvidence evidence = new RepositoryEvidence(".", files, new ManifestData(null, null, null),
                 RepositoryEvidence.TYPE_UNKNOWN, RepositoryEvidence.CONFIDENCE_LOW, List.of(), List.of(), List.of(), "hash");
-        ServiceCard card = new ServiceCard("web", "docker", ".", 3000, null, null, null, null, null, null, null, true);
+        ServiceCard card = new ServiceCard("web", "docker", ".", 3000, null, null, null, null, null, null, null, true, "portfolio");
 
         RuleBasedSpecInferrer.RuleBasedInferenceResult result = inferrer.infer(evidence, card);
 
@@ -43,6 +43,7 @@ class RuleBasedSpecInferrerTest {
         assertThat(spec.run().containerPort()).isEqualTo(80);
         assertThat(spec.expose()).isNotNull();
         assertThat(spec.expose().enabled()).isTrue();
+        assertThat(spec.expose().customSubdomain()).isEqualTo("portfolio");
     }
 
     @Test
@@ -50,7 +51,7 @@ class RuleBasedSpecInferrerTest {
         DetectedFiles files = new DetectedFiles(false, false, false, false, false, false, false, false, true);
         RepositoryEvidence evidence = new RepositoryEvidence(".", files, new ManifestData(null, null, null),
                 RepositoryEvidence.TYPE_UNKNOWN, RepositoryEvidence.CONFIDENCE_LOW, List.of(), List.of(), List.of(), "hash");
-        ServiceCard card = new ServiceCard("web", "docker", ".", 3000, null, null, null, null, null, null, null, false);
+        ServiceCard card = new ServiceCard("web", "docker", ".", 3000, null, null, null, null, null, null, null, false, null);
 
         RuleBasedSpecInferrer.RuleBasedInferenceResult result = inferrer.infer(evidence, card);
 
@@ -63,7 +64,7 @@ class RuleBasedSpecInferrerTest {
         DetectedFiles files = new DetectedFiles(true, false, false, false, false, false, false, false, false);
         RepositoryEvidence evidence = new RepositoryEvidence(".", files, new ManifestData(null, null, null),
                 RepositoryEvidence.TYPE_UNKNOWN, RepositoryEvidence.CONFIDENCE_LOW, List.of(), List.of(), List.of(), "hash");
-        ServiceCard card = new ServiceCard("web", "docker", ".", 8080, null, null, null, null, null, null, null, true);
+        ServiceCard card = new ServiceCard("web", "docker", ".", 8080, null, null, null, null, null, null, null, true, null);
 
         RuleBasedSpecInferrer.RuleBasedInferenceResult result = inferrer.infer(evidence, card);
 
@@ -79,7 +80,7 @@ class RuleBasedSpecInferrerTest {
         PackageJsonInfo packageJsonInfo = new PackageJsonInfo("app", false, "module", Map.of(), java.util.Set.of(), java.util.Set.of(), false, null, Map.of());
         RepositoryEvidence evidence = new RepositoryEvidence(".", files, new ManifestData(packageJsonInfo, null, null),
                 RepositoryEvidence.TYPE_UNKNOWN, RepositoryEvidence.CONFIDENCE_LOW, List.of(), List.of(), List.of(), "hash");
-        ServiceCard card = new ServiceCard("web", "node", ".", 3000, null, null, null, null, null, null, null, true);
+        ServiceCard card = new ServiceCard("web", "node", ".", 3000, null, null, null, null, null, null, null, true, null);
 
         RuleBasedSpecInferrer.RuleBasedInferenceResult result = inferrer.infer(evidence, card);
 

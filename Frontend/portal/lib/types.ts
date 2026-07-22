@@ -338,6 +338,8 @@ export interface ServiceCard {
   pythonVersion?: string;
   pythonFramework?: string;
   expose: boolean;
+  // PRO 플랜 전용 — 외부 노출 시 자동 접미사 없는 CNAME을 사용
+  customSubdomain?: string;
 }
 
 export interface InfraSelection {

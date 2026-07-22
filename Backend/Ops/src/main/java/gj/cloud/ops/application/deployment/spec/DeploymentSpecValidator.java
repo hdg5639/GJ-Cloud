@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 // gamjabox가 스펙 검증(schemaVersion 기준) 후 compose 렌더링 — D-3절 "생성 후" 단계 그대로 D-1에도 적용.
 // build/artifact/run 분리 스키마(2.0) 도입 이후: 구조적 검증만 담당 — 보안/정책 검증은 별도
@@ -17,6 +18,8 @@ public class DeploymentSpecValidator {
 
     private static final Set<String> SUPPORTED_SCHEMA_VERSIONS = Set.of("2.0");
     private static final Set<String> SUPPORTED_INFRA_TYPES = Set.of("postgresql", "mysql", "redis", "mongodb");
+    private static final Pattern CUSTOM_SUBDOMAIN_PATTERN =
+            Pattern.compile("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$");
 
     private static final Set<BuildRunStrategy> NODE_BUILD_STRATEGIES = EnumSet.of(
             BuildRunStrategy.NONE, BuildRunStrategy.COPY_SOURCE,
@@ -128,6 +131,18 @@ public class DeploymentSpecValidator {
                 errors.add(new ValidationError(
                         "expose.enabled=false인데 healthCheckPath가 지정돼 있습니다 (service=" + svc + ")",
                         "healthCheckPath is set while expose.enabled=false (service=" + svc + ")"));
+            }
+            if (!expose.enabled() && expose.customSubdomain() != null && !expose.customSubdomain().isBlank()) {
+                errors.add(new ValidationError(
+                        "expose.enabled=false인데 customSubdomain이 지정돼 있습니다 (service=" + svc + ")",
+                        "customSubdomain is set while expose.enabled=false (service=" + svc + ")"));
+            }
+            if (expose.customSubdomain() != null && !expose.customSubdomain().isBlank()
+                    && (expose.customSubdomain().length() > 30
+                    || !CUSTOM_SUBDOMAIN_PATTERN.matcher(expose.customSubdomain()).matches())) {
+                errors.add(new ValidationError(
+                        "customSubdomain 형식이 올바르지 않습니다 (영문 소문자, 숫자, 하이픈만 1~30자; service=" + svc + ")",
+                        "customSubdomain must contain only lowercase letters, digits, and hyphens (1-30 chars; service=" + svc + ")"));
             }
             if (expose.enabled() && !"http".equalsIgnoreCase(expose.protocol())
                     && expose.healthCheckPath() != null && !expose.healthCheckPath().isBlank()) {

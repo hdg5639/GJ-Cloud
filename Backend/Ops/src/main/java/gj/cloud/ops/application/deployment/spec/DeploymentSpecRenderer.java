@@ -86,7 +86,8 @@ public class DeploymentSpecRenderer {
 
             if (exposed) {
                 String protocol = "http".equalsIgnoreCase(service.expose().protocol()) ? "HTTP" : "TCP";
-                exposedRoutes.add(new ExposedRoute(service.name(), effectivePort, protocol, "PUBLIC", service.name(), null));
+                exposedRoutes.add(new ExposedRoute(service.name(), effectivePort, protocol, "PUBLIC", service.name(),
+                        service.expose().customSubdomain()));
 
                 String healthPath = service.expose().healthCheckPath();
                 if (healthPath != null && !healthPath.isBlank()) {

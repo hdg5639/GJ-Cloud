@@ -67,7 +67,8 @@ public class AiGenerationCache {
         raw.append(request.repoUrl()).append('|').append(request.branch()).append('|');
         for (ServiceCard card : request.services()) {
             raw.append(card.name()).append(':').append(card.runtime()).append(':').append(card.context())
-                    .append(':').append(card.containerPort()).append(':').append(card.expose()).append(';');
+                    .append(':').append(card.containerPort()).append(':').append(card.expose())
+                    .append(':').append(card.customSubdomain()).append(';');
         }
         List<InfraSelection> infra = request.infrastructure();
         if (infra != null) {

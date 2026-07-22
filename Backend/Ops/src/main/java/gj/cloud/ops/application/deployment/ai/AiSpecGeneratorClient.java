@@ -71,6 +71,8 @@ public class AiSpecGeneratorClient {
               of forcing a complete spec. Set status to whichever of NEEDS_INPUT/UNSUPPORTED/CONFLICT applies.
             - If the user-selected service card contradicts the repository evidence (e.g. the card says java but there \
               is no pom.xml/build.gradle at all in the repository), set status to CONFLICT and explain why.
+            - `customSubdomain` is a user-owned PRO plan setting. Copy the requested value exactly when exposure is \
+              enabled; use null when the user did not request one. Never invent or modify a custom subdomain.
             - Once everything is resolved, set status to READY.
 
             Language requirement: this system is used by Korean-speaking users through a Korean-language portal. \
@@ -222,7 +224,7 @@ public class AiSpecGeneratorClient {
             }
 
             List<ServiceSpec> allServices = new ArrayList<>(resolvedSpecs);
-            allServices.addAll(output.services());
+            allServices.addAll(applyRequestedCustomSubdomains(output.services(), aiCards));
             DeploymentSpec spec = assembleSpec(allServices, request.infrastructure(), networkName, externalNetwork);
             List<ValidationError> specErrors = collectAllErrors(spec);
             if (!specErrors.isEmpty()) {
@@ -243,9 +245,27 @@ public class AiSpecGeneratorClient {
         List<InfrastructureSpec> infra = infrastructure == null ? List.of() : infrastructure.stream()
                 .map(i -> new InfrastructureSpec(i.type(),
                         i.version() != null && !i.version().isBlank() ? i.version() : defaultInfraVersion(i.type()),
-                        new ExposeSpec(false, null, null)))
+                        new ExposeSpec(false, null, null, null)))
                 .toList();
         return new DeploymentSpec(SCHEMA_VERSION, services, infra, networkName, externalNetwork);
+    }
+
+    // 커스텀 CNAME은 저장소 분석이나 AI 추론 대상이 아니라 사용자가 명시적으로 고른 값이다. AI가 null로
+    // 누락하거나 다른 문자열을 반환해도 요청 카드의 값을 최종 스펙에 덮어써서 배포 라우트까지 보존한다.
+    private List<ServiceSpec> applyRequestedCustomSubdomains(List<ServiceSpec> services, List<ServiceCard> cards) {
+        Map<String, ServiceCard> cardsByName = cards.stream()
+                .collect(java.util.stream.Collectors.toMap(ServiceCard::name, card -> card, (first, ignored) -> first));
+        return services.stream().map(service -> {
+            ServiceCard card = cardsByName.get(service.name());
+            if (card == null || !card.expose() || service.expose() == null) {
+                return service;
+            }
+            ExposeSpec current = service.expose();
+            ExposeSpec exposure = new ExposeSpec(current.enabled(), current.protocol(), current.healthCheckPath(),
+                    card.customSubdomain());
+            return new ServiceSpec(service.name(), service.deploymentMode(), service.build(), service.artifact(),
+                    service.run(), service.context(), exposure);
+        }).toList();
     }
 
     private String defaultInfraVersion(String type) {
@@ -296,7 +316,17 @@ public class AiSpecGeneratorClient {
                         "요청한 서비스 수와 응답의 services 개수가 일치하지 않습니다",
                         "The number of requested services does not match the number of services in the response"));
             } else {
-                DeploymentSpec probe = assembleSpec(output.services(), List.of(), NETWORK_NAME, false);
+                List<String> requestedNames = requestedCards.stream().map(ServiceCard::name).sorted().toList();
+                List<String> outputNames = output.services().stream().map(ServiceSpec::name).sorted().toList();
+                if (!requestedNames.equals(outputNames)) {
+                    errors.add(new ValidationError(
+                            "요청한 서비스 이름과 응답의 services 이름이 일치하지 않습니다",
+                            "The requested service names do not match the service names in the response"));
+                }
+                // 사용자 설정인 customSubdomain은 모델 응답을 신뢰하지 않고 덮어쓴 상태로 검증한다.
+                DeploymentSpec probe = assembleSpec(
+                        applyRequestedCustomSubdomains(output.services(), requestedCards),
+                        List.of(), NETWORK_NAME, false);
                 errors.addAll(deploymentSpecValidator.collectErrors(probe));
             }
         }
@@ -343,6 +373,7 @@ public class AiSpecGeneratorClient {
                     .append(", context=").append(card.context())
                     .append(", containerPort=").append(card.containerPort())
                     .append(", expose=").append(card.expose())
+                    .append(", customSubdomain=").append(card.customSubdomain())
                     .append(", user-selected category=").append(card.runtime())
                     .append("\n  repository analysis: ").append(describeEvidence(evidence))
                     .append("\n");

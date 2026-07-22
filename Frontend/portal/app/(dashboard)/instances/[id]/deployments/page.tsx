@@ -60,6 +60,7 @@ function formatDate(iso: string): string {
 }
 
 type CreateTab = "compose" | "ai";
+type SubdomainCheckStatus = "idle" | "checking" | "available" | "taken" | "reserved" | "pro-only";
 
 // 배포 상세 페이지의 "재시도" 버튼 → 이 목록 페이지로 넘어올 때 프리필 스펙을 임시로 담아두는 키
 // (같은 형식의 키를 deployments/[deploymentId]/page.tsx에서도 그대로 사용)
@@ -70,7 +71,7 @@ function retryStorageKey(vmId: string): string {
 const emptyExposedRoute = (): ExposedRoute => ({ serviceName: "", port: 80, protocol: "HTTP", visibility: "PUBLIC", nickname: "", customSubdomain: "" });
 const emptyHealthCheck = (): HealthCheck => ({ serviceName: "", path: "/", hostPort: undefined, containerPort: undefined });
 const emptyEnvFile = (): EnvironmentFile => ({ vmPath: ".env", content: "" });
-const emptyServiceCard = (): ServiceCard => ({ name: "", runtime: "docker", context: ".", containerPort: 3000, expose: true });
+const emptyServiceCard = (): ServiceCard => ({ name: "", runtime: "docker", context: ".", containerPort: 3000, expose: true, customSubdomain: "" });
 const emptyInfra = (): InfraSelection => ({ type: "postgres", version: "" });
 
 // 모달 내 섹션 하나가 어떤 역할인지 한눈에 보이도록 제목+설명을 통일된 형태로 감싸는 래퍼
@@ -123,13 +124,13 @@ export default function DeploymentsPage() {
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
   // PRO 전용 커스텀 CNAME — 라우트별로 가용성 체크 상태를 따로 들고 있어야 함(여러 서비스 노출 가능)
   const [planType, setPlanType] = useState<string | null>(null);
-  const [routeSubdomainCheck, setRouteSubdomainCheck] = useState<
-    Record<number, "idle" | "checking" | "available" | "taken" | "reserved" | "pro-only">
-  >({});
+  const [routeSubdomainCheck, setRouteSubdomainCheck] = useState<Record<number, SubdomainCheckStatus>>({});
   const routeSubdomainTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   // AI 자동생성
   const [serviceCards, setServiceCards] = useState<ServiceCard[]>([emptyServiceCard()]);
+  const [serviceSubdomainCheck, setServiceSubdomainCheck] = useState<Record<number, SubdomainCheckStatus>>({});
+  const serviceSubdomainTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const [infraSelections, setInfraSelections] = useState<InfraSelection[]>([]);
   const [generatedSpec, setGeneratedSpec] = useState<string>("");
   const [generating, setGenerating] = useState(false);
@@ -143,7 +144,7 @@ export default function DeploymentsPage() {
   const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
 
   function handleRouteCustomSubdomainChange(index: number, value: string) {
-    const lower = value.toLowerCase();
+    const lower = value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30);
     setRoutes((prev) => prev.map((x, xi) => (xi === index ? { ...x, customSubdomain: lower } : x)));
     setRouteSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
     if (routeSubdomainTimers.current[index]) clearTimeout(routeSubdomainTimers.current[index]);
@@ -161,6 +162,43 @@ export default function DeploymentsPage() {
       }
     }, 500);
   }
+
+  function handleServiceCustomSubdomainChange(index: number, value: string) {
+    const lower = value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30);
+    setServiceCards((prev) => prev.map((x, xi) => (xi === index ? { ...x, customSubdomain: lower } : x)));
+    setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
+    setGeneratedSpec("");
+    setGenerationStatus(null);
+    if (serviceSubdomainTimers.current[index]) clearTimeout(serviceSubdomainTimers.current[index]);
+    if (!lower || !accessToken) return;
+    setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "checking" }));
+    serviceSubdomainTimers.current[index] = setTimeout(async () => {
+      try {
+        const result = await api.vm.checkSubdomain(accessToken, vmId, lower);
+        setServiceSubdomainCheck((prev) => ({
+          ...prev,
+          [index]: result.available ? "available" : ((result.reason as Exclude<SubdomainCheckStatus, "idle" | "checking" | "available">) ?? "taken"),
+        }));
+      } catch {
+        setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "taken" }));
+      }
+    }, 500);
+  }
+
+  function handleServiceExposureChange(index: number, expose: boolean) {
+    setServiceCards((prev) => prev.map((x, xi) => (
+      xi === index ? { ...x, expose, customSubdomain: expose ? x.customSubdomain : "" } : x
+    )));
+    setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
+    if (serviceSubdomainTimers.current[index]) clearTimeout(serviceSubdomainTimers.current[index]);
+    setGeneratedSpec("");
+    setGenerationStatus(null);
+  }
+
+  useEffect(() => () => {
+    Object.values(routeSubdomainTimers.current).forEach(clearTimeout);
+    Object.values(serviceSubdomainTimers.current).forEach(clearTimeout);
+  }, []);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -257,8 +295,10 @@ export default function DeploymentsPage() {
     setShowAdvanced(false);
     setEnvFiles([]);
     setRoutes([]);
+    setRouteSubdomainCheck({});
     setHealthChecks([]);
     setServiceCards([emptyServiceCard()]);
+    setServiceSubdomainCheck({});
     setInfraSelections([]);
     setGeneratedSpec("");
     setReviewFindings(null);
@@ -307,6 +347,7 @@ export default function DeploymentsPage() {
 
   async function handleGenerateSpec() {
     if (!accessToken || !repoUrl || !branch) return;
+    if (serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")) return;
     setGenerating(true);
     setError(null);
     setReviewFindings(null);
@@ -353,6 +394,7 @@ export default function DeploymentsPage() {
   async function handleCreateFromSpec(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken || !repoUrl || !branch || !generatedSpec) return;
+    if (serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -661,22 +703,26 @@ export default function DeploymentsPage() {
                                   <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
                                   <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
                                 </div>
-                                <div className="mt-1.5 rounded border border-line-strong bg-white/[0.02] p-1.5">
+                                <div className={cn(
+                                  "mt-1.5 rounded border p-2",
+                                  isPro ? "border-line-strong bg-white/[0.02]" : "border-[#e8b657]/25 bg-[#e8b657]/[0.045]"
+                                )}>
                                   <div className="mb-1 flex items-center gap-1.5">
                                     <span className="text-[10px] font-bold text-muted">커스텀 서브도메인</span>
                                     {!isPro ? (
-                                      <span className="shrink-0 text-[10px] font-bold text-[#e8b657] bg-[#e8b657]/10 border border-[#e8b657]/25 px-1.5 py-0.5 rounded">PRO 전용</span>
+                                      <span className="shrink-0 rounded border border-[#e8b657]/30 bg-[#e8b657]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#e8b657]">PRO에서 잠금 해제</span>
                                     ) : (
                                       <span className="text-[10px] text-accent">PRO</span>
                                     )}
                                   </div>
-                                  <div className={cn("flex items-center gap-1.5", !isPro && "opacity-50")}>
+                                  <div className="flex items-center gap-1.5">
                                     <input
                                       value={r.customSubdomain ?? ""}
                                       onChange={(e) => handleRouteCustomSubdomainChange(i, e.target.value)}
                                       placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
                                       disabled={!isPro}
-                                      className="h-7 flex-1 px-2 border border-line-strong rounded text-xs disabled:pointer-events-none disabled:bg-white/[0.03]"
+                                      title={!isPro ? "PRO 플랜에서 자동 식별자 없는 커스텀 CNAME을 사용할 수 있습니다." : undefined}
+                                      className="h-7 flex-1 rounded border border-line-strong px-2 text-xs disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-muted-soft"
                                     />
                                     {isPro && r.customSubdomain && (
                                       <span className={cn(
@@ -693,7 +739,9 @@ export default function DeploymentsPage() {
                                   </div>
                                   {!r.customSubdomain && (
                                     <p className="mt-1 text-[10px] text-muted-soft">
-                                      미입력 시 자동 생성됩니다{r.nickname && ` (${r.nickname} 닉네임 기준)`}.
+                                      {!isPro
+                                        ? "PRO 플랜에서는 자동 식별자 없이 원하는 주소를 선점할 수 있습니다."
+                                        : `미입력 시 자동 생성됩니다${r.nickname ? ` (${r.nickname} 닉네임 기준)` : ""}.`}
                                     </p>
                                   )}
                                 </div>
@@ -767,11 +815,65 @@ export default function DeploymentsPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             <label className="flex items-center gap-1.5 text-xs text-muted">
-                              <input type="checkbox" checked={s.expose} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, expose: e.target.checked } : x)))} className="accent-brand" />
+                              <input type="checkbox" checked={s.expose} onChange={(e) => handleServiceExposureChange(i, e.target.checked)} className="accent-brand" />
                               외부 노출
                             </label>
                             <button type="button" onClick={() => setServiceCards((prev) => prev.filter((_, xi) => xi !== i))} className="text-xs text-muted-soft hover:text-danger">삭제</button>
                           </div>
+                          {s.expose && (() => {
+                            const isPro = planType === "PRO";
+                            const check = serviceSubdomainCheck[i] ?? "idle";
+                            return (
+                              <div className={cn(
+                                "rounded-md border p-2.5",
+                                isPro ? "border-line-strong bg-white/[0.02]" : "border-[#e8b657]/25 bg-[#e8b657]/[0.045]"
+                              )}>
+                                <div className="mb-1.5 flex items-center gap-1.5">
+                                  <span className="text-[11px] font-bold text-foreground">커스텀 CNAME</span>
+                                  {!isPro ? (
+                                    <span className="rounded border border-[#e8b657]/30 bg-[#e8b657]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#e8b657]">PRO에서 잠금 해제</span>
+                                  ) : (
+                                    <span className="text-[10px] text-accent">PRO</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <div className={cn(
+                                    "flex h-8 flex-1 items-center overflow-hidden rounded border border-line-strong",
+                                    isPro ? "bg-background" : "bg-black/10"
+                                  )}>
+                                    <input
+                                      value={s.customSubdomain ?? ""}
+                                      onChange={(e) => handleServiceCustomSubdomainChange(i, e.target.value)}
+                                      placeholder="예: portfolio"
+                                      maxLength={30}
+                                      pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
+                                      disabled={!isPro}
+                                      title={!isPro ? "PRO 플랜에서 자동 식별자 없는 커스텀 CNAME을 사용할 수 있습니다." : undefined}
+                                      className="h-full min-w-0 flex-1 bg-transparent px-2 text-xs outline-none disabled:cursor-not-allowed disabled:text-muted-soft"
+                                    />
+                                    <span className="shrink-0 border-l border-line-strong px-2 text-[11px] text-muted-soft">.gamjabox.cloud</span>
+                                  </div>
+                                  {isPro && s.customSubdomain && (
+                                    <span className={cn(
+                                      "shrink-0 text-[10px]",
+                                      check === "available" ? "text-brand-strong" : check === "checking" ? "text-muted-soft" : "text-danger"
+                                    )}>
+                                      {check === "checking" && "확인 중..."}
+                                      {check === "available" && "✓ 사용 가능"}
+                                      {check === "taken" && "이미 사용 중"}
+                                      {check === "reserved" && "예약된 이름"}
+                                      {check === "pro-only" && "PRO 전용"}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={cn("mt-1.5 text-[10px]", isPro ? "text-muted-soft" : "font-medium text-[#e8b657]")}>
+                                  {isPro
+                                    ? "비워두면 VM 식별자가 포함된 주소가 자동 생성됩니다. 입력하면 접미사 없는 주소를 사용합니다."
+                                    : "PRO 플랜에서는 portfolio.gamjabox.cloud처럼 자동 식별자 없는 주소를 선점할 수 있습니다."}
+                                </p>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -843,7 +945,11 @@ export default function DeploymentsPage() {
                       type="button"
                       variant="primary"
                       onClick={handleGenerateSpec}
-                      disabled={generating || !repoUrl || !branch || serviceCards.every((s) => !s.name) || (networkMode === "reuse" && !existingNetworkName)}
+                      disabled={
+                        generating || !repoUrl || !branch || serviceCards.every((s) => !s.name) ||
+                        (networkMode === "reuse" && !existingNetworkName) ||
+                        serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")
+                      }
                       title={!repoUrl || !branch ? "위쪽 저장소 연결에 Git 저장소 URL/브랜치를 먼저 입력하세요" : undefined}
                     >
                       {generating ? "저장소 분석 + AI 생성 중..." : "AI 스펙 생성"}
@@ -952,7 +1058,15 @@ export default function DeploymentsPage() {
               </Button>
             ) : (
               generatedSpec && (
-                <Button form="deploy-spec-form" type="submit" variant="primary" disabled={submitting || !repoUrl || !branch}>
+                <Button
+                  form="deploy-spec-form"
+                  type="submit"
+                  variant="primary"
+                  disabled={
+                    submitting || !repoUrl || !branch ||
+                    serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")
+                  }
+                >
                   {submitting ? "배포 시작 중..." : "이 스펙으로 배포 시작"}
                 </Button>
               )

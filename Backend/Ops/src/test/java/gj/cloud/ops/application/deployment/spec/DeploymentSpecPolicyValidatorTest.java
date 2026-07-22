@@ -19,7 +19,7 @@ class DeploymentSpecPolicyValidatorTest {
                 new BuildSpec(RuntimeKind.NONE, null, BuildRunStrategy.NONE, null),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                context, new ExposeSpec(true, "http", "/"));
+                context, new ExposeSpec(true, "http", "/", null));
     }
 
     @Test
@@ -46,7 +46,7 @@ class DeploymentSpecPolicyValidatorTest {
                 new BuildSpec(RuntimeKind.NODEJS, null, BuildRunStrategy.NPM_BUILD, "../../secrets"),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "dist"),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                ".", new ExposeSpec(true, "http", "/"));
+                ".", new ExposeSpec(true, "http", "/", null));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("build.outputPath"));
     }
@@ -57,7 +57,7 @@ class DeploymentSpecPolicyValidatorTest {
                 new BuildSpec(RuntimeKind.NONE, "password=hunter2", BuildRunStrategy.NONE, null),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                ".", new ExposeSpec(true, "http", "/"));
+                ".", new ExposeSpec(true, "http", "/", null));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("시크릿"));
     }
