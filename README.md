@@ -8,7 +8,7 @@
   VM 생성부터 SSH 접속, 포트 노출, 배포, 팀 협업까지 — AWS EC2 + 간이 PaaS를 직접 만든 인프라 위에서.
 </p>
 
-<p align="center"><b>라이브 서비스</b> → <a href="https://portal.gamjabox.cloud">gamjabox.cloud</a></p>
+<p align="center"><b>라이브 서비스</b> → <a href="https://gamjabox.cloud">gamjabox.cloud</a></p>
 
 ---
 
