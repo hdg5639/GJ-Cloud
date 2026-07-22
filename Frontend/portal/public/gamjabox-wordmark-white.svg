@@ -1,5 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 96" role="img" aria-labelledby="title">
-  <title id="title">GamjaBox monochrome wordmark</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 2 353 86" role="img" aria-labelledby="title">
+  <title id="title">GamjaBox wordmark (white)</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c8ff58"/>
+      <stop offset="1" stop-color="#62ffa8"/>
+    </linearGradient>
+  </defs>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@800&amp;display=swap');
     .brand-name { font-family: Manrope, Inter, Arial, sans-serif; font-size: 58px; font-weight: 800; letter-spacing: -3.1px; }
@@ -11,9 +17,11 @@
   </style>
   <g class="wm-symbol">
     <g transform="translate(5.3 7.6) scale(2.3)">
-      <path fill="#FFFFFF" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
+      <path fill="url(#g)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
       <path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"/>
     </g>
   </g>
-  <text x="100" y="67" class="brand-name wm-name" fill="#FFFFFF">GamjaBox</text>
+  <text x="100" y="67" class="brand-name wm-name">
+    <tspan fill="#FFFFFF">Gamja</tspan><tspan fill="#08B85B">Box</tspan>
+  </text>
 </svg>

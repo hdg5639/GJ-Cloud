@@ -50,16 +50,23 @@ function VisualWordmark() {
   );
 }
 
-// 인트로 애니메이션이 최종적으로 정착하는 모습(컬러 아이콘 + 흰색 텍스트)과 완전히 동일한 정적
-// 버전 — AnimatedVisualWordmark의 "done"(이미 재생됨) 상태에서 사용. 예전엔 이 자리에 모노톤
-// 워드마크 SVG(gamjabox-wordmark-white.svg)를 썼는데, 그러면 최초 방문(컬러 아이콘)과 같은
-// 세션 내 재방문(흑백 아이콘)의 색이 서로 달라 보이는 문제가 있었다.
+// 인트로 애니메이션이 최종적으로 정착하는 모습(컬러 아이콘 + 흰색/그린 텍스트)과 완전히 동일한
+// 정적 버전 — AnimatedVisualWordmark의 "done"(이미 재생됨) 상태에서 사용. "playing" 단계는
+// 텍스트를 max-width 애니메이션으로 한 글자씩 드러내야 해서 실제 DOM 텍스트를 쓸 수밖에 없는데,
+// 그 텍스트에도 워드마크 SVG와 동일한 폰트(Manrope)·색 분리(Gamja 흰색/Box 그린)를 적용해뒀기
+// 때문에 애니메이션이 끝나는 순간 폰트나 색이 바뀌어 보이지 않는다.
 function AssembledWordmark() {
   return (
     <div className="flex items-center gap-2.5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/gamjabox-symbol.svg" alt="GamjaBox" className="h-9 w-9 shrink-0" />
-      <span className="whitespace-nowrap text-2xl font-extrabold tracking-tight text-[#f4f7f1]">GamjaBox</span>
+      <span
+        className="whitespace-nowrap text-2xl font-extrabold tracking-tighter"
+        style={{ fontFamily: "var(--font-manrope)" }}
+      >
+        <span className="text-[#f4f7f1]">Gamja</span>
+        <span className="text-[#08B85B]">Box</span>
+      </span>
     </div>
   );
 }
@@ -126,10 +133,14 @@ function AnimatedVisualWordmark({ phase }: { phase: BrandIntroPhase }) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/gamjabox-symbol.svg" alt="GamjaBox" className="h-9 w-9 shrink-0" />
         <span
-          className="brand-intro-text inline-block overflow-hidden whitespace-nowrap text-2xl font-extrabold tracking-tight text-[#f4f7f1]"
-          style={{ animation: `brand-intro-text ${BRAND_INTRO_DURATION} cubic-bezier(.22,1,.36,1) forwards` }}
+          className="brand-intro-text inline-block overflow-hidden whitespace-nowrap text-2xl font-extrabold tracking-tighter"
+          style={{
+            animation: `brand-intro-text ${BRAND_INTRO_DURATION} cubic-bezier(.22,1,.36,1) forwards`,
+            fontFamily: "var(--font-manrope)",
+          }}
         >
-          GamjaBox
+          <span className="text-[#f4f7f1]">Gamja</span>
+          <span className="text-[#08B85B]">Box</span>
         </span>
       </div>
     </div>

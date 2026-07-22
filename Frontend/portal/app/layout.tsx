@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 
@@ -10,6 +10,14 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// 브랜드 워드마크 전용 서체 — 로그인 인트로 애니메이션의 "GamjaBox" 텍스트를 실제
+// 워드마크 SVG와 동일한 폰트/두께로 렌더링하기 위함(그 외 UI는 계속 Geist Sans 사용).
+const manrope = Manrope({
+  variable: "--font-manrope",
+  weight: "800",
   subsets: ["latin"],
 });
 
@@ -35,7 +43,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
+    <html lang="ko" className={`${geistSans.variable} ${geistMono.variable} ${manrope.variable} h-full`}>
       <body className="min-h-full">
         <AuthProvider>{children}</AuthProvider>
       </body>
