@@ -30,8 +30,10 @@ public class OrganizationController {
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<ApiResponse<OrgDetailResponse>> create(
             @AuthenticationPrincipal VmPrincipal principal,
+            ServerWebExchange exchange,
             @Valid @RequestBody OrgCreateRequest request) {
-        return organizationService.create(principal.userId(), principal.email(), request).map(ApiResponse::ok);
+        return organizationService.create(principal.userId(), principal.email(), extractToken(exchange), request)
+                .map(ApiResponse::ok);
     }
 
     @Operation(summary = "내 Organization 목록")
@@ -50,8 +52,9 @@ public class OrganizationController {
     @GetMapping("/{orgId}")
     public Mono<ApiResponse<OrgDetailResponse>> get(
             @AuthenticationPrincipal VmPrincipal principal,
+            ServerWebExchange exchange,
             @PathVariable UUID orgId) {
-        return organizationService.getDetail(orgId, principal.email()).map(ApiResponse::ok);
+        return organizationService.getDetail(orgId, principal.email(), extractToken(exchange)).map(ApiResponse::ok);
     }
 
     @Operation(summary = "Organization 이름 변경 (OWNER)")
@@ -89,9 +92,7 @@ public class OrganizationController {
             ServerWebExchange exchange,
             @PathVariable UUID orgId,
             @RequestParam String query) {
-        String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
-        String token = authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
-        return organizationService.searchMembers(orgId, principal.email(), token, query).map(ApiResponse::ok);
+        return organizationService.searchMembers(orgId, principal.email(), extractToken(exchange), query).map(ApiResponse::ok);
     }
 
     @Operation(summary = "초대 수락/거절 (초대 대상자)")
@@ -142,5 +143,10 @@ public class OrganizationController {
             @PathVariable UUID orgId,
             @PathVariable UUID vmId) {
         return organizationService.removeVm(orgId, principal.email(), vmId);
+    }
+
+    private String extractToken(ServerWebExchange exchange) {
+        String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
+        return authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
     }
 }

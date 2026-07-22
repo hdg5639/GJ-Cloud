@@ -36,27 +36,31 @@ public class OrganizationServiceImpl implements OrganizationService {
     private final UserServiceClient userServiceClient;
 
     @Override
-    public Mono<OrgDetailResponse> create(String userId, String email, OrgCreateRequest request) {
-        OrganizationEntity org = OrganizationEntity.create(request.name(), userId);
-        return organizationRepository.save(org)
-                .flatMap(saved -> {
-                    OrganizationMemberEntity ownerMember = OrganizationMemberEntity.createOwner(saved.getId(), userId, email);
-                    Mono<Void> ownerSave = memberRepository.save(ownerMember).then();
+    public Mono<OrgDetailResponse> create(String userId, String email, String bearerToken, OrgCreateRequest request) {
+        return resolveOwnProfile(bearerToken, email)
+                .flatMap(ownProfile -> {
+                    OrganizationEntity org = OrganizationEntity.create(request.name(), userId);
+                    return organizationRepository.save(org)
+                            .flatMap(saved -> {
+                                OrganizationMemberEntity ownerMember = OrganizationMemberEntity.createOwner(
+                                        saved.getId(), userId, email, ownProfile.nickname(), ownProfile.profileImageUrl());
+                                Mono<Void> ownerSave = memberRepository.save(ownerMember).then();
 
-                    Mono<Void> inviteSave = Flux.fromIterable(
-                            request.invites() == null ? List.of() : request.invites()
-                    ).flatMap(invite -> {
-                        MemberRole role = invite.role() != null ? invite.role() : MemberRole.MEMBER;
-                        return memberRepository.save(OrganizationMemberEntity.createInvite(saved.getId(), invite.email(), role));
-                    }).then();
+                                Mono<Void> inviteSave = Flux.fromIterable(
+                                        request.invites() == null ? List.of() : request.invites()
+                                ).flatMap(invite -> {
+                                    MemberRole role = invite.role() != null ? invite.role() : MemberRole.MEMBER;
+                                    return memberRepository.save(OrganizationMemberEntity.createInvite(saved.getId(), invite.email(), role));
+                                }).then();
 
-                    Mono<Void> vmsSave = Flux.fromIterable(
-                            request.vmIds() == null ? List.of() : request.vmIds()
-                    ).flatMap(vmId -> orgVmRepository.save(OrganizationVmEntity.create(saved.getId(), vmId))).then();
+                                Mono<Void> vmsSave = Flux.fromIterable(
+                                        request.vmIds() == null ? List.of() : request.vmIds()
+                                ).flatMap(vmId -> orgVmRepository.save(OrganizationVmEntity.create(saved.getId(), vmId))).then();
 
-                    return Mono.when(ownerSave, inviteSave, vmsSave).thenReturn(saved);
+                                return Mono.when(ownerSave, inviteSave, vmsSave).thenReturn(saved);
+                            });
                 })
-                .flatMap(saved -> buildDetail(saved, email));
+                .flatMap(saved -> buildDetail(saved, email, bearerToken));
     }
 
     @Override
@@ -73,11 +77,11 @@ public class OrganizationServiceImpl implements OrganizationService {
     }
 
     @Override
-    public Mono<OrgDetailResponse> getDetail(UUID orgId, String email) {
+    public Mono<OrgDetailResponse> getDetail(UUID orgId, String email, String bearerToken) {
         return organizationRepository.findById(orgId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.ORGANIZATION_NOT_FOUND)))
                 .flatMap(org -> requireMember(orgId, email)
-                        .then(buildDetail(org, email)));
+                        .then(buildDetail(org, email, bearerToken)));
     }
 
     @Override
@@ -86,7 +90,7 @@ public class OrganizationServiceImpl implements OrganizationService {
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.ORGANIZATION_NOT_FOUND)))
                 .flatMap(org -> requireRole(orgId, email, MemberRole.OWNER)
                         .flatMap(ignored -> organizationRepository.save(org.withName(request.name())))
-                        .flatMap(saved -> buildDetail(saved, email)));
+                        .flatMap(saved -> buildDetail(saved, email, null)));
     }
 
     @Override
@@ -227,12 +231,13 @@ public class OrganizationServiceImpl implements OrganizationService {
         ).map(t -> OrgResponse.of(org, t.getT1(), t.getT2(), t.getT3()));
     }
 
-    private Mono<OrgDetailResponse> buildDetail(OrganizationEntity org, String email) {
+    private Mono<OrgDetailResponse> buildDetail(OrganizationEntity org, String email, String bearerToken) {
         Mono<MemberRole> roleMono = memberRepository.findAcceptedByOrgIdAndEmail(org.getId(), email)
                 .map(OrganizationMemberEntity::getRole)
                 .defaultIfEmpty(MemberRole.MEMBER);
 
         Mono<List<MemberResponse>> membersMono = memberRepository.findAllByOrganizationId(org.getId())
+                .flatMap(member -> withBackfilledSnapshot(member, bearerToken))
                 .map(MemberResponse::from)
                 .collectList();
 
@@ -244,5 +249,34 @@ public class OrganizationServiceImpl implements OrganizationService {
 
         return Mono.zip(roleMono, membersMono, vmsMono)
                 .map(t -> OrgDetailResponse.of(org, t.getT1(), t.getT2(), t.getT3()));
+    }
+
+    // 닉네임 검색 기능 이전에 초대됐거나 이메일만으로 가입 전 초대돼 스냅샷이 없던 기존 멤버(오너 포함)를
+    // 조회 시점에 채워 넣는다 — 한 번 채워지면 저장돼서 다음 조회부터는 다시 조회하지 않는다.
+    private Mono<OrganizationMemberEntity> withBackfilledSnapshot(OrganizationMemberEntity member, String bearerToken) {
+        if (member.getNickname() != null || bearerToken == null) {
+            return Mono.just(member);
+        }
+        return userServiceClient.searchUsers(bearerToken, member.getEmail())
+                .flatMapMany(Flux::fromIterable)
+                .filter(r -> r.email().equalsIgnoreCase(member.getEmail()))
+                .next()
+                .flatMap(match -> memberRepository.save(
+                        member.withProfileSnapshot(match.nickname(), match.profileImageUrl())))
+                .defaultIfEmpty(member)
+                .onErrorReturn(member);
+    }
+
+    // 조직 생성 시점의 오너 본인 프로필 스냅샷 조회 — 검색 API를 자기 자신의 이메일로 정확히 일치시켜 재사용.
+    private Mono<MemberSearchResult> resolveOwnProfile(String bearerToken, String email) {
+        if (bearerToken == null) {
+            return Mono.just(new MemberSearchResult(null, null, email, null));
+        }
+        return userServiceClient.searchUsers(bearerToken, email)
+                .flatMapMany(Flux::fromIterable)
+                .filter(r -> r.email().equalsIgnoreCase(email))
+                .next()
+                .defaultIfEmpty(new MemberSearchResult(null, null, email, null))
+                .onErrorReturn(new MemberSearchResult(null, null, email, null));
     }
 }

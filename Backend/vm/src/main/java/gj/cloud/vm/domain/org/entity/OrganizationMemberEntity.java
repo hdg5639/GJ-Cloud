@@ -53,13 +53,16 @@ public class OrganizationMemberEntity implements Persistable<UUID> {
     @Column("joined_at")
     private LocalDateTime joinedAt;
 
-    public static OrganizationMemberEntity createOwner(UUID orgId, String ownerId, String ownerEmail) {
+    public static OrganizationMemberEntity createOwner(
+            UUID orgId, String ownerId, String ownerEmail, String nickname, String profileImageUrl) {
         return OrganizationMemberEntity.builder()
                 .id(UUID.randomUUID())
                 .isNew(true)
                 .organizationId(orgId)
                 .email(ownerEmail)
                 .userId(ownerId)
+                .nickname(nickname)
+                .profileImageUrl(profileImageUrl)
                 .role(MemberRole.OWNER)
                 .status(MemberStatus.ACCEPTED)
                 .invitedAt(LocalDateTime.now())
@@ -105,5 +108,11 @@ public class OrganizationMemberEntity implements Persistable<UUID> {
 
     public OrganizationMemberEntity withRole(MemberRole role) {
         return this.toBuilder().isNew(false).role(role).build();
+    }
+
+    // 초대 당시 스냅샷이 없던(닉네임 검색 기능 이전에 초대됐거나, 이메일만으로 가입 전 초대돼 스냅샷을
+    // 못 남겼던) 기존 멤버를 조회 시점에 채워 넣기 위함 — OrganizationServiceImpl에서 lazy backfill로 사용.
+    public OrganizationMemberEntity withProfileSnapshot(String nickname, String profileImageUrl) {
+        return this.toBuilder().isNew(false).nickname(nickname).profileImageUrl(profileImageUrl).build();
     }
 }

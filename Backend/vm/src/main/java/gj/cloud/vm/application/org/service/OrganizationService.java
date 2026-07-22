@@ -9,13 +9,13 @@ import java.util.UUID;
 
 public interface OrganizationService {
 
-    Mono<OrgDetailResponse> create(String userId, String email, OrgCreateRequest request);
+    Mono<OrgDetailResponse> create(String userId, String email, String bearerToken, OrgCreateRequest request);
 
     Flux<OrgResponse> listMyOrganizations(String email);
 
     Flux<OrgResponse> listPendingInvitations(String email);
 
-    Mono<OrgDetailResponse> getDetail(UUID orgId, String email);
+    Mono<OrgDetailResponse> getDetail(UUID orgId, String email, String bearerToken);
 
     Mono<OrgDetailResponse> update(UUID orgId, String email, OrgUpdateRequest request);
 
