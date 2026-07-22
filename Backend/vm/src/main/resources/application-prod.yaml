@@ -12,6 +12,10 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
       password: ${REDIS_PASSWORD:}
+      # 이 서비스엔 실제 Redis 리포지토리(@RedisHash)가 없어서(캐시/SSE 티켓 용도로만 Redis 사용),
+      # 리포지토리 스캔을 켜두면 R2DBC 리포지토리들을 대상으로 "store를 특정 못함" 경고만 반복 출력됨
+      repositories:
+        enabled: false
 
 server:
   port: 8080
