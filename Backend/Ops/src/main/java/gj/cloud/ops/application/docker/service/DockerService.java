@@ -44,6 +44,18 @@ public class DockerService {
     private static final long LOGS_TIMEOUT_MS = 20_000;
     private static final int STEP_RETRY_ATTEMPTS = 3;
     private static final long STEP_RETRY_DELAY_MS = 5_000;
+    // 타임아웃은 실패하기까지 기다리는 시간이므로 정상 설치 속도에는 영향을 주지 않는다. apt는 cloud-init의
+    // 패키지 잠금과 느린 미러를 만날 수 있어 짧은 공통 SSH 타임아웃 대신 단계별 상한을 사용한다.
+    private static final long CLOUD_INIT_WAIT_TIMEOUT_MS = 120_000;
+    private static final long REPOSITORY_SETUP_TIMEOUT_MS = 120_000;
+    private static final long APT_UPDATE_TIMEOUT_MS = 300_000;
+    private static final long DOCKER_INSTALL_TIMEOUT_MS = 900_000;
+    private static final int APT_LOCK_TIMEOUT_SECONDS = 300;
+    private static final String APT_COMMAND_PREFIX = "sudo -n env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get"
+            + " -o DPkg::Lock::Timeout=" + APT_LOCK_TIMEOUT_SECONDS
+            + " -o Acquire::Retries=3"
+            + " -o Acquire::http::Timeout=30"
+            + " -o Acquire::https::Timeout=30";
     private static final Set<String> SAFE_NETWORK_DRIVERS = Set.of("bridge", "host", "overlay", "macvlan", "none");
     // 컨테이너/이미지 ID, 컨테이너/네트워크 이름 등 요청 경로에서 들어오는 값은 셸 커맨드에 그대로 꽂히므로 반드시 검증
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("^[A-Za-z0-9._-]+$");
@@ -74,7 +86,8 @@ public class DockerService {
 
     public boolean isDockerInstalled(String bearerToken, String vmId) {
         return execute(bearerToken, vmId, PERMISSION_DOCKER_READ,
-                session -> sshCommandExecutor.exec(session, "command -v docker", 10_000).isSuccess());
+                session -> sshCommandExecutor.exec(session,
+                        "command -v docker >/dev/null && sudo -n docker info >/dev/null 2>&1", 15_000).isSuccess());
     }
 
     public void requestInstall(String bearerToken, String vmId) {
@@ -91,7 +104,14 @@ public class DockerService {
         installErrorByVmId.remove(vmId);
 
         String internalIp = context.internalIp();
-        deploymentTaskExecutor.execute(() -> runInstall(vmId, internalIp));
+        try {
+            deploymentTaskExecutor.execute(() -> runInstall(vmId, internalIp));
+        } catch (RuntimeException e) {
+            // 큐 포화 등으로 작업 제출 자체가 실패했는데 설치 중 플래그가 영구히 남는 것을 방지한다.
+            installingVmIds.remove(vmId);
+            installStageByVmId.remove(vmId);
+            throw e;
+        }
     }
 
     // CICD-005: 예전엔 전 단계를 &&로 묶어 하나의 SSH 명령으로 최대 10번 반복했음 — 막판(예: apt-get
@@ -106,8 +126,7 @@ public class DockerService {
 
             // cloud-init은 동기화 목적일 뿐 실패해도(예: 마이너 모듈 오류) 설치 자체는 계속 진행 —
             // 기존 스크립트도 이 단계의 종료 코드는 확인하지 않았음(best-effort 대기).
-            installStageByVmId.put(vmId, "사전 준비 확인 중...");
-            sshCommandExecutor.exec(session, "cloud-init status --wait", 120_000);
+            waitForCloudInitBestEffort(vmId, session);
 
             // DEP-004: 이전에는 get.docker.com에서 받은 설치 스크립트를 그대로 실행(curl | sh)했음 — 무결성
             // 검증 없이 원격 셸 스크립트를 실행하는 공급망 취약점. Docker 공식 apt 저장소(GPG 서명 검증)로
@@ -115,33 +134,47 @@ public class DockerService {
             // 정확한 버전 고정은 Ubuntu 코드네임(lsb_release -cs)마다 패키지 문자열이 달라 VM 템플릿이
             // 바뀔 때마다 깨지기 쉬우므로, 대신 "공식 서명된 저장소에서만 설치"를 보안 경계로 삼는다.
             runStep(vmId, session, "Docker 공식 저장소 등록 중...",
-                    "sudo install -m 0755 -d /etc/apt/keyrings"
-                            + " && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /tmp/docker.gpg"
-                            + " && sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg"
+                    "sudo -n install -m 0755 -d /etc/apt/keyrings"
+                            + " && curl --fail --silent --show-error --location"
+                            + " --retry 3 --retry-delay 2 --connect-timeout 10 --max-time 60"
+                            + " https://download.docker.com/linux/ubuntu/gpg -o /tmp/docker.gpg"
+                            + " && sudo -n gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg"
                             + " && rm -f /tmp/docker.gpg"
-                            + " && sudo chmod a+r /etc/apt/keyrings/docker.gpg"
+                            + " && sudo -n chmod a+r /etc/apt/keyrings/docker.gpg"
                             + " && CODENAME=$(. /etc/os-release && echo $VERSION_CODENAME)"
                             + " && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg]"
                             + " https://download.docker.com/linux/ubuntu $CODENAME stable\""
-                            + " | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null",
-                    60_000);
+                            + " | sudo -n tee /etc/apt/sources.list.d/docker.list > /dev/null",
+                    REPOSITORY_SETUP_TIMEOUT_MS);
 
-            runStep(vmId, session, "패키지 목록 갱신 중...", "sudo apt-get update -y", 120_000);
+            runStep(vmId, session, "패키지 목록 갱신 중...", APT_COMMAND_PREFIX + " update", APT_UPDATE_TIMEOUT_MS);
 
             runStep(vmId, session, "Docker 설치 중... (패키지 다운로드가 오래 걸릴 수 있어요)",
-                    "sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
-                    240_000);
+                    APT_COMMAND_PREFIX
+                            + " install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
+                    DOCKER_INSTALL_TIMEOUT_MS);
 
             runStep(vmId, session, "마무리 중...",
-                    "sudo usermod -aG docker $(whoami) && command -v docker", 15_000);
+                    "sudo -n usermod -aG docker $(whoami)"
+                            + " && sudo -n systemctl enable --now docker"
+                            + " && command -v docker >/dev/null"
+                            + " && sudo -n docker info >/dev/null 2>&1",
+                    60_000);
 
             log.info("Docker 설치 완료(공식 apt 저장소, GPG 서명 검증): vmId={}", vmId);
         } catch (InstallStepFailedException e) {
-            log.warn("Docker 설치 실패: vmId={}, step={}, exitStatus={}, stderr={}, stdout={}",
-                    vmId, e.stepLabel, e.result.exitStatus(), trim(e.result.stderr()), trim(e.result.stdout()));
-            installErrorByVmId.put(vmId, "Docker 설치에 실패했습니다 (" + e.stepLabel + ")");
+            if (e.result != null) {
+                log.warn("Docker 설치 실패: vmId={}, step={}, exitStatus={}, stderr={}, stdout={}",
+                        vmId, e.stepLabel, e.result.exitStatus(), trim(e.result.stderr()), trim(e.result.stdout()));
+            } else {
+                log.warn("Docker 설치 실패: vmId={}, step={}, error={}",
+                        vmId, e.stepLabel, e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+            }
+            String reason = e.timedOut ? " - 시간 초과" : "";
+            installErrorByVmId.put(vmId, "Docker 설치에 실패했습니다 (" + e.stepLabel + reason + ")");
         } catch (Exception e) {
-            log.error("Docker 설치 처리 중 예외: vmId={}, error={}", vmId, e.getMessage());
+            String stage = installStageByVmId.get(vmId);
+            log.error("Docker 설치 처리 중 예외: vmId={}, stage={}, error={}", vmId, stage, e.getMessage(), e);
             installErrorByVmId.put(vmId, "Docker 설치 중 오류가 발생했습니다.");
         } finally {
             installingVmIds.remove(vmId);
@@ -152,21 +185,51 @@ public class DockerService {
         }
     }
 
+    private void waitForCloudInitBestEffort(String vmId, Session session) {
+        String stageLabel = "사전 준비 확인 중...";
+        installStageByVmId.put(vmId, stageLabel);
+        try {
+            CommandResult result = sshCommandExecutor.exec(
+                    session, "cloud-init status --wait", CLOUD_INIT_WAIT_TIMEOUT_MS);
+            if (!result.isSuccess()) {
+                log.warn("cloud-init 준비 확인 실패, apt 잠금 대기로 전환: vmId={}, exitStatus={}, stderr={}",
+                        vmId, result.exitStatus(), trim(result.stderr()));
+            }
+        } catch (OpsException e) {
+            if (e.getErrorCode() != OpsErrorCode.SSH_COMMAND_TIMEOUT) {
+                throw e;
+            }
+            // cloud-init 자체를 중단시키는 것이 아니라 상태 대기만 포기한다. 이어지는 apt 명령은
+            // DPkg::Lock::Timeout으로 cloud-init이 쥔 패키지 잠금이 풀릴 때까지 안전하게 기다린다.
+            log.warn("cloud-init 준비 확인 시간 초과, apt 잠금 대기로 전환: vmId={}, timeoutMs={}",
+                    vmId, CLOUD_INIT_WAIT_TIMEOUT_MS);
+        }
+    }
+
     // 단계 하나를 최대 STEP_RETRY_ATTEMPTS번만 재시도 — 이전 단계는 다시 실행하지 않으므로, 특정 단계가
     // 일시적 네트워크 문제 등으로 실패해도 그 단계만 이어서 재시도된다.
     private void runStep(String vmId, Session session, String stageLabel, String command, long timeoutMs) {
         installStageByVmId.put(vmId, stageLabel);
         CommandResult result = null;
         for (int attempt = 1; attempt <= STEP_RETRY_ATTEMPTS; attempt++) {
-            result = sshCommandExecutor.exec(session, command, timeoutMs);
+            try {
+                result = sshCommandExecutor.exec(session, command, timeoutMs);
+            } catch (OpsException e) {
+                // 타임아웃 뒤 원격 apt 프로세스의 종료 시점은 확정할 수 없다. 즉시 같은 명령을 겹쳐 실행하면
+                // dpkg 잠금 경합과 부분 설치를 악화시키므로 재시도하지 않고 정확한 단계 오류로 종료한다.
+                throw new InstallStepFailedException(
+                        stageLabel, null, e, e.getErrorCode() == OpsErrorCode.SSH_COMMAND_TIMEOUT);
+            }
             if (result.isSuccess()) {
                 return;
             }
+            log.warn("Docker 설치 단계 재시도 예정: vmId={}, step={}, attempt={}/{}, exitStatus={}, stderr={}",
+                    vmId, stageLabel, attempt, STEP_RETRY_ATTEMPTS, result.exitStatus(), trim(result.stderr()));
             if (attempt < STEP_RETRY_ATTEMPTS) {
                 sleepBeforeRetry();
             }
         }
-        throw new InstallStepFailedException(stageLabel, result);
+        throw new InstallStepFailedException(stageLabel, result, null, false);
     }
 
     private void sleepBeforeRetry() {
@@ -180,11 +243,13 @@ public class DockerService {
     private static class InstallStepFailedException extends RuntimeException {
         private final String stepLabel;
         private final CommandResult result;
+        private final boolean timedOut;
 
-        InstallStepFailedException(String stepLabel, CommandResult result) {
-            super(stepLabel);
+        InstallStepFailedException(String stepLabel, CommandResult result, Throwable cause, boolean timedOut) {
+            super(stepLabel, cause);
             this.stepLabel = stepLabel;
             this.result = result;
+            this.timedOut = timedOut;
         }
     }
 

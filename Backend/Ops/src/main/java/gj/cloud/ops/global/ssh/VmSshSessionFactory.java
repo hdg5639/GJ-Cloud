@@ -26,6 +26,8 @@ public class VmSshSessionFactory {
 
     private static final int SSH_PORT = 22;
     private static final int CONNECT_TIMEOUT_MS = 10_000;
+    private static final int SERVER_ALIVE_INTERVAL_MS = 15_000;
+    private static final int SERVER_ALIVE_COUNT_MAX = 4;
 
     private final ManagementKeyService managementKeyService;
 
@@ -51,6 +53,10 @@ public class VmSshSessionFactory {
 
             Session session = jsch.getSession(vmSshUsername, internalIp, SSH_PORT);
             session.setConfig("StrictHostKeyChecking", "yes");
+            // apt 설치처럼 출력 간격이 길 수 있는 명령도 NAT/방화벽의 유휴 연결 정리에 끊기지 않도록
+            // SSH transport 레벨 keepalive를 보낸다. 명령 자체의 실행 상한은 SshCommandExecutor가 담당한다.
+            session.setServerAliveInterval(SERVER_ALIVE_INTERVAL_MS);
+            session.setServerAliveCountMax(SERVER_ALIVE_COUNT_MAX);
             session.connect(CONNECT_TIMEOUT_MS);
             return session;
         } catch (JSchException e) {
