@@ -10,11 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
 import { Avatar } from "@/components/ui/avatar";
 
+// ◫(협업)·⚙(설정) 글리프는 ▣·⌘보다 자체적으로 "잉크"가 em 박스를 덜 채우는 모양이라, 같은
+// font-size를 줘도 눈으로 보기엔 더 작아 보임 — 그래서 이 둘만 펼침/접힘 크기를 한 단계씩 더 키움.
 const NAV_ITEMS = [
   { href: "/instances", icon: "▣", label: "인스턴스" },
-  { href: "/organizations", icon: "◫", label: "협업" },
+  { href: "/organizations", icon: "◫", label: "협업", expandedSize: "text-xl", collapsedSize: "lg:text-2xl" },
   { href: "/ssh-keys", icon: "⌘", label: "SSH 키" },
-  { href: "/settings", icon: "⚙", label: "설정" },
+  { href: "/settings", icon: "⚙", label: "설정", expandedSize: "text-xl", collapsedSize: "lg:text-2xl" },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "gj-sidebar-collapsed";
@@ -200,8 +202,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     // 글자 폭 차이와 무관하게 모든 아이콘이 똑같이 중앙에 옴 — translateX는 이 박스
                     // 전체를 옮기는 용도로만 씀.
                     "flex h-5 w-5 shrink-0 items-center justify-center transition-[font-size,transform]",
+                    item.expandedSize ?? "text-lg",
                     collapsed
-                      ? "lg:translate-x-1 lg:text-xl duration-300 lg:delay-0"
+                      ? cn("lg:translate-x-1 duration-300 lg:delay-0", item.collapsedSize ?? "lg:text-xl")
                       : "lg:translate-x-0 duration-150 lg:delay-[300ms]"
                   )}
                 >
