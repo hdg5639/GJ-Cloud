@@ -15,22 +15,31 @@
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
-  <div class="ambient ambient-a" aria-hidden="true"></div>
-  <div class="ambient ambient-b" aria-hidden="true"></div>
+  <div class="ambient-layer" aria-hidden="true">
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+  </div>
 
   <header class="site-header">
     <a class="brand" href="#top" aria-label="GamjaBox 홈">
-      <svg viewBox="0 0 38 38" aria-hidden="true">
+      <svg viewBox="14 2 353 86" role="img" aria-labelledby="wm-title-header">
+        <title id="wm-title-header">GamjaBox</title>
         <defs>
-          <linearGradient id="brand-g" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stop-color="#c8ff58" />
-            <stop offset="1" stop-color="#62ffa8" />
+          <linearGradient id="wm-g-header" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#c8ff58"/>
+            <stop offset="1" stop-color="#62ffa8"/>
           </linearGradient>
         </defs>
-        <path fill="url(#brand-g)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
-        <path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"/>
+        <g class="wm-symbol">
+          <g transform="translate(5.3 7.6) scale(2.3)">
+            <path fill="url(#wm-g-header)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
+            <path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"/>
+          </g>
+        </g>
+        <text x="100" y="67" class="brand-name wm-name">
+          <tspan fill="#FFFFFF">Gamja</tspan><tspan fill="#08B85B">Box</tspan>
+        </text>
       </svg>
-      <span>GamjaBox</span>
     </a>
 
     <nav class="desktop-nav" aria-label="주요 메뉴">
@@ -234,7 +243,26 @@
   </main>
 
   <footer class="site-footer section-shell">
-    <a class="brand footer-brand" href="#top"><span class="mini-logo">G</span><span>GamjaBox</span></a>
+    <a class="brand footer-brand" href="#top">
+      <svg viewBox="14 2 353 86" role="img" aria-labelledby="wm-title-footer">
+        <title id="wm-title-footer">GamjaBox</title>
+        <defs>
+          <linearGradient id="wm-g-footer" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#c8ff58"/>
+            <stop offset="1" stop-color="#62ffa8"/>
+          </linearGradient>
+        </defs>
+        <g class="wm-symbol">
+          <g transform="translate(5.3 7.6) scale(2.3)">
+            <path fill="url(#wm-g-footer)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
+            <path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"/>
+          </g>
+        </g>
+        <text x="100" y="67" class="brand-name wm-name">
+          <tspan fill="#FFFFFF">Gamja</tspan><tspan fill="#08B85B">Box</tspan>
+        </text>
+      </svg>
+    </a>
     <p>Self-hosted cloud, built from the ground up.</p>
     <div><a href="https://portal.gamjabox.cloud">Portal</a><a href="https://github.com/hdg5639/GJ-Cloud" target="_blank" rel="noreferrer">GitHub</a><span>© 2026 GamjaBox</span></div>
   </footer>
