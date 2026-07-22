@@ -116,24 +116,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           collapsed && "lg:w-[76px] lg:px-3"
         )}
       >
-        <div className="relative flex h-8 shrink-0 items-center">
+        <div className="relative flex h-11 shrink-0 items-center">
           <button
             type="button"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
             title={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
-            className={cn(
-              "group relative hidden h-8 overflow-hidden rounded-lg text-left outline-none transition-[width,background-color] duration-300 hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-brand/60 lg:block",
-              collapsed ? "w-8" : "w-[176px]"
-            )}
+            className="group relative hidden h-11 w-full overflow-hidden rounded-lg text-left outline-none transition-colors duration-300 hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-brand/60 lg:block"
           >
+            {/* 워드마크/심볼 둘 다 버튼 중앙에 겹쳐 놓고 크로스페이드 — 이전엔 left-0 고정이라 접혔을 때
+                심볼이 버튼 폭 중앙이 아니라 왼쪽에 붙어 있었고, 워드마크는 176px 폭 기준 실제 렌더 높이가
+                43px 정도인데 컨테이너가 32px(h-8)이라 overflow-hidden에 하단이 잘렸음. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/gamjabox-wordmark-white.svg"
               alt="GamjaBox"
               className={cn(
-                "absolute left-0 top-0 h-auto w-[176px] origin-left transition-[opacity,transform] duration-200",
-                collapsed && "scale-95 opacity-0"
+                "absolute left-1/2 top-1/2 h-[43px] w-[176px] -translate-x-1/2 -translate-y-1/2 transition-[opacity,transform] duration-200",
+                collapsed ? "scale-95 opacity-0" : "scale-100 opacity-100"
               )}
             />
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -141,7 +141,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               src="/gamjabox-symbol.svg"
               alt="GamjaBox"
               className={cn(
-                "absolute left-0 top-0 h-8 w-8 transition-[opacity,transform] duration-200",
+                "absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 transition-[opacity,transform] duration-200",
                 collapsed ? "scale-100 opacity-100" : "scale-75 opacity-0"
               )}
             />
