@@ -212,6 +212,27 @@ export const api = {
       request<void>("auth", "/auth/logout", { method: "POST", accessToken }),
     withdraw: (accessToken: string) =>
       request<void>("auth", "/auth/withdraw", { method: "DELETE", accessToken }),
+    sendPasswordResetCode: (email: string) =>
+      request<void>("auth", "/auth/password/reset/send", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    confirmPasswordResetCode: (email: string, code: string) =>
+      request<{ resetToken: string }>("auth", "/auth/password/reset/confirm", {
+        method: "POST",
+        body: JSON.stringify({ email, code }),
+      }),
+    resetPassword: (resetToken: string, newPassword: string) =>
+      request<void>("auth", "/auth/password/reset", {
+        method: "POST",
+        body: JSON.stringify({ resetToken, newPassword }),
+      }),
+    changePassword: (accessToken: string, currentPassword: string, newPassword: string) =>
+      request<void>("auth", "/auth/password/change", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+        accessToken,
+      }),
   },
   vm: {
     list: (accessToken: string) =>

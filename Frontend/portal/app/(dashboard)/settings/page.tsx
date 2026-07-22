@@ -38,6 +38,11 @@ export default function SettingsPage() {
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -73,6 +78,29 @@ export default function SettingsPage() {
       setSaveMsg({ type: "err", text: "저장에 실패했습니다." });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleChangePassword() {
+    if (!accessToken) return;
+    setPasswordMsg(null);
+    if (newPassword.length < 8) {
+      setPasswordMsg({ type: "err", text: "새 비밀번호는 8자 이상이어야 합니다." });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordMsg({ type: "err", text: "새 비밀번호가 일치하지 않습니다." });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await api.auth.changePassword(accessToken, currentPassword, newPassword);
+      logout();
+      router.push("/login");
+    } catch (err) {
+      setPasswordMsg({ type: "err", text: err instanceof Error ? err.message : "비밀번호 변경에 실패했습니다." });
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -235,6 +263,62 @@ export default function SettingsPage() {
                   {saveMsg && (
                     <span className={`text-xs ${saveMsg.type === "ok" ? "text-brand-strong" : "text-danger"}`}>
                       {saveMsg.text}
+                    </span>
+                  )}
+                </div>
+              </Card>
+
+              <Card>
+                <h2 className="text-sm font-bold mb-4">비밀번호 변경</h2>
+
+                <div className="flex flex-col gap-4">
+                  <Field label="현재 비밀번호" htmlFor="settings-current-password" className="mb-0">
+                    <Input
+                      id="settings-current-password"
+                      name="settings-current-password"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => { setCurrentPassword(e.target.value); setPasswordMsg(null); }}
+                      placeholder="현재 비밀번호"
+                    />
+                  </Field>
+
+                  <Field label="새 비밀번호" htmlFor="settings-new-password" className="mb-0">
+                    <Input
+                      id="settings-new-password"
+                      name="settings-new-password"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => { setNewPassword(e.target.value); setPasswordMsg(null); }}
+                      placeholder="8자 이상"
+                      minLength={8}
+                    />
+                  </Field>
+
+                  <Field label="새 비밀번호 확인" htmlFor="settings-confirm-new-password" className="mb-0">
+                    <Input
+                      id="settings-confirm-new-password"
+                      name="settings-confirm-new-password"
+                      type="password"
+                      value={confirmNewPassword}
+                      onChange={(e) => { setConfirmNewPassword(e.target.value); setPasswordMsg(null); }}
+                      placeholder="새 비밀번호 다시 입력"
+                      minLength={8}
+                    />
+                  </Field>
+                </div>
+
+                <div className="flex items-center gap-3 mt-5">
+                  <Button
+                    variant="primary"
+                    onClick={handleChangePassword}
+                    disabled={changingPassword || !currentPassword || !newPassword || !confirmNewPassword}
+                  >
+                    {changingPassword ? "변경 중..." : "비밀번호 변경"}
+                  </Button>
+                  {passwordMsg && (
+                    <span className={`text-xs ${passwordMsg.type === "ok" ? "text-brand-strong" : "text-danger"}`}>
+                      {passwordMsg.text}
                     </span>
                   )}
                 </div>

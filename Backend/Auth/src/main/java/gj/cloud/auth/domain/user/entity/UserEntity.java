@@ -67,6 +67,10 @@ public class UserEntity {
         this.status = UserStatus.SUSPENDED;
     }
 
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
     public void anonymizeAndDelete() {
         this.email = "deleted_" + this.id + "@deleted";
         this.password = "DELETED";

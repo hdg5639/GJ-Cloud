@@ -73,17 +73,22 @@ export default function LoginPage() {
           />
         </Field>
 
-        <div className="mt-3 flex items-center justify-end gap-2">
-          <label htmlFor="rememberMe" className="cursor-pointer select-none text-xs text-muted">
-            로그인 유지
-          </label>
-          <input
-            id="rememberMe"
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            className="h-3.5 w-3.5 cursor-pointer accent-brand"
-          />
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <a href="/forgot-password" className="text-xs font-bold text-brand-strong">
+            비밀번호를 잊으셨나요?
+          </a>
+          <div className="flex items-center gap-2">
+            <label htmlFor="rememberMe" className="cursor-pointer select-none text-xs text-muted">
+              로그인 유지
+            </label>
+            <input
+              id="rememberMe"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-3.5 w-3.5 cursor-pointer accent-brand"
+            />
+          </div>
         </div>
 
         {error && <p className="mt-2 text-xs text-danger">{error}</p>}

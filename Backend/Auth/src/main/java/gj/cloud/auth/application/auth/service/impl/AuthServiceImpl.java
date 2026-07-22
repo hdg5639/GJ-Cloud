@@ -1,6 +1,7 @@
 package gj.cloud.auth.application.auth.service.impl;
 
 import gj.cloud.auth.application.auditlog.service.SecurityAuditLogService;
+import gj.cloud.auth.application.auth.dto.ChangePasswordRequest;
 import gj.cloud.auth.application.auth.dto.LoginRequest;
 import gj.cloud.auth.application.auth.dto.LoginResult;
 import gj.cloud.auth.application.auth.dto.RegisterRequest;
@@ -159,5 +160,26 @@ public class AuthServiceImpl implements AuthService {
 
     private void createUserProfile(String userId, String email) {
         userServiceClient.createProfile(userId, email);
+    }
+
+    // 설정 페이지의 비밀번호 변경 — 이메일 인증 없이 현재 비밀번호로만 본인 확인.
+    // 성공 시 다른 기기/세션에서도 재로그인이 필요하도록 기존 refresh 토큰을 전부 무효화한다.
+    @Override
+    @Transactional
+    public void changePassword(String userId, ChangePasswordRequest request, String clientIp) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            securityAuditLogService.record(AuditActorType.USER, userId, AuditAction.PASSWORD_CHANGED,
+                    "USER", userId, AuditResult.FAILURE, clientIp, "INVALID_CURRENT_PASSWORD");
+            throw new AuthException(AuthErrorCode.INVALID_PASSWORD);
+        }
+
+        user.changePassword(passwordEncoder.encode(request.newPassword()));
+        tokenService.deleteAllUserTokens(userId);
+
+        securityAuditLogService.record(AuditActorType.USER, userId, AuditAction.PASSWORD_CHANGED,
+                "USER", userId, AuditResult.SUCCESS, clientIp, null);
     }
 }

@@ -1,6 +1,7 @@
 package gj.cloud.auth.api.controller;
 
 import gj.cloud.auth.api.controller.spec.AuthApi;
+import gj.cloud.auth.application.auth.dto.ChangePasswordRequest;
 import gj.cloud.auth.application.auth.dto.LoginRequest;
 import gj.cloud.auth.application.auth.dto.LoginResponse;
 import gj.cloud.auth.application.auth.dto.LoginResult;
@@ -9,6 +10,11 @@ import gj.cloud.auth.application.auth.service.AuthService;
 import gj.cloud.auth.application.email.dto.EmailVerifyConfirmRequest;
 import gj.cloud.auth.application.email.dto.EmailVerifyRequest;
 import gj.cloud.auth.application.email.service.EmailVerificationService;
+import gj.cloud.auth.application.passwordreset.dto.PasswordResetConfirmRequest;
+import gj.cloud.auth.application.passwordreset.dto.PasswordResetConfirmResponse;
+import gj.cloud.auth.application.passwordreset.dto.PasswordResetRequest;
+import gj.cloud.auth.application.passwordreset.dto.PasswordResetSendRequest;
+import gj.cloud.auth.application.passwordreset.service.PasswordResetService;
 import gj.cloud.auth.global.response.ApiResponse;
 import gj.cloud.auth.global.security.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,6 +29,7 @@ public class AuthController implements AuthApi {
 
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
+    private final PasswordResetService passwordResetService;
     private final ClientIpResolver clientIpResolver;
 
     @Override
@@ -62,6 +69,30 @@ public class AuthController implements AuthApi {
     @Override
     public ApiResponse<Void> confirmVerifyCode(EmailVerifyConfirmRequest request) {
         emailVerificationService.confirmCode(request.email(), request.code());
+        return ApiResponse.ok();
+    }
+
+    @Override
+    public ApiResponse<Void> sendPasswordResetCode(PasswordResetSendRequest request, HttpServletRequest httpRequest) {
+        passwordResetService.sendCode(request.email(), clientIpResolver.resolve(httpRequest));
+        return ApiResponse.ok();
+    }
+
+    @Override
+    public ApiResponse<PasswordResetConfirmResponse> confirmPasswordResetCode(PasswordResetConfirmRequest request) {
+        String resetToken = passwordResetService.confirmCode(request.email(), request.code());
+        return ApiResponse.ok(new PasswordResetConfirmResponse(resetToken));
+    }
+
+    @Override
+    public ApiResponse<Void> resetPassword(PasswordResetRequest request) {
+        passwordResetService.resetPassword(request.resetToken(), request.newPassword());
+        return ApiResponse.ok();
+    }
+
+    @Override
+    public ApiResponse<Void> changePassword(@AuthenticationPrincipal String userId, ChangePasswordRequest request, HttpServletRequest httpRequest) {
+        authService.changePassword(userId, request, clientIpResolver.resolve(httpRequest));
         return ApiResponse.ok();
     }
 

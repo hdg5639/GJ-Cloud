@@ -23,7 +23,9 @@ public enum AuthErrorCode {
     LOGIN_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이메일 발송에 실패했습니다."),
     INVALID_SERVICE_CLIENT(HttpStatus.UNAUTHORIZED, "유효하지 않은 서비스 클라이언트입니다."),
-    EMAIL_VERIFY_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증 코드 요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.");
+    EMAIL_VERIFY_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "인증 코드 요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
+    PASSWORD_RESET_RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "재설정 코드 요청 횟수를 초과했습니다. 잠시 후 다시 시도해주세요."),
+    INVALID_RESET_TOKEN(HttpStatus.BAD_REQUEST, "유효하지 않거나 만료된 재설정 토큰입니다.");
 
     private final HttpStatus status;
     private final String message;
