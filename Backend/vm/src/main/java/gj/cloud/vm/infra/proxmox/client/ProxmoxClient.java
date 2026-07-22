@@ -22,7 +22,6 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.util.UriUtils;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -92,7 +91,11 @@ public class ProxmoxClient {
         configParams.add("cores", String.valueOf(config.getCores()));
         configParams.add("memory", config.getMemory());
         configParams.add("cpu", config.getCpu());
-        configParams.add("sshkeys", UriUtils.encode(config.getSshkeys(), "UTF-8"));
+        // CICD-004: BodyInserters.fromFormData가 application/x-www-form-urlencoded 직렬화 시
+        // 값을 자체적으로 퍼센트 인코딩하므로, 여기서 미리 인코딩해서 넘기면 이중 인코딩되어(예: '+' -> '%2B' -> '%252B')
+        // Proxmox가 한 번만 디코딩한 뒤에도 원본 SSH 공개키와 다른 문자열을 받게 됨 — 그 결과 cloud-init에
+        // 등록되는 sshkeys 자체가 깨져서 사용자 키/관리 키 모두 SSH 인증이 항상 실패했음. 원본 그대로 전달해야 함.
+        configParams.add("sshkeys", config.getSshkeys());
         configParams.add("ipconfig0", config.getIpconfig0());
         configParams.add("nameserver", config.getNameserver());
 
