@@ -220,29 +220,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex-1" />
 
         {usage && (
-          <div className={cn("rounded-[14px] border border-line bg-white/[0.02] p-4", collapsed && "lg:hidden")}>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="block text-[11px] font-extrabold tracking-[.11em] text-muted-soft">CURRENT PLAN</span>
-                <strong className="text-base">{usage.planType}</strong>
+          // 바깥 래퍼는 접힘/펼침에 따른 높이(max-height)만 담당 — 콘텐츠가 있던 자리가 자연스럽게
+          // 접히고 펼쳐지게 함. 안쪽 카드는 접힐 땐 빠르게 사라지고(트랜지션), 펼칠 땐 사이드바 패널이
+          // 거의 다 넓어진 뒤(280ms)에야 dashboard-page 등에서 쓰는 것과 같은 panel-enter 키프레임으로
+          // 살짝 아래에서 튀어오르듯 나타남 — 그냥 즉시 hidden 처리하던 것보다 제품다운 느낌을 주기 위함.
+          <div
+            className={cn(
+              "overflow-hidden transition-[max-height] duration-200",
+              collapsed ? "lg:max-h-0 lg:delay-[70ms]" : "max-h-[420px] lg:delay-0"
+            )}
+          >
+            <div
+              className={cn(
+                "rounded-[14px] border border-line bg-white/[0.02] p-4",
+                collapsed
+                  ? "transition-[opacity,transform] duration-100 lg:-translate-y-1 lg:scale-95 lg:opacity-0 lg:delay-0"
+                  : "lg:[animation:panel-enter_380ms_cubic-bezier(0.16,1,0.3,1)_280ms_both]"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-[11px] font-extrabold tracking-[.11em] text-muted-soft">CURRENT PLAN</span>
+                  <strong className="text-base">{usage.planType}</strong>
+                </div>
+                <Badge>{usage.planType}</Badge>
               </div>
-              <Badge>{usage.planType}</Badge>
-            </div>
 
-            <UsageBar label="인스턴스 (FREE)" current={usage.myFreeCount} max={usage.maxFreeVmCount} />
-            <UsageBar label="인스턴스 (PRO)" current={usage.myProCount} max={usage.maxProVmCount} />
-            <UsageBar label="vCPU 한도" current={usage.vCpuLimit} max={usage.vCpuLimit} suffix=" core" hideBar />
-            <UsageBar label="RAM 한도" current={usage.ramGbLimit} max={usage.ramGbLimit} suffix=" GB" hideBar />
+              <UsageBar label="인스턴스 (FREE)" current={usage.myFreeCount} max={usage.maxFreeVmCount} />
+              <UsageBar label="인스턴스 (PRO)" current={usage.myProCount} max={usage.maxProVmCount} />
+              <UsageBar label="vCPU 한도" current={usage.vCpuLimit} max={usage.vCpuLimit} suffix=" core" hideBar />
+              <UsageBar label="RAM 한도" current={usage.ramGbLimit} max={usage.ramGbLimit} suffix=" GB" hideBar />
 
-            <div className="mt-3 border-t border-line pt-3">
-              <p className="mb-2 text-[11px] font-extrabold tracking-[.05em] text-muted-soft">서버 전체 점유</p>
-              <div className="flex items-center justify-between text-xs text-muted">
-                <span>FREE</span>
-                <span className="font-bold text-foreground">{usage.systemFreeCount}대</span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-muted">
-                <span>PRO</span>
-                <span className="font-bold text-foreground">{usage.systemProCount}대</span>
+              <div className="mt-3 border-t border-line pt-3">
+                <p className="mb-2 text-[11px] font-extrabold tracking-[.05em] text-muted-soft">서버 전체 점유</p>
+                <div className="flex items-center justify-between text-xs text-muted">
+                  <span>FREE</span>
+                  <span className="font-bold text-foreground">{usage.systemFreeCount}대</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted">
+                  <span>PRO</span>
+                  <span className="font-bold text-foreground">{usage.systemProCount}대</span>
+                </div>
               </div>
             </div>
           </div>
