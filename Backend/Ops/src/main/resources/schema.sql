@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS deployments (
 
     CONSTRAINT chk_deployment_status CHECK (status IN (
         'QUEUED', 'CLONING', 'UPLOADING', 'VALIDATING', 'BUILDING', 'SWAPPING',
-        'HEALTH_CHECKING', 'ROUTING', 'SUCCEEDED', 'FAILED', 'ROLLING_BACK', 'ROLLED_BACK'
+        'HEALTH_CHECKING', 'ROUTING', 'SUCCEEDED', 'FAILED', 'ROLLING_BACK', 'ROLLED_BACK',
+        'STOPPING', 'STOPPED'
     )),
     CONSTRAINT chk_source_type CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE'))
 );
@@ -53,6 +54,16 @@ ALTER TABLE deployments ADD COLUMN IF NOT EXISTS health_checks_json TEXT;
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS context VARCHAR(255);
 -- VM 내 특정 경로에 현재 배포를 가리키는 심볼릭 링크를 생성하는 기능 추가
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS install_path VARCHAR(500);
+
+-- 배포 내리기 상태(STOPPING/STOPPED)는 기존 운영 테이블이 만들어진 뒤 추가됐다. CREATE TABLE IF NOT
+-- EXISTS는 기존 CHECK 제약을 갱신하지 않으므로, 애플리케이션 시작 시 현재 enum 목록으로 재생성한다.
+-- Ops는 단일 인스턴스로 운영되고 schema.sql은 트래픽 수신 전에 실행되므로 DDL 경합은 발생하지 않는다.
+ALTER TABLE deployments DROP CONSTRAINT IF EXISTS chk_deployment_status;
+ALTER TABLE deployments ADD CONSTRAINT chk_deployment_status CHECK (status IN (
+    'QUEUED', 'CLONING', 'UPLOADING', 'VALIDATING', 'BUILDING', 'SWAPPING',
+    'HEALTH_CHECKING', 'ROUTING', 'SUCCEEDED', 'FAILED', 'ROLLING_BACK', 'ROLLED_BACK',
+    'STOPPING', 'STOPPED'
+));
 
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id_created_at ON deployments(vm_id, created_at DESC);

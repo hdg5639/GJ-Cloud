@@ -198,13 +198,36 @@ public class DeploymentExecutor {
         if (!tryLockWithStaleRecovery(vmId, target.getId())) {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
         }
-        DeploymentEntity stopping = deploymentRepository.save(target.withStatus(DeploymentStatus.STOPPING));
-        String deploymentId = stopping.getId();
-        String internalIp = context.internalIp();
-        List<String> nicknamesToRemove = removeRouteNicknames != null ? removeRouteNicknames : List.of();
-        deploymentTaskExecutor.execute(() -> runTeardown(deploymentId, vmId, internalIp, bearerToken, nicknamesToRemove));
-
-        return stopping;
+        DeploymentEntity stopping = null;
+        boolean handedOff = false;
+        try {
+            stopping = deploymentRepository.save(target.withStatus(DeploymentStatus.STOPPING));
+            String deploymentId = stopping.getId();
+            String internalIp = context.internalIp();
+            List<String> nicknamesToRemove = removeRouteNicknames != null ? removeRouteNicknames : List.of();
+            deploymentTaskExecutor.execute(
+                    () -> runTeardown(deploymentId, vmId, internalIp, bearerToken, nicknamesToRemove));
+            handedOff = true;
+            return stopping;
+        } catch (RuntimeException e) {
+            // 워커 제출이 실패했다면 STOPPING에 영구 고착되지 않게 원래 상태로 복구한다. DB 저장 자체가
+            // 실패한 경우 stopping은 null이므로 복구할 레코드가 없고, 아래 finally에서 락만 반환한다.
+            if (stopping != null) {
+                try {
+                    deploymentRepository.save(stopping.withStatus(DeploymentStatus.SUCCEEDED));
+                } catch (RuntimeException restoreError) {
+                    log.error("배포 내리기 상태 복구 실패: deploymentId={}, error={}",
+                            stopping.getId(), restoreError.getMessage(), restoreError);
+                }
+            }
+            throw e;
+        } finally {
+            // runTeardown에 정상 인계된 뒤에는 워커의 finally가 락을 해제한다. 그 전에 DB 제약 위반이나
+            // TaskExecutor 거절이 발생하면 요청 스레드가 직접 해제해 leaked lock을 만들지 않는다.
+            if (!handedOff) {
+                lockService.unlock(vmId, target.getId());
+            }
+        }
     }
 
     private void runTeardown(String deploymentId, String appId, String internalIp, String bearerToken, List<String> removeRouteNicknames) {
