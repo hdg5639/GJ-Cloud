@@ -16,12 +16,28 @@ const NAV_ITEMS = [
   { href: "/settings", icon: "⚙", label: "설정" },
 ];
 
+const SIDEBAR_COLLAPSED_KEY = "gj-sidebar-collapsed";
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { accessToken, user, isLoading, logout } = useAuth();
   const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // 데스크톱 전용 설정이라 새로고침해도 유지되게 로컬 저장에서 읽어옴 — 이 레이아웃은 isLoading이 풀리기 전까지
+  // 항상 null을 렌더링하므로(아래 return null) 서버/클라이언트 첫 렌더 결과물이 갈릴 일이 없어 하이드레이션 문제 없음
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!isLoading && !accessToken) {
@@ -64,13 +80,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[238px] shrink-0 -translate-x-full flex-col gap-[22px] overflow-y-auto border-r border-line bg-panel px-5 pb-[18px] pt-[26px] transition-transform duration-200 lg:static lg:translate-x-0",
-          drawerOpen && "translate-x-0"
+          "fixed inset-y-0 left-0 z-50 flex w-[238px] shrink-0 -translate-x-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden border-r border-line bg-panel px-5 pb-[18px] pt-[26px] transition-[width,transform] duration-200 ease-in-out lg:static lg:translate-x-0",
+          drawerOpen && "translate-x-0",
+          collapsed && "lg:w-[76px] lg:px-3"
         )}
       >
-        <div className="flex items-center px-[5px]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/gamjabox-wordmark-white.svg" alt="GamjaBox" className="h-auto w-[176px]" />
+        <div className={cn("relative flex h-8 shrink-0 items-center", collapsed ? "lg:justify-center" : "justify-between")}>
+          <div className="relative h-8 flex-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/gamjabox-wordmark-white.svg"
+              alt="GamjaBox"
+              className={cn(
+                "absolute left-0 top-0 h-auto w-[176px] transition-opacity duration-150",
+                collapsed && "lg:opacity-0"
+              )}
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/gamjabox-symbol.svg"
+              alt="GamjaBox"
+              className={cn(
+                "absolute left-0 top-0 h-8 w-8 opacity-0 transition-opacity duration-150",
+                collapsed && "lg:opacity-100"
+              )}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
+            className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-foreground lg:flex"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={cn("transition-transform duration-200", collapsed && "rotate-180")}
+            >
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
         </div>
 
         <nav className="grid gap-1.5">
@@ -81,19 +136,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={item.href}
                 href={item.href}
                 onClick={() => setDrawerOpen(false)}
-                className={`flex w-full items-center gap-2.5 rounded-[10px] px-3 py-[11px] text-left text-sm font-bold ${
+                title={collapsed ? item.label : undefined}
+                className={cn(
+                  "flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-[11px] text-left text-sm font-bold",
+                  collapsed && "lg:justify-center lg:px-0",
                   active ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
-                }`}
+                )}
               >
-                <span aria-hidden>{item.icon}</span>
-                {item.label}
+                <span aria-hidden className="shrink-0">
+                  {item.icon}
+                </span>
+                <span
+                  className={cn(
+                    "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200",
+                    collapsed ? "lg:max-w-0 lg:opacity-0" : "max-w-[160px] opacity-100"
+                  )}
+                >
+                  {item.label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
+        <div className="flex-1" />
+
         {usage && (
-          <div className="mt-auto rounded-[14px] border border-line bg-white/[0.02] p-4">
+          <div className={cn("rounded-[14px] border border-line bg-white/[0.02] p-4", collapsed && "lg:hidden")}>
             <div className="flex items-center justify-between">
               <div>
                 <span className="block text-[11px] font-extrabold tracking-[.11em] text-muted-soft">CURRENT PLAN</span>
@@ -121,16 +190,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         )}
 
-        <div className="flex items-center gap-2.5 px-[5px] py-2">
-          <div className="grid h-[34px] w-[34px] place-items-center rounded-full bg-white/[0.06] text-xs font-extrabold">
+        <div className={cn("flex items-center gap-2.5 px-[5px] py-2", collapsed && "lg:justify-center")}>
+          <div
+            className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-white/[0.06] text-xs font-extrabold"
+            title={collapsed ? (user?.email ?? undefined) : undefined}
+          >
             {user?.email?.[0]?.toUpperCase() ?? "?"}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1 overflow-hidden", collapsed && "lg:hidden")}>
             <strong className="block truncate text-sm">{user?.email ?? ""}</strong>
             <button onClick={handleLogout} className="mt-0.5 block text-xs text-muted-soft hover:text-muted">
               로그아웃
             </button>
           </div>
+          {collapsed && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              aria-label="로그아웃"
+              title="로그아웃"
+              className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-foreground lg:flex"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                <path d="M16 17l5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+            </button>
+          )}
         </div>
       </aside>
 
