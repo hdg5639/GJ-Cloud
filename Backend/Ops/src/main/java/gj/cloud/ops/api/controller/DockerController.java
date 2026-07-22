@@ -29,17 +29,16 @@ public class DockerController {
 
     private final DockerService dockerService;
 
-    @Operation(summary = "Docker 설치 여부 확인")
+    @Operation(summary = "Docker 설치 여부/진행 상태 확인")
     @GetMapping("/status")
     public ApiResponse<DockerStatusResponse> status(HttpServletRequest request, @PathVariable UUID vmId) {
-        boolean installed = dockerService.isDockerInstalled(extractToken(request), vmId.toString());
-        return ApiResponse.ok(new DockerStatusResponse(installed));
+        return ApiResponse.ok(dockerService.getStatus(extractToken(request), vmId.toString()));
     }
 
-    @Operation(summary = "Docker 설치", description = "공식 편의 스크립트(get.docker.com)로 설치합니다.")
+    @Operation(summary = "Docker 설치 요청", description = "설치는 백그라운드에서 진행되며, 완료 여부는 /status를 폴링해 확인합니다.")
     @PostMapping("/install")
     public ApiResponse<Void> install(HttpServletRequest request, @PathVariable UUID vmId) {
-        dockerService.installDocker(extractToken(request), vmId.toString());
+        dockerService.requestInstall(extractToken(request), vmId.toString());
         return ApiResponse.ok();
     }
 

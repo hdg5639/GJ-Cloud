@@ -38,6 +38,7 @@ public enum OpsErrorCode {
 
     // Docker 관리
     DOCKER_NOT_INSTALLED(HttpStatus.BAD_REQUEST, "VM에 Docker가 설치되어 있지 않습니다."),
+    DOCKER_INSTALL_IN_PROGRESS(HttpStatus.CONFLICT, "이미 Docker 설치가 진행 중입니다."),
     DOCKER_INSTALL_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Docker 설치에 실패했습니다."),
     DOCKER_COMMAND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "Docker 명령 실행에 실패했습니다."),
     INVALID_DOCKER_IDENTIFIER(HttpStatus.BAD_REQUEST, "유효하지 않은 식별자입니다."),

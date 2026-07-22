@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.Session;
 import gj.cloud.ops.application.docker.dto.ComposeStackInfo;
 import gj.cloud.ops.application.docker.dto.ContainerInfo;
+import gj.cloud.ops.application.docker.dto.DockerStatusResponse;
 import gj.cloud.ops.application.docker.dto.ImageInfo;
 import gj.cloud.ops.application.docker.dto.NetworkInfo;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
@@ -17,11 +18,14 @@ import gj.cloud.ops.global.ssh.SshCommandExecutor;
 import gj.cloud.ops.global.ssh.VmSshSessionFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 // C절 Docker 관리 — 자체 UI(SSH 명령 + JSON 파싱)로 구현, Portainer는 별도 탭 링크만 제공(C.4).
@@ -47,14 +51,51 @@ public class DockerService {
     private final VmSshSessionFactory sshSessionFactory;
     private final SshCommandExecutor sshCommandExecutor;
     private final ObjectMapper objectMapper;
+    private final TaskExecutor deploymentTaskExecutor;
+
+    // CICD-004: 설치는 수 분 걸릴 수 있는데 예전엔 HTTP 요청 스레드에서 그대로 블로킹했음 — 중간의 리버스
+    // 프록시가 응답을 오래 기다리다 연결을 끊어버리면 브라우저엔 "Failed to fetch"만 뜨고, 서버는 그 사실을
+    // 모른 채 계속 실행되다 결과를 이미 끊긴 연결에 쓰려다 버림(DeploymentExecutor와 동일한 문제/해법).
+    // 요청 스레드는 권한/상태 확인 후 전용 워커에 위임하고 즉시 반환하며, 진행 상태는 이 메모리 맵으로
+    // 추적해 프론트가 /status를 폴링하게 한다. Ops는 단일 인스턴스로만 운영하므로 인메모리로 충분.
+    private final Set<String> installingVmIds = ConcurrentHashMap.newKeySet();
+    private final Map<String, String> installErrorByVmId = new ConcurrentHashMap<>();
+
+    public DockerStatusResponse getStatus(String bearerToken, String vmId) {
+        if (installingVmIds.contains(vmId)) {
+            return new DockerStatusResponse(false, true, null);
+        }
+        boolean installed = isDockerInstalled(bearerToken, vmId);
+        String lastError = installed ? null : installErrorByVmId.get(vmId);
+        return new DockerStatusResponse(installed, false, lastError);
+    }
 
     public boolean isDockerInstalled(String bearerToken, String vmId) {
         return execute(bearerToken, vmId, PERMISSION_DOCKER_READ,
                 session -> sshCommandExecutor.exec(session, "command -v docker", 10_000).isSuccess());
     }
 
-    public void installDocker(String bearerToken, String vmId) {
-        execute(bearerToken, vmId, PERMISSION_DOCKER_ADMIN, session -> {
+    public void requestInstall(String bearerToken, String vmId) {
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
+        if (!context.hasPermission(PERMISSION_DOCKER_ADMIN)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+        if (context.internalIp() == null || !"RUNNING".equals(context.status())) {
+            throw new OpsException(OpsErrorCode.VM_NOT_RUNNING);
+        }
+        if (!installingVmIds.add(vmId)) {
+            throw new OpsException(OpsErrorCode.DOCKER_INSTALL_IN_PROGRESS);
+        }
+        installErrorByVmId.remove(vmId);
+
+        String internalIp = context.internalIp();
+        deploymentTaskExecutor.execute(() -> runInstall(vmId, internalIp));
+    }
+
+    private void runInstall(String vmId, String internalIp) {
+        Session session = null;
+        try {
+            session = sshSessionFactory.createSession(vmId, internalIp);
             // DEP-004: 이전에는 get.docker.com에서 받은 설치 스크립트를 그대로 실행(curl | sh)했음 — 무결성
             // 검증 없이 원격 셸 스크립트를 실행하는 공급망 취약점. Docker 공식 apt 저장소(GPG 서명 검증)로
             // 대체 — apt가 패키지 서명을 검증하므로 변조된 패키지는 설치 자체가 거부된다.
@@ -84,11 +125,19 @@ public class DockerService {
             if (!result.isSuccess()) {
                 log.warn("Docker 설치 실패: vmId={}, exitStatus={}, stderr={}, stdout={}",
                         vmId, result.exitStatus(), trim(result.stderr()), trim(result.stdout()));
-                throw new OpsException(OpsErrorCode.DOCKER_INSTALL_FAILED);
+                installErrorByVmId.put(vmId, "Docker 설치에 실패했습니다.");
+            } else {
+                log.info("Docker 설치 완료(공식 apt 저장소, GPG 서명 검증): vmId={}", vmId);
             }
-            log.info("Docker 설치 완료(공식 apt 저장소, GPG 서명 검증): vmId={}", vmId);
-            return null;
-        });
+        } catch (Exception e) {
+            log.error("Docker 설치 처리 중 예외: vmId={}, error={}", vmId, e.getMessage());
+            installErrorByVmId.put(vmId, "Docker 설치 중 오류가 발생했습니다.");
+        } finally {
+            installingVmIds.remove(vmId);
+            if (session != null && session.isConnected()) {
+                session.disconnect();
+            }
+        }
     }
 
     public List<ContainerInfo> listContainers(String bearerToken, String vmId) {
