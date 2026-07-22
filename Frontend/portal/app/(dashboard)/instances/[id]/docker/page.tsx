@@ -286,6 +286,11 @@ export default function DockerManagementPage() {
           <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
         </div>
       )}
+      {installing && (
+        <div className="mb-3 flex items-center rounded-md border border-[#e8b657]/25 bg-[#e8b657]/10 px-4 py-3 text-sm text-[#e8b657]">
+          VM 생성 초기에는 dpkg 잠금 대기로 인해 Docker 설치에 5~10분가량 소요될 수 있습니다.
+        </div>
+      )}
 
       {!installed ? (
         <div className="flex-1 rounded-panel border border-line flex flex-col items-center justify-center gap-3">
