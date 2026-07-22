@@ -27,16 +27,15 @@ export default function CreateInstancePage() {
   const [loading, setLoading] = useState(false);
   const [userPlan, setUserPlan] = useState<string | null>(null);
 
+  // 세 요청을 Promise.all로 묶으면 하나만 실패해도 나머지 결과까지 통째로 버려져서(catch에서
+  // 조용히 삼켜짐), 예를 들어 가용성 조회만 실패해도 정상 응답이 온 SSH 키 목록까지 화면에
+  // 비어 보이는 문제가 있었다. 서로 독립적으로 처리해 하나가 실패해도 나머지는 반영되게 함.
   useEffect(() => {
     if (!accessToken) return;
-    Promise.all([
-      api.vm.availability(accessToken),
-      api.user.profile(accessToken),
-      api.user.sshKeys(accessToken),
-    ])
-      .then(([availabilityData, profileData, keysData]) => {
-        setAvailability(availabilityData);
-        setUserPlan(profileData.planType);
+    api.vm.availability(accessToken).then(setAvailability).catch(() => {});
+    api.user.profile(accessToken).then((profileData) => setUserPlan(profileData.planType)).catch(() => {});
+    api.user.sshKeys(accessToken)
+      .then((keysData) => {
         setSshKeys(keysData);
         if (keysData.length > 0) setSshKeyId(keysData[0].id);
       })
