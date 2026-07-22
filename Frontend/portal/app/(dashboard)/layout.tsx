@@ -141,15 +141,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             title={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
             className="group relative hidden h-11 w-full overflow-hidden rounded-lg text-left outline-none transition-colors duration-300 hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-brand/60 lg:block"
           >
-            {/* 워드마크/심볼 둘 다 버튼 중앙에 겹쳐 놓고 크로스페이드 — 이전엔 left-0 고정이라 접혔을 때
-                심볼이 버튼 폭 중앙이 아니라 왼쪽에 붙어 있었고, 워드마크는 176px 폭 기준 실제 렌더 높이가
-                43px 정도인데 컨테이너가 32px(h-8)이라 overflow-hidden에 하단이 잘렸음. */}
+            {/* 워드마크/심볼 둘 다 버튼 중앙에 겹쳐 놓고 크로스페이드. 세로는 버튼 높이가 고정이라
+                top-1/2 퍼센트 중앙정렬이 문제없지만, 가로는 이전에 left-1/2 -translate-x-1/2(퍼센트
+                기반)를 썼더니 버튼 폭이 아직 애니메이션 중일 때(패널이 접히거나 펼쳐지는 도중) 매 프레임
+                중앙 위치가 다시 계산되면서 네비 아이콘과 같은 이유로 미세하게 흔들려 보였음. 그래서
+                가로는 각 이미지가 각자 실제로 보이는 상태(펼침=워드마크, 접힘=심볼)의 최종 폭 기준으로
+                미리 계산한 고정 px만큼만 translateX — 패널 폭 트랜지션과 무관한 독립적인 값이라 안 흔들림. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/gamjabox-wordmark-white.svg"
               alt="GamjaBox"
               className={cn(
-                "absolute left-1/2 top-1/2 h-[43px] w-[176px] -translate-x-1/2 -translate-y-1/2 transition-[opacity,transform] duration-200",
+                "absolute left-0 top-1/2 h-[43px] w-[176px] translate-x-[11px] -translate-y-1/2 transition-[opacity,transform] duration-200",
                 collapsed ? "scale-95 opacity-0" : "scale-100 opacity-100"
               )}
             />
@@ -158,7 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               src="/gamjabox-symbol.svg"
               alt="GamjaBox"
               className={cn(
-                "absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 transition-[opacity,transform] duration-200",
+                "absolute left-0 top-1/2 h-10 w-10 translate-x-[6px] -translate-y-1/2 transition-[opacity,transform] duration-200",
                 collapsed ? "scale-100 opacity-100" : "scale-75 opacity-0"
               )}
             />
