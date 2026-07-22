@@ -274,6 +274,7 @@ export interface ComposeStackInfo {
 export interface DockerStatusResponse {
   installed: boolean;
   installing: boolean;
+  stage: string | null;
   lastError: string | null;
 }
 

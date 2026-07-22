@@ -1,4 +1,4 @@
 package gj.cloud.ops.application.docker.dto;
 
-public record DockerStatusResponse(boolean installed, boolean installing, String lastError) {
+public record DockerStatusResponse(boolean installed, boolean installing, String stage, String lastError) {
 }

@@ -38,6 +38,7 @@ export default function DockerManagementPage() {
   const [checking, setChecking] = useState(true);
   const [installed, setInstalled] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [installStage, setInstallStage] = useState<string | null>(null);
 
   const [tab, setTab] = useState<Tab>("containers");
   const [loading, setLoading] = useState(false);
@@ -74,6 +75,7 @@ export default function DockerManagementPage() {
       const status = await api.ops.docker.status(accessToken, vmId);
       setInstalled(status.installed);
       setInstalling(status.installing);
+      setInstallStage(status.stage);
       if (!status.installing && status.lastError) {
         setError(status.lastError);
       }
@@ -130,6 +132,7 @@ export default function DockerManagementPage() {
   async function handleInstall() {
     if (!accessToken) return;
     setError(null);
+    setInstallStage(null);
     setInstalling(true);
     try {
       await api.ops.docker.install(accessToken, vmId);
@@ -287,7 +290,7 @@ export default function DockerManagementPage() {
       {!installed ? (
         <div className="flex-1 rounded-panel border border-line flex flex-col items-center justify-center gap-3">
           {installing ? (
-            <PageLoader label="Docker 설치 중... (수 분 소요될 수 있어요)" />
+            <PageLoader label={installStage ?? "Docker 설치 중..."} />
           ) : (
             <>
               <p className="text-sm text-muted">이 VM에는 아직 Docker가 설치되어 있지 않습니다.</p>
