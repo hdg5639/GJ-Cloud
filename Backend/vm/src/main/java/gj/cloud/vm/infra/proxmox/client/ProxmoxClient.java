@@ -22,6 +22,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriUtils;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -91,11 +92,11 @@ public class ProxmoxClient {
         configParams.add("cores", String.valueOf(config.getCores()));
         configParams.add("memory", config.getMemory());
         configParams.add("cpu", config.getCpu());
-        // CICD-004: BodyInserters.fromFormData가 application/x-www-form-urlencoded 직렬화 시
-        // 값을 자체적으로 퍼센트 인코딩하므로, 여기서 미리 인코딩해서 넘기면 이중 인코딩되어(예: '+' -> '%2B' -> '%252B')
-        // Proxmox가 한 번만 디코딩한 뒤에도 원본 SSH 공개키와 다른 문자열을 받게 됨 — 그 결과 cloud-init에
-        // 등록되는 sshkeys 자체가 깨져서 사용자 키/관리 키 모두 SSH 인증이 항상 실패했음. 원본 그대로 전달해야 함.
-        configParams.add("sshkeys", config.getSshkeys());
+        // Proxmox의 sshkeys 파라미터는 자체 검증기가 "urlencoded 문자열이어야 함"을 요구함 — HTTP 폼
+        // 전송단의 인코딩(BodyInserters.fromFormData가 자동 처리)과는 별개로, Proxmox가 전달받는 값 자체가
+        // 이미 percent-encoded 상태여야 통과함(원본 그대로 보내면 400 invalid urlencoded string 에러).
+        // 그래서 여기서 한 번 인코딩한 뒤 폼 전송단에서 한 번 더 인코딩되는 이중 인코딩이 정상 동작임 — 되돌리지 말 것.
+        configParams.add("sshkeys", UriUtils.encode(config.getSshkeys(), "UTF-8"));
         configParams.add("ipconfig0", config.getIpconfig0());
         configParams.add("nameserver", config.getNameserver());
 
