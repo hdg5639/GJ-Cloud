@@ -66,22 +66,43 @@ export default function DockerManagementPage() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  const checkStatus = useCallback(async () => {
-    if (!accessToken) return;
-    setChecking(true);
+  // 설치는 수 분 걸릴 수 있어 백엔드가 즉시 응답하고 백그라운드에서 진행한다(Failed to fetch 방지).
+  // 그래서 상태는 폴링으로 확인 — checking은 최초 진입 시 전체 로더용, installing 중엔 폴링만 조용히 갱신.
+  const fetchStatus = useCallback(async () => {
+    if (!accessToken) return null;
     try {
       const status = await api.ops.docker.status(accessToken, vmId);
       setInstalled(status.installed);
+      setInstalling(status.installing);
+      if (!status.installing && status.lastError) {
+        setError(status.lastError);
+      }
+      return status;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Docker 상태 확인에 실패했습니다.");
-    } finally {
-      setChecking(false);
+      return null;
     }
   }, [accessToken, vmId]);
 
   useEffect(() => {
-    checkStatus();
-  }, [checkStatus]);
+    (async () => {
+      setChecking(true);
+      await fetchStatus();
+      setChecking(false);
+    })();
+  }, [fetchStatus]);
+
+  // 설치 요청 직후, 혹은 설치 도중 새로고침으로 재진입한 경우 모두 끝날 때까지 주기적으로 재확인
+  useEffect(() => {
+    if (!installing) return;
+    const interval = setInterval(async () => {
+      const status = await fetchStatus();
+      if (status && !status.installing && status.installed) {
+        setNotice("Docker를 설치했습니다.");
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [installing, fetchStatus]);
 
   const loadTab = useCallback(
     async (target: Tab) => {
@@ -108,16 +129,14 @@ export default function DockerManagementPage() {
 
   async function handleInstall() {
     if (!accessToken) return;
-    setInstalling(true);
     setError(null);
+    setInstalling(true);
     try {
       await api.ops.docker.install(accessToken, vmId);
-      setNotice("Docker를 설치했습니다.");
-      await checkStatus();
+      // 요청이 접수되면 installing은 true로 유지 — 이후 폴링(useEffect)이 완료 시점을 감지한다.
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Docker 설치에 실패했습니다.");
-    } finally {
       setInstalling(false);
+      setError(err instanceof Error ? err.message : "Docker 설치 요청에 실패했습니다.");
     }
   }
 
@@ -267,10 +286,16 @@ export default function DockerManagementPage() {
 
       {!installed ? (
         <div className="flex-1 rounded-panel border border-line flex flex-col items-center justify-center gap-3">
-          <p className="text-sm text-muted">이 VM에는 아직 Docker가 설치되어 있지 않습니다.</p>
-          <Button variant="primary" onClick={handleInstall} disabled={installing}>
-            {installing ? "설치 중... (수 분 소요될 수 있어요)" : "Docker 설치"}
-          </Button>
+          {installing ? (
+            <PageLoader label="Docker 설치 중... (수 분 소요될 수 있어요)" />
+          ) : (
+            <>
+              <p className="text-sm text-muted">이 VM에는 아직 Docker가 설치되어 있지 않습니다.</p>
+              <Button variant="primary" onClick={handleInstall}>
+                Docker 설치
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <div className="flex-1 rounded-panel border border-line overflow-auto">

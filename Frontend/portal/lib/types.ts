@@ -273,6 +273,8 @@ export interface ComposeStackInfo {
 
 export interface DockerStatusResponse {
   installed: boolean;
+  installing: boolean;
+  lastError: string | null;
 }
 
 // 배포 파이프라인 (D-2 Raw Compose / D-1·D-3 DeploymentSpec 공용)
