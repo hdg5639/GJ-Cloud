@@ -202,9 +202,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <span
                     className={cn(
                       "inline-block transition-[opacity,transform] duration-100",
+                      // 펼칠 땐 사이드바 패널(300ms)이 거의 다 넓어진 뒤에야 글자가 나타나야 함 —
+                      // 딜레이가 짧으면 패널이 절반쯤 열렸을 때 글자가 먼저 튀어나온 것처럼 보임
                       collapsed
                         ? "lg:-translate-x-2 lg:opacity-0 lg:delay-0"
-                        : "translate-x-0 opacity-100 duration-150 lg:delay-150"
+                        : "translate-x-0 opacity-100 duration-[120ms] lg:delay-[280ms]"
                     )}
                   >
                     {item.label}
@@ -277,7 +279,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div
               className={cn(
                 "transition-opacity duration-100",
-                collapsed ? "lg:opacity-0 lg:delay-0" : "opacity-100 duration-150 lg:delay-150"
+                // 닉네임/로그아웃도 네비 라벨과 동일하게, 패널이 거의 다 넓어진 뒤에 나타나야 함
+                collapsed ? "lg:opacity-0 lg:delay-0" : "opacity-100 duration-[120ms] lg:delay-[280ms]"
               )}
             >
               <strong className="block truncate text-sm">{profile?.nickname ?? user?.email ?? ""}</strong>

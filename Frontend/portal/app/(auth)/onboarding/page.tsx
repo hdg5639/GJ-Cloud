@@ -68,8 +68,8 @@ export default function OnboardingPage() {
     e.preventDefault();
     if (!accessToken) return;
     const trimmed = nickname.trim();
-    if (trimmed.length < 2) {
-      setError("닉네임은 2자 이상 입력해주세요");
+    if (trimmed.length < 2 || trimmed.length > 12) {
+      setError("닉네임은 2~12자로 입력해주세요");
       return;
     }
     setError(null);
@@ -133,8 +133,8 @@ export default function OnboardingPage() {
             name="nickname"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
-            placeholder="다른 사람에게 보여질 이름"
-            maxLength={50}
+            placeholder="다른 사람에게 보여질 이름 (2~12자)"
+            maxLength={12}
             required
           />
         </Field>

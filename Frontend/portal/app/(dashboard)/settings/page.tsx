@@ -58,10 +58,15 @@ export default function SettingsPage() {
 
   async function handleSave() {
     if (!accessToken) return;
+    const trimmed = nickname.trim();
+    if (trimmed && (trimmed.length < 2 || trimmed.length > 12)) {
+      setSaveMsg({ type: "err", text: "닉네임은 2~12자로 입력해주세요." });
+      return;
+    }
     setSaving(true);
     setSaveMsg(null);
     try {
-      const updated = await api.user.updateProfile(accessToken, { nickname: nickname.trim() || undefined });
+      const updated = await api.user.updateProfile(accessToken, { nickname: trimmed || undefined });
       setProfile(updated);
       setSaveMsg({ type: "ok", text: "저장되었습니다." });
     } catch {
@@ -211,8 +216,8 @@ export default function SettingsPage() {
                       name="settings-nickname"
                       value={nickname}
                       onChange={(e) => { setNickname(e.target.value); setSaveMsg(null); }}
-                      placeholder="닉네임 입력"
-                      maxLength={50}
+                      placeholder="닉네임 입력 (2~12자)"
+                      maxLength={12}
                     />
                   </Field>
 
