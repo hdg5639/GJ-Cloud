@@ -30,6 +30,8 @@ public enum OpsErrorCode {
     // 배포 파이프라인
     SSH_COMMAND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "원격 명령 실행에 실패했습니다."),
     SSH_COMMAND_TIMEOUT(HttpStatus.INTERNAL_SERVER_ERROR, "원격 명령 실행이 시간 초과되었습니다."),
+    REPOSITORY_NETWORK_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE,
+            "저장소 호스트에 연결할 수 없습니다. VM의 DNS/네트워크 상태를 확인한 뒤 다시 시도해주세요."),
     INVALID_COMPOSE(HttpStatus.BAD_REQUEST, "compose 검증에 실패했습니다."),
     INVALID_REPO_CONFIG(HttpStatus.BAD_REQUEST, "레포 URL 또는 브랜치명이 유효하지 않습니다."),
     DEPLOYMENT_IN_PROGRESS(HttpStatus.CONFLICT, "이미 배포가 진행 중입니다."),

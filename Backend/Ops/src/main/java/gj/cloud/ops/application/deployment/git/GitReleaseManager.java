@@ -28,6 +28,8 @@ import java.util.regex.Pattern;
 public class GitReleaseManager {
 
     private static final long GIT_TIMEOUT_MS = 120_000; // clone/fetch는 레포 크기에 따라 오래 걸릴 수 있음
+    private static final int GIT_NETWORK_RETRY_ATTEMPTS = 3;
+    private static final long GIT_NETWORK_RETRY_DELAY_MS = 5_000;
     private static final String BASE_DIR_TEMPLATE = "/home/%s/gamjabox/apps/%s";
 
     // repoUrl/branch는 사용자 입력이 그대로 셸 커맨드 문자열에 꽂히므로 반드시 사전 검증함.
@@ -76,7 +78,7 @@ public class GitReleaseManager {
             // http.followRedirects=false: 사전 검증을 통과한 뒤 리다이렉트로 내부 주소로 우회하는 경로 차단
             String cloneCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git -c http.followRedirects=false clone --mirror '"
                     + repoUrl + "' '" + bareDir + "'";
-            sshCommandExecutor.execOrThrow(session, cloneCmd, GIT_TIMEOUT_MS);
+            execGitNetworkCommandWithRetry(session, cloneCmd, "저장소 최초 clone");
         });
     }
 
@@ -89,12 +91,77 @@ public class GitReleaseManager {
         withAskpass(session, patToken, askpassPath -> {
             String fetchCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git -c http.followRedirects=false -C '" + bareDir
                     + "' fetch --prune origin";
-            sshCommandExecutor.execOrThrow(session, fetchCmd, GIT_TIMEOUT_MS);
+            execGitNetworkCommandWithRetry(session, fetchCmd, "저장소 fetch");
         });
 
         CommandResult revParse = sshCommandExecutor.execOrThrow(session,
                 "git -C '" + bareDir + "' rev-parse '" + branch + "'", 15_000);
         return revParse.stdout().trim();
+    }
+
+    // VM 부팅 직후 systemd-resolved/network-online 정착이 늦거나 외부 DNS가 순간적으로 응답하지 않으면
+    // git은 exit=128로 즉시 종료한다. 인증 실패/없는 저장소 같은 확정 오류까지 재시도하면 사용자 대기 시간만
+    // 늘어나므로 DNS·연결 계층의 일시 오류와 명령 타임아웃만 짧게 재시도한다.
+    CommandResult execGitNetworkCommandWithRetry(Session session, String command, String operation) {
+        for (int attempt = 1; attempt <= GIT_NETWORK_RETRY_ATTEMPTS; attempt++) {
+            try {
+                CommandResult result = sshCommandExecutor.exec(session, command, GIT_TIMEOUT_MS);
+                if (result.isSuccess()) {
+                    return result;
+                }
+                if (!isTransientGitNetworkFailure(result.stderr())) {
+                    log.error("Git 명령 실패(operation={}, exit={}): stderr={}", operation, result.exitStatus(), result.stderr());
+                    throw new OpsException(OpsErrorCode.SSH_COMMAND_FAILED);
+                }
+                if (attempt == GIT_NETWORK_RETRY_ATTEMPTS) {
+                    log.error("Git 네트워크 오류 재시도 소진(operation={}, attempts={}): stderr={}",
+                            operation, GIT_NETWORK_RETRY_ATTEMPTS, result.stderr());
+                    throw new OpsException(OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE);
+                }
+                log.warn("Git 네트워크 일시 오류 — 재시도 예정: operation={}, attempt={}/{}, stderr={}",
+                        operation, attempt, GIT_NETWORK_RETRY_ATTEMPTS, result.stderr());
+            } catch (OpsException e) {
+                if (e.getErrorCode() != OpsErrorCode.SSH_COMMAND_TIMEOUT) {
+                    throw e;
+                }
+                if (attempt == GIT_NETWORK_RETRY_ATTEMPTS) {
+                    log.error("Git 명령 타임아웃 재시도 소진(operation={}, attempts={})",
+                            operation, GIT_NETWORK_RETRY_ATTEMPTS);
+                    throw new OpsException(OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE);
+                }
+                log.warn("Git 명령 일시 타임아웃 — 재시도 예정: operation={}, attempt={}/{}",
+                        operation, attempt, GIT_NETWORK_RETRY_ATTEMPTS);
+            }
+            pauseBeforeGitRetry();
+        }
+        throw new OpsException(OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE);
+    }
+
+    static boolean isTransientGitNetworkFailure(String stderr) {
+        if (stderr == null) {
+            return false;
+        }
+        String message = stderr.toLowerCase();
+        return message.contains("could not resolve host")
+                || message.contains("temporary failure in name resolution")
+                || message.contains("name or service not known")
+                || message.contains("failed to connect")
+                || message.contains("connection timed out")
+                || message.contains("connection reset")
+                || message.contains("network is unreachable")
+                || message.contains("remote end hung up unexpectedly")
+                || message.contains("the requested url returned error: 502")
+                || message.contains("the requested url returned error: 503")
+                || message.contains("the requested url returned error: 504");
+    }
+
+    void pauseBeforeGitRetry() {
+        try {
+            Thread.sleep(GIT_NETWORK_RETRY_DELAY_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new OpsException(OpsErrorCode.SSH_COMMAND_FAILED);
+        }
     }
 
     public void createWorktree(Session session, String appId, String deploymentId, String commitSha) {
