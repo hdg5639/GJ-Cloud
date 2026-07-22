@@ -389,16 +389,16 @@ export default function OrganizationDetailPage() {
                     <Td>{m.email}</Td>
                     <Td>
                       {myRole === "OWNER" && m.role !== "OWNER" ? (
-                        <select
+                        <Select
                           id={`org-member-role-${m.id}`}
                           name={`org-member-role-${m.id}`}
                           value={m.role}
                           onChange={(e) => handleRoleChange(m, e.target.value as MemberRole)}
-                          className="text-xs px-2 py-1 rounded border border-line-strong"
+                          className="h-8 !min-h-0 w-[92px] py-1 pl-2 pr-8 text-xs"
                         >
                           <option value="ADMIN">관리자</option>
                           <option value="MEMBER">멤버</option>
-                        </select>
+                        </Select>
                       ) : (
                         <Badge>{ROLE_LABEL[m.role]}</Badge>
                       )}
