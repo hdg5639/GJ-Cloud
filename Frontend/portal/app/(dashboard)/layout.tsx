@@ -194,7 +194,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span
                   aria-hidden
                   className={cn(
-                    "shrink-0 transition-[font-size,transform]",
+                    // 아이콘 글자(▣/◫/⌘/⚙)마다 실제 렌더링되는 폭이 조금씩 달라서, 다 같은 고정
+                    // translateX만 주면 어떤 아이콘은 딱 맞고 어떤 건 살짝 왼쪽/오른쪽으로 치우쳐 보임.
+                    // 그래서 아이콘을 항상 같은 고정 너비 박스로 감싸고 그 안에서 flex로 중앙정렬해야
+                    // 글자 폭 차이와 무관하게 모든 아이콘이 똑같이 중앙에 옴 — translateX는 이 박스
+                    // 전체를 옮기는 용도로만 씀.
+                    "flex h-5 w-5 shrink-0 items-center justify-center transition-[font-size,transform]",
                     collapsed
                       ? "lg:translate-x-1 lg:text-xl duration-300 lg:delay-0"
                       : "lg:translate-x-0 duration-150 lg:delay-[300ms]"
