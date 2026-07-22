@@ -1224,13 +1224,13 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       </div>{/* end 2-col */}
 
       {/* 협업 작성/수정 모달 */}
-      {showCollabWrite && (
-        <CollaborationWriteModal
+      <CollaborationWriteModal
+          open={showCollabWrite}
           accessToken={accessToken!}
           scopeType="INSTANCE"
           scopeId={id}
           editing={editingCollab}
-          onClose={() => { setShowCollabWrite(false); setEditingCollab(undefined); }}
+          onClose={() => setShowCollabWrite(false)}
           onSuccess={(item) => {
             if (editingCollab) {
               setCollabItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
@@ -1240,8 +1240,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             }
             setShowCollabWrite(false);
           }}
-        />
-      )}
+      />
 
       {/* 포트 추가 모달 */}
       <Modal open={showPortModal} onClose={() => setShowPortModal(false)}>
@@ -1390,16 +1389,15 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       </Modal>
 
       {/* 스펙 변경 모달 */}
-      {showUpgradeModal && vm && (
-        <VmSpecModal
+      <VmSpecModal
+          open={showUpgradeModal}
           vm={vm}
           onClose={() => setShowUpgradeModal(false)}
           onSuccess={(updated) => {
             setVm(updated);
             setShowUpgradeModal(false);
           }}
-        />
-      )}
+      />
     </div>
   );
 }

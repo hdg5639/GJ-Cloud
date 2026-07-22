@@ -2,7 +2,7 @@ import { HTMLAttributes, ReactNode } from "react";
 import { cn } from "./cn";
 
 export function Panel({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-panel border border-line bg-panel", className)} {...props} />;
+  return <div className={cn("motion-panel rounded-panel border border-line bg-panel", className)} {...props} />;
 }
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

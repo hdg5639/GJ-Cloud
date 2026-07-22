@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
 
-const TRANSITION_MS = 200;
+const TRANSITION_MS = 280;
 
 export function Modal({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
   const [mounted, setMounted] = useState(open);
@@ -33,22 +33,46 @@ export function Modal({ open, onClose, children }: { open: boolean; onClose: () 
     return () => window.removeEventListener("keydown", onKey);
   }, [mounted, onClose]);
 
+  useEffect(() => {
+    if (!mounted) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mounted]);
+
   if (!mounted || typeof document === "undefined") return null;
+
+  const useDashboardMotion = document.body.classList.contains("theme-dark");
 
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-opacity duration-200 ease-out",
-        visible ? "opacity-100" : "opacity-0"
+        "fixed inset-0 z-[100] flex items-center justify-center p-4",
+        useDashboardMotion
+          ? "transition-[background-color,backdrop-filter] duration-300 [transition-timing-function:cubic-bezier(.22,1,.36,1)]"
+          : "bg-black/60 transition-opacity duration-200 ease-out",
+        visible
+          ? useDashboardMotion ? "bg-black/65 backdrop-blur-[5px]" : "opacity-100"
+          : useDashboardMotion ? "bg-black/0 backdrop-blur-none" : "opacity-0"
       )}
       onClick={onClose}
+      role="presentation"
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          "w-full transition-[transform,opacity] duration-200 ease-out",
-          visible ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-[0.97] opacity-0"
+          "w-full will-change-[transform,opacity] transition-[transform,opacity]",
+          useDashboardMotion
+            ? "duration-300 [transition-timing-function:cubic-bezier(.16,1,.3,1)]"
+            : "duration-200 ease-out",
+          visible
+            ? "translate-y-0 scale-100 opacity-100"
+            : useDashboardMotion ? "translate-y-5 scale-[0.955] opacity-0" : "translate-y-2 scale-[0.97] opacity-0"
         )}
+        role="dialog"
+        aria-modal="true"
       >
         {children}
       </div>

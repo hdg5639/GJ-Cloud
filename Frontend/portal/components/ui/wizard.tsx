@@ -60,7 +60,8 @@ export function Wizard({
               >
                 <span
                   className={cn(
-                    "grid h-[27px] w-[27px] place-items-center rounded-full text-xs font-extrabold",
+                    "grid h-[27px] w-[27px] place-items-center rounded-full text-xs font-extrabold transition-[background-color,color,transform] duration-300",
+                    i === currentStep && "scale-110",
                     i <= currentStep ? "bg-brand text-[#0a0c08]" : "bg-white/[0.06] text-muted-soft"
                   )}
                 >
@@ -74,7 +75,7 @@ export function Wizard({
         </div>
 
         <div className="overflow-auto p-6">
-          <div className="mx-auto max-w-[1040px]">{children}</div>
+          <div key={steps[currentStep]?.key} className="wizard-step-enter mx-auto max-w-[1040px]">{children}</div>
         </div>
 
         <div className="flex items-center gap-2 border-t border-line bg-panel px-[22px] py-[15px]">{footer}</div>

@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api-client";
 import type { CollaborationResponse, CollaborationType, ScopeType, TagResponse } from "@/lib/types";
+import { Modal } from "@/components/ui/modal";
 
 interface Props {
+  open?: boolean;
   accessToken: string;
   scopeType: ScopeType;
   scopeId: string;
@@ -15,7 +17,7 @@ interface Props {
 
 const TYPE_LABELS: Record<CollaborationType, string> = { NOTE: "메모", NOTICE: "공지", REQUEST: "요청" };
 
-export default function CollaborationWriteModal({ accessToken, scopeType, scopeId, onClose, onSuccess, editing }: Props) {
+export default function CollaborationWriteModal({ open = true, accessToken, scopeType, scopeId, onClose, onSuccess, editing }: Props) {
   const [type, setType] = useState<CollaborationType>(editing?.type ?? "NOTE");
   const [tag, setTag] = useState(editing?.tag ?? "");
   const [title, setTitle] = useState(editing?.title ?? "");
@@ -26,14 +28,25 @@ export default function CollaborationWriteModal({ accessToken, scopeType, scopeI
   const tagTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!open) return;
+    // 같은 모달 인스턴스를 유지해야 닫힘 모션이 재생되므로, 열리는 시점에 편집 폼만 명시적으로 초기화한다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setType(editing?.type ?? "NOTE");
+    setTag(editing?.tag ?? "");
+    setTitle(editing?.title ?? "");
+    setContent(editing?.content ?? "");
+    setShowSuggestions(false);
+  }, [editing, open]);
+
+  useEffect(() => {
     if (tagTimer.current) clearTimeout(tagTimer.current);
-    if (!tag) { setTagSuggestions([]); return; }
+    if (!tag) return;
     tagTimer.current = setTimeout(() => {
       api.collab.searchTags(accessToken, scopeType, scopeId, tag)
         .then(setTagSuggestions)
         .catch(() => {});
     }, 300);
-  }, [tag]);
+  }, [accessToken, scopeId, scopeType, tag]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,8 +66,8 @@ export default function CollaborationWriteModal({ accessToken, scopeType, scopeI
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-panel border border-line rounded-xl shadow-xl w-full max-w-lg">
+    <Modal open={open} onClose={onClose}>
+      <div className="mx-auto w-full max-w-lg rounded-xl border border-line bg-panel shadow-2xl shadow-black/30">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <h2 className="text-sm font-medium text-foreground">{editing ? "협업 항목 수정" : "새 협업 항목"}</h2>
           <button onClick={onClose} className="text-muted-soft hover:text-muted text-lg leading-none">×</button>
@@ -89,14 +102,18 @@ export default function CollaborationWriteModal({ accessToken, scopeType, scopeI
               name="collab-tag"
               type="text"
               value={tag}
-              onChange={(e) => { setTag(e.target.value); setShowSuggestions(true); }}
+              onChange={(e) => {
+                setTag(e.target.value);
+                if (!e.target.value) setTagSuggestions([]);
+                setShowSuggestions(true);
+              }}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
               placeholder="예: port, email, cpu"
               className="w-full h-8 px-3 border border-line-strong bg-transparent text-foreground rounded-md text-sm"
             />
             {showSuggestions && tagSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-panel border border-line-strong rounded-md shadow-md z-10 overflow-hidden">
+              <div className="floating-box-enter absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-md border border-line-strong bg-panel shadow-md">
                 {tagSuggestions.map((s) => (
                   <button
                     key={s.id}
@@ -161,6 +178,6 @@ export default function CollaborationWriteModal({ accessToken, scopeType, scopeI
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

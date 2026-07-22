@@ -490,13 +490,13 @@ export default function OrganizationDetailPage() {
       )}
 
       {/* ── 협업 작성/수정 모달 ── */}
-      {showWrite && (
-        <CollaborationWriteModal
+      <CollaborationWriteModal
+          open={showWrite}
           accessToken={accessToken!}
           scopeType="ORGANIZATION"
           scopeId={id}
           editing={editingItem}
-          onClose={() => { setShowWrite(false); setEditingItem(undefined); }}
+          onClose={() => setShowWrite(false)}
           onSuccess={(item) => {
             if (editingItem) {
               handleItemUpdated(item);
@@ -506,8 +506,7 @@ export default function OrganizationDetailPage() {
             }
             setShowWrite(false);
           }}
-        />
-      )}
+      />
 
       {/* ── VM 연결 모달 ── */}
       <Modal open={showAddVm} onClose={() => setShowAddVm(false)}>

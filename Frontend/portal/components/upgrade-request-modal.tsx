@@ -4,14 +4,16 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { VmResponse, ProfileResponse } from "@/lib/types";
+import { Modal } from "@/components/ui/modal";
 
 interface Props {
+  open?: boolean;
   vm: VmResponse;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function UpgradeRequestModal({ vm, onClose, onSuccess }: Props) {
+export default function UpgradeRequestModal({ open = true, vm, onClose, onSuccess }: Props) {
   const { accessToken } = useAuth();
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,8 +51,8 @@ export default function UpgradeRequestModal({ vm, onClose, onSuccess }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-panel border border-line rounded-xl p-6 w-[420px]">
+    <Modal open={open} onClose={onClose}>
+      <div className="mx-auto w-full max-w-[420px] rounded-xl border border-line bg-panel p-6 shadow-2xl shadow-black/30">
         <h2 className="text-base font-medium text-foreground mb-4">플랜 변경</h2>
 
         <div className="space-y-3 mb-6">
@@ -101,6 +103,6 @@ export default function UpgradeRequestModal({ vm, onClose, onSuccess }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { VmResponse } from "@/lib/types";
+import { Modal } from "@/components/ui/modal";
 
 const PLAN_DISK = {
   FREE: { min: 20, max: 50,  step: 5 },
@@ -11,17 +12,27 @@ const PLAN_DISK = {
 } as const;
 
 interface Props {
+  open?: boolean;
   vm: VmResponse;
   onClose: () => void;
   onSuccess: (updated: VmResponse) => void;
 }
 
-export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
+export default function VmSpecModal({ open = true, vm, onClose, onSuccess }: Props) {
   const { accessToken } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<"FREE" | "PRO">(vm.planType);
   const [diskSizeGb, setDiskSizeGb] = useState(vm.diskSizeGb);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    // 모달을 다시 열 때 서버의 최신 VM 값으로 폼 초깃값을 동기화한다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedPlan(vm.planType);
+    setDiskSizeGb(vm.diskSizeGb);
+    setError(null);
+  }, [open, vm.diskSizeGb, vm.planType]);
 
   const planChanged = selectedPlan !== vm.planType;
 
@@ -65,8 +76,8 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-panel border border-line rounded-xl p-6 w-[440px]">
+    <Modal open={open} onClose={onClose}>
+      <div className="mx-auto w-full max-w-[440px] rounded-xl border border-line bg-panel p-6 shadow-2xl shadow-black/30">
         <h2 className="text-base font-medium text-foreground mb-5">스펙 변경</h2>
 
         {/* 플랜 선택 */}
@@ -161,6 +172,6 @@ export default function VmSpecModal({ vm, onClose, onSuccess }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
