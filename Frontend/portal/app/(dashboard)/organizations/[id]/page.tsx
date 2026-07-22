@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Table, Th, Td } from "@/components/ui/table";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { isValidVmName, VmNameInput } from "@/components/vm-name-input";
 
 const ROLE_LABEL: Record<MemberRole, string> = { OWNER: "소유자", ADMIN: "관리자", MEMBER: "멤버" };
 
@@ -200,6 +201,10 @@ export default function OrganizationDetailPage() {
     e.preventDefault();
     if (!accessToken) return;
     setCreateVmError(null);
+    if (!isValidVmName(createVmName)) {
+      setCreateVmError("인스턴스 이름은 영문, 숫자, 하이픈(-)만 사용할 수 있으며 하이픈으로 시작하거나 끝날 수 없습니다.");
+      return;
+    }
     setCreateVmLoading(true);
     try {
       const vm = await api.vm.create(accessToken, {
@@ -581,11 +586,11 @@ export default function OrganizationDetailPage() {
               </div>
               <form onSubmit={handleCreateVm} className="p-5 space-y-4">
                 <Field label="인스턴스 이름" htmlFor="org-create-vm-name">
-                  <Input
+                  <VmNameInput
                     id="org-create-vm-name"
                     name="org-create-vm-name"
                     value={createVmName}
-                    onChange={(e) => setCreateVmName(e.target.value)}
+                    onValueChange={setCreateVmName}
                     placeholder="my-server"
                     required
                   />
@@ -679,7 +684,7 @@ export default function OrganizationDetailPage() {
                   <Button type="button" onClick={() => setShowCreateVm(false)}>
                     취소
                   </Button>
-                  <Button type="submit" variant="primary" disabled={createVmLoading || !createVmName || !createVmSshKeyId}>
+                  <Button type="submit" variant="primary" disabled={createVmLoading || !isValidVmName(createVmName) || !createVmSshKeyId}>
                     {createVmLoading ? "생성 중..." : "생성 및 추가"}
                   </Button>
                 </div>

@@ -6,8 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { VmAvailabilityResponse, SshKeyResponse } from "@/lib/types";
 import { Card } from "@/components/ui/panel";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { isValidVmName, VmNameInput } from "@/components/vm-name-input";
 
 const PLAN_INFO = {
   FREE: { cores: 4, memory: "5GB", diskMin: 20, diskMax: 50 },
@@ -51,6 +52,10 @@ export default function CreateInstancePage() {
   async function handleSubmit() {
     if (!accessToken) return;
     setError(null);
+    if (!isValidVmName(name)) {
+      setError("인스턴스 이름은 영문, 숫자, 하이픈(-)만 사용할 수 있으며 하이픈으로 시작하거나 끝날 수 없습니다.");
+      return;
+    }
     setLoading(true);
     try {
       const vm = await api.vm.create(accessToken, { name, planType, diskSizeGb, sshKeyId });
@@ -83,11 +88,11 @@ export default function CreateInstancePage() {
         <p className="mb-5 text-sm text-muted">플랜과 디스크 크기를 선택하세요</p>
 
         <Field label="인스턴스 이름" htmlFor="new-instance-name">
-          <Input
+          <VmNameInput
             id="new-instance-name"
             name="new-instance-name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onValueChange={setName}
             placeholder="my-server"
           />
         </Field>
@@ -199,7 +204,7 @@ export default function CreateInstancePage() {
         <Button
           variant="primary"
           onClick={handleSubmit}
-          disabled={loading || !name || !sshKeyId}
+          disabled={loading || !isValidVmName(name) || !sshKeyId}
           className="w-full"
         >
           {loading ? "생성 중..." : "인스턴스 생성"}
