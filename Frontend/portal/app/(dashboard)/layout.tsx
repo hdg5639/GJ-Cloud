@@ -29,10 +29,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [accessToken, isLoading, router]);
 
+  // pathname을 의존성에 넣어 페이지 이동마다 재조회 — VM 생성 후 목록/상세로 이동할 때 이 레이아웃
+  // 자체는 그대로 유지(리마운트 안 됨)돼서, 안 그러면 새로고침 전까진 개수가 그대로 남아있었음.
   useEffect(() => {
     if (!accessToken) return;
     api.user.usage(accessToken).then(setUsage).catch(() => {});
-  }, [accessToken]);
+  }, [accessToken, pathname]);
 
   // Modal은 createPortal로 document.body에 직접 붙기 때문에 이 레이아웃 안쪽에
   // .theme-dark를 걸어봤자 소용없음 — body 자체에도 걸어줘야 포탈된 콘텐츠까지 다크 토큰을 상속받음.
