@@ -12,6 +12,7 @@ import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select } from "@/components/ui/field";
 import { StatusBadge } from "@/components/ui/badge";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { ExpandableText } from "@/components/ui/expandable-text";
 
 type Tab = "containers" | "images" | "networks" | "compose";
 
@@ -330,12 +331,18 @@ export default function DockerManagementPage() {
                     const isBusy = busyId === c.ID;
                     return (
                       <tr key={c.ID} className="hover:bg-white/[0.03]">
-                        <Td className="text-foreground">{c.Names}</Td>
-                        <Td className="text-muted-soft font-mono text-xs">{c.Image}</Td>
+                        <Td className="max-w-[200px] text-foreground">
+                          <ExpandableText text={c.Names} />
+                        </Td>
+                        <Td className="max-w-xs font-mono text-xs text-muted-soft">
+                          <ExpandableText text={c.Image} />
+                        </Td>
                         <Td>
                           <StatusBadge tone={STATE_TONE[state] ?? "off"}>{c.Status}</StatusBadge>
                         </Td>
-                        <Td className="text-muted-soft text-xs">{c.Ports || "—"}</Td>
+                        <Td className="max-w-[220px] text-xs text-muted-soft">
+                          <ExpandableText text={c.Ports || "—"} />
+                        </Td>
                         <Td>
                           <div className="flex items-center gap-2 text-xs">
                             {isRunning ? (
@@ -373,8 +380,12 @@ export default function DockerManagementPage() {
                 <tbody>
                   {images.map((img) => (
                     <tr key={img.ID} className="hover:bg-white/[0.03]">
-                      <Td className="text-foreground font-mono text-xs">{img.Repository}</Td>
-                      <Td className="text-muted-soft font-mono text-xs">{img.Tag}</Td>
+                      <Td className="max-w-xs font-mono text-xs text-foreground">
+                        <ExpandableText text={img.Repository} />
+                      </Td>
+                      <Td className="max-w-[160px] font-mono text-xs text-muted-soft">
+                        <ExpandableText text={img.Tag} />
+                      </Td>
                       <Td className="text-muted">{img.Size}</Td>
                       <Td className="text-muted text-xs">{img.CreatedAt}</Td>
                       <Td>
@@ -438,9 +449,13 @@ export default function DockerManagementPage() {
               <tbody>
                 {composeStacks.map((stack) => (
                   <tr key={stack.Name} className="hover:bg-white/[0.03]">
-                    <Td className="text-foreground">{stack.Name}</Td>
+                    <Td className="max-w-[200px] text-foreground">
+                      <ExpandableText text={stack.Name} />
+                    </Td>
                     <Td className="text-muted">{stack.Status}</Td>
-                    <Td className="text-muted font-mono text-xs truncate max-w-xs">{stack.ConfigFiles}</Td>
+                    <Td className="max-w-xs font-mono text-xs text-muted">
+                      <ExpandableText text={stack.ConfigFiles} />
+                    </Td>
                   </tr>
                 ))}
               </tbody>

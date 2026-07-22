@@ -127,7 +127,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-[238px] shrink-0 -translate-x-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden border-r border-line bg-panel px-5 pb-[18px] pt-[26px] will-change-[width,transform] transition-[width,transform,padding] duration-300 [transition-timing-function:cubic-bezier(.22,1,.36,1)] lg:static lg:translate-x-0",
           drawerOpen && "translate-x-0",
-          collapsed && "lg:w-[76px] lg:px-3"
+          // 접힐 땐 라벨 텍스트가 먼저 사라진 다음(딜레이 없이 빠르게) 패널이 줄어들고, 펼칠 땐 패널이
+          // 먼저 넓어진 다음 텍스트가 나타나야 "텍스트가 잠깐 튀어보이는" 느낌이 없음 — 그래서 패널
+          // 폭 트랜지션에 접힐 때만 딜레이를 줘서 텍스트(딜레이 없음)보다 살짝 늦게 시작하게 함.
+          collapsed ? "lg:w-[76px] lg:px-3 lg:delay-[70ms]" : "lg:delay-0"
         )}
       >
         <div className="relative flex h-11 shrink-0 items-center">
@@ -190,11 +193,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </span>
                 <span
                   className={cn(
-                    "overflow-hidden whitespace-nowrap transition-[max-width,opacity,transform] duration-300",
-                    collapsed ? "lg:max-w-0 lg:-translate-x-2 lg:opacity-0" : "max-w-[160px] translate-x-0 opacity-100"
+                    "overflow-hidden whitespace-nowrap transition-[max-width] duration-200",
+                    // 글자가 안 보이게(투명해지게) 먼저 되고 나서 박스(max-width)가 닫혀야 "잘려나가는"
+                    // 느낌 없이 자연스러움 — 그래서 바깥쪽(폭)과 안쪽(투명도)의 딜레이를 서로 다르게 둠.
+                    collapsed ? "lg:max-w-0 lg:delay-[70ms]" : "max-w-[160px] lg:delay-0"
                   )}
                 >
-                  {item.label}
+                  <span
+                    className={cn(
+                      "inline-block transition-[opacity,transform] duration-100",
+                      collapsed
+                        ? "lg:-translate-x-2 lg:opacity-0 lg:delay-0"
+                        : "translate-x-0 opacity-100 duration-150 lg:delay-150"
+                    )}
+                  >
+                    {item.label}
+                  </span>
                 </span>
               </Link>
             );
@@ -232,7 +246,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         )}
 
-        <div ref={profileMenuRef} className={cn("relative flex items-center gap-2.5 px-[5px] py-2", collapsed && "lg:justify-center")}>
+        <div
+          ref={profileMenuRef}
+          className={cn(
+            "relative flex items-center gap-2.5 px-[5px] py-2 transition-[gap] duration-150",
+            // gap이 남아있으면 접혔을 때 아바타가 gap 절반만큼 중앙에서 밀려 보임(네비 아이콘과 동일한 이슈)
+            collapsed && "lg:justify-center lg:gap-0"
+          )}
+        >
           <button
             type="button"
             onClick={() => collapsed && setProfileMenuOpen((prev) => !prev)}
@@ -243,15 +264,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               collapsed && "lg:hover:scale-105 lg:focus-visible:ring-2 lg:focus-visible:ring-brand/60",
               collapsed && profileMenuOpen && "lg:ring-2 lg:ring-brand/40"
             )}
-            title={collapsed ? (user?.email ?? undefined) : undefined}
+            title={collapsed ? (profile?.nickname ?? user?.email ?? undefined) : undefined}
           >
             <Avatar nickname={profile?.nickname} email={user?.email} profileImageUrl={profile?.profileImageUrl} sizePx={34} />
           </button>
-          <div className={cn("min-w-0 flex-1 overflow-hidden", collapsed && "lg:hidden")}>
-            <strong className="block truncate text-sm">{user?.email ?? ""}</strong>
-            <button onClick={handleLogout} className="mt-0.5 block text-xs text-muted-soft hover:text-muted">
-              로그아웃
-            </button>
+          <div
+            className={cn(
+              "overflow-hidden whitespace-nowrap transition-[max-width] duration-200",
+              collapsed ? "lg:max-w-0 lg:delay-[70ms]" : "max-w-[150px] flex-1 lg:delay-0"
+            )}
+          >
+            <div
+              className={cn(
+                "transition-opacity duration-100",
+                collapsed ? "lg:opacity-0 lg:delay-0" : "opacity-100 duration-150 lg:delay-150"
+              )}
+            >
+              <strong className="block truncate text-sm">{profile?.nickname ?? user?.email ?? ""}</strong>
+              <button onClick={handleLogout} className="mt-0.5 block text-xs text-muted-soft hover:text-muted">
+                로그아웃
+              </button>
+            </div>
           </div>
           <div
             className={cn(
