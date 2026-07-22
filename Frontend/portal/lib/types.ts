@@ -314,6 +314,8 @@ export interface ExposedRoute {
   protocol: string;
   visibility: string;
   nickname: string;
+  // PRO 플랜 전용 — 비워두면 기존처럼 {서브도메인}-{닉네임}으로 자동 생성
+  customSubdomain?: string;
 }
 
 export interface HealthCheck {

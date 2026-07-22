@@ -7,6 +7,8 @@ public record DeploymentRouteItem(
         int port,
         String protocol,
         String visibility,
-        String nickname
+        String nickname,
+        // PRO 전용 커스텀 서브도메인 — null/빈 값이면 기존처럼 자동 생성(PortServiceImpl.addDeploymentRoute 참고)
+        String customSubdomain
 ) {
 }

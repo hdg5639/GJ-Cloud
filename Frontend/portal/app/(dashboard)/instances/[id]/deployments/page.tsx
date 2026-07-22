@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
@@ -42,6 +42,8 @@ const STATUS_TONE: Record<string, "ok" | "off"> = {
   FAILED: "off",
   ROLLING_BACK: "off",
   ROLLED_BACK: "off",
+  STOPPING: "off",
+  STOPPED: "off",
 };
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
@@ -65,7 +67,7 @@ function retryStorageKey(vmId: string): string {
   return `retryDeployment:${vmId}`;
 }
 
-const emptyExposedRoute = (): ExposedRoute => ({ serviceName: "", port: 80, protocol: "HTTP", visibility: "PUBLIC", nickname: "" });
+const emptyExposedRoute = (): ExposedRoute => ({ serviceName: "", port: 80, protocol: "HTTP", visibility: "PUBLIC", nickname: "", customSubdomain: "" });
 const emptyHealthCheck = (): HealthCheck => ({ serviceName: "", path: "/", hostPort: undefined, containerPort: undefined });
 const emptyEnvFile = (): EnvironmentFile => ({ vmPath: ".env", content: "" });
 const emptyServiceCard = (): ServiceCard => ({ name: "", runtime: "docker", context: ".", containerPort: 3000, expose: true });
@@ -119,6 +121,12 @@ export default function DeploymentsPage() {
   const [envFiles, setEnvFiles] = useState<EnvironmentFile[]>([]);
   const [routes, setRoutes] = useState<ExposedRoute[]>([]);
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
+  // PRO 전용 커스텀 CNAME — 라우트별로 가용성 체크 상태를 따로 들고 있어야 함(여러 서비스 노출 가능)
+  const [planType, setPlanType] = useState<string | null>(null);
+  const [routeSubdomainCheck, setRouteSubdomainCheck] = useState<
+    Record<number, "idle" | "checking" | "available" | "taken" | "reserved" | "pro-only">
+  >({});
+  const routeSubdomainTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   // AI 자동생성
   const [serviceCards, setServiceCards] = useState<ServiceCard[]>([emptyServiceCard()]);
@@ -133,6 +141,26 @@ export default function DeploymentsPage() {
   const [unresolvedFields, setUnresolvedFields] = useState<UnresolvedField[]>([]);
   const [evidenceRefs, setEvidenceRefs] = useState<string[]>([]);
   const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
+
+  function handleRouteCustomSubdomainChange(index: number, value: string) {
+    const lower = value.toLowerCase();
+    setRoutes((prev) => prev.map((x, xi) => (xi === index ? { ...x, customSubdomain: lower } : x)));
+    setRouteSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
+    if (routeSubdomainTimers.current[index]) clearTimeout(routeSubdomainTimers.current[index]);
+    if (!lower || !accessToken) return;
+    setRouteSubdomainCheck((prev) => ({ ...prev, [index]: "checking" }));
+    routeSubdomainTimers.current[index] = setTimeout(async () => {
+      try {
+        const result = await api.vm.checkSubdomain(accessToken, vmId, lower);
+        setRouteSubdomainCheck((prev) => ({
+          ...prev,
+          [index]: result.available ? "available" : ((result.reason as "taken" | "reserved" | "pro-only") ?? "taken"),
+        }));
+      } catch {
+        setRouteSubdomainCheck((prev) => ({ ...prev, [index]: "taken" }));
+      }
+    }, 500);
+  }
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -158,6 +186,12 @@ export default function DeploymentsPage() {
     if (!showCreate || !accessToken) return;
     api.ops.docker.listNetworks(accessToken, vmId).then(setDockerNetworks).catch(() => setDockerNetworks([]));
   }, [showCreate, accessToken, vmId]);
+
+  // 라우트 편집 UI의 PRO 커스텀 CNAME 게이팅에 필요 — 기존 포트 추가 폼과 동일하게 플랜을 조회해둠
+  useEffect(() => {
+    if (!showCreate || !accessToken) return;
+    api.user.profile(accessToken).then((p) => setPlanType(p.planType)).catch(() => {});
+  }, [showCreate, accessToken]);
 
   // SEC-010: 배포 상세 페이지의 "재시도" 버튼에서 넘어올 때 복호화된 스펙(시크릿 포함 가능)을
   // sessionStorage에 담지 않고 deploymentId만 전달받아, 여기서 handleRetry로 직접 새로 조회한다.
@@ -243,6 +277,10 @@ export default function DeploymentsPage() {
   async function handleCreateFromCompose(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken || !repoUrl || !branch || !composeContent) return;
+    const hasUncheckedCustomSubdomain = routes.some(
+      (r, i) => r.customSubdomain && routeSubdomainCheck[i] !== "available"
+    );
+    if (hasUncheckedCustomSubdomain) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -604,22 +642,53 @@ export default function DeploymentsPage() {
                             <button type="button" onClick={() => setRoutes((prev) => [...prev, emptyExposedRoute()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
                           </div>
                           <p className="mb-1.5 text-[11px] text-muted-soft">외부에서 접근 가능하게 노출할 서비스 포트를 지정합니다.</p>
-                          {routes.map((r, i) => (
-                            <div key={i} className="grid grid-cols-6 gap-1.5 mb-2 items-center">
-                              <input value={r.serviceName} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                              <input type="number" value={r.port} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, port: Number(e.target.value) } : x)))} placeholder="포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                              <select value={r.protocol} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, protocol: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
-                                <option value="HTTP">HTTP</option>
-                                <option value="TCP">TCP</option>
-                              </select>
-                              <select value={r.visibility} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, visibility: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
-                                <option value="PUBLIC">공개</option>
-                                <option value="PRIVATE">비공개</option>
-                              </select>
-                              <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                              <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
-                            </div>
-                          ))}
+                          {routes.map((r, i) => {
+                            const check = routeSubdomainCheck[i] ?? "idle";
+                            const isPro = planType === "PRO";
+                            return (
+                              <div key={i} className="mb-2">
+                                <div className="grid grid-cols-6 gap-1.5 items-center">
+                                  <input value={r.serviceName} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                                  <input type="number" value={r.port} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, port: Number(e.target.value) } : x)))} placeholder="포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                                  <select value={r.protocol} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, protocol: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
+                                    <option value="HTTP">HTTP</option>
+                                    <option value="TCP">TCP</option>
+                                  </select>
+                                  <select value={r.visibility} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, visibility: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
+                                    <option value="PUBLIC">공개</option>
+                                    <option value="PRIVATE">비공개</option>
+                                  </select>
+                                  <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                                  <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
+                                </div>
+                                <div className={cn("mt-1 flex items-center gap-1.5", !isPro && "opacity-50")}>
+                                  <input
+                                    value={r.customSubdomain ?? ""}
+                                    onChange={(e) => handleRouteCustomSubdomainChange(i, e.target.value)}
+                                    placeholder="커스텀 서브도메인 (선택)"
+                                    disabled={!isPro}
+                                    className="h-7 flex-1 px-2 border border-line-strong rounded text-xs disabled:pointer-events-none"
+                                  />
+                                  {!isPro ? (
+                                    <span className="shrink-0 text-[10px] font-bold text-[#e8b657] bg-[#e8b657]/10 border border-[#e8b657]/25 px-1.5 py-0.5 rounded">PRO 전용</span>
+                                  ) : (
+                                    r.customSubdomain && (
+                                      <span className={cn(
+                                        "shrink-0 text-[10px]",
+                                        check === "available" ? "text-brand-strong" : check === "checking" ? "text-muted-soft" : "text-danger"
+                                      )}>
+                                        {check === "checking" && "확인 중..."}
+                                        {check === "available" && "✓ 사용 가능"}
+                                        {check === "taken" && "이미 사용 중"}
+                                        {check === "reserved" && "예약된 이름"}
+                                        {check === "pro-only" && "PRO 전용"}
+                                      </span>
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* 헬스체크 */}
@@ -859,7 +928,15 @@ export default function DeploymentsPage() {
             </span>
             <Button onClick={closeCreate}>취소</Button>
             {createTab === "compose" ? (
-              <Button form="deploy-compose-form" type="submit" variant="primary" disabled={submitting || !repoUrl || !branch || !composeContent}>
+              <Button
+                form="deploy-compose-form"
+                type="submit"
+                variant="primary"
+                disabled={
+                  submitting || !repoUrl || !branch || !composeContent ||
+                  routes.some((r, i) => r.customSubdomain && routeSubdomainCheck[i] !== "available")
+                }
+              >
                 {submitting ? "배포 시작 중..." : "배포 시작"}
               </Button>
             ) : (

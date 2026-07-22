@@ -19,5 +19,6 @@ public interface PortService {
     Mono<PortResponse> removePortAccessEmail(String userId, String userEmail, UUID vmId, UUID portId, String targetEmail);
     Mono<Void> teardownAllPortsForVm(UUID vmId);
     Mono<SubdomainCheckResponse> checkSubdomainAvailable(String bearerToken, String subdomain);
-    Mono<Void> syncDeploymentRoutes(String requesterId, String requesterEmail, UUID vmId, String deploymentId, List<DeploymentRouteItem> routes);
+    Mono<Void> syncDeploymentRoutes(String requesterId, String requesterEmail, UUID vmId, String deploymentId,
+                                     List<DeploymentRouteItem> routes, String bearerToken);
 }

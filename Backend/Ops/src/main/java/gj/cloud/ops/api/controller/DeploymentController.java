@@ -9,6 +9,7 @@ import gj.cloud.ops.application.deployment.dto.ComposeSpecResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentCreateRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentFromSpecRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
+import gj.cloud.ops.application.deployment.dto.DeploymentTeardownRequest;
 import gj.cloud.ops.application.deployment.dto.GenerateDeploymentSpecRequest;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
@@ -181,6 +182,23 @@ public class DeploymentController {
         DeploymentEntity target = findOwned(vmId, deploymentId);
         DeploymentEntity rollbackEntity = deploymentExecutor.rollbackTo(bearerToken, vmId.toString(), target);
         return ApiResponse.ok(DeploymentResponse.from(rollbackEntity));
+    }
+
+    @Operation(summary = "배포 내리기", description = "현재 활성화된(최신 SUCCEEDED) 배포의 컨테이너를 중지/제거합니다. "
+            + "removeRouteNicknames에 닉네임을 넣으면 그 노출 포트(Cloudflare 라우트)도 함께 정리하고, "
+            + "비워두면 컨테이너만 내리고 포트는 그대로 둡니다.")
+    @PostMapping("/{deploymentId}/teardown")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<DeploymentResponse> teardown(
+            HttpServletRequest request, @PathVariable UUID vmId, @PathVariable String deploymentId,
+            @RequestBody(required = false) DeploymentTeardownRequest body
+    ) {
+        requireDeployPermission(request, vmId);
+        String bearerToken = extractToken(request);
+        DeploymentEntity target = findOwned(vmId, deploymentId);
+        List<String> removeRouteNicknames = body != null ? body.removeRouteNicknames() : List.of();
+        DeploymentEntity stopping = deploymentExecutor.teardown(bearerToken, vmId.toString(), target, removeRouteNicknames);
+        return ApiResponse.ok(DeploymentResponse.from(stopping));
     }
 
     // 주의: EventSource는 커스텀 Authorization 헤더를 못 붙이지만, 이 엔드포인트는 아직 ?token= 같은

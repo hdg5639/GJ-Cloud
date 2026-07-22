@@ -35,6 +35,8 @@ public enum OpsErrorCode {
     DEPLOYMENT_IN_PROGRESS(HttpStatus.CONFLICT, "이미 배포가 진행 중입니다."),
     DEPLOYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "배포 이력을 찾을 수 없습니다."),
     DEPLOYMENT_ROLLBACK_TARGET_NOT_SUCCEEDED(HttpStatus.BAD_REQUEST, "성공한 배포로만 롤백할 수 있습니다."),
+    DEPLOYMENT_TEARDOWN_TARGET_INVALID(HttpStatus.BAD_REQUEST, "현재 활성화된 배포만 내릴 수 있습니다."),
+    DEPLOYMENT_TEARDOWN_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "배포 내리기에 실패했습니다."),
 
     // Docker 관리
     DOCKER_NOT_INSTALLED(HttpStatus.BAD_REQUEST, "VM에 Docker가 설치되어 있지 않습니다."),

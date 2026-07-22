@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
+import type { PortResponse } from "@/lib/api-client";
 import type { DeploymentResponse, DeploymentEventPayload } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import { StatusBadge } from "@/components/ui/badge";
 import { StatGrid, StatCard } from "@/components/ui/stat-card";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
   QUEUED: "off",
@@ -22,10 +25,12 @@ const STATUS_TONE: Record<string, "ok" | "off"> = {
   FAILED: "off",
   ROLLING_BACK: "off",
   ROLLED_BACK: "off",
+  STOPPING: "off",
+  STOPPED: "off",
 };
 
 const IN_PROGRESS_STATUSES = new Set([
-  "QUEUED", "CLONING", "UPLOADING", "VALIDATING", "BUILDING", "SWAPPING", "HEALTH_CHECKING", "ROUTING", "ROLLING_BACK",
+  "QUEUED", "CLONING", "UPLOADING", "VALIDATING", "BUILDING", "SWAPPING", "HEALTH_CHECKING", "ROUTING", "ROLLING_BACK", "STOPPING",
 ]);
 
 const EVENT_TYPE_STYLE: Record<string, string> = {
@@ -55,6 +60,11 @@ export default function DeploymentDetailPage() {
   const [events, setEvents] = useState<DeploymentEventPayload[]>([]);
   const [connected, setConnected] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
+  const [showTeardown, setShowTeardown] = useState(false);
+  const [teardownPorts, setTeardownPorts] = useState<PortResponse[]>([]);
+  const [loadingTeardownPorts, setLoadingTeardownPorts] = useState(false);
+  const [selectedRemoveIds, setSelectedRemoveIds] = useState<Set<string>>(new Set());
+  const [tearingDown, setTearingDown] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const stopRef = useRef<(() => void) | null>(null);
 
@@ -113,6 +123,58 @@ export default function DeploymentDetailPage() {
     }
   }
 
+  // 배포가 만든 포트(deploymentId 있는 것)만 선택 삭제 후보로 보여줌 — 사용자가 직접 추가한 포트는 안 건드림
+  async function openTeardownModal() {
+    setShowTeardown(true);
+    setSelectedRemoveIds(new Set());
+    if (!accessToken) return;
+    setLoadingTeardownPorts(true);
+    try {
+      const allPorts = await api.vm.getPorts(accessToken, vmId);
+      setTeardownPorts(allPorts.filter((p) => p.deploymentId != null));
+    } catch {
+      setTeardownPorts([]);
+    } finally {
+      setLoadingTeardownPorts(false);
+    }
+  }
+
+  function toggleSelectAllPorts() {
+    setSelectedRemoveIds((prev) =>
+      prev.size === teardownPorts.length ? new Set() : new Set(teardownPorts.map((p) => p.id))
+    );
+  }
+
+  function togglePortSelection(portId: string) {
+    setSelectedRemoveIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(portId)) {
+        next.delete(portId);
+      } else {
+        next.add(portId);
+      }
+      return next;
+    });
+  }
+
+  async function handleTeardownConfirm() {
+    if (!accessToken) return;
+    setTearingDown(true);
+    setError(null);
+    try {
+      const removeRouteNicknames = teardownPorts
+        .filter((p) => selectedRemoveIds.has(p.id))
+        .map((p) => p.nickname);
+      const updated = await api.ops.deployments.teardown(accessToken, vmId, deploymentId, removeRouteNicknames);
+      setDeployment(updated);
+      setShowTeardown(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "배포 내리기에 실패했습니다.");
+    } finally {
+      setTearingDown(false);
+    }
+  }
+
   if (!accessToken || loading) return <PageLoader />;
   if (!deployment) {
     return (
@@ -149,8 +211,13 @@ export default function DeploymentDetailPage() {
             </button>
           )}
           {deployment.status === "SUCCEEDED" && (
-            <button onClick={handleRollback} disabled={rollingBack} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-muted transition-colors hover:bg-white/[0.06] disabled:opacity-50 rounded-r-panel">
+            <button onClick={handleRollback} disabled={rollingBack} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-muted transition-colors hover:bg-white/[0.06] disabled:opacity-50 border-r border-line">
               {rollingBack ? "롤백 요청 중..." : "이 배포로 롤백"}
+            </button>
+          )}
+          {deployment.status === "SUCCEEDED" && (
+            <button onClick={openTeardownModal} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm text-danger transition-colors hover:bg-danger/10 rounded-r-panel">
+              내리기
             </button>
           )}
         </div>
@@ -191,6 +258,55 @@ export default function DeploymentDetailPage() {
           </div>
         )}
       </div>
+
+      <Modal open={showTeardown} onClose={() => !tearingDown && setShowTeardown(false)}>
+        <div className="w-full max-w-[480px] rounded-panel border border-line bg-panel p-5">
+          <h2 className="mb-1 text-base font-bold text-danger">배포 내리기</h2>
+          <p className="mb-4 text-xs text-muted">
+            이 VM에서 실행 중인 컨테이너를 중지/제거합니다. 아래에서 선택한 노출 포트는 함께 삭제되고,
+            선택하지 않은 포트는 그대로 유지됩니다(컨테이너가 없으니 접속은 안 됨).
+          </p>
+
+          {loadingTeardownPorts ? (
+            <p className="mb-4 text-xs text-muted-soft">포트 목록 불러오는 중...</p>
+          ) : teardownPorts.length === 0 ? (
+            <p className="mb-4 text-xs text-muted-soft">이 배포로 만들어진 노출 포트가 없습니다.</p>
+          ) : (
+            <div className="mb-4 rounded-[10px] border border-line-strong">
+              <label className="flex items-center gap-2 border-b border-line px-3 py-2 text-xs font-bold text-muted">
+                <input
+                  type="checkbox"
+                  checked={selectedRemoveIds.size === teardownPorts.length}
+                  onChange={toggleSelectAllPorts}
+                />
+                전체 선택 (선택한 포트만 함께 삭제)
+              </label>
+              <div className="max-h-[220px] overflow-y-auto">
+                {teardownPorts.map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-white/[0.03]">
+                    <input
+                      type="checkbox"
+                      checked={selectedRemoveIds.has(p.id)}
+                      onChange={() => togglePortSelection(p.id)}
+                    />
+                    <span className="font-mono">{p.fullDomain}</span>
+                    <span className="text-muted-soft">:{p.port}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button size="small" onClick={() => setShowTeardown(false)} disabled={tearingDown}>
+              취소
+            </Button>
+            <Button variant="danger-solid" size="small" onClick={handleTeardownConfirm} disabled={tearingDown}>
+              {tearingDown ? "내리는 중..." : "내리기"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

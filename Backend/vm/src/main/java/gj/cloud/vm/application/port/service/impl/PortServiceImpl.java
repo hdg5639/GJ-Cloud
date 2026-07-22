@@ -278,7 +278,7 @@ public class PortServiceImpl implements PortService {
     // 사용자가 수동으로 추가한 포트는 절대 건드리지 않음.
     @Override
     public Mono<Void> syncDeploymentRoutes(String requesterId, String requesterEmail, UUID vmId,
-                                            String deploymentId, List<DeploymentRouteItem> routes) {
+                                            String deploymentId, List<DeploymentRouteItem> routes, String bearerToken) {
         return vmRepository.findById(vmId)
                 .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
                 .filter(vm -> vm.getDeletedAt() == null)
@@ -311,7 +311,7 @@ public class PortServiceImpl implements PortService {
                                     .then();
 
                             Mono<Void> addMono = Flux.fromIterable(toAdd)
-                                    .concatMap(route -> addDeploymentRoute(vm, deploymentId, route, requesterEmail))
+                                    .concatMap(route -> addDeploymentRoute(vm, deploymentId, route, requesterEmail, bearerToken))
                                     .then();
 
                             return removeMono.then(addMono);
@@ -319,7 +319,8 @@ public class PortServiceImpl implements PortService {
                 );
     }
 
-    private Mono<Void> addDeploymentRoute(VmEntity vm, String deploymentId, DeploymentRouteItem route, String requesterEmail) {
+    private Mono<Void> addDeploymentRoute(VmEntity vm, String deploymentId, DeploymentRouteItem route,
+                                           String requesterEmail, String bearerToken) {
         Protocol protocol;
         Visibility visibility;
         try {
@@ -329,8 +330,15 @@ public class PortServiceImpl implements PortService {
             return Mono.error(new VmException(VmErrorCode.INVALID_ROUTE_SPEC));
         }
 
-        String subdomain = vm.getSubdomain() + "-" + route.nickname();
+        Mono<String> subdomainMono = (route.customSubdomain() != null && !route.customSubdomain().isBlank())
+                ? validateCustomSubdomain(bearerToken, route.customSubdomain()).thenReturn(route.customSubdomain())
+                : Mono.just(vm.getSubdomain() + "-" + route.nickname());
 
+        return subdomainMono.flatMap(subdomain -> addDeploymentRouteWithSubdomain(vm, deploymentId, route, requesterEmail, protocol, visibility, subdomain));
+    }
+
+    private Mono<Void> addDeploymentRouteWithSubdomain(VmEntity vm, String deploymentId, DeploymentRouteItem route,
+                                                        String requesterEmail, Protocol protocol, Visibility visibility, String subdomain) {
         return vmPortRepository.countByVmId(vm.getId())
                 .flatMap(count -> {
                     if (count >= PORT_MAX_COUNT) {

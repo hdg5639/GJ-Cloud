@@ -6,6 +6,9 @@ public record ExposedRoute(
         int port,
         String protocol,
         String visibility,
-        String nickname
+        String nickname,
+        // PRO 플랜 전용 커스텀 서브도메인 — null/빈 값이면 기존처럼 {vm.subdomain}-{nickname}을 자동 생성.
+        // 검증(예약어/PRO 여부/중복)은 vm 서비스의 기존 PortService.validateCustomSubdomain()이 그대로 수행.
+        String customSubdomain
 ) {
 }

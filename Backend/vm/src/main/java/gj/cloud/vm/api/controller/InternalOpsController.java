@@ -12,6 +12,7 @@ import gj.cloud.vm.global.security.VmPrincipal;
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -57,10 +59,19 @@ public class InternalOpsController {
     public Mono<ApiResponse<Void>> syncDeploymentRoutes(
             @PathVariable UUID vmId,
             @AuthenticationPrincipal VmPrincipal principal,
-            @Valid @RequestBody DeploymentRoutesSyncRequest request
+            @Valid @RequestBody DeploymentRoutesSyncRequest request,
+            ServerWebExchange exchange
     ) {
+        // PRO 커스텀 CNAME 검증(User 서비스 plan 조회)에 필요 — 이 토큰은 Ops가 그대로 포워딩한 것이라
+        // aud=ops-service이고, User 쪽 InternalPlanJwtValidator가 이 audience를 허용하도록 완화돼 있음.
+        String bearerToken = extractToken(exchange);
         return portService.syncDeploymentRoutes(principal.userId(), principal.email(), vmId,
-                        request.deploymentId(), request.routes())
+                        request.deploymentId(), request.routes(), bearerToken)
                 .thenReturn(ApiResponse.<Void>ok(null));
+    }
+
+    private String extractToken(ServerWebExchange exchange) {
+        String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        return (header != null && header.startsWith("Bearer ")) ? header.substring(7) : "";
     }
 }

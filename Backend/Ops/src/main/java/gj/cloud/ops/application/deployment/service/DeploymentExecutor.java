@@ -172,6 +172,90 @@ public class DeploymentExecutor {
         return rollbackEntity;
     }
 
+    // 배포마다 컴포즈 프로젝트를 새로 만드는 게 아니라 VM당 하나(gj_{vmId})를 계속 갱신하는 구조라(D.7,
+    // appId=vmId), "내리기"는 배포 이력 한 건이 아니라 그 VM에서 지금 떠 있는 것 자체를 내리는 동작이다 —
+    // 그래서 대상이 그 VM의 최신 SUCCEEDED 배포인지(=지금 실제로 떠 있는 것인지) 먼저 확인한다.
+    public DeploymentEntity teardown(String bearerToken, String vmId, DeploymentEntity target, List<String> removeRouteNicknames) {
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
+        if (!context.hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+        if (context.internalIp() == null || !"RUNNING".equals(context.status())) {
+            throw new OpsException(OpsErrorCode.VM_NOT_RUNNING);
+        }
+        if (target.getStatus() != DeploymentStatus.SUCCEEDED) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_TEARDOWN_TARGET_INVALID);
+        }
+        String latestSucceededId = deploymentRepository
+                .findTopByVmIdAndStatusOrderByCreatedAtDesc(vmId, DeploymentStatus.SUCCEEDED)
+                .map(DeploymentEntity::getId)
+                .orElse(null);
+        if (!target.getId().equals(latestSucceededId)) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_TEARDOWN_TARGET_INVALID);
+        }
+
+        if (!lockService.tryLock(vmId, target.getId())) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
+        }
+        DeploymentEntity stopping = deploymentRepository.save(target.withStatus(DeploymentStatus.STOPPING));
+        String deploymentId = stopping.getId();
+        String internalIp = context.internalIp();
+        List<String> nicknamesToRemove = removeRouteNicknames != null ? removeRouteNicknames : List.of();
+        deploymentTaskExecutor.execute(() -> runTeardown(deploymentId, vmId, internalIp, bearerToken, nicknamesToRemove));
+
+        return stopping;
+    }
+
+    private void runTeardown(String deploymentId, String appId, String internalIp, String bearerToken, List<String> removeRouteNicknames) {
+        Session session = null;
+        try {
+            session = sshSessionFactory.createSession(appId, internalIp);
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "컨테이너 중지 중...");
+            CommandResult downResult = sshCommandExecutor.exec(session,
+                    "docker compose -p gj_" + appId + " down", DOCKER_COMPOSE_TIMEOUT_MS);
+            if (!downResult.isSuccess()) {
+                updateEntity(deploymentId, entity -> entity.withStatus(DeploymentStatus.SUCCEEDED));
+                eventPublisher.publish(deploymentId, DeploymentEventType.ERROR,
+                        "컨테이너 중지 실패: " + trim(downResult.stderr()));
+                return;
+            }
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "컨테이너 중지 완료");
+
+            if (!removeRouteNicknames.isEmpty()) {
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "선택한 포트 정리 중...");
+                deploymentRepository.findById(deploymentId).ifPresent(entity -> {
+                    List<ExposedRoute> current = entity.getExposedRoutesJson() != null
+                            ? readJsonList(entity.getExposedRoutesJson(), ExposedRoute.class)
+                            : List.of();
+                    List<ExposedRoute> remaining = current.stream()
+                            .filter(route -> !removeRouteNicknames.contains(route.nickname()))
+                            .toList();
+                    try {
+                        routesClient.syncRoutes(bearerToken, appId, new DeploymentRoutesRequest(deploymentId, remaining));
+                        eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "포트 정리 완료");
+                    } catch (Exception e) {
+                        // 컨테이너는 이미 내려갔으므로 배포 자체는 그대로 STOPPED 처리 — 포트 정리 실패는 경고만
+                        eventPublisher.publish(deploymentId, DeploymentEventType.ERROR,
+                                "포트 정리 실패 (컨테이너는 정상적으로 내려감, 재시도 필요): " + e.getMessage());
+                    }
+                });
+            }
+
+            updateEntity(deploymentId, entity -> entity.withStatus(DeploymentStatus.STOPPED));
+            eventPublisher.publish(deploymentId, DeploymentEventType.DONE, "배포 내리기 완료");
+        } catch (Exception e) {
+            log.error("배포 내리기 처리 중 예외: deploymentId={}, error={}", deploymentId, e.getMessage());
+            updateEntity(deploymentId, entity -> entity.withStatus(DeploymentStatus.SUCCEEDED));
+            eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, "배포 내리기 실패: " + e.getMessage());
+        } finally {
+            lockService.unlock(appId, deploymentId);
+            eventPublisher.complete(deploymentId);
+            if (session != null && session.isConnected()) {
+                session.disconnect();
+            }
+        }
+    }
+
     private void runRollback(String deploymentId, String appId, String internalIp, String bearerToken) {
         Session session = null;
         try {

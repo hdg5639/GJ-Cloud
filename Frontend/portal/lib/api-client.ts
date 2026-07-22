@@ -535,6 +535,13 @@ export const api = {
           method: "POST",
           accessToken,
         }),
+      // removeRouteNicknames를 비워두면 컨테이너만 내리고 노출 포트는 그대로 둠
+      teardown: (accessToken: string, vmId: string, deploymentId: string, removeRouteNicknames: string[]) =>
+        request<DeploymentResponse>("ops", `/ops/${vmId}/deployments/${deploymentId}/teardown`, {
+          method: "POST",
+          body: JSON.stringify({ removeRouteNicknames }),
+          accessToken,
+        }),
       create: (
         accessToken: string,
         vmId: string,
@@ -738,6 +745,8 @@ export interface PortResponse {
   fullDomain: string;
   accessEmails: string[];
   createdAt: string;
+  // 배포(자동배포)가 만든 포트면 값이 있고, 사용자가 직접 추가한 포트면 null
+  deploymentId: string | null;
 }
 
 export interface PortAddRequest {
