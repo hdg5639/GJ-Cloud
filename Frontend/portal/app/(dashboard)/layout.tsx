@@ -161,12 +161,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onClick={() => setDrawerOpen(false)}
                 title={collapsed ? item.label : undefined}
                 className={cn(
-                  "flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-[11px] text-left text-sm font-bold transition-[background-color,color,padding] duration-200",
-                  collapsed && "lg:justify-center lg:px-0",
+                  "flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-[11px] text-left text-sm font-bold transition-[background-color,color,padding,gap] duration-200",
+                  // 접혔을 때 라벨 span의 max-width가 0이 돼도 gap은 그대로 남아 아이콘이 중앙에서
+                  // gap의 절반만큼 왼쪽으로 밀려 보였음 — gap도 함께 0으로 줄여야 진짜 중앙정렬됨
+                  collapsed && "lg:justify-center lg:gap-0 lg:px-0",
                   active ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
                 )}
               >
-                <span aria-hidden className="shrink-0">
+                <span
+                  aria-hidden
+                  className={cn("shrink-0 transition-[font-size] duration-200", collapsed && "lg:text-xl")}
+                >
                   {item.icon}
                 </span>
                 <span
