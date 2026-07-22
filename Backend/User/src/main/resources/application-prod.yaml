@@ -21,6 +21,11 @@ auth:
 vm:
   service-url: ${VM_SERVICE_URL}
 
+user:
+  profile-image:
+    storage-path: ${PROFILE_IMAGE_STORAGE_PATH}
+    public-url-prefix: ${PROFILE_IMAGE_PUBLIC_URL_PREFIX}
+
 server:
   port: 8080
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/panel";
 import { Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
+import { validateProfileImage } from "@/lib/profile-image";
 
 type Tab = "profile" | "upgrade-requests";
 
@@ -33,6 +35,9 @@ export default function SettingsPage() {
   const [requestLoading, setRequestLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<"FREE" | "PRO" | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -76,6 +81,28 @@ export default function SettingsPage() {
     } catch {
       setWithdrawConfirm(false);
       setWithdrawing(false);
+    }
+  }
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    if (!file || !accessToken) return;
+    setImageError(null);
+    const validationError = validateProfileImage(file);
+    if (validationError) {
+      setImageError(validationError);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setImageUploading(true);
+    try {
+      const updated = await api.user.uploadProfileImage(accessToken, file);
+      setProfile(updated);
+    } catch {
+      setImageError("업로드에 실패했습니다");
+    } finally {
+      setImageUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -142,6 +169,35 @@ export default function SettingsPage() {
               <Card>
                 <h2 className="text-sm font-bold mb-4">계정 정보</h2>
 
+                <div className="mb-4 flex items-center gap-4">
+                  <Avatar
+                    nickname={profile.nickname}
+                    email={profile.email}
+                    profileImageUrl={profile.profileImageUrl}
+                    sizePx={56}
+                    textSizeClassName="text-lg"
+                  />
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={handleImageChange}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="small"
+                      disabled={imageUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {imageUploading ? "업로드 중..." : "프로필 사진 변경"}
+                    </Button>
+                    {imageError && <p className="mt-1.5 text-xs text-danger">{imageError}</p>}
+                  </div>
+                </div>
+
                 <div className="flex flex-col gap-4">
                   <Field label="이메일" className="mb-0">
                     <div className="h-[42px] px-3 flex items-center bg-white/[0.03] border border-line rounded-[9px] text-sm text-muted select-all">
@@ -156,7 +212,7 @@ export default function SettingsPage() {
                       value={nickname}
                       onChange={(e) => { setNickname(e.target.value); setSaveMsg(null); }}
                       placeholder="닉네임 입력"
-                      maxLength={32}
+                      maxLength={50}
                     />
                   </Field>
 

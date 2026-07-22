@@ -5,9 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import { useEffect, useRef, useState } from "react";
-import type { UsageResponse } from "@/lib/types";
+import type { ProfileResponse, UsageResponse } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
+import { Avatar } from "@/components/ui/avatar";
 
 const NAV_ITEMS = [
   { href: "/instances", icon: "▣", label: "인스턴스" },
@@ -23,6 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const { accessToken, user, isLoading, logout } = useAuth();
   const [usage, setUsage] = useState<UsageResponse | null>(null);
+  const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -77,6 +79,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!accessToken) return;
     api.user.usage(accessToken).then(setUsage).catch(() => {});
   }, [accessToken, pathname]);
+
+  // 닉네임 온보딩 게이트 — 닉네임이 비어있으면(가입 직후) 대시보드 대신 온보딩으로 보낸다.
+  // /onboarding은 (dashboard) 라우트 그룹 밖이라 이 레이아웃 자체를 타지 않으므로 리다이렉트 루프가 없다.
+  useEffect(() => {
+    if (!accessToken) return;
+    api.user.profile(accessToken).then((p) => {
+      setProfile(p);
+      if (!p.nickname?.trim()) {
+        router.replace("/onboarding");
+      }
+    }).catch(() => {});
+  }, [accessToken, pathname, router]);
 
   // Modal은 createPortal로 document.body에 직접 붙기 때문에 이 레이아웃 안쪽에
   // .theme-dark를 걸어봤자 소용없음 — body 자체에도 걸어줘야 포탈된 콘텐츠까지 다크 토큰을 상속받음.
@@ -225,13 +239,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             aria-label={collapsed ? "계정 메뉴 열기" : undefined}
             aria-expanded={collapsed ? profileMenuOpen : undefined}
             className={cn(
-              "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-white/[0.06] text-xs font-extrabold transition-[background-color,transform,box-shadow] duration-200",
-              collapsed && "lg:hover:scale-105 lg:hover:bg-white/[0.1] lg:focus-visible:ring-2 lg:focus-visible:ring-brand/60",
-              collapsed && profileMenuOpen && "lg:bg-white/[0.1] lg:ring-2 lg:ring-brand/40"
+              "grid shrink-0 place-items-center rounded-full transition-[transform,box-shadow] duration-200",
+              collapsed && "lg:hover:scale-105 lg:focus-visible:ring-2 lg:focus-visible:ring-brand/60",
+              collapsed && profileMenuOpen && "lg:ring-2 lg:ring-brand/40"
             )}
             title={collapsed ? (user?.email ?? undefined) : undefined}
           >
-            {user?.email?.[0]?.toUpperCase() ?? "?"}
+            <Avatar nickname={profile?.nickname} email={user?.email} profileImageUrl={profile?.profileImageUrl} sizePx={34} />
           </button>
           <div className={cn("min-w-0 flex-1 overflow-hidden", collapsed && "lg:hidden")}>
             <strong className="block truncate text-sm">{user?.email ?? ""}</strong>

@@ -1,6 +1,9 @@
 HELP.md
 .gradle
 build/
+
+### 로컬 프로필 이미지 업로드 저장소(dev 기본 경로) — 커밋 금지 ###
+/data/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

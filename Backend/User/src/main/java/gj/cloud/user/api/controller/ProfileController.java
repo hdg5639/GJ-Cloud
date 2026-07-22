@@ -9,6 +9,7 @@ import gj.cloud.user.global.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
@@ -27,5 +28,13 @@ public class ProfileController implements ProfileApi {
             ProfileUpdateRequest request
     ) {
         return ApiResponse.ok(profileService.updateProfile(principal.userId(), principal.email(), request));
+    }
+
+    @Override
+    public ApiResponse<ProfileResponse> updateProfileImage(
+            @AuthenticationPrincipal UserPrincipal principal,
+            MultipartFile file
+    ) {
+        return ApiResponse.ok(profileService.updateProfileImage(principal.userId(), principal.email(), file));
     }
 }

@@ -7,8 +7,10 @@ import gj.cloud.user.global.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "Profile", description = "사용자 프로필 API")
 @RequestMapping("/users/profile")
@@ -23,5 +25,12 @@ public interface ProfileApi {
     ApiResponse<ProfileResponse> updateProfile(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody ProfileUpdateRequest request
+    );
+
+    @Operation(summary = "프로필 이미지 업로드", description = "jpg/png/webp, 최대 2MB. 성공 시 profileImageUrl이 갱신된 프로필을 반환합니다.")
+    @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    ApiResponse<ProfileResponse> updateProfileImage(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("file") MultipartFile file
     );
 }

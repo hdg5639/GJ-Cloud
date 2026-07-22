@@ -301,6 +301,15 @@ export const api = {
         body: JSON.stringify(body),
         accessToken,
       }),
+    uploadProfileImage: (accessToken: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<ProfileResponse>("user", "/users/profile/image", {
+        method: "POST",
+        body: formData,
+        accessToken,
+      });
+    },
     usage: (accessToken: string) =>
       request<UsageResponse>("user", "/users/usage", { accessToken }),
     sshKeys: (accessToken: string) =>

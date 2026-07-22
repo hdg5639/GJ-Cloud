@@ -21,7 +21,11 @@ public enum UserErrorCode {
     ADMIN_ACCESS_REQUIRED(HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
     INVALID_AUDIENCE(HttpStatus.UNAUTHORIZED, "이 서비스에 유효하지 않은 토큰입니다."),
-    KEY_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "SSH 키 생성에 실패했습니다.");
+    KEY_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "SSH 키 생성에 실패했습니다."),
+    INVALID_IMAGE_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식입니다. (jpg/png/webp만 가능)"),
+    IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "이미지 용량은 2MB를 초과할 수 없습니다."),
+    IMAGE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이미지 업로드에 실패했습니다."),
+    PROFILE_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "이미지를 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;

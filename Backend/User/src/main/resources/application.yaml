@@ -1,3 +1,13 @@
 spring:
   application:
     name: User
+  servlet:
+    multipart:
+      max-file-size: 3MB
+      max-request-size: 3MB
+
+user:
+  profile-image:
+    storage-path: ${PROFILE_IMAGE_STORAGE_PATH:./data/profile-images}
+    public-url-prefix: ${PROFILE_IMAGE_PUBLIC_URL_PREFIX:http://localhost:8081/uploads/profile-images}
+    max-size-bytes: 2097152
