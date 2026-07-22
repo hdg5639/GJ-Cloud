@@ -31,14 +31,22 @@ jobs:
           docker compose build "$SERVICE"
           docker compose up -d "$SERVICE"
 
-          HOST_PORT=$(docker compose port "$SERVICE" 8080 | cut -d: -f2)
+          # CICD-002: docker compose port + cut으로 호스트에 매핑된 포트를 알아내 localhost로
+          # curl했는데, 앱은 매번 로그상 정상 기동되는데도 헬스체크가 매번 실패해 롤백당했다
+          # (compose.yaml은 gitignore돼 있어 직접 확인은 못했지만, 호스트에 포트가 publish 안
+          # 돼 있으면 HOST_PORT가 비어 애초에 curl 대상 자체가 잘못되는 것으로 강하게 의심됨).
+          # 호스트 포트 publish 여부와 무관하게 항상 맞는 컨테이너 내부 IP:8080으로 직접 확인한다.
+          CONTAINER_ID=$(docker compose ps -q "$SERVICE")
+          CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER_ID")
+          echo "헬스체크 대상: http://${CONTAINER_IP}:8080${HEALTH_PATH}"
+
           HEALTHY=0
           # vm은 R2DBC+Redis+WebClient까지 초기화하는 리액티브 앱이라 콜드 스타트가
           # 30초(10회x3초) 창에 걸치는 경계값 근처였고, 실제로 이 타이밍 때문에 정상
           # 이미지가 헬스체크 실패로 오판돼 롤백당한 적이 있어 100초로 넉넉하게 늘림.
           for i in $(seq 1 20); do
             sleep 5
-            if curl -fsS "http://localhost:${HOST_PORT}${HEALTH_PATH}" > /dev/null 2>&1; then
+            if curl -fsS "http://${CONTAINER_IP}:8080${HEALTH_PATH}" > /dev/null 2>&1; then
               HEALTHY=1
               break
             fi
