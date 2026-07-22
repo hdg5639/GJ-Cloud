@@ -178,29 +178,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onClick={() => setDrawerOpen(false)}
                 title={collapsed ? item.label : undefined}
                 className={cn(
-                  "flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-[11px] text-left text-sm font-bold",
-                  // 접혔을 때 라벨 span의 max-width가 0이 돼도 gap은 그대로 남아 아이콘이 중앙에서
-                  // gap의 절반만큼 왼쪽으로 밀려 보였음 — gap도 함께 0으로 줄여야 진짜 중앙정렬됨
-                  collapsed && "lg:justify-center lg:gap-0 lg:px-0",
+                  "flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-[11px] text-left text-sm font-bold transition-[background-color,color] duration-150",
                   active ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
                 )}
-                style={{
-                  // hover 배경색은 항상 즉시 반응해야 하므로 별도 트랜지션으로 분리.
-                  // 아이콘 이동(padding, gap, justify)은 "중앙 정렬"이 그 순간의 패널 폭을 기준으로
-                  // 계산되므로, 패널이 아직 넓을 때(phase1) 미리 적용하면 넓은 폭 기준으로 확 이동했다가
-                  // 패널이 좁아지며 다시 왼쪽으로 미끄러지는 이중 움직임(덜덜 떨리는 느낌)이 생김.
-                  // 그래서 패널 폭 트랜지션(phase2)과 정확히 같은 딜레이/시간으로 맞춰 폭이 줄어드는
-                  // 동안 같이 움직이게 한다 — 접힐 때만 phase2(160ms~), 펼칠 때는 기존대로 phase2(300ms~).
-                  transition: collapsed
-                    ? "background-color 150ms, color 150ms, padding 260ms 160ms, gap 260ms 160ms"
-                    : "background-color 150ms, color 150ms, padding 150ms 300ms, gap 150ms 300ms",
-                }}
               >
+                {/* justify-content:center는 그 순간의 패널 폭을 기준으로 매 프레임 다시 계산되기 때문에,
+                    패널 폭이 아직 변하는 도중(phase1/2)에 적용하면 "먼저 넓은 폭 기준으로 확 이동했다가
+                    폭이 좁아지며 다시 미끄러지는" 이중 움직임(덜덜 떨림)이 생겼음. justify-content는 항상
+                    flex-start로 고정하고, 대신 아이콘 자체를 고정 픽셀만큼 translateX로 옮긴다 — 패널 폭이
+                    몇 px이든 상관없이 항상 같은 목표 지점으로 가는 독립적인 애니메이션이라 흔들리지 않음.
+                    필요한 이동량(padding-left 12px 기준 접힌 상태에서 중앙까지)은 작아서(약 4px) 고정값으로 충분. */}
                 <span
                   aria-hidden
                   className={cn(
-                    "shrink-0 transition-[font-size]",
-                    collapsed ? "lg:text-xl duration-[260ms] lg:delay-[160ms]" : "duration-150 lg:delay-[300ms]"
+                    "shrink-0 transition-[font-size,transform]",
+                    collapsed
+                      ? "lg:translate-x-1 lg:text-xl duration-300 lg:delay-0"
+                      : "lg:translate-x-0 duration-150 lg:delay-[300ms]"
                   )}
                 >
                   {item.icon}
@@ -282,15 +276,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div
           ref={profileMenuRef}
-          className={cn(
-            "relative flex items-center gap-2.5 px-[5px] py-2 transition-[gap]",
-            // gap이 남아있으면 접혔을 때 아바타가 gap 절반만큼 중앙에서 밀려 보임(네비 아이콘과 동일한 이슈).
-            // 중앙 정렬은 그 순간의 패널 폭 기준으로 계산되므로, 패널 폭 트랜지션(phase2)과 정확히
-            // 같은 타이밍으로 맞춰야 폭이 좁아지는 동안 같이 움직이고, 미리 이동했다가 다시 밀리는
-            // 이중 움직임(떨림)이 생기지 않는다.
-            collapsed ? "lg:justify-center lg:gap-0 duration-[260ms] lg:delay-[160ms]" : "duration-150 lg:delay-[300ms]"
-          )}
+          className="relative flex items-center gap-2.5 px-[5px] py-2"
         >
+          {/* 네비 아이콘과 동일한 이유로 justify-content 토글 대신 아바타 자체를 고정 픽셀만큼
+              translateX로 옮김 — 패널 폭 트랜지션과 무관한 독립적인 애니메이션이라 흔들리지 않음. */}
           <button
             type="button"
             onClick={() => collapsed && setProfileMenuOpen((prev) => !prev)}
@@ -298,7 +287,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             aria-expanded={collapsed ? profileMenuOpen : undefined}
             className={cn(
               "grid shrink-0 place-items-center rounded-full transition-[transform,box-shadow] duration-200",
-              collapsed && "lg:hover:scale-105 lg:focus-visible:ring-2 lg:focus-visible:ring-brand/60",
+              collapsed
+                ? "lg:translate-x-1 lg:hover:scale-105 lg:focus-visible:ring-2 lg:focus-visible:ring-brand/60"
+                : "lg:translate-x-0",
               collapsed && profileMenuOpen && "lg:ring-2 lg:ring-brand/40"
             )}
             title={collapsed ? (profile?.nickname ?? user?.email ?? undefined) : undefined}
