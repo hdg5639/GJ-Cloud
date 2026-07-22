@@ -97,11 +97,37 @@ public class AuthServiceImpl implements AuthService {
         securityAuditLogService.record(AuditActorType.USER, user.getId(), AuditAction.LOGIN,
                 "USER", user.getId(), AuditResult.SUCCESS, clientIp, null);
 
+        return issueSession(user, request.rememberMe());
+    }
+
+    // 이메일 코드 확인은 메일함 소유권을 증명한 직후의 1회성 인증 절차다. 회원가입 완료 뒤 다시 로그인
+    // 화면을 거치지 않고 프로필 온보딩으로 이어질 수 있도록 일반 로그인과 동일한 세션을 발급한다.
+    @Override
+    public LoginResult createSessionAfterEmailVerification(String email, String clientIp) {
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
+
+        if (user.getStatus() == UserStatus.PENDING_VERIFICATION) {
+            throw new AuthException(AuthErrorCode.EMAIL_NOT_VERIFIED);
+        }
+        if (user.getStatus() == UserStatus.DELETED) {
+            throw new AuthException(AuthErrorCode.ACCOUNT_DELETED);
+        }
+        if (user.getStatus() == UserStatus.SUSPENDED) {
+            throw new AuthException(AuthErrorCode.ACCOUNT_SUSPENDED);
+        }
+
+        loginRateLimiter.clearFailures(user.getEmail(), clientIp);
+        securityAuditLogService.record(AuditActorType.USER, user.getId(), AuditAction.LOGIN,
+                "USER", user.getId(), AuditResult.SUCCESS, clientIp, "EMAIL_VERIFICATION");
+        return issueSession(user, false);
+    }
+
+    private LoginResult issueSession(UserEntity user, boolean rememberMe) {
         String accessToken = tokenService.issueAccessToken(
                 user.getId(), user.getEmail(), user.getRole(), ServiceAudience.AUTH);
-        String refreshToken = tokenService.issueRefreshToken(user.getId(), request.rememberMe());
-        long cookieMaxAgeSeconds = request.rememberMe() ? 2592000L : 604800L;
-
+        String refreshToken = tokenService.issueRefreshToken(user.getId(), rememberMe);
+        long cookieMaxAgeSeconds = rememberMe ? 2592000L : 604800L;
         return new LoginResult(accessToken, refreshToken, cookieMaxAgeSeconds);
     }
 

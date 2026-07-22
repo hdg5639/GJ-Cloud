@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { AuthBrand } from "@/components/ui/auth-card";
 import { AuthSplitLayout, AuthStepsPanel } from "@/components/ui/auth-split-layout";
 import { Field, Input } from "@/components/ui/field";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 
 function VerifyForm() {
   const router = useRouter();
+  const { login } = useAuth();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
   const [code, setCode] = useState("");
@@ -23,8 +25,9 @@ function VerifyForm() {
     setError(null);
     setLoading(true);
     try {
-      await api.auth.verifyEmail(email, code);
-      router.push("/login");
+      const session = await api.auth.verifyEmail(email, code);
+      login(session.accessToken, { email });
+      router.replace("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "인증에 실패했습니다");
     } finally {

@@ -67,9 +67,16 @@ public class AuthController implements AuthApi {
     }
 
     @Override
-    public ApiResponse<Void> confirmVerifyCode(EmailVerifyConfirmRequest request) {
+    public ApiResponse<LoginResponse> confirmVerifyCode(
+            EmailVerifyConfirmRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse response
+    ) {
         emailVerificationService.confirmCode(request.email(), request.code());
-        return ApiResponse.ok();
+        LoginResult result = authService.createSessionAfterEmailVerification(
+                request.email(), clientIpResolver.resolve(httpRequest));
+        setRefreshTokenCookie(response, result.refreshToken(), result.cookieMaxAgeSeconds());
+        return ApiResponse.ok(new LoginResponse(result.accessToken(), "Bearer", 900L));
     }
 
     @Override

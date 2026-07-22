@@ -45,9 +45,13 @@ public interface AuthApi {
     @PostMapping("/email/verify/send")
     ApiResponse<Void> sendVerifyCode(@Valid @RequestBody EmailVerifyRequest request, HttpServletRequest httpRequest);
 
-    @Operation(summary = "인증 코드 확인", description = "코드 일치 시 계정 ACTIVE 전환")
+    @Operation(summary = "인증 코드 확인", description = "코드 일치 시 계정 ACTIVE 전환 후 온보딩용 로그인 세션 발급")
     @PostMapping("/email/verify/confirm")
-    ApiResponse<Void> confirmVerifyCode(@Valid @RequestBody EmailVerifyConfirmRequest request);
+    ApiResponse<LoginResponse> confirmVerifyCode(
+            @Valid @RequestBody EmailVerifyConfirmRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse response
+    );
 
     @Operation(summary = "비밀번호 재설정 코드 발송", description = "가입된 이메일로 6자리 재설정 코드 발송 (5분 유효)")
     @PostMapping("/password/reset/send")

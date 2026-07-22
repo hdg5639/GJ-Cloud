@@ -199,7 +199,7 @@ export const api = {
         body: JSON.stringify({ email, password }),
       }),
     verifyEmail: (email: string, code: string) =>
-      request<void>("auth", "/auth/email/verify/confirm", {
+      request<{ accessToken: string; tokenType: string; expiresIn: number }>("auth", "/auth/email/verify/confirm", {
         method: "POST",
         body: JSON.stringify({ email, code }),
       }),
