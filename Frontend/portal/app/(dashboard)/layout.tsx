@@ -125,12 +125,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[238px] shrink-0 -translate-x-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden border-r border-line bg-panel px-5 pb-[18px] pt-[26px] will-change-[width,transform] transition-[width,transform,padding] duration-300 [transition-timing-function:cubic-bezier(.22,1,.36,1)] lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[238px] shrink-0 -translate-x-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden border-r border-line bg-panel px-5 pb-[18px] pt-[26px] will-change-[width,transform] transition-[width,transform,padding] [transition-timing-function:cubic-bezier(.22,1,.36,1)] lg:static lg:translate-x-0",
           drawerOpen && "translate-x-0",
-          // 접힐 땐 라벨 텍스트가 먼저 사라진 다음(딜레이 없이 빠르게) 패널이 줄어들고, 펼칠 땐 패널이
-          // 먼저 넓어진 다음 텍스트가 나타나야 "텍스트가 잠깐 튀어보이는" 느낌이 없음 — 그래서 패널
-          // 폭 트랜지션에 접힐 때만 딜레이를 줘서 텍스트(딜레이 없음)보다 살짝 늦게 시작하게 함.
-          collapsed ? "lg:w-[76px] lg:px-3 lg:delay-[70ms]" : "lg:delay-0"
+          // 두 단계 시퀀스: 접힐 땐 (1) 텍스트가 접히며 사라지고 아이콘이 제자리로 이동하고 플랜
+          // 패널도 접히는 게 다 끝난 뒤(PHASE1_MS=160ms) (2) 패널 폭이 줄어든다. 펼칠 땐 반대로
+          // (1) 패널 폭이 먼저 넓어지고 (2) 그 뒤에 텍스트/아이콘/플랜 패널이 나타난다.
+          collapsed ? "lg:w-[76px] lg:px-3 duration-[260ms] lg:delay-[160ms]" : "duration-300 lg:delay-0"
         )}
       >
         <div className="relative flex h-11 shrink-0 items-center">
@@ -178,35 +178,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onClick={() => setDrawerOpen(false)}
                 title={collapsed ? item.label : undefined}
                 className={cn(
-                  "flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-[11px] text-left text-sm font-bold transition-[background-color,color,padding,gap] duration-200",
+                  "flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-[11px] text-left text-sm font-bold",
                   // 접혔을 때 라벨 span의 max-width가 0이 돼도 gap은 그대로 남아 아이콘이 중앙에서
                   // gap의 절반만큼 왼쪽으로 밀려 보였음 — gap도 함께 0으로 줄여야 진짜 중앙정렬됨
                   collapsed && "lg:justify-center lg:gap-0 lg:px-0",
                   active ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
                 )}
+                style={{
+                  // hover 배경색은 항상 즉시 반응해야 하므로 별도 트랜지션으로 분리 — 아이콘 이동(padding,
+                  // gap, justify)만 접힘/펼침 시퀀스에 맞춰 딜레이를 다르게 준다(접힘 phase1=0ms,
+                  // 펼침 phase2=패널이 다 넓어진 뒤인 300ms).
+                  transition: collapsed
+                    ? "background-color 150ms, color 150ms, padding 150ms, gap 150ms"
+                    : "background-color 150ms, color 150ms, padding 150ms 300ms, gap 150ms 300ms",
+                }}
               >
                 <span
                   aria-hidden
-                  className={cn("shrink-0 transition-[font-size] duration-200", collapsed && "lg:text-xl")}
+                  className={cn(
+                    "shrink-0 transition-[font-size] duration-150",
+                    collapsed ? "lg:text-xl lg:delay-0" : "lg:delay-[300ms]"
+                  )}
                 >
                   {item.icon}
                 </span>
                 <span
                   className={cn(
-                    "overflow-hidden whitespace-nowrap transition-[max-width] duration-200",
+                    "overflow-hidden whitespace-nowrap transition-[max-width] duration-[90ms]",
                     // 글자가 안 보이게(투명해지게) 먼저 되고 나서 박스(max-width)가 닫혀야 "잘려나가는"
-                    // 느낌 없이 자연스러움 — 그래서 바깥쪽(폭)과 안쪽(투명도)의 딜레이를 서로 다르게 둠.
-                    collapsed ? "lg:max-w-0 lg:delay-[70ms]" : "max-w-[160px] lg:delay-0"
+                    // 느낌 없이 자연스러움 — 접힘 phase1(0~160ms) 안에서 70ms 딜레이 뒤 90ms간 닫힘.
+                    collapsed ? "lg:max-w-0 lg:delay-[70ms]" : "max-w-[160px] duration-200 lg:delay-0"
                   )}
                 >
                   <span
                     className={cn(
-                      "inline-block transition-[opacity,transform] duration-100",
-                      // 펼칠 땐 사이드바 패널(300ms)이 거의 다 넓어진 뒤에야 글자가 나타나야 함 —
-                      // 딜레이가 짧으면 패널이 절반쯤 열렸을 때 글자가 먼저 튀어나온 것처럼 보임
+                      "inline-block transition-[opacity,transform] duration-[70ms]",
+                      // 펼칠 땐 사이드바 패널(300ms)이 다 넓어진 뒤에야 글자가 나타나야 함(phase2)
                       collapsed
                         ? "lg:-translate-x-2 lg:opacity-0 lg:delay-0"
-                        : "translate-x-0 opacity-100 duration-[120ms] lg:delay-[280ms]"
+                        : "translate-x-0 opacity-100 duration-[120ms] lg:delay-[300ms]"
                     )}
                   >
                     {item.label}
@@ -226,16 +236,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           // 살짝 아래에서 튀어오르듯 나타남 — 그냥 즉시 hidden 처리하던 것보다 제품다운 느낌을 주기 위함.
           <div
             className={cn(
-              "overflow-hidden transition-[max-height] duration-200",
-              collapsed ? "lg:max-h-0 lg:delay-[70ms]" : "max-h-[420px] lg:delay-0"
+              "overflow-hidden transition-[max-height] duration-[90ms]",
+              // 접힘 phase1(0~160ms) 안에서 텍스트/아이콘과 같은 타이밍으로 딜레이 70ms 뒤 닫힘
+              collapsed ? "lg:max-h-0 lg:delay-[70ms]" : "max-h-[420px] duration-200 lg:delay-0"
             )}
           >
             <div
               className={cn(
                 "rounded-[14px] border border-line bg-white/[0.02] p-4",
                 collapsed
-                  ? "transition-[opacity,transform] duration-100 lg:-translate-y-1 lg:scale-95 lg:opacity-0 lg:delay-0"
-                  : "lg:[animation:panel-enter_380ms_cubic-bezier(0.16,1,0.3,1)_280ms_both]"
+                  ? "transition-[opacity,transform] duration-[70ms] lg:-translate-y-1 lg:scale-95 lg:opacity-0 lg:delay-0"
+                  : "lg:[animation:panel-enter_380ms_cubic-bezier(0.16,1,0.3,1)_300ms_both]"
               )}
             >
               <div className="flex items-center justify-between">
@@ -271,7 +282,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           className={cn(
             "relative flex items-center gap-2.5 px-[5px] py-2 transition-[gap] duration-150",
             // gap이 남아있으면 접혔을 때 아바타가 gap 절반만큼 중앙에서 밀려 보임(네비 아이콘과 동일한 이슈)
-            collapsed && "lg:justify-center lg:gap-0"
+            // — 아바타 이동도 네비 아이콘과 같은 phase1/phase2 타이밍을 따름
+            collapsed ? "lg:justify-center lg:gap-0 lg:delay-0" : "lg:delay-[300ms]"
           )}
         >
           <button
@@ -290,15 +302,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
           <div
             className={cn(
-              "overflow-hidden whitespace-nowrap transition-[max-width] duration-200",
-              collapsed ? "lg:max-w-0 lg:delay-[70ms]" : "max-w-[150px] flex-1 lg:delay-0"
+              "overflow-hidden whitespace-nowrap transition-[max-width] duration-[90ms]",
+              collapsed ? "lg:max-w-0 lg:delay-[70ms]" : "max-w-[150px] flex-1 duration-200 lg:delay-0"
             )}
           >
             <div
               className={cn(
-                "transition-opacity duration-100",
-                // 닉네임/로그아웃도 네비 라벨과 동일하게, 패널이 거의 다 넓어진 뒤에 나타나야 함
-                collapsed ? "lg:opacity-0 lg:delay-0" : "opacity-100 duration-[120ms] lg:delay-[280ms]"
+                "transition-opacity duration-[70ms]",
+                // 닉네임/로그아웃도 네비 라벨과 동일하게, 패널이 다 넓어진 뒤에 나타나야 함
+                collapsed ? "lg:opacity-0 lg:delay-0" : "opacity-100 duration-[120ms] lg:delay-[300ms]"
               )}
             >
               <strong className="block truncate text-sm">{profile?.nickname ?? user?.email ?? ""}</strong>
