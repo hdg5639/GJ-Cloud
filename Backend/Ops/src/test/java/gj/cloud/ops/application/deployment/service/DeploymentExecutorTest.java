@@ -1,6 +1,7 @@
 package gj.cloud.ops.application.deployment.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jcraft.jsch.Session;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
 import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
@@ -11,6 +12,7 @@ import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
 import gj.cloud.ops.global.crypto.AesGcmCipher;
+import gj.cloud.ops.global.ssh.CommandResult;
 import gj.cloud.ops.global.ssh.SshCommandExecutor;
 import gj.cloud.ops.global.ssh.VmSshSessionFactory;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,10 +28,13 @@ import org.springframework.dao.DataIntegrityViolationException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -55,8 +61,9 @@ class DeploymentExecutorTest {
     @Mock private HealthCheckExecutor healthCheckExecutor;
     @Mock private RollbackService rollbackService;
     @Mock private AesGcmCipher cipher;
-    @Mock private ObjectMapper objectMapper;
+    @Spy private ObjectMapper objectMapper = new ObjectMapper();
     @Mock private TaskExecutor deploymentTaskExecutor;
+    @Mock private Session session;
 
     @InjectMocks
     private DeploymentExecutor deploymentExecutor;
@@ -99,6 +106,47 @@ class DeploymentExecutorTest {
         assertThat(saved.getAllValues())
                 .extracting(DeploymentEntity::getStatus)
                 .containsExactly(DeploymentStatus.STOPPING, DeploymentStatus.SUCCEEDED);
+        verify(lockService).unlock(VM_ID, DEPLOYMENT_ID);
+    }
+
+    @Test
+    void teardownRemovesOnlyImagesBuiltForTheTargetDeployment() {
+        String imageRefsJson = """
+                {"api":{"imageTag":"gamjabox/vm-1/api:deployment-1","imageId":"sha256:api"},
+                 "web":{"imageTag":"gamjabox/vm-1/web:deployment-1","imageId":"sha256:web"},
+                 "other":{"imageTag":"gamjabox/vm-2/api:deployment-9","imageId":"sha256:other"}}
+                """;
+        DeploymentEntity target = succeededDeployment().toBuilder()
+                .serviceImageRefsJson(imageRefsJson)
+                .build();
+        AtomicReference<DeploymentEntity> stored = new AtomicReference<>(target);
+
+        when(vmServiceClient.getContext(TOKEN, VM_ID)).thenReturn(runningDeployContext());
+        when(deploymentRepository.findTopByVmIdAndStatusOrderByCreatedAtDesc(
+                VM_ID, DeploymentStatus.SUCCEEDED)).thenReturn(Optional.of(target));
+        when(deploymentRepository.findById(DEPLOYMENT_ID))
+                .thenAnswer(invocation -> Optional.ofNullable(stored.get()));
+        when(deploymentRepository.save(any(DeploymentEntity.class))).thenAnswer(invocation -> {
+            DeploymentEntity saved = invocation.getArgument(0);
+            stored.set(saved);
+            return saved;
+        });
+        when(lockService.tryLock(VM_ID, DEPLOYMENT_ID)).thenReturn(true);
+        when(sshSessionFactory.createSession(VM_ID, "10.0.0.10")).thenReturn(session);
+        when(sshCommandExecutor.exec(any(Session.class), any(String.class), anyLong()))
+                .thenReturn(new CommandResult(0, "", ""));
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(0).run();
+            return null;
+        }).when(deploymentTaskExecutor).execute(any(Runnable.class));
+
+        deploymentExecutor.teardown(TOKEN, VM_ID, target, List.of());
+
+        verify(sshCommandExecutor).exec(
+                session,
+                "docker image rm 'gamjabox/vm-1/api:deployment-1' 'gamjabox/vm-1/web:deployment-1'",
+                120_000);
+        assertThat(stored.get().getStatus()).isEqualTo(DeploymentStatus.STOPPED);
         verify(lockService).unlock(VM_ID, DEPLOYMENT_ID);
     }
 

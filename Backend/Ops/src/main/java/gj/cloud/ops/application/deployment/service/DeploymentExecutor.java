@@ -1,6 +1,7 @@
 package gj.cloud.ops.application.deployment.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSchException;
@@ -14,6 +15,7 @@ import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.dto.HealthCheck;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.dto.ResolvedCompose;
+import gj.cloud.ops.application.deployment.dto.ServiceImageRef;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
@@ -39,6 +41,7 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
@@ -54,10 +57,15 @@ public class DeploymentExecutor {
     private static final String COMPOSE_FILE_NAME = "docker-compose.yml";
     private static final String RESOLVED_COMPOSE_FILE_NAME = "resolved-compose.yml";
     private static final long DOCKER_COMPOSE_TIMEOUT_MS = 300_000;
+    private static final long IMAGE_CLEANUP_TIMEOUT_MS = 120_000;
     private static final long HEALTH_CHECK_INTERVAL_MS = 3_000;
     private static final int HEALTH_CHECK_MAX_ATTEMPTS = 10;
     // vmPath가 mkdir -p '...' 셸 커맨드에 그대로 꽂히므로 따옴표/셸 메타문자를 차단 (명령 인젝션 방지)
     private static final Pattern UNSAFE_SHELL_CHARS = Pattern.compile("[;&`|$'\"\\\\]");
+    // 배포 시 내부에서 생성한 태그만 삭제 대상으로 허용한다. DB 값이 손상되거나 변조돼도 임의의 Docker
+    // 이미지 식별자가 셸 명령에 들어가지 않도록 형식과 app/deployment 소유권을 모두 확인한다.
+    private static final Pattern SAFE_DEPLOYMENT_IMAGE_TAG = Pattern.compile(
+            "^gamjabox/[A-Za-z0-9-]+/[a-z0-9][a-z0-9_-]{0,62}:[A-Za-z0-9-]+$");
 
     private final DeploymentRepository deploymentRepository;
     private final DeploymentLockService lockService;
@@ -245,6 +253,8 @@ public class DeploymentExecutor {
             }
             eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "컨테이너 중지 완료");
 
+            cleanupDeploymentImages(session, deploymentId, appId);
+
             if (!removeRouteNicknames.isEmpty()) {
                 eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "선택한 포트 정리 중...");
                 deploymentRepository.findById(deploymentId).ifPresent(entity -> {
@@ -277,6 +287,61 @@ public class DeploymentExecutor {
             if (session != null && session.isConnected()) {
                 session.disconnect();
             }
+        }
+    }
+
+    private void cleanupDeploymentImages(Session session, String deploymentId, String appId) {
+        DeploymentEntity deployment = deploymentRepository.findById(deploymentId).orElse(null);
+        if (deployment == null || deployment.getServiceImageRefsJson() == null
+                || deployment.getServiceImageRefsJson().isBlank()) {
+            return;
+        }
+
+        try {
+            Map<String, ServiceImageRef> refs = objectMapper.readValue(
+                    deployment.getServiceImageRefsJson(), new TypeReference<>() {});
+            if (refs == null || refs.isEmpty()) {
+                return;
+            }
+
+            String expectedPrefix = "gamjabox/" + appId + "/";
+            String expectedSuffix = ":" + deploymentId;
+            List<String> imageTags = refs.values().stream()
+                    .filter(ref -> ref != null && ref.imageTag() != null)
+                    .map(ServiceImageRef::imageTag)
+                    .filter(tag -> SAFE_DEPLOYMENT_IMAGE_TAG.matcher(tag).matches())
+                    .filter(tag -> tag.startsWith(expectedPrefix) && tag.endsWith(expectedSuffix))
+                    .distinct()
+                    .sorted()
+                    .toList();
+
+            if (imageTags.size() != refs.size()) {
+                log.warn("배포 이미지 정리에서 소유권이 확인되지 않은 태그 제외: deploymentId={}, total={}, safe={}",
+                        deploymentId, refs.size(), imageTags.size());
+            }
+            if (imageTags.isEmpty()) {
+                return;
+            }
+
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "배포 이미지 정리 중...");
+            String command = "docker image rm " + String.join(" ", imageTags.stream()
+                    .map(tag -> "'" + tag + "'")
+                    .toList());
+            CommandResult result = sshCommandExecutor.exec(session, command, IMAGE_CLEANUP_TIMEOUT_MS);
+            if (result.isSuccess()) {
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "배포 이미지 정리 완료");
+                return;
+            }
+
+            log.warn("배포 이미지 정리 실패: deploymentId={}, stderr={}", deploymentId, trim(result.stderr()));
+            eventPublisher.publish(deploymentId, DeploymentEventType.ERROR,
+                    "배포 이미지 정리 실패 (컨테이너는 정상적으로 내려감, Docker 관리에서 직접 삭제해주세요.)");
+        } catch (Exception e) {
+            // 컨테이너는 이미 정상적으로 내려갔다. 이미지 정리 문제만으로 상태를 SUCCEEDED로 되돌리면 실제
+            // 런타임 상태와 어긋나므로 경고를 남기고 teardown의 STOPPED 전이는 계속 진행한다.
+            log.warn("배포 이미지 정보 처리 실패: deploymentId={}, error={}", deploymentId, e.getMessage());
+            eventPublisher.publish(deploymentId, DeploymentEventType.ERROR,
+                    "배포 이미지 정리 실패 (컨테이너는 정상적으로 내려감, Docker 관리에서 직접 삭제해주세요.)");
         }
     }
 
