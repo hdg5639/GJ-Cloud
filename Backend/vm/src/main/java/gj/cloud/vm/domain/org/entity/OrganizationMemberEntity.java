@@ -37,6 +37,13 @@ public class OrganizationMemberEntity implements Persistable<UUID> {
     @Column("user_id")
     private String userId;
 
+    // 초대 시점의 스냅샷(비정규화) — email처럼 매 조회마다 User 서비스를 다시 호출하지 않기 위함.
+    // 미가입 이메일 직접 초대 경로에서는 검색 결과가 없어 둘 다 null.
+    private String nickname;
+
+    @Column("profile_image_url")
+    private String profileImageUrl;
+
     private MemberRole role;
     private MemberStatus status;
 
@@ -61,11 +68,22 @@ public class OrganizationMemberEntity implements Persistable<UUID> {
     }
 
     public static OrganizationMemberEntity createInvite(UUID orgId, String email, MemberRole role) {
+        return createInvite(orgId, null, email, null, null, role);
+    }
+
+    // 검색 결과에서 선택해 초대한 경우 — userId/nickname/profileImageUrl 스냅샷을 함께 저장.
+    // userId가 이 시점에 채워져도 실제 접근 권한 판단(requireMember 등)은 항상 status='ACCEPTED' +
+    // email 매칭만 보므로, 아직 수락 전인 PENDING 레코드에 userId가 있다고 접근 권한이 생기지 않는다.
+    public static OrganizationMemberEntity createInvite(
+            UUID orgId, String userId, String email, String nickname, String profileImageUrl, MemberRole role) {
         return OrganizationMemberEntity.builder()
                 .id(UUID.randomUUID())
                 .isNew(true)
                 .organizationId(orgId)
+                .userId(userId)
                 .email(email)
+                .nickname(nickname)
+                .profileImageUrl(profileImageUrl)
                 .role(role)
                 .status(MemberStatus.PENDING)
                 .invitedAt(LocalDateTime.now())

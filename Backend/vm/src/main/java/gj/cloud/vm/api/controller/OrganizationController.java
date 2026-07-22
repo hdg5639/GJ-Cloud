@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -79,6 +80,18 @@ public class OrganizationController {
             @PathVariable UUID orgId,
             @Valid @RequestBody MemberInviteRequest request) {
         return organizationService.invite(orgId, principal.email(), request).map(ApiResponse::ok);
+    }
+
+    @Operation(summary = "초대용 사용자 검색 (OWNER, ADMIN)", description = "닉네임/이메일 부분 일치로 최대 10건을 검색합니다.")
+    @GetMapping("/{orgId}/members/search")
+    public Mono<ApiResponse<List<MemberSearchResult>>> searchMembers(
+            @AuthenticationPrincipal VmPrincipal principal,
+            ServerWebExchange exchange,
+            @PathVariable UUID orgId,
+            @RequestParam String query) {
+        String authHeader = exchange.getRequest().getHeaders().getFirst("Authorization");
+        String token = authHeader != null && authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        return organizationService.searchMembers(orgId, principal.email(), token, query).map(ApiResponse::ok);
     }
 
     @Operation(summary = "초대 수락/거절 (초대 대상자)")

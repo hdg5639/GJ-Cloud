@@ -13,9 +13,12 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, Th, Td } from "@/components/ui/table";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { isValidVmName, VmNameInput } from "@/components/vm-name-input";
+import { Avatar } from "@/components/ui/avatar";
+import { MemberInviteCombobox, type InviteTarget } from "@/components/member-invite-combobox";
+import { maskEmail } from "@/lib/mask-email";
 
 const ROLE_LABEL: Record<MemberRole, string> = { OWNER: "소유자", ADMIN: "관리자", MEMBER: "멤버" };
 
@@ -59,7 +62,7 @@ export default function OrganizationDetailPage() {
   const [editingItem, setEditingItem] = useState<CollaborationResponse | undefined>();
 
   // 멤버 초대
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [selectedInvite, setSelectedInvite] = useState<InviteTarget | null>(null);
   const [inviteRole, setInviteRole] = useState<MemberRole>("MEMBER");
   const [inviting, setInviting] = useState(false);
 
@@ -131,12 +134,12 @@ export default function OrganizationDetailPage() {
   // ── 멤버 핸들러 ──
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!accessToken || !inviteEmail.trim()) return;
+    if (!accessToken || !selectedInvite) return;
     setInviting(true);
     try {
-      const member = await api.org.invite(accessToken, id, inviteEmail.trim(), inviteRole);
+      const member = await api.org.invite(accessToken, id, { ...selectedInvite, role: inviteRole });
       setOrg((prev) => prev ? { ...prev, members: [...prev.members, member] } : prev);
-      setInviteEmail("");
+      setSelectedInvite(null);
     } catch (err) {
       alert(err instanceof Error ? err.message : "초대에 실패했습니다");
     } finally {
@@ -352,16 +355,30 @@ export default function OrganizationDetailPage() {
         <div className="space-y-4">
           {isOwnerOrAdmin && (
             <form onSubmit={handleInvite} className="flex gap-2">
-              <Input
-                id="org-invite-email"
-                name="org-invite-email"
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="초대할 이메일"
-                required
-                className="min-w-0 flex-1"
-              />
+              {selectedInvite ? (
+                <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[9px] border border-line-strong bg-panel px-3 py-2">
+                  <Avatar
+                    nickname={selectedInvite.nickname}
+                    email={selectedInvite.email}
+                    profileImageUrl={selectedInvite.profileImageUrl}
+                    sizePx={26}
+                    textSizeClassName="text-[11px]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold">{selectedInvite.nickname ?? selectedInvite.email}</p>
+                    <p className="truncate text-xs text-muted-soft">{maskEmail(selectedInvite.email)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInvite(null)}
+                    className="shrink-0 text-xs font-bold text-muted-soft hover:text-muted"
+                  >
+                    변경
+                  </button>
+                </div>
+              ) : accessToken ? (
+                <MemberInviteCombobox accessToken={accessToken} orgId={id} onSelect={setSelectedInvite} />
+              ) : null}
               <div className="w-32 shrink-0">
                 <Select
                   id="org-invite-role"
@@ -373,7 +390,7 @@ export default function OrganizationDetailPage() {
                   <option value="ADMIN">관리자</option>
                 </Select>
               </div>
-              <Button type="submit" variant="primary" disabled={inviting} className="shrink-0">
+              <Button type="submit" variant="primary" disabled={inviting || !selectedInvite} className="shrink-0">
                 {inviting ? "초대 중..." : "초대"}
               </Button>
             </form>
@@ -382,7 +399,7 @@ export default function OrganizationDetailPage() {
             <Table>
               <thead>
                 <tr>
-                  <Th>이메일</Th>
+                  <Th>사용자</Th>
                   <Th>역할</Th>
                   <Th>상태</Th>
                   <Th />
@@ -391,7 +408,15 @@ export default function OrganizationDetailPage() {
               <tbody>
                 {org.members.map((m) => (
                   <tr key={m.id} className="hover:bg-white/[0.03]">
-                    <Td>{m.email}</Td>
+                    <Td>
+                      <div className="flex items-center gap-2.5">
+                        <Avatar nickname={m.nickname} email={m.email} profileImageUrl={m.profileImageUrl} sizePx={28} textSizeClassName="text-[11px]" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold">{m.nickname ?? m.email}</p>
+                          {m.nickname && <p className="truncate text-xs text-muted-soft">{maskEmail(m.email)}</p>}
+                        </div>
+                      </div>
+                    </Td>
                     <Td>
                       {myRole === "OWNER" && m.role !== "OWNER" ? (
                         <Select

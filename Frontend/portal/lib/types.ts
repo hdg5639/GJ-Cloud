@@ -160,10 +160,20 @@ export interface MemberResponse {
   id: string;
   email: string;
   userId: string | null;
+  nickname: string | null;
+  profileImageUrl: string | null;
   role: MemberRole;
   status: MemberStatus;
   invitedAt: string;
   joinedAt: string | null;
+}
+
+// 조직 초대용 사용자 검색 결과
+export interface MemberSearchResult {
+  userId: string;
+  nickname: string | null;
+  email: string;
+  profileImageUrl: string | null;
 }
 
 export interface OrgResponse {

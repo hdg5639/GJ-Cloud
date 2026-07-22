@@ -4,6 +4,7 @@ import gj.cloud.vm.application.org.dto.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface OrganizationService {
@@ -21,6 +22,8 @@ public interface OrganizationService {
     Mono<Void> delete(UUID orgId, String email);
 
     Mono<MemberResponse> invite(UUID orgId, String email, MemberInviteRequest request);
+
+    Mono<List<MemberSearchResult>> searchMembers(UUID orgId, String email, String bearerToken, String query);
 
     Mono<MemberResponse> respond(UUID orgId, UUID memberId, String userId, String email, MemberRespondRequest request);
 

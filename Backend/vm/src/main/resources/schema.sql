@@ -100,6 +100,10 @@ CREATE TABLE IF NOT EXISTS organization_members (
 CREATE INDEX IF NOT EXISTS idx_org_members_org_id ON organization_members(organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_email  ON organization_members(email);
 
+-- 조직 초대 검색 UX(닉네임/이미지 표시) — email처럼 초대 시점 스냅샷을 비정규화해서 저장
+ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS nickname          VARCHAR(50);
+ALTER TABLE organization_members ADD COLUMN IF NOT EXISTS profile_image_url VARCHAR(500);
+
 CREATE TABLE IF NOT EXISTS organization_vms (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

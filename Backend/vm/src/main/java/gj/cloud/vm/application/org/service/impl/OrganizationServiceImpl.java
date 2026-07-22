@@ -2,6 +2,7 @@ package gj.cloud.vm.application.org.service.impl;
 
 import gj.cloud.vm.application.org.dto.*;
 import gj.cloud.vm.application.org.service.OrganizationService;
+import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.domain.org.entity.OrganizationEntity;
 import gj.cloud.vm.domain.org.entity.OrganizationMemberEntity;
@@ -32,6 +33,7 @@ public class OrganizationServiceImpl implements OrganizationService {
     private final OrganizationMemberRepository memberRepository;
     private final OrganizationVmRepository orgVmRepository;
     private final VmRepository vmRepository;
+    private final UserServiceClient userServiceClient;
 
     @Override
     public Mono<OrgDetailResponse> create(String userId, String email, OrgCreateRequest request) {
@@ -105,9 +107,18 @@ public class OrganizationServiceImpl implements OrganizationService {
                         .flatMap(existing -> Mono.<OrganizationMemberEntity>error(new VmException(VmErrorCode.MEMBER_ALREADY_EXISTS)))
                         .switchIfEmpty(Mono.defer(() -> {
                             MemberRole role = request.role() != null ? request.role() : MemberRole.MEMBER;
-                            return memberRepository.save(OrganizationMemberEntity.createInvite(orgId, request.email(), role));
+                            return memberRepository.save(OrganizationMemberEntity.createInvite(
+                                    orgId, request.userId(), request.email(), request.nickname(), request.profileImageUrl(), role));
                         })))
                 .map(MemberResponse::from);
+    }
+
+    @Override
+    public Mono<List<MemberSearchResult>> searchMembers(UUID orgId, String email, String bearerToken, String query) {
+        return organizationRepository.findById(orgId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.ORGANIZATION_NOT_FOUND)))
+                .flatMap(org -> requireRoleAtLeast(orgId, email, MemberRole.ADMIN))
+                .then(userServiceClient.searchUsers(bearerToken, query));
     }
 
     @Override

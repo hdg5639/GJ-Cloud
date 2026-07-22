@@ -15,6 +15,7 @@ import type {
   OrgResponse,
   OrgDetailResponse,
   MemberResponse,
+  MemberSearchResult,
   CollaborationResponse,
   TagResponse,
   ScopeType,
@@ -355,8 +356,18 @@ export const api = {
       request<OrgDetailResponse>("vm", `/vms/organizations/${orgId}`, { method: "PATCH", body: JSON.stringify({ name }), accessToken }),
     delete: (accessToken: string, orgId: string) =>
       request<void>("vm", `/vms/organizations/${orgId}`, { method: "DELETE", accessToken }),
-    invite: (accessToken: string, orgId: string, email: string, role: MemberRole) =>
-      request<MemberResponse>("vm", `/vms/organizations/${orgId}/members`, { method: "POST", body: JSON.stringify({ email, role }), accessToken }),
+    invite: (
+      accessToken: string,
+      orgId: string,
+      body: { userId?: string; email: string; nickname?: string; profileImageUrl?: string; role: MemberRole }
+    ) =>
+      request<MemberResponse>("vm", `/vms/organizations/${orgId}/members`, { method: "POST", body: JSON.stringify(body), accessToken }),
+    searchMembers: (accessToken: string, orgId: string, query: string) =>
+      request<MemberSearchResult[]>(
+        "vm",
+        `/vms/organizations/${orgId}/members/search?query=${encodeURIComponent(query)}`,
+        { accessToken }
+      ),
     respond: (accessToken: string, orgId: string, memberId: string, accept: boolean) =>
       request<MemberResponse>("vm", `/vms/organizations/${orgId}/members/${memberId}/respond`, { method: "PATCH", body: JSON.stringify({ accept }), accessToken }),
     removeMember: (accessToken: string, orgId: string, memberId: string) =>

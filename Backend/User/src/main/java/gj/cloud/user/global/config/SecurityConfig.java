@@ -32,13 +32,18 @@ public class SecurityConfig {
     @Autowired(required = false)
     private CorsConfigurationSource corsConfigurationSource;
 
-    // 최종 사용자 위임(delegation) 전용 — VM 서비스가 사용자를 대신해 SSH 키/플랜을 조회할 때.
-    // 아래 순수 서비스 전용 체인보다 먼저 매칭돼야 함 (더 좁은 경로가 우선).
+    // 최종 사용자 위임(delegation) 전용 — VM 서비스가 사용자를 대신해 호출할 때. VM은 자기 자신의
+    // client-credentials가 아니라 최종 사용자가 원래 갖고 있던 aud=vm-service 토큰을 그대로 포워딩하고,
+    // User는 그 토큰의 aud만 확인한다(누구를 대신하는 조회인지는 각 엔드포인트가 sub로 판단).
+    // /internal/profiles/search(조직 초대용 사용자 검색)도 여기 포함 — "위임"이 곧 "본인 리소스만 조회"를
+    // 뜻하진 않음: vm이 이미 자기 쪽에서 조직 ADMIN 권한을 확인한 뒤에만 이 경로를 호출하므로, User 입장에선
+    // "vm을 거쳐 온 정상 로그인 사용자"라는 사실만 확인하면 충분하다. 아래 순수 서비스 전용 체인보다 먼저
+    // 매칭돼야 함 (더 좁은 경로가 우선).
     @Bean
     @Order(1)
     public SecurityFilterChain internalDelegatedFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/internal/ssh-keys/**", "/internal/users/plan")
+                .securityMatcher("/internal/ssh-keys/**", "/internal/users/plan", "/internal/profiles/search")
                 .csrf(AbstractHttpConfigurer::disable);
 
         if (corsConfigurationSource != null) {

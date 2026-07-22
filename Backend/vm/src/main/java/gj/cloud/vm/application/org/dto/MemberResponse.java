@@ -11,13 +11,15 @@ public record MemberResponse(
         UUID id,
         String email,
         String userId,
+        String nickname,
+        String profileImageUrl,
         MemberRole role,
         MemberStatus status,
         LocalDateTime invitedAt,
         LocalDateTime joinedAt
 ) {
     public static MemberResponse from(OrganizationMemberEntity e) {
-        return new MemberResponse(e.getId(), e.getEmail(), e.getUserId(),
+        return new MemberResponse(e.getId(), e.getEmail(), e.getUserId(), e.getNickname(), e.getProfileImageUrl(),
                 e.getRole(), e.getStatus(), e.getInvitedAt(), e.getJoinedAt());
     }
 }
