@@ -185,19 +185,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   active ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
                 )}
                 style={{
-                  // hover 배경색은 항상 즉시 반응해야 하므로 별도 트랜지션으로 분리 — 아이콘 이동(padding,
-                  // gap, justify)만 접힘/펼침 시퀀스에 맞춰 딜레이를 다르게 준다(접힘 phase1=0ms,
-                  // 펼침 phase2=패널이 다 넓어진 뒤인 300ms).
+                  // hover 배경색은 항상 즉시 반응해야 하므로 별도 트랜지션으로 분리.
+                  // 아이콘 이동(padding, gap, justify)은 "중앙 정렬"이 그 순간의 패널 폭을 기준으로
+                  // 계산되므로, 패널이 아직 넓을 때(phase1) 미리 적용하면 넓은 폭 기준으로 확 이동했다가
+                  // 패널이 좁아지며 다시 왼쪽으로 미끄러지는 이중 움직임(덜덜 떨리는 느낌)이 생김.
+                  // 그래서 패널 폭 트랜지션(phase2)과 정확히 같은 딜레이/시간으로 맞춰 폭이 줄어드는
+                  // 동안 같이 움직이게 한다 — 접힐 때만 phase2(160ms~), 펼칠 때는 기존대로 phase2(300ms~).
                   transition: collapsed
-                    ? "background-color 150ms, color 150ms, padding 150ms, gap 150ms"
+                    ? "background-color 150ms, color 150ms, padding 260ms 160ms, gap 260ms 160ms"
                     : "background-color 150ms, color 150ms, padding 150ms 300ms, gap 150ms 300ms",
                 }}
               >
                 <span
                   aria-hidden
                   className={cn(
-                    "shrink-0 transition-[font-size] duration-150",
-                    collapsed ? "lg:text-xl lg:delay-0" : "lg:delay-[300ms]"
+                    "shrink-0 transition-[font-size]",
+                    collapsed ? "lg:text-xl duration-[260ms] lg:delay-[160ms]" : "duration-150 lg:delay-[300ms]"
                   )}
                 >
                   {item.icon}
@@ -280,10 +283,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div
           ref={profileMenuRef}
           className={cn(
-            "relative flex items-center gap-2.5 px-[5px] py-2 transition-[gap] duration-150",
-            // gap이 남아있으면 접혔을 때 아바타가 gap 절반만큼 중앙에서 밀려 보임(네비 아이콘과 동일한 이슈)
-            // — 아바타 이동도 네비 아이콘과 같은 phase1/phase2 타이밍을 따름
-            collapsed ? "lg:justify-center lg:gap-0 lg:delay-0" : "lg:delay-[300ms]"
+            "relative flex items-center gap-2.5 px-[5px] py-2 transition-[gap]",
+            // gap이 남아있으면 접혔을 때 아바타가 gap 절반만큼 중앙에서 밀려 보임(네비 아이콘과 동일한 이슈).
+            // 중앙 정렬은 그 순간의 패널 폭 기준으로 계산되므로, 패널 폭 트랜지션(phase2)과 정확히
+            // 같은 타이밍으로 맞춰야 폭이 좁아지는 동안 같이 움직이고, 미리 이동했다가 다시 밀리는
+            // 이중 움직임(떨림)이 생기지 않는다.
+            collapsed ? "lg:justify-center lg:gap-0 duration-[260ms] lg:delay-[160ms]" : "duration-150 lg:delay-[300ms]"
           )}
         >
           <button
