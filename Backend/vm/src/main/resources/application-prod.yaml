@@ -39,11 +39,11 @@ proxmox:
   base-url: ${PROXMOX_URL}
   token-id: ${PROXMOX_TOKEN_ID}
   token-secret: ${PROXMOX_TOKEN_SECRET}
-  node: ${PROXMOX_NODE:pve}
-  bridge: ${PROXMOX_BRIDGE:vmbr0}
-  storage: ${PROXMOX_STORAGE:local-lvm}
-  vmid-range-start: ${PROXMOX_VMID_START:1000}
-  vmid-range-end: ${PROXMOX_VMID_END:8999}
+  node: ${PROXMOX_NODE}
+  bridge: ${PROXMOX_BRIDGE}
+  storage: ${PROXMOX_STORAGE}
+  vmid-range-start: ${PROXMOX_VMID_START}
+  vmid-range-end: ${PROXMOX_VMID_END}
 
 cloudflare:
   reserved-subdomains: ${RESERVED_SUBDOMAINS:}
