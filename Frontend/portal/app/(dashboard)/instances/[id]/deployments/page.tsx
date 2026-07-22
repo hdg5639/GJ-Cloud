@@ -661,18 +661,24 @@ export default function DeploymentsPage() {
                                   <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
                                   <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
                                 </div>
-                                <div className={cn("mt-1 flex items-center gap-1.5", !isPro && "opacity-50")}>
-                                  <input
-                                    value={r.customSubdomain ?? ""}
-                                    onChange={(e) => handleRouteCustomSubdomainChange(i, e.target.value)}
-                                    placeholder="커스텀 서브도메인 (선택)"
-                                    disabled={!isPro}
-                                    className="h-7 flex-1 px-2 border border-line-strong rounded text-xs disabled:pointer-events-none"
-                                  />
-                                  {!isPro ? (
-                                    <span className="shrink-0 text-[10px] font-bold text-[#e8b657] bg-[#e8b657]/10 border border-[#e8b657]/25 px-1.5 py-0.5 rounded">PRO 전용</span>
-                                  ) : (
-                                    r.customSubdomain && (
+                                <div className="mt-1.5 rounded border border-line-strong bg-white/[0.02] p-1.5">
+                                  <div className="mb-1 flex items-center gap-1.5">
+                                    <span className="text-[10px] font-bold text-muted">커스텀 서브도메인</span>
+                                    {!isPro ? (
+                                      <span className="shrink-0 text-[10px] font-bold text-[#e8b657] bg-[#e8b657]/10 border border-[#e8b657]/25 px-1.5 py-0.5 rounded">PRO 전용</span>
+                                    ) : (
+                                      <span className="text-[10px] text-accent">PRO</span>
+                                    )}
+                                  </div>
+                                  <div className={cn("flex items-center gap-1.5", !isPro && "opacity-50")}>
+                                    <input
+                                      value={r.customSubdomain ?? ""}
+                                      onChange={(e) => handleRouteCustomSubdomainChange(i, e.target.value)}
+                                      placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
+                                      disabled={!isPro}
+                                      className="h-7 flex-1 px-2 border border-line-strong rounded text-xs disabled:pointer-events-none disabled:bg-white/[0.03]"
+                                    />
+                                    {isPro && r.customSubdomain && (
                                       <span className={cn(
                                         "shrink-0 text-[10px]",
                                         check === "available" ? "text-brand-strong" : check === "checking" ? "text-muted-soft" : "text-danger"
@@ -683,7 +689,12 @@ export default function DeploymentsPage() {
                                         {check === "reserved" && "예약된 이름"}
                                         {check === "pro-only" && "PRO 전용"}
                                       </span>
-                                    )
+                                    )}
+                                  </div>
+                                  {!r.customSubdomain && (
+                                    <p className="mt-1 text-[10px] text-muted-soft">
+                                      미입력 시 자동 생성됩니다{r.nickname && ` (${r.nickname} 닉네임 기준)`}.
+                                    </p>
                                   )}
                                 </div>
                               </div>

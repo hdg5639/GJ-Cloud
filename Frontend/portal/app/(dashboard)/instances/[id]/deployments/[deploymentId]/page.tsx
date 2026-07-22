@@ -260,7 +260,7 @@ export default function DeploymentDetailPage() {
       </div>
 
       <Modal open={showTeardown} onClose={() => !tearingDown && setShowTeardown(false)}>
-        <div className="w-full max-w-[480px] rounded-panel border border-line bg-panel p-5">
+        <div className="mx-auto w-full max-w-[480px] rounded-panel border border-line bg-panel p-5">
           <h2 className="mb-1 text-base font-bold text-danger">배포 내리기</h2>
           <p className="mb-4 text-xs text-muted">
             이 VM에서 실행 중인 컨테이너를 중지/제거합니다. 아래에서 선택한 노출 포트는 함께 삭제되고,

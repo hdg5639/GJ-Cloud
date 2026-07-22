@@ -39,6 +39,7 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
@@ -110,7 +111,7 @@ public class DeploymentExecutor {
                         environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, repoConfig.context(),
                         repoConfig.installPath()));
 
-        if (!lockService.tryLock(vmId, deployment.getId())) {
+        if (!tryLockWithStaleRecovery(vmId, deployment.getId())) {
             deployment = deploymentRepository.save(deployment.withFailed("이미 배포가 진행 중입니다."));
             throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
         }
@@ -160,7 +161,7 @@ public class DeploymentExecutor {
         DeploymentEntity rollbackEntity = deploymentRepository.save(
                 DeploymentEntity.createQueued(vmId, target.getSourceType(), target.getSourceComposeCiphertext(), target.getId()));
 
-        if (!lockService.tryLock(vmId, rollbackEntity.getId())) {
+        if (!tryLockWithStaleRecovery(vmId, rollbackEntity.getId())) {
             rollbackEntity = deploymentRepository.save(rollbackEntity.withFailed("이미 배포가 진행 중입니다."));
             throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
         }
@@ -194,7 +195,7 @@ public class DeploymentExecutor {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_TEARDOWN_TARGET_INVALID);
         }
 
-        if (!lockService.tryLock(vmId, target.getId())) {
+        if (!tryLockWithStaleRecovery(vmId, target.getId())) {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
         }
         DeploymentEntity stopping = deploymentRepository.save(target.withStatus(DeploymentStatus.STOPPING));
@@ -288,6 +289,32 @@ public class DeploymentExecutor {
         } catch (Exception e) {
             return List.of();
         }
+    }
+
+    // Ops 프로세스가 파이프라인 도중(비정상 종료 등으로) finally의 unlock을 못 타면 락이 leaked 상태로
+    // TTL(기본 30분) 내내 남아 새 배포/롤백/내리기가 전부 DEPLOYMENT_IN_PROGRESS로 막힌다. 이 락을 쥔
+    // deploymentId가 이미 터미널 상태(SUCCEEDED/FAILED/STOPPED/ROLLED_BACK)라면 그 배포의 파이프라인이
+    // 실제로는 끝났다는 뜻이므로 — 즉 이 락은 확실히 leaked다 — 강제로 비우고 한 번 더 시도한다.
+    private boolean tryLockWithStaleRecovery(String vmId, String newDeploymentId) {
+        if (lockService.tryLock(vmId, newDeploymentId)) {
+            return true;
+        }
+        Optional<String> holderId = lockService.currentHolder(vmId);
+        boolean staleLock = holderId.isEmpty() || holderId
+                .flatMap(deploymentRepository::findById)
+                .map(entity -> isTerminalStatus(entity.getStatus()))
+                .orElse(true);
+        if (!staleLock) {
+            return false;
+        }
+        log.warn("leaked deployment lock 감지 — 강제 해제 후 재시도: vmId={}, staleHolder={}", vmId, holderId.orElse(null));
+        lockService.forceUnlock(vmId);
+        return lockService.tryLock(vmId, newDeploymentId);
+    }
+
+    private boolean isTerminalStatus(DeploymentStatus status) {
+        return status == DeploymentStatus.SUCCEEDED || status == DeploymentStatus.FAILED
+                || status == DeploymentStatus.STOPPED || status == DeploymentStatus.ROLLED_BACK;
     }
 
     private void runPipeline(String deploymentId, String appId, String internalIp, String bearerToken,
