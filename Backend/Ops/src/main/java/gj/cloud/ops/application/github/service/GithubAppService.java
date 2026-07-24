@@ -19,6 +19,7 @@ import gj.cloud.ops.domain.github.repository.GithubInstallationRepository;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
@@ -56,16 +57,42 @@ public class GithubAppService {
     private final StringRedisTemplate redisTemplate;
     private final GithubInstallationRepository installationRepository;
 
+    @Autowired
     public GithubAppService(
             @Value("${ops.github.app-id:}") String appId,
             @Value("${ops.github.app-slug:}") String appSlug,
             @Value("${ops.github.client-id:}") String clientId,
             @Value("${ops.github.client-secret:}") String clientSecret,
             @Value("${ops.github.private-key:}") String privateKeyPem,
-            RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
             StringRedisTemplate redisTemplate,
             GithubInstallationRepository installationRepository
+    ) {
+        this(
+                appId,
+                appSlug,
+                clientId,
+                clientSecret,
+                privateKeyPem,
+                objectMapper,
+                redisTemplate,
+                installationRepository,
+                createGithubApiClient(),
+                createGithubOAuthClient()
+        );
+    }
+
+    GithubAppService(
+            String appId,
+            String appSlug,
+            String clientId,
+            String clientSecret,
+            String privateKeyPem,
+            ObjectMapper objectMapper,
+            StringRedisTemplate redisTemplate,
+            GithubInstallationRepository installationRepository,
+            RestClient githubApi,
+            RestClient githubOAuth
     ) {
         this.appId = normalizeConfigValue(appId);
         this.appSlug = normalizeConfigValue(appSlug);
@@ -75,13 +102,21 @@ public class GithubAppService {
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
         this.installationRepository = installationRepository;
-        this.githubApi = restClientBuilder.clone()
+        this.githubApi = githubApi;
+        this.githubOAuth = githubOAuth;
+    }
+
+    private static RestClient createGithubApiClient() {
+        return RestClient.builder()
                 .baseUrl("https://api.github.com")
                 .defaultHeader(HttpHeaders.ACCEPT, "application/vnd.github+json")
                 .defaultHeader(HttpHeaders.USER_AGENT, "GamjaBox-Ops")
                 .defaultHeader("X-GitHub-Api-Version", GITHUB_API_VERSION)
                 .build();
-        this.githubOAuth = restClientBuilder.clone()
+    }
+
+    private static RestClient createGithubOAuthClient() {
+        return RestClient.builder()
                 .baseUrl("https://github.com")
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.USER_AGENT, "GamjaBox-Ops")

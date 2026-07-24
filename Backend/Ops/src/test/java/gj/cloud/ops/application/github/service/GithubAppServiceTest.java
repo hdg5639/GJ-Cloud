@@ -6,6 +6,7 @@ import gj.cloud.ops.domain.github.entity.GithubInstallationEntity;
 import gj.cloud.ops.domain.github.repository.GithubInstallationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.HttpHeaders;
@@ -38,13 +39,16 @@ class GithubAppServiceTest {
     @SuppressWarnings("unchecked")
     private final ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
 
-    private MockRestServiceServer githubServer;
+    private MockRestServiceServer githubApiServer;
+    private MockRestServiceServer githubOAuthServer;
     private GithubAppService githubAppService;
 
     @BeforeEach
     void setUp() {
-        RestClient.Builder restClientBuilder = RestClient.builder();
-        githubServer = MockRestServiceServer.bindTo(restClientBuilder).build();
+        RestClient.Builder githubApiBuilder = RestClient.builder().baseUrl("https://api.github.com");
+        githubApiServer = MockRestServiceServer.bindTo(githubApiBuilder).build();
+        RestClient.Builder githubOAuthBuilder = RestClient.builder().baseUrl("https://github.com");
+        githubOAuthServer = MockRestServiceServer.bindTo(githubOAuthBuilder).build();
 
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.getAndDelete("github-install-state:" + STATE))
@@ -60,16 +64,17 @@ class GithubAppServiceTest {
                 "Iv1.client",
                 "client-secret",
                 "-----BEGIN PRIVATE KEY-----\\ntest\\n-----END PRIVATE KEY-----",
-                restClientBuilder,
                 new ObjectMapper(),
                 redisTemplate,
-                installationRepository
+                installationRepository,
+                githubApiBuilder.build(),
+                githubOAuthBuilder.build()
         );
     }
 
     @Test
     void exchangesAuthorizationCodeAsUrlEncodedForm() {
-        githubServer.expect(requestTo("https://github.com/login/oauth/access_token"))
+        githubOAuthServer.expect(requestTo("https://github.com/login/oauth/access_token"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(
                         HttpHeaders.CONTENT_TYPE,
@@ -79,7 +84,7 @@ class GithubAppServiceTest {
                 .andRespond(withSuccess(
                         "{\"access_token\":\"ghu_test\",\"token_type\":\"bearer\"}",
                         MediaType.APPLICATION_JSON));
-        githubServer.expect(requestTo(
+        githubApiServer.expect(requestTo(
                         "https://api.github.com/user/installations?per_page=100&page=1"))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer ghu_test"))
@@ -110,6 +115,23 @@ class GithubAppServiceTest {
                     assertThat(installation.accountLogin()).isEqualTo("octocat");
                     assertThat(installation.accountType()).isEqualTo("User");
                 });
-        githubServer.verify();
+        githubOAuthServer.verify();
+        githubApiServer.verify();
+    }
+
+    @Test
+    void createsWithProductionConstructorWithoutRestClientBuilderBean() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.getBeanFactory().registerSingleton("objectMapper", new ObjectMapper());
+            context.getBeanFactory().registerSingleton(
+                    "redisTemplate", mock(StringRedisTemplate.class));
+            context.getBeanFactory().registerSingleton(
+                    "installationRepository", mock(GithubInstallationRepository.class));
+            context.register(GithubAppService.class);
+
+            context.refresh();
+
+            assertThat(context.getBean(GithubAppService.class)).isNotNull();
+        }
     }
 }
