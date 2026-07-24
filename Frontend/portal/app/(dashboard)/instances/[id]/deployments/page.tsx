@@ -69,6 +69,7 @@ function formatDate(iso: string): string {
 }
 
 type CreateTab = "compose" | "ai";
+type RepositorySource = "github" | "url";
 type SubdomainCheckStatus = "idle" | "checking" | "available" | "taken" | "reserved" | "pro-only";
 type CreateStep = 1 | 2 | 3 | 4;
 
@@ -191,8 +192,10 @@ export default function DeploymentsPage() {
   const [retryNotice, setRetryNotice] = useState(false);
 
   // 공통 (repo)
-  const [repoUrl, setRepoUrl] = useState("");
-  const [branch, setBranch] = useState("main");
+  const [repositorySource, setRepositorySource] = useState<RepositorySource>("github");
+  const [manualRepoUrl, setManualRepoUrl] = useState("");
+  const [manualBranch, setManualBranch] = useState("main");
+  const [githubBranch, setGithubBranch] = useState("main");
   const [patToken, setPatToken] = useState("");
   const [targetName, setTargetName] = useState("");
   const [autoDeploy, setAutoDeploy] = useState(true);
@@ -200,6 +203,16 @@ export default function DeploymentsPage() {
   const [selectedGithubRepositoryKey, setSelectedGithubRepositoryKey] = useState("");
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubConnecting, setGithubConnecting] = useState(false);
+  const selectedGithubRepository = githubRepositories.find(
+    (repository) => `${repository.installationId}:${repository.id}` === selectedGithubRepositoryKey
+  );
+  const activeGithubRepository = repositorySource === "github"
+    ? selectedGithubRepository
+    : undefined;
+  const repoUrl = activeGithubRepository?.cloneUrl ?? (
+    repositorySource === "url" ? manualRepoUrl : ""
+  );
+  const branch = repositorySource === "github" ? githubBranch : manualBranch;
 
   // 공통 — VM 내 배포 경로 (심볼릭 링크)
   const [installPath, setInstallPath] = useState("");
@@ -266,14 +279,22 @@ export default function DeploymentsPage() {
   }
 
   function handleRepoUrlChange(value: string) {
-    setRepoUrl(value);
-    setSelectedGithubRepositoryKey("");
-    setAutoDeploy(false);
+    setManualRepoUrl(value);
     invalidateAiGeneration();
   }
 
   function handleBranchChange(value: string) {
-    setBranch(value);
+    if (repositorySource === "github") {
+      setGithubBranch(value);
+    } else {
+      setManualBranch(value);
+    }
+    invalidateAiGeneration();
+  }
+
+  function handleRepositorySourceChange(source: RepositorySource) {
+    if (source === repositorySource) return;
+    setRepositorySource(source);
     invalidateAiGeneration();
   }
 
@@ -497,6 +518,9 @@ export default function DeploymentsPage() {
     setComposeContent(spec.composeContent);
     setContext(spec.context ?? "");
     setInstallPath(spec.installPath ?? "");
+    setRepositorySource("url");
+    setSelectedGithubRepositoryKey("");
+    setAutoDeploy(false);
     setEnvFiles(spec.environmentFiles);
     setRoutes(spec.exposedRoutes);
     setHealthChecks(spec.healthChecks);
@@ -546,8 +570,10 @@ export default function DeploymentsPage() {
   }
 
   function resetCreateForm() {
-    setRepoUrl("");
-    setBranch("main");
+    setRepositorySource("github");
+    setManualRepoUrl("");
+    setManualBranch("main");
+    setGithubBranch("main");
     setPatToken("");
     setTargetName("");
     setAutoDeploy(true);
@@ -621,14 +647,13 @@ export default function DeploymentsPage() {
     setSelectedGithubRepositoryKey(key);
     const repository = githubRepositories.find((item) => `${item.installationId}:${item.id}` === key);
     if (!repository) {
-      setRepoUrl("");
+      setGithubBranch("main");
       setAutoDeploy(false);
+      invalidateAiGeneration();
       return;
     }
-    setRepoUrl(repository.cloneUrl);
-    setBranch(repository.defaultBranch || "main");
-    setPatToken("");
-    setAutoDeploy(true);
+    setGithubBranch(repository.defaultBranch || "main");
+    setAutoDeploy(repositorySource === "github");
     if (!targetName.trim()) {
       setTargetName(repository.fullName.split("/").pop() ?? "");
     }
@@ -663,17 +688,14 @@ export default function DeploymentsPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const githubRepository = githubRepositories.find(
-        (item) => `${item.installationId}:${item.id}` === selectedGithubRepositoryKey
-      );
       const deployment = await api.ops.deployments.create(accessToken, vmId, {
         repoUrl,
         branch,
-        patToken: patToken || undefined,
+        patToken: repositorySource === "url" ? patToken || undefined : undefined,
         targetName: targetName.trim() || undefined,
-        autoDeploy: Boolean(githubRepository && autoDeploy),
-        githubInstallationId: githubRepository?.installationId,
-        githubRepositoryId: githubRepository?.id,
+        autoDeploy: Boolean(activeGithubRepository && autoDeploy),
+        githubInstallationId: activeGithubRepository?.installationId,
+        githubRepositoryId: activeGithubRepository?.id,
         composeContent,
         context: context.trim() || undefined,
         installPath: installPath.trim() || undefined,
@@ -702,15 +724,12 @@ export default function DeploymentsPage() {
     setEvidenceRefs([]);
     setGenerationWarnings([]);
     try {
-      const githubRepository = githubRepositories.find(
-        (item) => `${item.installationId}:${item.id}` === selectedGithubRepositoryKey
-      );
       const result = await api.ops.deployments.generateSpec(accessToken, vmId, {
         repoUrl,
         branch,
-        patToken: patToken || undefined,
-        githubInstallationId: githubRepository?.installationId,
-        githubRepositoryId: githubRepository?.id,
+        patToken: repositorySource === "url" ? patToken || undefined : undefined,
+        githubInstallationId: activeGithubRepository?.installationId,
+        githubRepositoryId: activeGithubRepository?.id,
         services: serviceCards
           .filter((s) => s.name && s.runtime && s.context)
           .map((service) => ({
@@ -757,19 +776,16 @@ export default function DeploymentsPage() {
     setError(null);
     try {
       const spec: DeploymentSpec = JSON.parse(generatedSpec);
-      const githubRepository = githubRepositories.find(
-        (item) => `${item.installationId}:${item.id}` === selectedGithubRepositoryKey
-      );
       const deployment = await api.ops.deployments.createFromSpec(accessToken, vmId, {
         repoUrl,
         branch,
-        patToken: patToken || undefined,
+        patToken: repositorySource === "url" ? patToken || undefined : undefined,
         spec,
         installPath: installPath.trim() || undefined,
         targetName: targetName.trim() || undefined,
-        autoDeploy: Boolean(githubRepository && autoDeploy),
-        githubInstallationId: githubRepository?.installationId,
-        githubRepositoryId: githubRepository?.id,
+        autoDeploy: Boolean(activeGithubRepository && autoDeploy),
+        githubInstallationId: activeGithubRepository?.installationId,
+        githubRepositoryId: activeGithubRepository?.id,
       });
       setShowCreate(false);
       resetCreateForm();
@@ -1066,47 +1082,151 @@ export default function DeploymentsPage() {
               {createStep === 2 && <div className="wizard-step-enter">
                 <Section
                   title="저장소 설정"
-                  description="GitHub App을 연결하면 비공개 저장소도 장기 PAT 없이 안전하게 배포하고, push마다 자동 재배포할 수 있습니다."
+                  description="GitHub에 연결해 자동 배포를 사용하거나, Git URL을 직접 입력해 한 번만 배포할 수 있습니다."
                 >
-                  <div className="mb-4 rounded-[10px] border border-line-strong bg-white/[0.025] p-3">
-                    <div className="flex items-end gap-2">
-                      <Field label="GitHub 저장소" htmlFor="deploy-github-repository" className="min-w-0 flex-1">
-                        <Select
-                          id="deploy-github-repository"
-                          value={selectedGithubRepositoryKey}
-                          onChange={(e) => handleGithubRepositoryChange(e.target.value)}
-                          disabled={githubLoading}
-                        >
-                          <option value="">
-                            {githubLoading ? "저장소 불러오는 중..." : "GitHub App 저장소 선택"}
-                          </option>
-                          {githubRepositories.map((repository) => (
-                            <option
-                              key={`${repository.installationId}:${repository.id}`}
-                              value={`${repository.installationId}:${repository.id}`}
-                            >
-                              {repository.fullName}{repository.privateRepository ? " · Private" : ""}
-                            </option>
-                          ))}
-                        </Select>
-                      </Field>
-                      <Button
-                        type="button"
-                        onClick={handleConnectGithub}
-                        disabled={githubConnecting}
-                        className="shrink-0"
-                      >
-                        {githubConnecting ? "GitHub 이동 중..." : githubRepositories.length > 0 ? "저장소 권한 추가" : "GitHub 연결"}
-                      </Button>
-                    </div>
-                    <p className="mt-2 text-[11px] text-muted-soft">
-                      GitHub App은 선택한 저장소의 코드 읽기와 push 이벤트만 사용합니다.
-                    </p>
+                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      aria-pressed={repositorySource === "github"}
+                      onClick={() => handleRepositorySourceChange("github")}
+                      className={cn(
+                        "rounded-[12px] border p-4 text-left transition-colors",
+                        repositorySource === "github"
+                          ? "border-brand bg-brand/[0.06] shadow-[inset_0_0_0_1px_var(--brand)]"
+                          : "border-line-strong bg-white/[0.02] hover:border-white/20"
+                      )}
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-bold text-foreground">GitHub 저장소 연결</span>
+                        <span className="rounded-full bg-brand/15 px-2 py-0.5 text-[10px] font-extrabold text-brand-strong">
+                          자동 배포
+                        </span>
+                      </span>
+                      <span className="mt-1.5 block text-xs leading-relaxed text-muted">
+                        GitHub App으로 저장소를 선택하고 push마다 다시 배포합니다.
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={repositorySource === "url"}
+                      onClick={() => handleRepositorySourceChange("url")}
+                      className={cn(
+                        "rounded-[12px] border p-4 text-left transition-colors",
+                        repositorySource === "url"
+                          ? "border-brand bg-brand/[0.06] shadow-[inset_0_0_0_1px_var(--brand)]"
+                          : "border-line-strong bg-white/[0.02] hover:border-white/20"
+                      )}
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-bold text-foreground">Git URL 직접 입력</span>
+                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-extrabold text-muted">
+                          단발성
+                        </span>
+                      </span>
+                      <span className="mt-1.5 block text-xs leading-relaxed text-muted">
+                        공개 URL이나 PAT를 입력해 이번 배포에만 사용합니다.
+                      </span>
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  {repositorySource === "github" ? (
+                    <div className="mb-4 space-y-3 rounded-[10px] border border-brand/25 bg-brand/[0.04] p-4">
+                      <div className="flex items-end gap-2">
+                        <Field label="GitHub 저장소" htmlFor="deploy-github-repository" className="min-w-0 flex-1">
+                          <Select
+                            id="deploy-github-repository"
+                            value={selectedGithubRepositoryKey}
+                            onChange={(e) => handleGithubRepositoryChange(e.target.value)}
+                            disabled={githubLoading}
+                          >
+                            <option value="">
+                              {githubLoading ? "저장소 불러오는 중..." : "연결된 저장소 선택"}
+                            </option>
+                            {githubRepositories.map((repository) => (
+                              <option
+                                key={`${repository.installationId}:${repository.id}`}
+                                value={`${repository.installationId}:${repository.id}`}
+                              >
+                                {repository.fullName}{repository.privateRepository ? " · Private" : ""}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Button
+                          type="button"
+                          onClick={handleConnectGithub}
+                          disabled={githubConnecting}
+                          className="shrink-0"
+                        >
+                          {githubConnecting ? "GitHub 이동 중..." : githubRepositories.length > 0 ? "저장소 권한 추가" : "GitHub 연결"}
+                        </Button>
+                      </div>
+                      <Field label="배포 브랜치" htmlFor="deploy-github-branch">
+                        <Input
+                          id="deploy-github-branch"
+                          name="deploy-github-branch"
+                          value={githubBranch}
+                          onChange={(e) => handleBranchChange(e.target.value)}
+                          disabled={!selectedGithubRepositoryKey}
+                        />
+                      </Field>
+                      <label className="flex items-start gap-2 rounded-[10px] border border-brand/20 bg-white/[0.02] p-3">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedGithubRepositoryKey && autoDeploy)}
+                          onChange={(e) => setAutoDeploy(e.target.checked)}
+                          disabled={!selectedGithubRepositoryKey}
+                          className="mt-0.5 accent-brand"
+                        />
+                        <span>
+                          <span className="block text-xs font-bold text-foreground">커밋 시 자동 재배포</span>
+                          <span className="mt-0.5 block text-[11px] text-muted-soft">
+                            지정 브랜치에 push되면 정확한 커밋 SHA를 배포합니다. 연속 push는 최신 커밋 하나로 합쳐집니다.
+                          </span>
+                        </span>
+                      </label>
+                      <p className="text-[11px] text-muted-soft">
+                        GitHub App은 선택한 저장소의 코드 읽기와 push 이벤트만 사용합니다.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-4 grid grid-cols-1 gap-3 rounded-[10px] border border-line-strong bg-white/[0.025] p-4 sm:grid-cols-2">
+                      <Field label="Git 저장소 URL" htmlFor="deploy-repo-url">
+                        <Input
+                          id="deploy-repo-url"
+                          name="deploy-repo-url"
+                          value={manualRepoUrl}
+                          onChange={(e) => handleRepoUrlChange(e.target.value)}
+                          placeholder="https://github.com/user/repo.git"
+                        />
+                      </Field>
+                      <Field label="브랜치" htmlFor="deploy-manual-branch">
+                        <Input
+                          id="deploy-manual-branch"
+                          name="deploy-manual-branch"
+                          value={manualBranch}
+                          onChange={(e) => handleBranchChange(e.target.value)}
+                        />
+                      </Field>
+                      <Field label="PAT (비공개 저장소인 경우)" htmlFor="deploy-pat" className="sm:col-span-2">
+                        <Input
+                          id="deploy-pat"
+                          name="deploy-pat"
+                          type="password"
+                          value={patToken}
+                          onChange={(e) => handlePatTokenChange(e.target.value)}
+                          placeholder="공개 저장소면 비워두세요"
+                        />
+                        <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
+                          URL과 PAT는 이번 수동 배포에만 사용하며 저장하지 않습니다.
+                        </p>
+                      </Field>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {!retryNotice && (
-                      <Field label="배포 대상 이름" htmlFor="deploy-target-name" className="col-span-2">
+                      <Field label="배포 대상 이름" htmlFor="deploy-target-name" className="sm:col-span-2">
                         <Input
                           id="deploy-target-name"
                           name="deploy-target-name"
@@ -1119,35 +1239,7 @@ export default function DeploymentsPage() {
                         </p>
                       </Field>
                     )}
-                    <Field label="Git 저장소 URL" htmlFor="deploy-repo-url">
-                      <Input
-                        id="deploy-repo-url"
-                        name="deploy-repo-url"
-                        value={repoUrl}
-                        onChange={(e) => handleRepoUrlChange(e.target.value)}
-                        placeholder="https://github.com/user/repo.git"
-                        readOnly={Boolean(selectedGithubRepositoryKey)}
-                      />
-                    </Field>
-                    <Field label="브랜치" htmlFor="deploy-branch">
-                      <Input id="deploy-branch" name="deploy-branch" value={branch} onChange={(e) => handleBranchChange(e.target.value)} />
-                    </Field>
-                    {!selectedGithubRepositoryKey && (
-                      <Field label="PAT (비공개 저장소인 경우)" htmlFor="deploy-pat" className="col-span-2">
-                        <Input
-                          id="deploy-pat"
-                          name="deploy-pat"
-                          type="password"
-                          value={patToken}
-                          onChange={(e) => handlePatTokenChange(e.target.value)}
-                          placeholder="공개 저장소면 비워두세요"
-                        />
-                        <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
-                          직접 URL 방식은 일회성 수동 배포입니다. PAT는 저장하지 않습니다.
-                        </p>
-                      </Field>
-                    )}
-                    <Field label="저장소 배포 디렉토리 (선택)" htmlFor="deploy-context" className="col-span-2">
+                    <Field label="저장소 배포 디렉토리 (선택)" htmlFor="deploy-context" className="sm:col-span-2">
                       <Input
                         id="deploy-context"
                         name="deploy-context"
@@ -1162,7 +1254,7 @@ export default function DeploymentsPage() {
                         {" "}(저장소 내부 경로)
                       </p>
                     </Field>
-                    <Field label="VM 배포 경로 (선택)" htmlFor="deploy-install-path" className="col-span-2">
+                    <Field label="VM 배포 경로 (선택)" htmlFor="deploy-install-path" className="sm:col-span-2">
                       <Input
                         id="deploy-install-path"
                         name="deploy-install-path"
@@ -1174,24 +1266,6 @@ export default function DeploymentsPage() {
                         VM 내부의 이 경로에 현재 배포를 가리키는 심볼릭 링크를 만듭니다. (VM 파일시스템 절대경로)
                       </p>
                     </Field>
-                    <label className={cn(
-                      "col-span-2 flex items-start gap-2 rounded-[10px] border p-3",
-                      selectedGithubRepositoryKey ? "border-brand/25 bg-brand/[0.05]" : "border-line bg-white/[0.015]"
-                    )}>
-                      <input
-                        type="checkbox"
-                        checked={autoDeploy}
-                        onChange={(e) => setAutoDeploy(e.target.checked)}
-                        disabled={!selectedGithubRepositoryKey}
-                        className="mt-0.5 accent-brand"
-                      />
-                      <span>
-                        <span className="block text-xs font-bold text-foreground">커밋 시 자동 재배포</span>
-                        <span className="mt-0.5 block text-[11px] text-muted-soft">
-                          지정 브랜치에 push되면 정확한 커밋 SHA를 배포합니다. 연속 push는 가장 최신 커밋 하나로 합쳐집니다.
-                        </span>
-                      </span>
-                    </label>
                   </div>
                 </Section>
               </div>}
@@ -1373,11 +1447,13 @@ export default function DeploymentsPage() {
                         <div className="rounded-md border border-line bg-white/[0.025] p-3">
                           <dt className="mb-1 text-muted-soft">자동 재배포</dt>
                           <dd className="text-foreground">
-                            {selectedGithubRepositoryKey && autoDeploy ? "Git push 시 자동 실행" : "사용 안 함"}
+                            {activeGithubRepository && autoDeploy ? "Git push 시 자동 실행" : "사용 안 함"}
                           </dd>
                         </div>
                         <div className="rounded-md border border-line bg-white/[0.025] p-3">
-                          <dt className="mb-1 text-muted-soft">저장소</dt>
+                          <dt className="mb-1 text-muted-soft">
+                            저장소 · {repositorySource === "github" ? "GitHub 연결" : "Git URL 단발성"}
+                          </dt>
                           <dd className="break-all font-mono text-foreground">{repoUrl}</dd>
                         </div>
                         <div className="rounded-md border border-line bg-white/[0.025] p-3">
@@ -1580,11 +1656,13 @@ export default function DeploymentsPage() {
                       <div className="rounded-md border border-line bg-white/[0.025] p-3">
                         <dt className="mb-1 text-muted-soft">자동 재배포</dt>
                         <dd className="text-foreground">
-                          {selectedGithubRepositoryKey && autoDeploy ? "Git push 시 자동 실행" : "사용 안 함"}
+                          {activeGithubRepository && autoDeploy ? "Git push 시 자동 실행" : "사용 안 함"}
                         </dd>
                       </div>
                       <div className="rounded-md border border-line bg-white/[0.025] p-3">
-                        <dt className="mb-1 text-muted-soft">저장소 · 브랜치</dt>
+                        <dt className="mb-1 text-muted-soft">
+                          저장소 · {repositorySource === "github" ? "GitHub 연결" : "Git URL 단발성"}
+                        </dt>
                         <dd className="break-all font-mono text-foreground">{repoUrl} · {branch}</dd>
                       </div>
                       <div className="rounded-md border border-line bg-white/[0.025] p-3">
