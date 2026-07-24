@@ -649,6 +649,12 @@ export const api = {
           method: "POST",
           accessToken,
         }),
+      // 컨테이너 중지 + 이 대상이 만든 모든 이미지/git 저장소/노출 라우트를 정리하고 대상 자체를 삭제
+      deleteTarget: (accessToken: string, vmId: string, targetId: string) =>
+        request<void>("ops", `/ops/${vmId}/deployment-targets/${targetId}`, {
+          method: "DELETE",
+          accessToken,
+        }),
       // SSE는 EventSource로 커스텀 Authorization 헤더를 못 붙여서(백엔드도 알고 있는 기존 갭),
       // fetch 스트리밍으로 직접 SSE 프레임을 파싱함. afterSequence로 끊겼을 때 이어받기도 직접 구현.
       streamEvents: (
