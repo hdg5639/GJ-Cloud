@@ -12,23 +12,27 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.security.KeyPairGenerator;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class GithubAppServiceTest {
 
@@ -119,6 +123,84 @@ class GithubAppServiceTest {
                     assertThat(installation.accountType()).isEqualTo("User");
                 });
         githubOAuthServer.verify();
+        githubApiServer.verify();
+    }
+
+    @Test
+    void removesStaleInstallationMappingAfterReconnect() {
+        GithubInstallationEntity staleInstallation = GithubInstallationEntity.create(
+                99L, USER_ID, "octocat", "User");
+        when(installationRepository.findAllByUserIdOrderByCreatedAtAsc(USER_ID))
+                .thenReturn(List.of(staleInstallation));
+        githubOAuthServer.expect(requestTo("https://github.com/login/oauth/access_token"))
+                .andRespond(withSuccess(
+                        "{\"access_token\":\"ghu_test\"}",
+                        MediaType.APPLICATION_JSON));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/user/installations?per_page=100&page=1"))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "installations": [
+                            {
+                              "id": 101,
+                              "account": {"login": "octocat", "type": "User"}
+                            }
+                          ]
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        githubAppService.completeInstallation(USER_ID, "authorization-code", STATE);
+
+        verify(installationRepository).deleteAll(List.of(staleInstallation));
+        githubOAuthServer.verify();
+        githubApiServer.verify();
+    }
+
+    @Test
+    void removesDeletedInstallationAndContinuesListingRepositories() {
+        GithubInstallationEntity deletedInstallation = GithubInstallationEntity.create(
+                99L, USER_ID, "octocat", "User");
+        GithubInstallationEntity currentInstallation = GithubInstallationEntity.create(
+                101L, USER_ID, "octocat", "User");
+        when(installationRepository.findAllByUserIdOrderByCreatedAtAsc(USER_ID))
+                .thenReturn(List.of(deletedInstallation, currentInstallation));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/app/installations/99/access_tokens"))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"Not Found\"}"));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/app/installations/101/access_tokens"))
+                .andRespond(withSuccess(
+                        "{\"token\":\"ghs_installation\"}",
+                        MediaType.APPLICATION_JSON));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/installation/repositories?per_page=100&page=1"))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "repositories": [
+                            {
+                              "id": 202,
+                              "full_name": "octocat/example",
+                              "clone_url": "https://github.com/octocat/example.git",
+                              "default_branch": "main",
+                              "private": false
+                            }
+                          ]
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(githubAppService.listRepositories(USER_ID))
+                .singleElement()
+                .satisfies(repository -> {
+                    assertThat(repository.installationId()).isEqualTo(101L);
+                    assertThat(repository.fullName()).isEqualTo("octocat/example");
+                });
+        verify(installationRepository).delete(deletedInstallation);
         githubApiServer.verify();
     }
 

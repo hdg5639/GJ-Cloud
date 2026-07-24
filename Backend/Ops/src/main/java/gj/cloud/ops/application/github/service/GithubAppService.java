@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -35,7 +36,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -168,6 +171,7 @@ public class GithubAppService {
                     return GithubInstallationResponse.from(entity);
                 })
                 .toList();
+        removeStaleInstallations(userId, saved);
         return new GithubInstallationCompleteResponse(saved, stateParts[1]);
     }
 
@@ -183,9 +187,15 @@ public class GithubAppService {
         List<GithubRepositoryResponse> repositories = new ArrayList<>();
         for (GithubInstallationEntity installation
                 : installationRepository.findAllByUserIdOrderByCreatedAtAsc(userId)) {
-            String token = createInstallationToken(installation.getInstallationId());
-            for (JsonNode repository : listInstallationRepositories(token)) {
-                repositories.add(toRepositoryResponse(installation.getInstallationId(), repository));
+            try {
+                String token = createInstallationToken(installation.getInstallationId());
+                for (JsonNode repository : listInstallationRepositories(token)) {
+                    repositories.add(toRepositoryResponse(installation.getInstallationId(), repository));
+                }
+            } catch (GithubInstallationUnavailableException e) {
+                installationRepository.delete(installation);
+                log.warn("삭제된 GitHub installation 연결 정리: userId={}, installationId={}",
+                        userId, installation.getInstallationId());
             }
         }
         return repositories;
@@ -195,13 +205,29 @@ public class GithubAppService {
             String userId, Long installationId, Long repositoryId
     ) {
         requireConfigured();
-        installationRepository.findByInstallationIdAndUserId(installationId, userId)
+        GithubInstallationEntity installation = installationRepository
+                .findByInstallationIdAndUserId(installationId, userId)
                 .orElseThrow(() -> new OpsException(OpsErrorCode.GITHUB_INSTALLATION_NOT_FOUND));
-        return resolveRepositoryAccess(installationId, repositoryId);
+        try {
+            return resolveRepositoryAccessInternal(installationId, repositoryId);
+        } catch (GithubInstallationUnavailableException e) {
+            installationRepository.delete(installation);
+            throw new OpsException(OpsErrorCode.GITHUB_INSTALLATION_NOT_FOUND);
+        }
     }
 
     public GithubRepositoryAccess resolveRepositoryAccess(Long installationId, Long repositoryId) {
         requireConfigured();
+        try {
+            return resolveRepositoryAccessInternal(installationId, repositoryId);
+        } catch (GithubInstallationUnavailableException e) {
+            throw new OpsException(OpsErrorCode.GITHUB_INSTALLATION_NOT_FOUND);
+        }
+    }
+
+    private GithubRepositoryAccess resolveRepositoryAccessInternal(
+            Long installationId, Long repositoryId
+    ) {
         String token = createInstallationToken(installationId);
         JsonNode repository = getWithInstallationToken("/repositories/" + repositoryId, token);
         if (repository.path("id").asLong() == repositoryId) {
@@ -215,6 +241,29 @@ public class GithubAppService {
             );
         }
         throw new OpsException(OpsErrorCode.GITHUB_REPOSITORY_NOT_FOUND);
+    }
+
+    private void removeStaleInstallations(
+            String userId, List<GithubInstallationResponse> accessibleInstallations
+    ) {
+        Set<Long> accessibleIds = new HashSet<>();
+        for (GithubInstallationResponse installation : accessibleInstallations) {
+            accessibleIds.add(installation.installationId());
+        }
+        List<GithubInstallationEntity> staleInstallations =
+                installationRepository.findAllByUserIdOrderByCreatedAtAsc(userId)
+                        .stream()
+                        .filter(installation -> !accessibleIds.contains(installation.getInstallationId()))
+                        .toList();
+        if (staleInstallations.isEmpty()) {
+            return;
+        }
+        installationRepository.deleteAll(staleInstallations);
+        log.info("GitHub installation 연결 동기화: userId={}, removedInstallationIds={}",
+                userId,
+                staleInstallations.stream()
+                        .map(GithubInstallationEntity::getInstallationId)
+                        .toList());
     }
 
     private List<JsonNode> listInstallationRepositories(String token) {
@@ -314,6 +363,13 @@ public class GithubAppService {
                 throw new OpsException(OpsErrorCode.GITHUB_API_FAILED);
             }
             return token;
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 404) {
+                throw new GithubInstallationUnavailableException(installationId, e);
+            }
+            log.error("GitHub installation token 발급 실패: installationId={}, status={}, error={}",
+                    installationId, e.getStatusCode().value(), e.getMessage());
+            throw new OpsException(OpsErrorCode.GITHUB_API_FAILED);
         } catch (OpsException e) {
             throw e;
         } catch (Exception e) {
@@ -394,5 +450,14 @@ public class GithubAppService {
 
     private static String normalizeConfigValue(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static final class GithubInstallationUnavailableException extends RuntimeException {
+
+        private GithubInstallationUnavailableException(
+                Long installationId, RestClientResponseException cause
+        ) {
+            super("GitHub installation을 찾을 수 없습니다: " + installationId, cause);
+        }
     }
 }
