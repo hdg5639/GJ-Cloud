@@ -33,6 +33,7 @@ jobs:
 
           PREV_IMAGE_ID=$(docker images -q "$IMAGE" | head -n1)
 
+          pwd
           docker compose build "$SERVICE"
           docker compose up -d "$SERVICE"
 
@@ -54,6 +55,7 @@ jobs:
           echo "헬스체크 실패 — 이전 이미지로 롤백 시도"
           if [ -n "$PREV_IMAGE_ID" ]; then
             docker tag "$PREV_IMAGE_ID" "$IMAGE"
+            pwd
             docker compose up -d "$SERVICE"
           else
             echo "롤백할 이전 이미지가 없음(최초 배포)"
