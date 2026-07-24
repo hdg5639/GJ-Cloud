@@ -36,6 +36,7 @@ out/
 ### VS Code ###
 .vscode/
 
+
 ### 로컬 전용 (커밋 금지) ###
 .env
 .env.*
