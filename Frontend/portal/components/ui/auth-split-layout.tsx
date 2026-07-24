@@ -28,16 +28,22 @@ export function AuthSplitLayout({
   );
 }
 
-function AuthVisualBackdrop() {
+function AuthVisualBackdrop({ animated = false }: { animated?: boolean }) {
   return (
     <>
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-24 top-16 h-[380px] w-[380px] rounded-full bg-[#74ff5b] opacity-[0.14] blur-[100px]"
+        className={cn(
+          "pointer-events-none absolute -right-24 top-16 h-[380px] w-[380px] rounded-full bg-[#74ff5b] opacity-[0.14] blur-[100px]",
+          animated && "auth-reveal auth-reveal-backdrop auth-reveal-backdrop-primary",
+        )}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-32 bottom-10 h-[320px] w-[320px] rounded-full bg-[#00b66c] opacity-[0.10] blur-[100px]"
+        className={cn(
+          "pointer-events-none absolute -left-32 bottom-10 h-[320px] w-[320px] rounded-full bg-[#00b66c] opacity-[0.10] blur-[100px]",
+          animated && "auth-reveal auth-reveal-backdrop auth-reveal-backdrop-secondary",
+        )}
       />
     </>
   );
@@ -72,7 +78,8 @@ function AssembledWordmark() {
 }
 
 const BRAND_INTRO_KEY = "gb-brand-intro-played";
-const BRAND_INTRO_MS = 2600;
+const BRAND_INTRO_MS = 3300;
+const BRAND_REVEAL_SETTLE_MS = 1400;
 const BRAND_INTRO_DURATION = `${BRAND_INTRO_MS / 1000}s`;
 
 export type BrandIntroPhase = "pending" | "playing" | "done";
@@ -94,7 +101,7 @@ export function useBrandIntroPhase(): BrandIntroPhase {
     }
     sessionStorage.setItem(BRAND_INTRO_KEY, "1");
     setPhase("playing");
-    const t = setTimeout(() => setPhase("done"), BRAND_INTRO_MS + 100);
+    const t = setTimeout(() => setPhase("done"), BRAND_INTRO_MS + BRAND_REVEAL_SETTLE_MS);
     return () => clearTimeout(t);
   }, []);
 
@@ -127,15 +134,15 @@ function AnimatedVisualWordmark({ phase }: { phase: BrandIntroPhase }) {
   return (
     <div className="relative h-9 w-[168px]">
       <div
-        className="brand-intro-icon fixed z-50 flex items-center gap-2.5"
+        className="brand-intro-icon fixed z-50 flex items-center"
         style={{ animation: `brand-intro-icon ${BRAND_INTRO_DURATION} cubic-bezier(.22,1,.36,1) forwards` }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/gamjabox-symbol.svg" alt="GamjaBox" className="h-9 w-9 shrink-0" />
+        <img src="/gamjabox-symbol.svg" alt="GamjaBox" className="brand-intro-symbol shrink-0" />
         <span
-          className="brand-intro-text inline-block overflow-hidden whitespace-nowrap text-2xl font-extrabold tracking-tighter"
+          className="brand-intro-text inline-block overflow-hidden whitespace-nowrap font-extrabold tracking-tighter"
           style={{
-            animation: `brand-intro-text ${BRAND_INTRO_DURATION} cubic-bezier(.22,1,.36,1) forwards`,
+            animation: `brand-intro-text ${BRAND_INTRO_DURATION} cubic-bezier(.4,0,.2,1) forwards`,
             fontFamily: "var(--font-manrope)",
           }}
         >
@@ -236,17 +243,13 @@ export function AuthMarketingPanel({ introPhase = "done" }: { introPhase?: Brand
 
   return (
     <div className="relative flex h-full flex-col justify-between p-10">
-      {/* done 상태에선 contents로 완전히 레이아웃에서 빠져서(추가 flex item이 되지 않음) 원래
-          구조와 100% 동일하게 유지 — 그래야 인트로 재생 직후와 새로고침 후의 위치가 어긋나지 않음 */}
-      <div className={introPhase !== "done" ? "auth-reveal" : "contents"}>
-        <AuthVisualBackdrop />
-      </div>
+      <AuthVisualBackdrop animated={introPhase !== "done"} />
 
       <div className="relative z-10">
         <AnimatedVisualWordmark phase={introPhase} />
       </div>
 
-      <div className={cn("relative z-10", introPhase !== "done" && "auth-reveal")}>
+      <div className={cn("relative z-10", introPhase !== "done" && "auth-reveal auth-reveal-copy")}>
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#baff4a]/20 bg-[#baff4a]/[0.06] px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#baff4a]">
           <span className="h-[6px] w-[6px] rounded-full bg-[#baff4a] shadow-[0_0_0_4px_rgba(186,255,74,0.12),0_0_14px_rgba(186,255,74,0.8)]" />
           SELF-HOSTED CLOUD PLATFORM
@@ -297,7 +300,7 @@ export function AuthMarketingPanel({ introPhase = "done" }: { introPhase?: Brand
         </div>
       </div>
 
-      <div className={introPhase !== "done" ? "auth-reveal" : "contents"}>
+      <div className={introPhase !== "done" ? "auth-reveal auth-reveal-footer" : "contents"}>
         <VisualFooter />
       </div>
     </div>
