@@ -157,18 +157,29 @@ body {
    3) 완성된 워드마크 전체가 좌상단 제자리로 이동 + 원래 크기로 축소 */
 @keyframes brand-intro-icon {
   0% {
+    gap: 0;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%) scale(1);
   }
-  64% {
+  18% {
+    gap: 0;
     left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(1);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  64% {
+    gap: 2rem;
+    /* 글리프의 실제 보이는 윤곽이 레이아웃 박스보다 우측으로 치우쳐 있어 8px 광학 보정한다. */
+    left: calc(50% - 0.5rem);
     top: 50%;
     transform: translate(-50%, -50%) scale(1);
     /* 완성된 워드마크의 이동 구간은 천천히 출발하고 도착 직전에 부드럽게 감속한다. */
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
   100% {
+    gap: 2rem;
     left: 40px;
     top: 40px;
     transform: translate(0, 0) scale(0.3125);
@@ -178,7 +189,7 @@ body {
 .brand-intro-icon {
   /* 작은 로고를 transform으로 확대하면 브라우저가 저해상도 레이어를 재사용해 흐릿해질 수 있다.
      중앙 인트로 크기(최종 크기의 3.2배)로 처음부터 렌더링한 뒤 마지막에 축소해 선명도를 유지한다. */
-  gap: 2rem;
+  gap: 0;
   transform-origin: top left;
   will-change: left, top, transform;
 }
