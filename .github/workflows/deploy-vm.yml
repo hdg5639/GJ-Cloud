@@ -15,10 +15,12 @@ jobs:
       - Linux
       - X64
       - gamjabox-dev
+    defaults:
+      run:
+        working-directory: /home/ubuntu/GJ-Cloud
     steps:
       - name: Pull latest code in production directory
         run: |
-          cd ~/GJ-Cloud
           git fetch origin develop
           git reset --hard origin/develop
 
