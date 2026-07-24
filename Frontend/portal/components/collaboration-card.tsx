@@ -26,17 +26,17 @@ function relativeTime(iso: string) {
 const TYPE_META = {
   NOTE: {
     label: "메모",
-    badge: { bg: "rgba(59,130,246,0.16)", color: "#93c5fd" },
+    badge: { bg: "rgba(59,130,246,0.22)", color: "#dbeafe", border: "rgba(96,165,250,0.5)" },
     pinned: { bg: "rgba(59,130,246,0.08)", border: "#3b82f6", text: "#dbeafe", sub: "#93c5fd", icon: "#60a5fa" },
   },
   NOTICE: {
     label: "공지",
-    badge: { bg: "rgba(250,199,117,0.18)", color: "#fbbf24" },
+    badge: { bg: "rgba(250,199,117,0.2)", color: "#fef3c7", border: "rgba(251,191,36,0.5)" },
     pinned: { bg: "rgba(250,199,117,0.08)", border: "#d69e2e", text: "#fde68a", sub: "#fbbf24", icon: "#f0b429" },
   },
   REQUEST: {
     label: "요청",
-    badge: { bg: "rgba(248,113,113,0.16)", color: "#fca5a5" },
+    badge: { bg: "rgba(248,113,113,0.2)", color: "#fee2e2", border: "rgba(248,113,113,0.5)" },
     pinned: { bg: "rgba(168,85,247,0.08)", border: "#a855f7", text: "#e9d5ff", sub: "#d8b4fe", icon: "#c084fc" },
   },
 };
@@ -98,8 +98,8 @@ export default function CollaborationCard({ item, accessToken, isOwnerOrAdmin, c
   }
 
   const containerStyle: React.CSSProperties = item.pinned
-    ? { backgroundColor: meta.pinned.bg, borderLeft: `3px solid ${meta.pinned.border}`, borderRadius: "0 8px 8px 0", padding: "12px 14px", position: "relative" }
-    : { backgroundColor: "var(--panel)", border: "0.5px solid var(--line)", borderRadius: 8, padding: "12px 14px", position: "relative" };
+    ? { backgroundColor: meta.pinned.bg, borderLeft: `3px solid ${meta.pinned.border}`, borderRadius: "0 8px 8px 0", padding: "15px 16px", position: "relative" }
+    : { backgroundColor: "var(--panel)", border: "0.5px solid var(--line)", borderRadius: 8, padding: "15px 16px", position: "relative" };
 
   const titleColor = item.pinned ? meta.pinned.text : "var(--foreground)";
   const contentColor = item.pinned ? meta.pinned.sub : "var(--muted)";
@@ -116,41 +116,42 @@ export default function CollaborationCard({ item, accessToken, isOwnerOrAdmin, c
 
       {/* 뱃지 행 */}
       <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-        <span style={{ backgroundColor: meta.badge.bg, color: meta.badge.color, fontSize: 11, padding: "2px 8px", borderRadius: 6, fontWeight: 500 }}>
+        <span style={{ backgroundColor: meta.badge.bg, color: meta.badge.color, border: `1px solid ${meta.badge.border}`, fontSize: 12, padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>
           {meta.label}
         </span>
         {item.tag && (
           <span style={{
-            backgroundColor: item.pinned ? meta.pinned.text : "#1f2937",
-            color: item.pinned ? meta.pinned.bg : "#f9fafb",
-            fontSize: 11, padding: "2px 8px", borderRadius: 6,
+            backgroundColor: "rgba(255,255,255,0.1)",
+            color: "#f8fafc",
+            border: "1px solid rgba(255,255,255,0.2)",
+            fontSize: 12, padding: "2px 8px", borderRadius: 6, fontWeight: 650,
           }}>
             #{item.tag}
           </span>
         )}
         {item.type === "REQUEST" && item.status === "UNSOLVED" && (
-          <span style={{ backgroundColor: "rgba(248,113,113,0.16)", color: "#fca5a5", fontSize: 11, padding: "2px 8px", borderRadius: 6 }}>미해결</span>
+          <span style={{ backgroundColor: "rgba(248,113,113,0.2)", color: "#fee2e2", border: "1px solid rgba(248,113,113,0.45)", fontSize: 12, padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>미해결</span>
         )}
         {item.type === "REQUEST" && item.status === "SOLVED" && (
-          <span style={{ backgroundColor: "rgba(121,217,94,0.14)", color: "#86efac", fontSize: 11, padding: "2px 8px", borderRadius: 6 }}>해결됨</span>
+          <span style={{ backgroundColor: "rgba(121,217,94,0.18)", color: "#dcfce7", border: "1px solid rgba(134,239,172,0.4)", fontSize: 12, padding: "2px 8px", borderRadius: 6, fontWeight: 700 }}>해결됨</span>
         )}
       </div>
 
       {/* 제목 */}
-      <p style={{ fontSize: 13, fontWeight: 500, margin: "8px 0 4px", color: titleColor }}>{item.title}</p>
+      <p style={{ fontSize: 15, fontWeight: 650, margin: "10px 0 5px", color: titleColor, lineHeight: 1.45 }}>{item.title}</p>
       {/* 내용 */}
-      <p style={{ fontSize: 12, margin: "0 0 8px", color: contentColor, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+      <p style={{ fontSize: 14, margin: "0 0 11px", color: contentColor, lineHeight: 1.65, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
         {item.content}
       </p>
 
       {/* 하단: 작성자·시간 + 액션 */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, color: metaColor }}>{item.createdByEmail} · {relativeTime(item.createdAt)}</span>
+        <span style={{ fontSize: 12, color: metaColor }}>{item.createdByEmail} · {relativeTime(item.createdAt)}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {item.type === "REQUEST" && item.status === "UNSOLVED" && (
             <button
               onClick={handleResolve}
-              style={{ height: 24, padding: "0 10px", fontSize: 11, width: "auto", cursor: "pointer" }}
+              style={{ height: 28, padding: "0 11px", fontSize: 12, width: "auto", cursor: "pointer" }}
               className="border border-line-strong rounded text-muted hover:bg-white/[0.06]"
             >
               해결 완료

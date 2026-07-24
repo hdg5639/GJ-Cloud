@@ -89,7 +89,7 @@ export default function OrganizationDetailPage() {
     if (!accessToken) return;
     api.org.get(accessToken, id).then(setOrg).catch(() => router.push("/organizations"));
     api.user.profile(accessToken).then((p) => setCurrentUserId(p.userId)).catch(() => {});
-  }, [accessToken, id]);
+  }, [accessToken, id, router]);
 
   useEffect(() => {
     if (!accessToken || !org) return;
@@ -298,7 +298,7 @@ export default function OrganizationDetailPage() {
                 <button
                   key={t ?? "all"}
                   onClick={() => setTypeFilter(t)}
-                  style={{ width: "auto", padding: "0 14px", height: 32, fontSize: 13 }}
+                  style={{ width: "auto", padding: "0 14px", height: 34, fontSize: 14 }}
                   className={`rounded-md transition-colors ${
                     typeFilter === t
                       ? "bg-white/[0.06] border border-line-strong text-foreground"
@@ -322,7 +322,7 @@ export default function OrganizationDetailPage() {
             <div className="flex flex-col items-center justify-center py-16 bg-white/[0.02] rounded-panel border border-line">
               <span className="text-line-strong mb-3"><IconMessagePlus /></span>
               <p className="text-sm font-bold mb-1">아직 협업 항목이 없어요</p>
-              <p className="text-[13px] text-muted-soft mb-4">메모, 공지, 요청을 작성해서 팀원과 공유해보세요</p>
+              <p className="mb-4 text-sm text-muted-soft">메모, 공지, 요청을 작성해서 팀원과 공유해보세요</p>
               <button
                 onClick={() => { setEditingItem(undefined); setShowWrite(true); }}
                 className="flex items-center gap-1 text-[13px] px-4 h-[34px] bg-soft text-brand-strong rounded-md hover:bg-brand/15 font-bold border-0"
@@ -354,9 +354,9 @@ export default function OrganizationDetailPage() {
       {tab === "members" && (
         <div className="space-y-4">
           {isOwnerOrAdmin && (
-            <form onSubmit={handleInvite} className="flex gap-2">
+            <form onSubmit={handleInvite} className="flex items-start gap-2">
               {selectedInvite ? (
-                <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[9px] border border-line-strong bg-panel px-3 py-2">
+                <div className="flex h-[42px] min-w-0 flex-1 items-center gap-2.5 rounded-[9px] border border-line-strong bg-panel px-3">
                   <Avatar
                     nickname={selectedInvite.nickname}
                     email={selectedInvite.email}
@@ -365,8 +365,8 @@ export default function OrganizationDetailPage() {
                     textSizeClassName="text-[11px]"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold">{selectedInvite.nickname ?? selectedInvite.email}</p>
-                    <p className="truncate text-xs text-muted-soft">{maskEmail(selectedInvite.email)}</p>
+                    <p className="truncate text-[13px] font-bold leading-4">{selectedInvite.nickname ?? selectedInvite.email}</p>
+                    <p className="truncate text-[11px] leading-[14px] text-muted-soft">{maskEmail(selectedInvite.email)}</p>
                   </div>
                   <button
                     type="button"
@@ -379,18 +379,19 @@ export default function OrganizationDetailPage() {
               ) : accessToken ? (
                 <MemberInviteCombobox accessToken={accessToken} orgId={id} onSelect={setSelectedInvite} />
               ) : null}
-              <div className="w-32 shrink-0">
+              <div className="w-28 shrink-0">
                 <Select
                   id="org-invite-role"
                   name="org-invite-role"
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as MemberRole)}
+                  className="h-[42px]"
                 >
                   <option value="MEMBER">멤버</option>
                   <option value="ADMIN">관리자</option>
                 </Select>
               </div>
-              <Button type="submit" variant="primary" disabled={inviting || !selectedInvite} className="shrink-0">
+              <Button type="submit" variant="primary" disabled={inviting || !selectedInvite} className="h-[42px] min-h-[42px] shrink-0">
                 {inviting ? "초대 중..." : "초대"}
               </Button>
             </form>
@@ -424,7 +425,8 @@ export default function OrganizationDetailPage() {
                           name={`org-member-role-${m.id}`}
                           value={m.role}
                           onChange={(e) => handleRoleChange(m, e.target.value as MemberRole)}
-                          className="h-8 !min-h-0 w-[92px] py-1 pl-2 pr-8 text-xs"
+                          className="h-7 !min-h-0 w-[74px] py-0 pl-2 pr-6 text-[11px] font-extrabold"
+                          style={{ backgroundPosition: "right 7px center", backgroundSize: "12px 12px" }}
                         >
                           <option value="ADMIN">관리자</option>
                           <option value="MEMBER">멤버</option>
