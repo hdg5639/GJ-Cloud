@@ -1,4 +1,4 @@
-name: Deploy portal to ops-01
+name: Deploy portal to dev-01
 
 on:
   push:

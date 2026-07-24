@@ -1,4 +1,4 @@
-name: Deploy User to ops-01
+name: Deploy User to dev-01
 
 on:
   push:

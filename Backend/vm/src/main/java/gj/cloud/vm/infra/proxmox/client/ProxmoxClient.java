@@ -26,9 +26,11 @@ import org.springframework.web.util.UriUtils;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 @Slf4j
@@ -92,11 +94,13 @@ public class ProxmoxClient {
         configParams.add("cores", String.valueOf(config.getCores()));
         configParams.add("memory", config.getMemory());
         configParams.add("cpu", config.getCpu());
+        // 템플릿 기본 사용자에 의존하면 템플릿 교체/재생성 시 키가 다른 계정에 들어갈 수 있다.
+        configParams.add("ciuser", config.getCiuser());
         // Proxmox의 sshkeys 파라미터는 자체 검증기가 "urlencoded 문자열이어야 함"을 요구함 — HTTP 폼
         // 전송단의 인코딩(BodyInserters.fromFormData가 자동 처리)과는 별개로, Proxmox가 전달받는 값 자체가
         // 이미 percent-encoded 상태여야 통과함(원본 그대로 보내면 400 invalid urlencoded string 에러).
         // 그래서 여기서 한 번 인코딩한 뒤 폼 전송단에서 한 번 더 인코딩되는 이중 인코딩이 정상 동작임 — 되돌리지 말 것.
-        configParams.add("sshkeys", UriUtils.encode(config.getSshkeys(), "UTF-8"));
+        configParams.add("sshkeys", UriUtils.encode(config.getSshkeys(), StandardCharsets.UTF_8));
         configParams.add("ipconfig0", config.getIpconfig0());
         configParams.add("nameserver", config.getNameserver());
 
@@ -121,9 +125,63 @@ public class ProxmoxClient {
                         return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
                     });
                 })
+                .then(verifyCloudInitConfig(vmid, sshPublicKeys))
                 .doOnSuccess(v -> log.info("VM config 완료: vmid={}", vmid))
                 .doOnError(e -> log.error("VM config 실패: vmid={}, error={}", vmid, e.getMessage()))
                 .then();
+    }
+
+    private Mono<Void> verifyCloudInitConfig(int vmid, List<String> expectedPublicKeys) {
+        return proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/config", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve()
+                .bodyToMono(String.class)
+                .flatMap(body -> {
+                    try {
+                        JsonNode data = new ObjectMapper().readTree(body).path("data");
+                        boolean hasCloudInitDrive = data.properties().stream()
+                                .filter(entry -> entry.getKey().matches("(?:ide|sata|scsi)\\d+"))
+                                .map(java.util.Map.Entry::getValue)
+                                .map(JsonNode::asText)
+                                .anyMatch(value -> value.contains("cloudinit"));
+                        boolean hasExpectedUser = "ubuntu".equals(data.path("ciuser").asText());
+                        String configuredKeys = decodePercentEncoded(data.path("sshkeys").asText());
+                        boolean hasAllKeys = expectedPublicKeys.stream()
+                                .map(this::canonicalPublicKey)
+                                .allMatch(configuredKeys::contains);
+
+                        if (hasCloudInitDrive && hasExpectedUser && hasAllKeys) {
+                            return Mono.<Void>empty();
+                        }
+                        log.error(
+                                "Proxmox cloud-init 설정 검증 실패: vmid={}, drive={}, ciuser={}, sshKeyCount={}",
+                                vmid, hasCloudInitDrive, hasExpectedUser, expectedPublicKeys.size());
+                        return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                    } catch (Exception e) {
+                        log.error("Proxmox cloud-init 설정 응답 파싱 실패: vmid={}, error={}", vmid, e.getMessage());
+                        return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
+                    }
+                });
+    }
+
+    private String decodePercentEncoded(String value) {
+        String decoded = value;
+        for (int i = 0; i < 3 && decoded.contains("%"); i++) {
+            String next = UriUtils.decode(decoded, StandardCharsets.UTF_8);
+            if (next.equals(decoded)) {
+                break;
+            }
+            decoded = next;
+        }
+        return decoded;
+    }
+
+    private String canonicalPublicKey(String publicKey) {
+        return Stream.of(publicKey.trim().split("\\s+"))
+                .limit(2)
+                .reduce((left, right) -> left + " " + right)
+                .orElse(publicKey);
     }
 
     public Mono<Void> waitForTaskCompletion(String upid) {

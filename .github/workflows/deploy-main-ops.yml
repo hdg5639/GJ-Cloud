@@ -1,4 +1,4 @@
-name: Deploy Ops to ops-01 from main
+name: Deploy Ops to ops-01
 
 on:
   push:

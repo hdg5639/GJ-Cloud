@@ -23,6 +23,7 @@ public class VmCreate {
     private final String net0;
     private final String ide2;
     private final String cipassword;
+    private final String ciuser;
     private final String sshkeys;
     private final String ipconfig0;
     private final String nameserver;
@@ -52,6 +53,7 @@ public class VmCreate {
         this.net0 = "virtio,bridge=" + bridge;
         this.ide2 = storage + ":cloudinit";
         this.cipassword = "password";
+        this.ciuser = "ubuntu";
         this.ipconfig0 = "ip=" + staticIp + "/24,gw=192.168.0.1";
         // cloud-init에 nameserver를 지정하지 않으면 게이트웨이(192.168.0.1)가 DNS도 포워딩해준다는 보장이
         // 없어 VM 내부에서 도메인 조회(git clone, curl 등)가 전부 실패할 수 있음 — 공인 DNS로 명시 고정

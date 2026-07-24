@@ -1,4 +1,4 @@
-name: Deploy Auth to ops-01
+name: Deploy Auth to dev-01
 
 on:
   push:
