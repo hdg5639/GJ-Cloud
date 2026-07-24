@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "./cn";
 
 // 랜딩 페이지(gamjabox-landing)의 다크 톤 비주얼 언어를 로그인/회원가입에도 가져오기 위한 레이아웃.
@@ -131,32 +132,38 @@ function AnimatedVisualWordmark({ phase }: { phase: BrandIntroPhase }) {
     return <AssembledWordmark />;
   }
 
+  const animatedWordmark = (
+    <div
+      className="brand-intro-icon pointer-events-none fixed z-[100] flex items-center"
+      style={{ animation: `brand-intro-icon ${BRAND_INTRO_DURATION} cubic-bezier(.22,1,.36,1) forwards` }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/gamjabox-symbol.svg" alt="GamjaBox" className="brand-intro-symbol shrink-0" />
+      <span
+        aria-label="GamjaBox"
+        className="brand-intro-text whitespace-nowrap font-extrabold tracking-tighter"
+        style={{
+          animation: `brand-intro-text ${BRAND_INTRO_DURATION} cubic-bezier(.4,0,.2,1) forwards`,
+          fontFamily: "var(--font-manrope)",
+        }}
+      >
+        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">G</span>
+        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">a</span>
+        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">m</span>
+        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">j</span>
+        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">a</span>
+        <span aria-hidden className="brand-intro-letter text-[#08B85B]">B</span>
+        <span aria-hidden className="brand-intro-letter text-[#08B85B]">o</span>
+        <span aria-hidden className="brand-intro-letter text-[#08B85B]">x</span>
+      </span>
+    </div>
+  );
+
   return (
     <div className="relative h-9 w-[168px]">
-      <div
-        className="brand-intro-icon fixed z-50 flex items-center"
-        style={{ animation: `brand-intro-icon ${BRAND_INTRO_DURATION} cubic-bezier(.22,1,.36,1) forwards` }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/gamjabox-symbol.svg" alt="GamjaBox" className="brand-intro-symbol shrink-0" />
-        <span
-          aria-label="GamjaBox"
-          className="brand-intro-text whitespace-nowrap font-extrabold tracking-tighter"
-          style={{
-            animation: `brand-intro-text ${BRAND_INTRO_DURATION} cubic-bezier(.4,0,.2,1) forwards`,
-            fontFamily: "var(--font-manrope)",
-          }}
-        >
-          <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">G</span>
-          <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">a</span>
-          <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">m</span>
-          <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">j</span>
-          <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">a</span>
-          <span aria-hidden className="brand-intro-letter text-[#08B85B]">B</span>
-          <span aria-hidden className="brand-intro-letter text-[#08B85B]">o</span>
-          <span aria-hidden className="brand-intro-letter text-[#08B85B]">x</span>
-        </span>
-      </div>
+      {/* 로그인 폼 패널의 stacking context와 좌측 패널의 overflow 영향을 받지 않도록
+          재생 중인 워드마크만 body 최상위 레이어에서 렌더링한다. */}
+      {typeof document !== "undefined" ? createPortal(animatedWordmark, document.body) : null}
     </div>
   );
 }
