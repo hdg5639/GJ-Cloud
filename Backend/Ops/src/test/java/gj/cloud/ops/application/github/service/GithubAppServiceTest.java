@@ -2,6 +2,7 @@ package gj.cloud.ops.application.github.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import gj.cloud.ops.application.github.dto.GithubInstallationCompleteResponse;
+import gj.cloud.ops.application.github.dto.GithubRepositoryAccess;
 import gj.cloud.ops.domain.github.entity.GithubInstallationEntity;
 import gj.cloud.ops.domain.github.repository.GithubInstallationRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,7 +47,7 @@ class GithubAppServiceTest {
     private GithubAppService githubAppService;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         RestClient.Builder githubApiBuilder = RestClient.builder().baseUrl("https://api.github.com");
         githubApiServer = MockRestServiceServer.bindTo(githubApiBuilder).build();
         RestClient.Builder githubOAuthBuilder = RestClient.builder().baseUrl("https://github.com");
@@ -63,7 +66,7 @@ class GithubAppServiceTest {
                 "gamjabox",
                 "Iv1.client",
                 "client-secret",
-                "-----BEGIN PRIVATE KEY-----\\ntest\\n-----END PRIVATE KEY-----",
+                generatePrivateKeyPem(),
                 new ObjectMapper(),
                 redisTemplate,
                 installationRepository,
@@ -120,6 +123,38 @@ class GithubAppServiceTest {
     }
 
     @Test
+    void parsesPemAndSignsAppJwtBeforeCreatingInstallationToken() {
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/app/installations/101/access_tokens"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(request -> assertThat(
+                        request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
+                        .startsWith("Bearer eyJ"))
+                .andRespond(withSuccess(
+                        "{\"token\":\"ghs_installation\"}",
+                        MediaType.APPLICATION_JSON));
+        githubApiServer.expect(requestTo("https://api.github.com/repositories/202"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer ghs_installation"))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "id": 202,
+                          "full_name": "octocat/example",
+                          "clone_url": "https://github.com/octocat/example.git",
+                          "default_branch": "main"
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        GithubRepositoryAccess access = githubAppService.resolveRepositoryAccess(101L, 202L);
+
+        assertThat(access.fullName()).isEqualTo("octocat/example");
+        assertThat(access.token()).isEqualTo("ghs_installation");
+        githubApiServer.verify();
+    }
+
+    @Test
     void createsWithProductionConstructorWithoutRestClientBuilderBean() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.getBeanFactory().registerSingleton("objectMapper", new ObjectMapper());
@@ -133,5 +168,13 @@ class GithubAppServiceTest {
 
             assertThat(context.getBean(GithubAppService.class)).isNotNull();
         }
+    }
+
+    private static String generatePrivateKeyPem() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        byte[] encoded = generator.generateKeyPair().getPrivate().getEncoded();
+        String body = Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(encoded);
+        return "-----BEGIN PRIVATE KEY-----\n" + body + "\n-----END PRIVATE KEY-----";
     }
 }
