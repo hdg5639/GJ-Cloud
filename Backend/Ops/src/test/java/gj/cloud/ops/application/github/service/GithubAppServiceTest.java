@@ -1,0 +1,262 @@
+package gj.cloud.ops.application.github.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import gj.cloud.ops.application.github.dto.GithubInstallationCompleteResponse;
+import gj.cloud.ops.application.github.dto.GithubRepositoryAccess;
+import gj.cloud.ops.domain.github.entity.GithubInstallationEntity;
+import gj.cloud.ops.domain.github.repository.GithubInstallationRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+
+import java.security.KeyPairGenerator;
+import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+
+class GithubAppServiceTest {
+
+    private static final String USER_ID = "user-1";
+    private static final String VM_ID = "vm-1";
+    private static final String STATE = "state-1";
+
+    private final StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+    private final GithubInstallationRepository installationRepository =
+            mock(GithubInstallationRepository.class);
+    @SuppressWarnings("unchecked")
+    private final ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+
+    private MockRestServiceServer githubApiServer;
+    private MockRestServiceServer githubOAuthServer;
+    private GithubAppService githubAppService;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        RestClient.Builder githubApiBuilder = RestClient.builder().baseUrl("https://api.github.com");
+        githubApiServer = MockRestServiceServer.bindTo(githubApiBuilder).build();
+        RestClient.Builder githubOAuthBuilder = RestClient.builder().baseUrl("https://github.com");
+        githubOAuthServer = MockRestServiceServer.bindTo(githubOAuthBuilder).build();
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.getAndDelete("github-install-state:" + STATE))
+                .thenReturn(USER_ID + "|" + VM_ID);
+        when(installationRepository.findByInstallationIdAndUserId(101L, USER_ID))
+                .thenReturn(Optional.empty());
+        when(installationRepository.save(any(GithubInstallationEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        githubAppService = new GithubAppService(
+                "1234",
+                "gamjabox",
+                "Iv1.client",
+                "client-secret",
+                generatePrivateKeyPem(),
+                new ObjectMapper(),
+                redisTemplate,
+                installationRepository,
+                githubApiBuilder.build(),
+                githubOAuthBuilder.build()
+        );
+    }
+
+    @Test
+    void exchangesAuthorizationCodeAsUrlEncodedForm() {
+        githubOAuthServer.expect(requestTo("https://github.com/login/oauth/access_token"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header(
+                        HttpHeaders.CONTENT_TYPE,
+                        MediaType.APPLICATION_FORM_URLENCODED_VALUE))
+                .andExpect(content().string(
+                        "client_id=Iv1.client&client_secret=client-secret&code=authorization-code"))
+                .andRespond(withSuccess(
+                        "{\"access_token\":\"ghu_test\",\"token_type\":\"bearer\"}",
+                        MediaType.APPLICATION_JSON));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/user/installations?per_page=100&page=1"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer ghu_test"))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "installations": [
+                            {
+                              "id": 101,
+                              "account": {
+                                "login": "octocat",
+                                "type": "User"
+                              }
+                            }
+                          ]
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        GithubInstallationCompleteResponse response =
+                githubAppService.completeInstallation(
+                        USER_ID, "authorization-code", STATE);
+
+        assertThat(response.vmId()).isEqualTo(VM_ID);
+        assertThat(response.installations()).singleElement()
+                .satisfies(installation -> {
+                    assertThat(installation.installationId()).isEqualTo(101L);
+                    assertThat(installation.accountLogin()).isEqualTo("octocat");
+                    assertThat(installation.accountType()).isEqualTo("User");
+                });
+        githubOAuthServer.verify();
+        githubApiServer.verify();
+    }
+
+    @Test
+    void removesStaleInstallationMappingAfterReconnect() {
+        GithubInstallationEntity staleInstallation = GithubInstallationEntity.create(
+                99L, USER_ID, "octocat", "User");
+        when(installationRepository.findAllByUserIdOrderByCreatedAtAsc(USER_ID))
+                .thenReturn(List.of(staleInstallation));
+        githubOAuthServer.expect(requestTo("https://github.com/login/oauth/access_token"))
+                .andRespond(withSuccess(
+                        "{\"access_token\":\"ghu_test\"}",
+                        MediaType.APPLICATION_JSON));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/user/installations?per_page=100&page=1"))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "installations": [
+                            {
+                              "id": 101,
+                              "account": {"login": "octocat", "type": "User"}
+                            }
+                          ]
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        githubAppService.completeInstallation(USER_ID, "authorization-code", STATE);
+
+        verify(installationRepository).deleteAll(List.of(staleInstallation));
+        githubOAuthServer.verify();
+        githubApiServer.verify();
+    }
+
+    @Test
+    void removesDeletedInstallationAndContinuesListingRepositories() {
+        GithubInstallationEntity deletedInstallation = GithubInstallationEntity.create(
+                99L, USER_ID, "octocat", "User");
+        GithubInstallationEntity currentInstallation = GithubInstallationEntity.create(
+                101L, USER_ID, "octocat", "User");
+        when(installationRepository.findAllByUserIdOrderByCreatedAtAsc(USER_ID))
+                .thenReturn(List.of(deletedInstallation, currentInstallation));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/app/installations/99/access_tokens"))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"Not Found\"}"));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/app/installations/101/access_tokens"))
+                .andRespond(withSuccess(
+                        "{\"token\":\"ghs_installation\"}",
+                        MediaType.APPLICATION_JSON));
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/installation/repositories?per_page=100&page=1"))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "repositories": [
+                            {
+                              "id": 202,
+                              "full_name": "octocat/example",
+                              "clone_url": "https://github.com/octocat/example.git",
+                              "default_branch": "main",
+                              "private": false
+                            }
+                          ]
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(githubAppService.listRepositories(USER_ID))
+                .singleElement()
+                .satisfies(repository -> {
+                    assertThat(repository.installationId()).isEqualTo(101L);
+                    assertThat(repository.fullName()).isEqualTo("octocat/example");
+                });
+        verify(installationRepository).delete(deletedInstallation);
+        githubApiServer.verify();
+    }
+
+    @Test
+    void parsesPemAndSignsAppJwtBeforeCreatingInstallationToken() {
+        githubApiServer.expect(requestTo(
+                        "https://api.github.com/app/installations/101/access_tokens"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(request -> assertThat(
+                        request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION))
+                        .startsWith("Bearer eyJ"))
+                .andRespond(withSuccess(
+                        "{\"token\":\"ghs_installation\"}",
+                        MediaType.APPLICATION_JSON));
+        githubApiServer.expect(requestTo("https://api.github.com/repositories/202"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer ghs_installation"))
+                .andRespond(withSuccess(
+                        """
+                        {
+                          "id": 202,
+                          "full_name": "octocat/example",
+                          "clone_url": "https://github.com/octocat/example.git",
+                          "default_branch": "main"
+                        }
+                        """,
+                        MediaType.APPLICATION_JSON));
+
+        GithubRepositoryAccess access = githubAppService.resolveRepositoryAccess(101L, 202L);
+
+        assertThat(access.fullName()).isEqualTo("octocat/example");
+        assertThat(access.token()).isEqualTo("ghs_installation");
+        githubApiServer.verify();
+    }
+
+    @Test
+    void createsWithProductionConstructorWithoutRestClientBuilderBean() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            context.getBeanFactory().registerSingleton("objectMapper", new ObjectMapper());
+            context.getBeanFactory().registerSingleton(
+                    "redisTemplate", mock(StringRedisTemplate.class));
+            context.getBeanFactory().registerSingleton(
+                    "installationRepository", mock(GithubInstallationRepository.class));
+            context.register(GithubAppService.class);
+
+            context.refresh();
+
+            assertThat(context.getBean(GithubAppService.class)).isNotNull();
+        }
+    }
+
+    private static String generatePrivateKeyPem() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        byte[] encoded = generator.generateKeyPair().getPrivate().getEncoded();
+        String body = Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(encoded);
+        return "-----BEGIN PRIVATE KEY-----\n" + body + "\n-----END PRIVATE KEY-----";
+    }
+}

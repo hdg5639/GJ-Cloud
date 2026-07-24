@@ -1,0 +1,59 @@
+name: Deploy User to ops-01 from main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Backend/User/**'
+
+jobs:
+  deploy:
+    name: Deploy to Production VM
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - gamjabox-prod
+    steps:
+      - name: Pull main code in production directory
+        run: |
+          cd ~/GJ-Cloud
+          git fetch origin main
+          git reset --hard origin/main
+
+      # CICD-001: 직전 이미지를 보존하고 새 이미지의 헬스체크가 실패하면 자동으로 롤백한다.
+      - name: Build and deploy with health check + auto-rollback
+        run: |
+          set -e
+          SERVICE=user
+          IMAGE=gj-cloud-${SERVICE}:latest
+          HEALTH_PATH=/actuator/health
+
+          PREV_IMAGE_ID=$(docker images -q "$IMAGE" | head -n1)
+
+          docker compose build "$SERVICE"
+          docker compose up -d "$SERVICE"
+
+          HOST_PORT=$(docker compose port "$SERVICE" 8080 | cut -d: -f2)
+          HEALTHY=0
+          for i in $(seq 1 10); do
+            sleep 3
+            if curl -fsS "http://localhost:${HOST_PORT}${HEALTH_PATH}" > /dev/null 2>&1; then
+              HEALTHY=1
+              break
+            fi
+          done
+
+          if [ "$HEALTHY" = "1" ]; then
+            echo "헬스체크 통과 — 배포 완료"
+            exit 0
+          fi
+
+          echo "헬스체크 실패 — 이전 이미지로 롤백 시도"
+          if [ -n "$PREV_IMAGE_ID" ]; then
+            docker tag "$PREV_IMAGE_ID" "$IMAGE"
+            docker compose up -d "$SERVICE"
+          else
+            echo "롤백할 이전 이미지가 없음(최초 배포)"
+          fi
+          exit 1

@@ -8,7 +8,8 @@ import java.util.Arrays;
 public enum ServiceAudience {
     AUTH("auth-service"),
     USER("user-service"),
-    VM("vm-service");
+    VM("vm-service"),
+    OPS("ops-service");
 
     private final String value;
 

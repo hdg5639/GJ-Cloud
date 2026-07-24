@@ -13,7 +13,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleAuthException(AuthException e) {
         return ResponseEntity
                 .status(e.getErrorCode().getStatus())
-                .body(ApiResponse.fail(e.getMessage()));
+                .body(ApiResponse.fail(e.getMessage(), e.getErrorCode().name()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

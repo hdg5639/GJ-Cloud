@@ -1,0 +1,56 @@
+spring:
+  r2dbc:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD:}
+      # 이 서비스엔 실제 Redis 리포지토리(@RedisHash)가 없어서(캐시/SSE 티켓 용도로만 Redis 사용),
+      # 리포지토리 스캔을 켜두면 R2DBC 리포지토리들을 대상으로 "store를 특정 못함" 경고만 반복 출력됨
+      repositories:
+        enabled: false
+
+server:
+  port: 8080
+
+auth:
+  server-url: ${AUTH_SERVER_URL}
+  jwks-cache-ttl: 3600000
+  service-client-id: vm-service
+  service-client-secret: ${VM_SERVICE_CLIENT_SECRET}
+  user-service-client-id: vm-user-service
+
+sse:
+  ticket-ttl-seconds: 30
+
+user:
+  service-url: ${USER_SERVICE_URL}
+
+ops:
+  service-url: ${OPS_SERVICE_URL}
+
+proxmox:
+  base-url: ${PROXMOX_URL}
+  token-id: ${PROXMOX_TOKEN_ID}
+  token-secret: ${PROXMOX_TOKEN_SECRET}
+  node: ${PROXMOX_NODE}
+  bridge: ${PROXMOX_BRIDGE}
+  storage: ${PROXMOX_STORAGE}
+  vmid-range-start: ${PROXMOX_VMID_START}
+  vmid-range-end: ${PROXMOX_VMID_END}
+
+cloudflare:
+  reserved-subdomains: ${RESERVED_SUBDOMAINS:}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

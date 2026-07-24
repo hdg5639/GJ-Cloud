@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: vm
+  # UserDetailsService/AuthenticationManager 없이 커스텀 WebFilter로 직접 인증을 처리하므로,
+  # Boot가 매 기동마다 미사용 기본 계정 + 랜덤 비밀번호를 생성해 로그에 찍는 것을 끈다.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.security.autoconfigure.ReactiveUserDetailsServiceAutoConfiguration

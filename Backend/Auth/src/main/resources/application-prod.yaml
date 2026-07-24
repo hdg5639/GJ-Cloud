@@ -18,6 +18,19 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
       password: ${REDIS_PASSWORD:}
+      # 이 서비스엔 실제 Redis 리포지토리(@RedisHash)가 없어서, 리포지토리 스캔을 켜두면
+      # JPA 리포지토리들을 대상으로 "store를 특정 못함" 경고만 반복 출력됨
+      repositories:
+        enabled: false
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    from: ${MAIL_FROM}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
 
 jwt:
   private-key: ${JWT_PRIVATE_KEY}
@@ -25,6 +38,37 @@ jwt:
   access-token-expiry: 900000
   refresh-token-expiry: 604800000
   exchange-token-expiry: 900000
+  service-token-expiry: 300000
+
+auth:
+  service-clients:
+    # ServiceClientProperties의 Map 필드명이 clients라서 prefix(auth.service-clients) 아래
+    # 한 단계 더 들어가야 바인딩됨 — 이 레벨을 빼먹으면 맵이 항상 빈 상태로 바인딩됨
+    clients:
+      vm-service:
+        secret: ${VM_SERVICE_CLIENT_SECRET}
+        audience: ops-service
+        scope: internal:management-key
+      # SEC-004: User가 계정 정지/복구 상태를 Auth에 동기화할 때 사용
+      user-service:
+        secret: ${USER_SERVICE_CLIENT_SECRET}
+        audience: auth-service
+        scope: user:status-sync
+      ops-service:
+        secret: ${OPS_SERVICE_CLIENT_SECRET}
+        audience: vm-service
+        scope: deployment:automation
+      vm-user-service:
+        secret: ${VM_SERVICE_CLIENT_SECRET}
+        audience: user-service
+        scope: user:plan-read
+
+app:
+  email-verification:
+    enabled: ${EMAIL_VERIFICATION_ENABLED:true}
+  services:
+    user-service-url: ${USER_SERVICE_URL:http://user:8080}
+    vm-service-url: ${VM_SERVICE_URL:http://vm:8080}
 
 server:
   port: 8080

@@ -1,0 +1,28 @@
+name: Deploy landing page to ops-01 from main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'gamjabox-landing/**'
+
+jobs:
+  deploy:
+    name: Deploy to Production VM
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - gamjabox-prod
+    steps:
+      - name: Pull main code in production directory
+        run: |
+          cd ~/GJ-Cloud
+          git fetch origin main
+          git reset --hard origin/main
+
+      # 정적 파일이라 빌드/헬스체크 없이 Caddy가 새 파일을 읽도록 재시작만 한다.
+      - name: Restart Caddy
+        run: |
+          cd ~/GJ-Cloud
+          docker compose restart caddy

@@ -52,14 +52,28 @@ public class UserEntity {
                 .id(UUID.randomUUID().toString())
                 .email(email)
                 .password(encodedPassword)
-                .role(UserRole.FREE)
-                .status(UserStatus.ACTIVE)
+                .role(UserRole.USER)
+                .status(UserStatus.PENDING_VERIFICATION)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
 
-    public void softDelete() {
+    public void activate() {
+        this.status = UserStatus.ACTIVE;
+    }
+
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    public void anonymizeAndDelete() {
+        this.email = "deleted_" + this.id + "@deleted";
+        this.password = "DELETED";
         this.status = UserStatus.DELETED;
         this.deletedAt = LocalDateTime.now();
     }

@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 38 38" role="img" aria-labelledby="title desc">
+  <title id="title">GamjaBox loading</title>
+  <desc id="desc">The original GamjaBox symbol slides in, pops slightly larger, then quickly shrinks and fades away.</desc>
+
+  <defs>
+    <linearGradient id="gamjabox-loader-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c8ff58"/>
+      <stop offset="1" stop-color="#62ffa8"/>
+    </linearGradient>
+
+    <style>
+      .gamjabox-loader-symbol {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: gamjabox-loader-pop 1.7s infinite;
+      }
+
+      .gamjabox-loader-hex {
+        opacity: 0;
+        animation: gamjabox-loader-hex 1.7s infinite;
+      }
+
+      .gamjabox-loader-g {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: gamjabox-loader-g 1.7s infinite;
+      }
+
+      @keyframes gamjabox-loader-pop {
+        0% {
+          transform: scale(.88);
+          animation-timing-function: cubic-bezier(.22, .7, .2, 1);
+        }
+        18% {
+          transform: scale(1);
+          animation-timing-function: cubic-bezier(.18, .9, .24, 1.28);
+        }
+        34% {
+          transform: scale(1.085);
+          animation-timing-function: cubic-bezier(.3, .75, .25, 1);
+        }
+        45% {
+          transform: scale(1.025);
+          animation-timing-function: cubic-bezier(.55, .02, .85, .35);
+        }
+        61% {
+          transform: scale(1);
+          animation-timing-function: cubic-bezier(.55, .02, .82, .25);
+        }
+        78% {
+          transform: scale(.58);
+        }
+        100% {
+          transform: scale(.58);
+        }
+      }
+
+      @keyframes gamjabox-loader-hex {
+        0% {
+          opacity: 0;
+          animation-timing-function: cubic-bezier(.2, .7, .2, 1);
+        }
+        5% {
+          opacity: 0;
+        }
+        18% {
+          opacity: 1;
+        }
+        61% {
+          opacity: 1;
+          animation-timing-function: cubic-bezier(.55, .02, .82, .25);
+        }
+        78% {
+          opacity: 0;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes gamjabox-loader-g {
+        0%, 15% {
+          opacity: 0;
+          transform: scale(.92);
+        }
+        28% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        61% {
+          opacity: 1;
+          transform: scale(1);
+          animation-timing-function: cubic-bezier(.55, .02, .82, .25);
+        }
+        78% {
+          opacity: 0;
+          transform: scale(.96);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(.96);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .gamjabox-loader-symbol,
+        .gamjabox-loader-hex,
+        .gamjabox-loader-g {
+          animation: none !important;
+        }
+
+        .gamjabox-loader-symbol {
+          transform: none !important;
+        }
+
+        .gamjabox-loader-hex,
+        .gamjabox-loader-g {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+      }
+    </style>
+  </defs>
+
+  <g class="gamjabox-loader-symbol">
+    <path
+      class="gamjabox-loader-hex"
+      fill="url(#gamjabox-loader-gradient)"
+      d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"
+    />
+    <path
+      class="gamjabox-loader-g"
+      fill="#07100a"
+      d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"
+    />
+  </g>
+</svg>

@@ -1,0 +1,61 @@
+name: Deploy Ops to ops-01
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'Backend/Ops/**'
+
+jobs:
+  deploy:
+    name: Deploy to Dev VM
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - gamjabox-dev
+    steps:
+      - name: Pull latest code in production directory
+        run: |
+          cd ~/GJ-Cloud
+          git fetch origin develop
+          git reset --hard origin/develop
+
+      # CICD-001: 이전에는 --rmi local로 직전 이미지를 즉시 삭제해, 빌드/기동 후 헬스체크가 실패해도
+      # 되돌아갈 이미지 자체가 없었음. 승인 게이트는 추가하지 않되(1인 프로젝트, 매 배포 수동 승인은
+      # 속도만 늦춤), 이전 이미지를 보존해뒀다가 헬스체크 실패 시 자동으로 재태깅+재기동한다.
+      - name: Build and deploy with health check + auto-rollback
+        run: |
+          set -e
+          SERVICE=ops
+          IMAGE=gj-cloud-${SERVICE}:latest
+          HEALTH_PATH=/actuator/health
+
+          PREV_IMAGE_ID=$(docker images -q "$IMAGE" | head -n1)
+
+          docker compose build "$SERVICE"
+          docker compose up -d "$SERVICE"
+
+          HOST_PORT=$(docker compose port "$SERVICE" 8080 | cut -d: -f2)
+          HEALTHY=0
+          for i in $(seq 1 10); do
+            sleep 3
+            if curl -fsS "http://localhost:${HOST_PORT}${HEALTH_PATH}" > /dev/null 2>&1; then
+              HEALTHY=1
+              break
+            fi
+          done
+
+          if [ "$HEALTHY" = "1" ]; then
+            echo "헬스체크 통과 — 배포 완료"
+            exit 0
+          fi
+
+          echo "헬스체크 실패 — 이전 이미지로 롤백 시도"
+          if [ -n "$PREV_IMAGE_ID" ]; then
+            docker tag "$PREV_IMAGE_ID" "$IMAGE"
+            docker compose up -d "$SERVICE"
+          else
+            echo "롤백할 이전 이미지가 없음(최초 배포)"
+          fi
+          exit 1

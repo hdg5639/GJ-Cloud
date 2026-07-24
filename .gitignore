@@ -20,3 +20,15 @@ $RECYCLE.BIN/
 *.iws
 *.iml
 *.ipr
+
+### Local guides ###
+NEW_SERVICE_GUIDE.md
+Service_Info.md
+docs/github-auto-deploy.md
+
+### Local docker ###
+compose.yaml
+.env
+.env.*
+!.env.example
+nginx/
