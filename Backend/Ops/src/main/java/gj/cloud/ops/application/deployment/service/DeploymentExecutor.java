@@ -21,11 +21,14 @@ import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
 import gj.cloud.ops.application.deployment.validation.ValidationResult;
 import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
+import gj.cloud.ops.application.vmclient.VmAutomationClient;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
+import gj.cloud.ops.domain.deployment.entity.DeploymentTargetEntity;
 import gj.cloud.ops.domain.deployment.enums.DeploymentEventType;
 import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
+import gj.cloud.ops.domain.deployment.enums.DeploymentTriggerType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
 import gj.cloud.ops.global.crypto.AesGcmCipher;
 import gj.cloud.ops.global.exception.OpsException;
@@ -36,6 +39,7 @@ import gj.cloud.ops.global.ssh.VmSshSessionFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
@@ -72,6 +76,7 @@ public class DeploymentExecutor {
     private final DeploymentEventPublisher eventPublisher;
     private final VmServiceClient vmServiceClient;
     private final VmDeploymentRoutesClient routesClient;
+    private final VmAutomationClient vmAutomationClient;
     private final VmSshSessionFactory sshSessionFactory;
     private final SshCommandExecutor sshCommandExecutor;
     private final GitReleaseManager gitReleaseManager;
@@ -81,12 +86,48 @@ public class DeploymentExecutor {
     private final RollbackService rollbackService;
     private final AesGcmCipher cipher;
     private final ObjectMapper objectMapper;
+    private final DeploymentTargetService deploymentTargetService;
+    private final ObjectProvider<AutoDeploymentService> autoDeploymentServiceProvider;
 
     private final TaskExecutor deploymentTaskExecutor;
 
     // 권한/실행상태 확인 + D.5 Validator 통과 + 락 획득까지는 호출 스레드(HTTP 요청 스레드)에서 동기 수행하고,
     // 실제 파이프라인(runPipeline)만 전용 워커에 위임함 — 잘못된 요청은 즉시 4xx로 응답 가능해야 하므로.
     public DeploymentEntity enqueue(String bearerToken, String vmId, RepoConfig repoConfig, ComposeArtifact artifact) {
+        return enqueueInternal(
+                bearerToken, vmId, null, DeploymentTriggerType.MANUAL, repoConfig, artifact);
+    }
+
+    public DeploymentEntity enqueueForTarget(
+            String bearerToken,
+            String vmId,
+            DeploymentTargetEntity target,
+            RepoConfig repoConfig,
+            ComposeArtifact artifact
+    ) {
+        return enqueueInternal(
+                bearerToken, vmId, target, DeploymentTriggerType.MANUAL, repoConfig, artifact);
+    }
+
+    public DeploymentEntity enqueueRetryForTarget(
+            String bearerToken,
+            String vmId,
+            DeploymentTargetEntity target,
+            RepoConfig repoConfig,
+            ComposeArtifact artifact
+    ) {
+        return enqueueInternal(
+                bearerToken, vmId, target, DeploymentTriggerType.RETRY, repoConfig, artifact);
+    }
+
+    private DeploymentEntity enqueueInternal(
+            String bearerToken,
+            String vmId,
+            DeploymentTargetEntity target,
+            DeploymentTriggerType triggerType,
+            RepoConfig repoConfig,
+            ComposeArtifact artifact
+    ) {
         VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
         if (!context.hasPermission(PERMISSION_DEPLOY)) {
             throw new OpsException(OpsErrorCode.FORBIDDEN);
@@ -100,8 +141,7 @@ public class DeploymentExecutor {
             throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
         }
 
-        String previousDeploymentId = deploymentRepository
-                .findTopByVmIdAndStatusOrderByCreatedAtDesc(vmId, DeploymentStatus.SUCCEEDED)
+        String previousDeploymentId = findLatestSucceeded(vmId, target)
                 .map(DeploymentEntity::getId)
                 .orElse(null);
 
@@ -114,21 +154,111 @@ public class DeploymentExecutor {
         String exposedRoutesJson = artifact.exposedRoutes().isEmpty() ? null : toJson(artifact.exposedRoutes());
         String healthChecksJson = artifact.healthChecks().isEmpty() ? null : toJson(artifact.healthChecks());
 
-        DeploymentEntity deployment = deploymentRepository.save(
-                DeploymentEntity.createQueued(vmId, artifact.sourceType(), sourceCiphertext, previousDeploymentId,
+        DeploymentEntity queued = target == null
+                ? DeploymentEntity.createQueued(vmId, artifact.sourceType(), sourceCiphertext, previousDeploymentId,
                         environmentFilesCiphertext, exposedRoutesJson, healthChecksJson, repoConfig.context(),
-                        repoConfig.installPath()));
+                        repoConfig.installPath())
+                : DeploymentEntity.createQueuedForTarget(
+                        vmId, target.getId(), triggerType, null,
+                        artifact.sourceType(), sourceCiphertext, previousDeploymentId,
+                        environmentFilesCiphertext, exposedRoutesJson, healthChecksJson,
+                        repoConfig.context(), repoConfig.installPath());
+        DeploymentEntity deployment = deploymentRepository.save(queued);
 
-        if (!tryLockWithStaleRecovery(vmId, deployment.getId())) {
+        String appId = runtimeAppId(deployment);
+        if (!tryLockWithStaleRecovery(appId, deployment.getId())) {
             deployment = deploymentRepository.save(deployment.withFailed("이미 배포가 진행 중입니다."));
             throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
         }
 
         String deploymentId = deployment.getId();
         String internalIp = context.internalIp();
-        deploymentTaskExecutor.execute(() -> runPipeline(deploymentId, vmId, internalIp, bearerToken, repoConfig, artifact));
+        try {
+            deploymentTaskExecutor.execute(() -> runPipeline(
+                    deploymentId, vmId, appId, internalIp, bearerToken,
+                    target != null ? target.getOwnerUserId() : null,
+                    target != null ? target.getOwnerEmail() : null,
+                    target != null, repoConfig, artifact, null));
+        } catch (RuntimeException e) {
+            lockService.unlock(appId, deploymentId);
+            deploymentRepository.save(deployment.withFailed("배포 워커가 요청을 수락하지 못했습니다."));
+            throw e;
+        }
 
         return deployment;
+    }
+
+    public Optional<DeploymentEntity> enqueueAutomatic(
+            DeploymentTargetEntity target,
+            RepoConfig repoConfig,
+            ComposeArtifact artifact,
+            String requestedRevision
+    ) {
+        VmContextResponse context = vmAutomationClient.getContext(
+                target.getVmId(), target.getOwnerUserId(), target.getOwnerEmail());
+        if (context.internalIp() == null || !"RUNNING".equals(context.status())) {
+            throw new OpsException(OpsErrorCode.VM_NOT_RUNNING);
+        }
+        ValidationResult validation = composeValidator.validate(artifact.composeContent());
+        if (!validation.valid()) {
+            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        }
+
+        String previousDeploymentId = findLatestSucceeded(target.getVmId(), target)
+                .map(DeploymentEntity::getId)
+                .orElse(null);
+        String sourceCiphertext = cipher.encrypt(artifact.composeContent().getBytes(StandardCharsets.UTF_8));
+        String environmentFilesCiphertext = artifact.environmentFiles().isEmpty()
+                ? null
+                : cipher.encrypt(toJson(artifact.environmentFiles()).getBytes(StandardCharsets.UTF_8));
+        String exposedRoutesJson = artifact.exposedRoutes().isEmpty() ? null : toJson(artifact.exposedRoutes());
+        String healthChecksJson = artifact.healthChecks().isEmpty() ? null : toJson(artifact.healthChecks());
+
+        DeploymentEntity queued = DeploymentEntity.createQueuedForTarget(
+                target.getVmId(), target.getId(), DeploymentTriggerType.GIT_PUSH, requestedRevision,
+                artifact.sourceType(), sourceCiphertext, previousDeploymentId,
+                environmentFilesCiphertext, exposedRoutesJson, healthChecksJson,
+                target.getContext(), target.getInstallPath());
+        if (!tryLockWithStaleRecovery(target.getId(), queued.getId())) {
+            return Optional.empty();
+        }
+
+        DeploymentEntity deployment = null;
+        try {
+            deployment = deploymentRepository.save(queued);
+            String deploymentId = deployment.getId();
+            deploymentTaskExecutor.execute(() -> runPipeline(
+                    deploymentId, target.getVmId(), target.getId(), context.internalIp(), null,
+                    target.getOwnerUserId(), target.getOwnerEmail(), true,
+                    repoConfig, artifact, requestedRevision));
+        } catch (RuntimeException e) {
+            lockService.unlock(target.getId(), queued.getId());
+            if (deployment != null) {
+                deploymentRepository.save(deployment.withFailed(
+                        "자동 배포 워커가 요청을 수락하지 못했습니다."));
+            }
+            throw e;
+        }
+        return Optional.of(deployment);
+    }
+
+    private Optional<DeploymentEntity> findLatestSucceeded(String vmId, DeploymentTargetEntity target) {
+        if (target == null) {
+            return deploymentRepository.findTopByVmIdAndDeploymentTargetIdIsNullAndStatusOrderByCreatedAtDesc(
+                    vmId, DeploymentStatus.SUCCEEDED);
+        }
+        if (target.getLatestDeploymentId() == null) {
+            return Optional.empty();
+        }
+        return deploymentRepository.findById(target.getLatestDeploymentId())
+                .filter(deployment -> target.getId().equals(deployment.getDeploymentTargetId()))
+                .filter(deployment -> deployment.getStatus() == DeploymentStatus.SUCCEEDED);
+    }
+
+    private String runtimeAppId(DeploymentEntity deployment) {
+        return deployment.getDeploymentTargetId() != null
+                ? deployment.getDeploymentTargetId()
+                : deployment.getVmId();
     }
 
     // 재시도/수정 후 재배포용 — 저장된 compose 원문과 환경변수/라우트/헬스체크를 복호화해 그대로 반환.
@@ -166,24 +296,38 @@ public class DeploymentExecutor {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_ROLLBACK_TARGET_NOT_SUCCEEDED);
         }
 
-        DeploymentEntity rollbackEntity = deploymentRepository.save(
-                DeploymentEntity.createQueued(vmId, target.getSourceType(), target.getSourceComposeCiphertext(), target.getId()));
+        DeploymentEntity rollbackEntity = deploymentRepository.save(target.getDeploymentTargetId() == null
+                ? DeploymentEntity.createQueued(
+                        vmId, target.getSourceType(), target.getSourceComposeCiphertext(), target.getId())
+                : DeploymentEntity.createQueuedForTarget(
+                        vmId, target.getDeploymentTargetId(), DeploymentTriggerType.ROLLBACK, target.getSourceRevision(),
+                        target.getSourceType(), target.getSourceComposeCiphertext(), target.getId(),
+                        target.getEnvironmentFilesCiphertext(), target.getExposedRoutesJson(),
+                        target.getHealthChecksJson(), target.getContext(), target.getInstallPath()));
 
-        if (!tryLockWithStaleRecovery(vmId, rollbackEntity.getId())) {
+        String appId = runtimeAppId(rollbackEntity);
+        if (!tryLockWithStaleRecovery(appId, rollbackEntity.getId())) {
             rollbackEntity = deploymentRepository.save(rollbackEntity.withFailed("이미 배포가 진행 중입니다."));
             throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
         }
 
         String rollbackId = rollbackEntity.getId();
         String internalIp = context.internalIp();
-        deploymentTaskExecutor.execute(() -> runRollback(rollbackId, vmId, internalIp, bearerToken));
+        try {
+            deploymentTaskExecutor.execute(() -> runRollback(
+                    rollbackId, vmId, appId, internalIp, bearerToken));
+        } catch (RuntimeException e) {
+            lockService.unlock(appId, rollbackId);
+            deploymentRepository.save(rollbackEntity.withFailed("배포 워커가 요청을 수락하지 못했습니다."));
+            throw e;
+        }
 
         return rollbackEntity;
     }
 
-    // 배포마다 컴포즈 프로젝트를 새로 만드는 게 아니라 VM당 하나(gj_{vmId})를 계속 갱신하는 구조라(D.7,
-    // appId=vmId), "내리기"는 배포 이력 한 건이 아니라 그 VM에서 지금 떠 있는 것 자체를 내리는 동작이다 —
-    // 그래서 대상이 그 VM의 최신 SUCCEEDED 배포인지(=지금 실제로 떠 있는 것인지) 먼저 확인한다.
+    // 같은 배포 대상은 하나의 compose 프로젝트(gj_{targetId})를 계속 갱신한다. 레거시 배포만
+    // gj_{vmId}를 사용한다. 따라서 "내리기"는 이력 한 건을 지우는 게 아니라 해당 앱의 현재
+    // 런타임을 내리는 동작이고, 그 앱의 최신 SUCCEEDED 배포만 대상으로 인정한다.
     public DeploymentEntity teardown(String bearerToken, String vmId, DeploymentEntity target, List<String> removeRouteNicknames) {
         VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
         if (!context.hasPermission(PERMISSION_DEPLOY)) {
@@ -195,15 +339,21 @@ public class DeploymentExecutor {
         if (target.getStatus() != DeploymentStatus.SUCCEEDED) {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_TEARDOWN_TARGET_INVALID);
         }
-        String latestSucceededId = deploymentRepository
-                .findTopByVmIdAndStatusOrderByCreatedAtDesc(vmId, DeploymentStatus.SUCCEEDED)
-                .map(DeploymentEntity::getId)
-                .orElse(null);
-        if (!target.getId().equals(latestSucceededId)) {
+        boolean activeDeployment = target.getDeploymentTargetId() == null
+                ? deploymentRepository
+                        .findTopByVmIdAndDeploymentTargetIdIsNullAndStatusOrderByCreatedAtDesc(
+                                vmId, DeploymentStatus.SUCCEEDED)
+                        .map(DeploymentEntity::getId)
+                        .filter(target.getId()::equals)
+                        .isPresent()
+                : deploymentTargetService.isActiveDeployment(
+                        target.getDeploymentTargetId(), target.getId());
+        if (!activeDeployment) {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_TEARDOWN_TARGET_INVALID);
         }
 
-        if (!tryLockWithStaleRecovery(vmId, target.getId())) {
+        String appId = runtimeAppId(target);
+        if (!tryLockWithStaleRecovery(appId, target.getId())) {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
         }
         DeploymentEntity stopping = null;
@@ -214,7 +364,7 @@ public class DeploymentExecutor {
             String internalIp = context.internalIp();
             List<String> nicknamesToRemove = removeRouteNicknames != null ? removeRouteNicknames : List.of();
             deploymentTaskExecutor.execute(
-                    () -> runTeardown(deploymentId, vmId, internalIp, bearerToken, nicknamesToRemove));
+                    () -> runTeardown(deploymentId, vmId, appId, internalIp, bearerToken, nicknamesToRemove));
             handedOff = true;
             return stopping;
         } catch (RuntimeException e) {
@@ -233,15 +383,22 @@ public class DeploymentExecutor {
             // runTeardown에 정상 인계된 뒤에는 워커의 finally가 락을 해제한다. 그 전에 DB 제약 위반이나
             // TaskExecutor 거절이 발생하면 요청 스레드가 직접 해제해 leaked lock을 만들지 않는다.
             if (!handedOff) {
-                lockService.unlock(vmId, target.getId());
+                lockService.unlock(appId, target.getId());
             }
         }
     }
 
-    private void runTeardown(String deploymentId, String appId, String internalIp, String bearerToken, List<String> removeRouteNicknames) {
+    private void runTeardown(
+            String deploymentId,
+            String vmId,
+            String appId,
+            String internalIp,
+            String bearerToken,
+            List<String> removeRouteNicknames
+    ) {
         Session session = null;
         try {
-            session = sshSessionFactory.createSession(appId, internalIp);
+            session = sshSessionFactory.createSession(vmId, internalIp);
             eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "컨테이너 중지 중...");
             CommandResult downResult = sshCommandExecutor.exec(session,
                     "docker compose -p gj_" + appId + " down", DOCKER_COMPOSE_TIMEOUT_MS);
@@ -265,7 +422,8 @@ public class DeploymentExecutor {
                             .filter(route -> !removeRouteNicknames.contains(route.nickname()))
                             .toList();
                     try {
-                        routesClient.syncRoutes(bearerToken, appId, new DeploymentRoutesRequest(deploymentId, remaining));
+                        routesClient.syncRoutes(
+                                bearerToken, vmId, new DeploymentRoutesRequest(appId, deploymentId, remaining));
                         eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "포트 정리 완료");
                     } catch (Exception e) {
                         // 컨테이너는 이미 내려갔으므로 배포 자체는 그대로 STOPPED 처리 — 포트 정리 실패는 경고만
@@ -276,14 +434,25 @@ public class DeploymentExecutor {
             }
 
             updateEntity(deploymentId, entity -> entity.withStatus(DeploymentStatus.STOPPED));
+            deploymentRepository.findById(deploymentId)
+                    .map(DeploymentEntity::getDeploymentTargetId)
+                    .ifPresent(targetId ->
+                            deploymentTargetService.clearActiveDeployment(targetId, deploymentId));
             eventPublisher.publish(deploymentId, DeploymentEventType.DONE, "배포 내리기 완료");
         } catch (Exception e) {
             log.error("배포 내리기 처리 중 예외: deploymentId={}, error={}", deploymentId, e.getMessage());
             updateEntity(deploymentId, entity -> entity.withStatus(DeploymentStatus.SUCCEEDED));
             eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, "배포 내리기 실패: " + e.getMessage());
         } finally {
+            try {
+                completeTargetDeployment(deploymentId);
+            } catch (Exception e) {
+                log.error("배포 내리기 후 대상 상태 갱신 실패: deploymentId={}, error={}",
+                        deploymentId, e.getMessage(), e);
+            }
             lockService.unlock(appId, deploymentId);
             eventPublisher.complete(deploymentId);
+            notifyPendingAutoDeployment(appId);
             if (session != null && session.isConnected()) {
                 session.disconnect();
             }
@@ -345,18 +514,36 @@ public class DeploymentExecutor {
         }
     }
 
-    private void runRollback(String deploymentId, String appId, String internalIp, String bearerToken) {
+    private void runRollback(
+            String deploymentId,
+            String vmId,
+            String appId,
+            String internalIp,
+            String bearerToken
+    ) {
         Session session = null;
         try {
-            session = sshSessionFactory.createSession(appId, internalIp);
-            rollbackService.rollback(session, deploymentId, appId, bearerToken, "사용자 요청에 의한 수동 롤백");
+            session = sshSessionFactory.createSession(vmId, internalIp);
+            rollbackService.rollback(
+                    session,
+                    deploymentId,
+                    appId,
+                    request -> routesClient.syncRoutes(bearerToken, vmId, request),
+                    "사용자 요청에 의한 수동 롤백");
         } catch (Exception e) {
             log.error("수동 롤백 처리 중 예외: deploymentId={}, error={}", deploymentId, e.getMessage());
             updateEntity(deploymentId, entity -> entity.withFailed(e.getMessage()));
             eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, "롤백 실패: " + e.getMessage());
         } finally {
+            try {
+                completeTargetDeployment(deploymentId);
+            } catch (Exception e) {
+                log.error("롤백 후 배포 대상 상태 갱신 실패: deploymentId={}, error={}",
+                        deploymentId, e.getMessage(), e);
+            }
             lockService.unlock(appId, deploymentId);
             eventPublisher.complete(deploymentId);
+            notifyPendingAutoDeployment(appId);
             if (session != null && session.isConnected()) {
                 session.disconnect();
             }
@@ -383,11 +570,11 @@ public class DeploymentExecutor {
     // TTL(기본 30분) 내내 남아 새 배포/롤백/내리기가 전부 DEPLOYMENT_IN_PROGRESS로 막힌다. 이 락을 쥔
     // deploymentId가 이미 터미널 상태(SUCCEEDED/FAILED/STOPPED/ROLLED_BACK)라면 그 배포의 파이프라인이
     // 실제로는 끝났다는 뜻이므로 — 즉 이 락은 확실히 leaked다 — 강제로 비우고 한 번 더 시도한다.
-    private boolean tryLockWithStaleRecovery(String vmId, String newDeploymentId) {
-        if (lockService.tryLock(vmId, newDeploymentId)) {
+    private boolean tryLockWithStaleRecovery(String appId, String newDeploymentId) {
+        if (lockService.tryLock(appId, newDeploymentId)) {
             return true;
         }
-        Optional<String> holderId = lockService.currentHolder(vmId);
+        Optional<String> holderId = lockService.currentHolder(appId);
         boolean staleLock = holderId.isEmpty() || holderId
                 .flatMap(deploymentRepository::findById)
                 .map(entity -> isTerminalStatus(entity.getStatus()))
@@ -395,9 +582,9 @@ public class DeploymentExecutor {
         if (!staleLock) {
             return false;
         }
-        log.warn("leaked deployment lock 감지 — 강제 해제 후 재시도: vmId={}, staleHolder={}", vmId, holderId.orElse(null));
-        lockService.forceUnlock(vmId);
-        return lockService.tryLock(vmId, newDeploymentId);
+        log.warn("leaked deployment lock 감지 — 강제 해제 후 재시도: appId={}, staleHolder={}", appId, holderId.orElse(null));
+        lockService.forceUnlock(appId);
+        return lockService.tryLock(appId, newDeploymentId);
     }
 
     private boolean isTerminalStatus(DeploymentStatus status) {
@@ -405,15 +592,27 @@ public class DeploymentExecutor {
                 || status == DeploymentStatus.STOPPED || status == DeploymentStatus.ROLLED_BACK;
     }
 
-    private void runPipeline(String deploymentId, String appId, String internalIp, String bearerToken,
-                              RepoConfig repoConfig, ComposeArtifact artifact) {
+    private void runPipeline(
+            String deploymentId,
+            String vmId,
+            String appId,
+            String internalIp,
+            String bearerToken,
+            String ownerUserId,
+            String ownerEmail,
+            boolean useAutomationAuth,
+            RepoConfig repoConfig,
+            ComposeArtifact artifact,
+            String requestedRevision
+    ) {
         Session session = null;
         try {
-            session = sshSessionFactory.createSession(appId, internalIp);
+            session = sshSessionFactory.createSession(vmId, internalIp);
 
             updateStatus(deploymentId, DeploymentStatus.CLONING, "소스 체크아웃 시작 (branch: " + repoConfig.branch() + ")");
             gitReleaseManager.ensureBareRepo(session, appId, repoConfig.repoUrl(), repoConfig.patToken());
-            String commitSha = gitReleaseManager.fetchAndResolveCommit(session, appId, repoConfig.branch(), repoConfig.patToken());
+            String commitSha = gitReleaseManager.fetchAndResolveCommit(
+                    session, appId, repoConfig.branch(), repoConfig.patToken(), requestedRevision);
             gitReleaseManager.createWorktree(session, appId, deploymentId, commitSha);
             String releaseDir = gitReleaseManager.releaseDir(appId, deploymentId);
             updateEntity(deploymentId, e -> e.withSourceRevision(commitSha, releaseDir));
@@ -456,21 +655,40 @@ public class DeploymentExecutor {
             CommandResult upResult = sshCommandExecutor.exec(session,
                     "docker compose -p gj_" + appId + " -f '" + resolvedFilePath + "' up -d", DOCKER_COMPOSE_TIMEOUT_MS);
             if (!upResult.isSuccess()) {
-                rollbackService.rollback(session, deploymentId, appId, bearerToken, "컨테이너 교체 실패: " + trim(upResult.stderr()));
+                rollbackService.rollback(
+                        session,
+                        deploymentId,
+                        appId,
+                        request -> syncRoutes(
+                                useAutomationAuth, bearerToken, vmId, ownerUserId, ownerEmail, appId, request),
+                        "컨테이너 교체 실패: " + trim(upResult.stderr()));
                 return;
             }
             eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "컨테이너 교체 완료");
 
             updateStatus(deploymentId, DeploymentStatus.HEALTH_CHECKING, "헬스체크 중...");
             if (!runHealthChecks(session, appId, artifact.healthChecks())) {
-                rollbackService.rollback(session, deploymentId, appId, bearerToken, "헬스체크 실패");
+                rollbackService.rollback(
+                        session,
+                        deploymentId,
+                        appId,
+                        request -> syncRoutes(
+                                useAutomationAuth, bearerToken, vmId, ownerUserId, ownerEmail, appId, request),
+                        "헬스체크 실패");
                 return;
             }
             eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "헬스체크 통과");
 
             updateStatus(deploymentId, DeploymentStatus.ROUTING, "라우트 등록 중...");
             try {
-                routesClient.syncRoutes(bearerToken, appId, new DeploymentRoutesRequest(deploymentId, artifact.exposedRoutes()));
+                syncRoutes(
+                        useAutomationAuth,
+                        bearerToken,
+                        vmId,
+                        ownerUserId,
+                        ownerEmail,
+                        appId,
+                        new DeploymentRoutesRequest(appId, deploymentId, artifact.exposedRoutes()));
                 eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "라우트 등록 완료");
             } catch (Exception e) {
                 // D.7 실패 처리 표: Cloudflare 등록 실패는 배포 완료 처리, Cloudflare만 재시도 안내
@@ -499,11 +717,64 @@ public class DeploymentExecutor {
             updateEntity(deploymentId, entity -> entity.withFailed(e.getMessage()));
             eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, "배포 실패: " + e.getMessage());
         } finally {
+            try {
+                completeTargetDeployment(deploymentId);
+            } catch (Exception e) {
+                log.error("배포 대상 상태 갱신 실패: deploymentId={}, error={}",
+                        deploymentId, e.getMessage(), e);
+            }
             lockService.unlock(appId, deploymentId);
             eventPublisher.complete(deploymentId);
+            notifyPendingAutoDeployment(appId);
             if (session != null && session.isConnected()) {
                 session.disconnect();
             }
+        }
+    }
+
+    private void syncRoutes(
+            boolean useAutomationAuth,
+            String bearerToken,
+            String vmId,
+            String ownerUserId,
+            String ownerEmail,
+            String appId,
+            DeploymentRoutesRequest request
+    ) {
+        if (useAutomationAuth) {
+            vmAutomationClient.syncRoutes(vmId, ownerUserId, ownerEmail, appId, request);
+            return;
+        }
+        routesClient.syncRoutes(bearerToken, vmId, request);
+    }
+
+    private void completeTargetDeployment(String deploymentId) {
+        deploymentRepository.findById(deploymentId).ifPresent(deployment -> {
+            if (deployment.getDeploymentTargetId() == null) {
+                return;
+            }
+            boolean succeeded = deployment.getStatus() == DeploymentStatus.SUCCEEDED;
+            if (deployment.getStatus() == DeploymentStatus.ROLLED_BACK
+                    && deployment.getPreviousDeploymentId() != null) {
+                deploymentRepository.findById(deployment.getPreviousDeploymentId())
+                        .ifPresent(previous -> deploymentTargetService.markActiveDeployment(
+                                deployment.getDeploymentTargetId(),
+                                previous.getId(),
+                                previous.getSourceRevision()));
+            } else {
+                deploymentTargetService.markDeploymentResult(
+                        deployment.getDeploymentTargetId(),
+                        deployment.getId(),
+                        deployment.getSourceRevision(),
+                        succeeded);
+            }
+        });
+    }
+
+    private void notifyPendingAutoDeployment(String appId) {
+        AutoDeploymentService autoDeploymentService = autoDeploymentServiceProvider.getIfAvailable();
+        if (autoDeploymentService != null) {
+            autoDeploymentService.onDeploymentFinished(appId);
         }
     }
 

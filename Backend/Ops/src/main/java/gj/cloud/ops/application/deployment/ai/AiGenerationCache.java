@@ -68,7 +68,9 @@ public class AiGenerationCache {
         for (ServiceCard card : request.services()) {
             raw.append(card.name()).append(':').append(card.runtime()).append(':').append(card.context())
                     .append(':').append(card.containerPort()).append(':').append(card.expose())
-                    .append(':').append(card.customSubdomain()).append(';');
+                    .append(':').append(card.customSubdomain())
+                    .append(':').append(card.buildCommand())
+                    .append(':').append(card.startCommand()).append(';');
         }
         List<InfraSelection> infra = request.infrastructure();
         if (infra != null) {
@@ -76,6 +78,7 @@ public class AiGenerationCache {
                 raw.append(i.type()).append(':').append(i.version()).append(';');
             }
         }
+        raw.append("|network:").append(request.existingNetworkName());
         return KEY_PREFIX + sha256(raw.toString());
     }
 

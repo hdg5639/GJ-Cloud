@@ -5,6 +5,7 @@ import com.jcraft.jsch.Session;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
 import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
+import gj.cloud.ops.application.vmclient.VmAutomationClient;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
@@ -53,6 +55,7 @@ class DeploymentExecutorTest {
     @Mock private DeploymentEventPublisher eventPublisher;
     @Mock private VmServiceClient vmServiceClient;
     @Mock private VmDeploymentRoutesClient routesClient;
+    @Mock private VmAutomationClient vmAutomationClient;
     @Mock private VmSshSessionFactory sshSessionFactory;
     @Mock private SshCommandExecutor sshCommandExecutor;
     @Mock private GitReleaseManager gitReleaseManager;
@@ -61,6 +64,8 @@ class DeploymentExecutorTest {
     @Mock private HealthCheckExecutor healthCheckExecutor;
     @Mock private RollbackService rollbackService;
     @Mock private AesGcmCipher cipher;
+    @Mock private DeploymentTargetService deploymentTargetService;
+    @Mock private ObjectProvider<AutoDeploymentService> autoDeploymentServiceProvider;
     @Spy private ObjectMapper objectMapper = new ObjectMapper();
     @Mock private TaskExecutor deploymentTaskExecutor;
     @Mock private Session session;
@@ -72,7 +77,7 @@ class DeploymentExecutorTest {
     void teardownReleasesLockWhenStoppingStatusCannotBeSaved() {
         DeploymentEntity target = succeededDeployment();
         when(vmServiceClient.getContext(TOKEN, VM_ID)).thenReturn(runningDeployContext());
-        when(deploymentRepository.findTopByVmIdAndStatusOrderByCreatedAtDesc(
+        when(deploymentRepository.findTopByVmIdAndDeploymentTargetIdIsNullAndStatusOrderByCreatedAtDesc(
                 VM_ID, DeploymentStatus.SUCCEEDED)).thenReturn(Optional.of(target));
         when(lockService.tryLock(VM_ID, DEPLOYMENT_ID)).thenReturn(true);
         when(deploymentRepository.save(any(DeploymentEntity.class)))
@@ -89,7 +94,7 @@ class DeploymentExecutorTest {
     void teardownRestoresStatusAndReleasesLockWhenWorkerRejectsTheTask() {
         DeploymentEntity target = succeededDeployment();
         when(vmServiceClient.getContext(TOKEN, VM_ID)).thenReturn(runningDeployContext());
-        when(deploymentRepository.findTopByVmIdAndStatusOrderByCreatedAtDesc(
+        when(deploymentRepository.findTopByVmIdAndDeploymentTargetIdIsNullAndStatusOrderByCreatedAtDesc(
                 VM_ID, DeploymentStatus.SUCCEEDED)).thenReturn(Optional.of(target));
         when(lockService.tryLock(VM_ID, DEPLOYMENT_ID)).thenReturn(true);
         when(deploymentRepository.save(any(DeploymentEntity.class)))
@@ -122,7 +127,7 @@ class DeploymentExecutorTest {
         AtomicReference<DeploymentEntity> stored = new AtomicReference<>(target);
 
         when(vmServiceClient.getContext(TOKEN, VM_ID)).thenReturn(runningDeployContext());
-        when(deploymentRepository.findTopByVmIdAndStatusOrderByCreatedAtDesc(
+        when(deploymentRepository.findTopByVmIdAndDeploymentTargetIdIsNullAndStatusOrderByCreatedAtDesc(
                 VM_ID, DeploymentStatus.SUCCEEDED)).thenReturn(Optional.of(target));
         when(deploymentRepository.findById(DEPLOYMENT_ID))
                 .thenAnswer(invocation -> Optional.ofNullable(stored.get()));

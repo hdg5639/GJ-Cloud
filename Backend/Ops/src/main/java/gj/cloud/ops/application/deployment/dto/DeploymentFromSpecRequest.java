@@ -12,6 +12,10 @@ public record DeploymentFromSpecRequest(
         String patToken,
         @NotNull @Valid DeploymentSpec spec,
         // VM 파일시스템 절대경로 — 지정하면 현재 활성 release를 가리키는 심볼릭 링크가 이 경로에 생성됨.
-        String installPath
+        String installPath,
+        String targetName,
+        Boolean autoDeploy,
+        Long githubInstallationId,
+        Long githubRepositoryId
 ) {
 }

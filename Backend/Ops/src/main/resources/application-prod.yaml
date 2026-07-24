@@ -32,6 +32,8 @@ server:
 auth:
   server-url: ${AUTH_SERVER_URL}
   jwks-cache-ttl: 3600000
+  service-client-id: ops-service
+  service-client-secret: ${OPS_SERVICE_CLIENT_SECRET}
 
 vm:
   service-url: ${VM_SERVICE_URL}
@@ -63,6 +65,13 @@ ops:
     max-total-size-bytes: 52428800
   ai-generation-cache:
     ttl-seconds: 900
+  github:
+    app-id: ${GITHUB_APP_ID}
+    app-slug: ${GITHUB_APP_SLUG}
+    client-id: ${GITHUB_APP_CLIENT_ID}
+    client-secret: ${GITHUB_APP_CLIENT_SECRET}
+    private-key: ${GITHUB_APP_PRIVATE_KEY}
+    webhook-secret: ${GITHUB_WEBHOOK_SECRET}
 
 springdoc:
   api-docs:

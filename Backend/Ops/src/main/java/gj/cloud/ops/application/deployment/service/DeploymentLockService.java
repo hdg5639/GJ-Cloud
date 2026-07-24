@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Optional;
 
-// D.9 배포 동시성 제어 — Application(=vmId)당 활성 배포 1개만 허용.
+// D.9 배포 동시성 제어 — 지속형 배포 대상(appId)당 활성 배포 1개만 허용.
+// 서로 다른 target은 같은 VM에서도 별도 키를 사용하므로 워커 여유 범위 안에서 병렬 배포할 수 있다.
 // TTL은 Ops가 배포 도중 재시작/크래시돼도 락이 영구히 남지 않도록 하는 안전장치일 뿐,
 // 정상 흐름에서는 항상 배포 종료 시 unlock을 명시적으로 호출해야 함.
 @Component

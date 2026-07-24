@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.UUID;
@@ -37,6 +38,7 @@ public class GitReleaseManager {
     // 스킴을 아예 화이트리스트로 막아야 함 (D.3도 HTTPS + PAT 흐름만 다룸, ssh://·file:// 등은 스코프 밖)
     private static final Pattern SAFE_REPO_URL = Pattern.compile("^https://[A-Za-z0-9._/:@-]+$");
     private static final Pattern SAFE_BRANCH_NAME = Pattern.compile("^[A-Za-z0-9._/-]+$");
+    private static final Pattern SAFE_COMMIT_SHA = Pattern.compile("^[0-9a-f]{40}$");
     // installPath는 사용자가 지정한 VM 절대경로 — 그대로 ln/mkdir 셸 커맨드에 꽂히므로 반드시 검증
     private static final Pattern UNSAFE_SHELL_CHARS = Pattern.compile("[;&`|$'\"\\\\]");
     private static final Set<String> PROTECTED_INSTALL_PATHS = Set.of(
@@ -85,7 +87,21 @@ public class GitReleaseManager {
     // fetch 후 브랜치의 HEAD commit SHA를 고정해 반환 (worktree add에 사용).
     // --mirror clone은 refs/heads/*가 원격과 1:1 매핑되므로 origin/{branch}가 아니라 {branch}로 직접 resolve.
     public String fetchAndResolveCommit(Session session, String appId, String branch, String patToken) {
+        return fetchAndResolveCommit(session, appId, branch, patToken, null);
+    }
+
+    public String fetchAndResolveCommit(
+            Session session,
+            String appId,
+            String branch,
+            String patToken,
+            String requestedRevision
+    ) {
         validateBranch(branch);
+        if (requestedRevision != null && !requestedRevision.isBlank()
+                && !SAFE_COMMIT_SHA.matcher(requestedRevision).matches()) {
+            throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+        }
         String bareDir = bareRepoDir(appId);
 
         withAskpass(session, patToken, askpassPath -> {
@@ -94,8 +110,14 @@ public class GitReleaseManager {
             execGitNetworkCommandWithRetry(session, fetchCmd, "저장소 fetch");
         });
 
+        String revision = branch;
+        if (requestedRevision != null && !requestedRevision.isBlank()) {
+            revision = requestedRevision;
+            sshCommandExecutor.execOrThrow(session,
+                    "git -C '" + bareDir + "' cat-file -e '" + requestedRevision + "^{commit}'", 15_000);
+        }
         CommandResult revParse = sshCommandExecutor.execOrThrow(session,
-                "git -C '" + bareDir + "' rev-parse '" + branch + "'", 15_000);
+                "git -C '" + bareDir + "' rev-parse '" + revision + "'", 15_000);
         return revParse.stdout().trim();
     }
 
@@ -218,6 +240,17 @@ public class GitReleaseManager {
 
     private void validateRepoUrl(String repoUrl) {
         if (repoUrl == null || !SAFE_REPO_URL.matcher(repoUrl).matches()) {
+            throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+        }
+        try {
+            URI uri = URI.create(repoUrl);
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || uri.getHost() == null
+                    || uri.getHost().isBlank()
+                    || uri.getUserInfo() != null) {
+                throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+            }
+        } catch (IllegalArgumentException e) {
             throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
         }
     }

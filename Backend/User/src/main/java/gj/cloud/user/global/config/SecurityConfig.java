@@ -1,10 +1,12 @@
 package gj.cloud.user.global.config;
 
 import gj.cloud.user.global.jwt.InternalJwtValidator;
+import gj.cloud.user.global.jwt.InternalAutomationJwtValidator;
 import gj.cloud.user.global.jwt.InternalPlanJwtValidator;
 import gj.cloud.user.global.jwt.InternalServiceJwtValidator;
 import gj.cloud.user.global.jwt.JwtValidator;
 import gj.cloud.user.global.security.InternalJwtAuthenticationFilter;
+import gj.cloud.user.global.security.InternalAutomationJwtAuthenticationFilter;
 import gj.cloud.user.global.security.InternalPlanJwtAuthenticationFilter;
 import gj.cloud.user.global.security.InternalServiceJwtAuthenticationFilter;
 import gj.cloud.user.global.security.JwtAuthenticationFilter;
@@ -30,6 +32,7 @@ public class SecurityConfig {
     private final JwtValidator jwtValidator;
     private final InternalJwtValidator internalJwtValidator;
     private final InternalPlanJwtValidator internalPlanJwtValidator;
+    private final InternalAutomationJwtValidator internalAutomationJwtValidator;
     private final InternalServiceJwtValidator internalServiceJwtValidator;
 
     @Autowired(required = false)
@@ -95,10 +98,26 @@ public class SecurityConfig {
         return http.build();
     }
 
+    @Bean
+    @Order(3)
+    public SecurityFilterChain internalAutomationFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/internal/automation/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(AbstractHttpConfigurer::disable)
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .exceptionHandling(e -> e.authenticationEntryPoint(
+                        (req, res, ex) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
+                .addFilterBefore(new InternalAutomationJwtAuthenticationFilter(internalAutomationJwtValidator),
+                        UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
     // 순수 서비스-간 신원 전용 — Auth 서비스만 호출 가능(프로필 생성/삭제). SEC-005: 이전에 프로필 생성이
     // permitAll이었던 것을 포함해 전부 인증 요구로 전환.
     @Bean
-    @Order(3)
+    @Order(4)
     public SecurityFilterChain internalServiceFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/internal/**")
@@ -123,7 +142,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @Order(4)
+    @Order(5)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable);

@@ -66,6 +66,7 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/webjars/**"
                         ).permitAll()
+                        .requestMatchers("/ops/webhooks/github").permitAll()
                         // 콘솔 WebSocket은 JWT가 아니라 일회용 티켓(Redis GETDEL)으로 별도 검증
                         .requestMatchers("/ws/terminal/**").permitAll()
                         // 미디어 미리보기 스트리밍(<video>/<audio> 태그가 커스텀 헤더 없이 직접 호출)도 JWT 대신 티켓으로 검증

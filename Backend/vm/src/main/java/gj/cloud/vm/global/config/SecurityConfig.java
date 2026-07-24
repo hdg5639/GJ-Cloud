@@ -1,10 +1,12 @@
 package gj.cloud.vm.global.config;
 
 import gj.cloud.vm.global.jwt.InternalJwtValidator;
+import gj.cloud.vm.global.jwt.InternalAutomationJwtValidator;
 import gj.cloud.vm.global.jwt.InternalOpsJwtValidator;
 import gj.cloud.vm.global.jwt.InternalUserJwtValidator;
 import gj.cloud.vm.global.jwt.JwtValidator;
 import gj.cloud.vm.global.security.InternalJwtAuthenticationWebFilter;
+import gj.cloud.vm.global.security.InternalAutomationJwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.InternalOpsJwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.InternalUserJwtAuthenticationWebFilter;
 import gj.cloud.vm.global.security.JwtAuthenticationWebFilter;
@@ -36,13 +38,34 @@ public class SecurityConfig {
     // 클래스들은 컴포넌트 스캔에서 빼고, 실제 의존성(검증기/서비스)만 주입받아 여기서 직접 생성한다.
     private final JwtValidator jwtValidator;
     private final InternalJwtValidator internalJwtValidator;
+    private final InternalAutomationJwtValidator internalAutomationJwtValidator;
     private final InternalOpsJwtValidator internalOpsJwtValidator;
     private final InternalUserJwtValidator internalUserJwtValidator;
     private final SseTicketService sseTicketService;
 
-    // /internal/ops/** 전용: Ops 서비스(aud=ops-service)만 호출 가능. 아래 일반 /internal/** 체인보다 먼저 매칭돼야 함
     @Bean
     @Order(1)
+    public SecurityWebFilterChain internalAutomationFilterChain(ServerHttpSecurity http) {
+        return http
+                .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/internal/automation/**"))
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+                .cors(ServerHttpSecurity.CorsSpec::disable)
+                .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
+                .authorizeExchange(auth -> auth.anyExchange().authenticated())
+                .exceptionHandling(e -> e.authenticationEntryPoint((exchange, ex) -> {
+                    exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+                    return exchange.getResponse().setComplete();
+                }))
+                .addFilterAt(new InternalAutomationJwtAuthenticationWebFilter(internalAutomationJwtValidator),
+                        SecurityWebFiltersOrder.AUTHENTICATION)
+                .build();
+    }
+
+    // /internal/ops/** 전용: Ops 서비스(aud=ops-service)만 호출 가능. 아래 일반 /internal/** 체인보다 먼저 매칭돼야 함
+    @Bean
+    @Order(2)
     public SecurityWebFilterChain internalOpsFilterChain(ServerHttpSecurity http) {
         return http
                 .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/internal/ops/**"))
@@ -67,7 +90,7 @@ public class SecurityConfig {
     // 순수 서비스 신원(client_id=auth-service)만 인정해서 이 위임 토큰을 거부하므로, 더 좁은 이 경로가
     // 먼저 매칭되도록 앞에 둬야 함.
     @Bean
-    @Order(2)
+    @Order(3)
     public SecurityWebFilterChain internalUserDelegatedFilterChain(ServerHttpSecurity http) {
         return http
                 .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/internal/vms/count", "/internal/vms/usage"))
@@ -88,7 +111,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @Order(3)
+    @Order(4)
     public SecurityWebFilterChain internalFilterChain(ServerHttpSecurity http) {
         return http
                 .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/internal/**"))
@@ -111,7 +134,7 @@ public class SecurityConfig {
     // SEC-006: SSE 구독 전용 티켓 인증 체인. 아래 일반 체인의 광범위한 인증(및 과거 ?token= 폴백)보다
     // 먼저 매칭돼야 하며, 이 두 경로에는 일반 Authorization 헤더 인증을 적용하지 않는다.
     @Bean
-    @Order(4)
+    @Order(5)
     public SecurityWebFilterChain sseTicketFilterChain(ServerHttpSecurity http) {
         return http
                 .securityMatcher(ServerWebExchangeMatchers.pathMatchers("/vms/events/subscribe", "/vms/*/metrics/stream"))
@@ -132,7 +155,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @Order(5)
+    @Order(6)
     public SecurityWebFilterChain filterChain(ServerHttpSecurity http) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)

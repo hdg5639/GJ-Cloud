@@ -25,6 +25,7 @@ auth:
   jwks-cache-ttl: 3600000
   service-client-id: vm-service
   service-client-secret: ${VM_SERVICE_CLIENT_SECRET}
+  user-service-client-id: vm-user-service
 
 sse:
   ticket-ttl-seconds: 30

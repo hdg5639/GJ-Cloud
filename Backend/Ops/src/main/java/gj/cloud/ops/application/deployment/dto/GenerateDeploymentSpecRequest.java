@@ -17,6 +17,8 @@ public record GenerateDeploymentSpecRequest(
         @Valid List<InfraSelection> infrastructure,
         // 지정하면 새 네트워크를 만드는 대신 VM에 이미 존재하는 이 이름의 Docker 네트워크를 external로 재사용.
         // null/빈 값이면 기존과 동일하게 새 네트워크를 생성.
-        String existingNetworkName
+        String existingNetworkName,
+        Long githubInstallationId,
+        Long githubRepositoryId
 ) {
 }

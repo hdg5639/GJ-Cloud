@@ -14,4 +14,5 @@ public class AuthProperties {
     private long jwksCacheTtl;
     private String serviceClientId;
     private String serviceClientSecret;
+    private String userServiceClientId;
 }

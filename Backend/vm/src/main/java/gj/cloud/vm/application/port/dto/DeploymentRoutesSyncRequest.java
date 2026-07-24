@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public record DeploymentRoutesSyncRequest(
+        @NotBlank String deploymentAppId,
         @NotBlank String deploymentId,
         @NotNull List<@Valid DeploymentRouteItem> routes
 ) {

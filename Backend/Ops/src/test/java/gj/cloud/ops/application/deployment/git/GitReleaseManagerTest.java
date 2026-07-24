@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -70,5 +71,53 @@ class GitReleaseManagerTest {
                 .isInstanceOfSatisfying(OpsException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE));
         verify(sshCommandExecutor, times(3)).exec(eq(session), eq(command), anyLong());
+    }
+
+    @Test
+    void resolvesTheExactWebhookCommitInsteadOfTheMovingBranchHead() {
+        String requestedRevision = "0123456789abcdef0123456789abcdef01234567";
+        when(sshCommandExecutor.exec(eq(session), org.mockito.ArgumentMatchers.contains(" fetch --prune origin"), anyLong()))
+                .thenReturn(new CommandResult(0, "", ""));
+        when(sshCommandExecutor.execOrThrow(
+                eq(session),
+                eq("git -C '/home/null/gamjabox/apps/target-1/repository.git' cat-file -e '"
+                        + requestedRevision + "^{commit}'"),
+                anyLong()))
+                .thenReturn(new CommandResult(0, "", ""));
+        when(sshCommandExecutor.execOrThrow(
+                eq(session),
+                eq("git -C '/home/null/gamjabox/apps/target-1/repository.git' rev-parse '"
+                        + requestedRevision + "'"),
+                anyLong()))
+                .thenReturn(new CommandResult(0, requestedRevision + "\n", ""));
+
+        String resolved = manager.fetchAndResolveCommit(
+                session, "target-1", "main", null, requestedRevision);
+
+        assertThat(resolved).isEqualTo(requestedRevision);
+    }
+
+    @Test
+    void rejectsInvalidWebhookRevisionBeforeRunningGit() {
+        assertThatThrownBy(() -> manager.fetchAndResolveCommit(
+                session, "target-1", "main", null, "main; touch /tmp/pwned"))
+                .isInstanceOfSatisfying(OpsException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(OpsErrorCode.INVALID_REPO_CONFIG));
+
+        verifyNoInteractions(sshCommandExecutor);
+    }
+
+    @Test
+    void rejectsCredentialsEmbeddedInRepositoryUrl() {
+        assertThatThrownBy(() -> manager.ensureBareRepo(
+                session,
+                "target-1",
+                "https://secret-token@github.com/example/repository.git",
+                null))
+                .isInstanceOfSatisfying(OpsException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(
+                                OpsErrorCode.INVALID_REPO_CONFIG));
+
+        verifyNoInteractions(sshCommandExecutor);
     }
 }

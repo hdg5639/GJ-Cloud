@@ -39,6 +39,17 @@ public enum OpsErrorCode {
     DEPLOYMENT_ROLLBACK_TARGET_NOT_SUCCEEDED(HttpStatus.BAD_REQUEST, "성공한 배포로만 롤백할 수 있습니다."),
     DEPLOYMENT_TEARDOWN_TARGET_INVALID(HttpStatus.BAD_REQUEST, "현재 활성화된 배포만 내릴 수 있습니다."),
     DEPLOYMENT_TEARDOWN_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "배포 내리기에 실패했습니다."),
+    DEPLOYMENT_TARGET_NOT_FOUND(HttpStatus.NOT_FOUND, "배포 대상을 찾을 수 없습니다."),
+    DEPLOYMENT_TARGET_NAME_DUPLICATED(HttpStatus.CONFLICT, "같은 VM에 동일한 배포 대상 이름이 이미 있습니다."),
+    AUTO_DEPLOY_REQUIRES_GITHUB(HttpStatus.BAD_REQUEST, "자동 배포는 GitHub App 저장소 연결이 필요합니다."),
+
+    // GitHub App / push webhook
+    GITHUB_APP_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "GitHub App 연동이 설정되지 않았습니다."),
+    GITHUB_INSTALLATION_NOT_FOUND(HttpStatus.NOT_FOUND, "연결된 GitHub App 설치를 찾을 수 없습니다."),
+    GITHUB_REPOSITORY_NOT_FOUND(HttpStatus.NOT_FOUND, "GitHub App이 접근할 수 있는 저장소를 찾을 수 없습니다."),
+    GITHUB_INSTALL_STATE_INVALID(HttpStatus.BAD_REQUEST, "GitHub 연결 요청이 만료됐거나 유효하지 않습니다."),
+    GITHUB_API_FAILED(HttpStatus.BAD_GATEWAY, "GitHub API 요청에 실패했습니다."),
+    GITHUB_WEBHOOK_SIGNATURE_INVALID(HttpStatus.UNAUTHORIZED, "GitHub 웹훅 서명이 유효하지 않습니다."),
 
     // Docker 관리
     DOCKER_NOT_INSTALLED(HttpStatus.BAD_REQUEST, "VM에 Docker가 설치되어 있지 않습니다."),

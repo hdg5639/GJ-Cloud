@@ -4,6 +4,8 @@ import gj.cloud.vm.application.org.dto.MemberSearchResult;
 import gj.cloud.vm.application.ssh.dto.SshKeyInternalResponse;
 import gj.cloud.vm.global.exception.VmException;
 import gj.cloud.vm.global.exception.enums.VmErrorCode;
+import gj.cloud.vm.global.auth.ServiceTokenClient;
+import gj.cloud.vm.global.config.AuthProperties;
 import gj.cloud.vm.global.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,9 +30,17 @@ public class UserServiceClient {
             new ParameterizedTypeReference<>() {};
 
     private final WebClient webClient;
+    private final ServiceTokenClient serviceTokenClient;
+    private final AuthProperties authProperties;
 
-    public UserServiceClient(@Value("${user.service-url}") String userServiceUrl) {
+    public UserServiceClient(
+            @Value("${user.service-url}") String userServiceUrl,
+            ServiceTokenClient serviceTokenClient,
+            AuthProperties authProperties
+    ) {
         this.webClient = WebClient.builder().baseUrl(userServiceUrl).build();
+        this.serviceTokenClient = serviceTokenClient;
+        this.authProperties = authProperties;
     }
 
     public Mono<SshKeyInternalResponse> getSshKey(String bearerToken, String sshKeyId) {
@@ -71,6 +81,20 @@ public class UserServiceClient {
                 .map(ApiResponse::data)
                 .onErrorResume(e -> {
                     log.error("플랜 조회 실패: error={}", e.getMessage());
+                    return Mono.just("FREE");
+                });
+    }
+
+    public Mono<String> getUserPlanById(String userId) {
+        return serviceTokenClient.getToken(authProperties.getUserServiceClientId())
+                .flatMap(token -> webClient.get()
+                        .uri("/internal/automation/users/{userId}/plan", userId)
+                        .header("Authorization", "Bearer " + token)
+                        .retrieve()
+                        .bodyToMono(STRING_RESPONSE_TYPE)
+                        .map(ApiResponse::data))
+                .onErrorResume(e -> {
+                    log.error("자동 배포 사용자 플랜 조회 실패: userId={}, error={}", userId, e.getMessage());
                     return Mono.just("FREE");
                 });
     }

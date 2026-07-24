@@ -16,9 +16,73 @@ ALTER TABLE vm_management_keys ADD COLUMN IF NOT EXISTS ssh_host_key_fingerprint
 
 CREATE INDEX IF NOT EXISTS idx_vm_management_keys_status ON vm_management_keys(status);
 
+CREATE TABLE IF NOT EXISTS github_installations (
+    id              VARCHAR(100) PRIMARY KEY,
+    installation_id BIGINT       NOT NULL,
+    user_id         VARCHAR(255) NOT NULL,
+    account_login   VARCHAR(255) NOT NULL,
+    account_type    VARCHAR(50)  NOT NULL,
+    created_at      TIMESTAMP    NOT NULL DEFAULT now()
+);
+
+-- GitHub 조직 App 설치 하나를 여러 GamjaBox 사용자가 각자 연결할 수 있다. 초기 구현의
+-- installation_id 단일 PK 테이블이 이미 존재해도 사용자별 매핑 테이블로 무중단 전환한다.
+ALTER TABLE github_installations ADD COLUMN IF NOT EXISTS id VARCHAR(100);
+UPDATE github_installations
+SET id = installation_id::text || ':' || user_id
+WHERE id IS NULL;
+ALTER TABLE github_installations ALTER COLUMN id SET NOT NULL;
+ALTER TABLE github_installations DROP CONSTRAINT IF EXISTS github_installations_pkey;
+ALTER TABLE github_installations ADD CONSTRAINT github_installations_pkey PRIMARY KEY (id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_github_installation_user
+    ON github_installations(installation_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_github_installations_user_id ON github_installations(user_id);
+
+CREATE TABLE IF NOT EXISTS deployment_targets (
+    id                           VARCHAR(36)  PRIMARY KEY,
+    vm_id                        VARCHAR(36)  NOT NULL,
+    owner_user_id                VARCHAR(255) NOT NULL,
+    owner_email                  VARCHAR(255) NOT NULL,
+    name                         VARCHAR(60)  NOT NULL,
+    repository_url               VARCHAR(500) NOT NULL,
+    branch                       VARCHAR(255) NOT NULL,
+    github_installation_id       BIGINT,
+    github_repository_id         BIGINT,
+    github_repository_full_name  VARCHAR(255),
+    source_type                  VARCHAR(20)  NOT NULL,
+    source_compose_ciphertext    TEXT         NOT NULL,
+    environment_files_ciphertext TEXT,
+    uploaded_files_ciphertext    TEXT,
+    exposed_routes_json          TEXT,
+    health_checks_json           TEXT,
+    context                      VARCHAR(255),
+    install_path                 VARCHAR(500),
+    auto_deploy_enabled          BOOLEAN      NOT NULL DEFAULT false,
+    active                       BOOLEAN      NOT NULL DEFAULT true,
+    latest_requested_revision    VARCHAR(64),
+    latest_requested_at          TIMESTAMP,
+    latest_deployed_revision     VARCHAR(64),
+    latest_deployment_id         VARCHAR(36),
+    created_at                   TIMESTAMP    NOT NULL DEFAULT now(),
+    updated_at                   TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_deployment_target_source_type CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deployment_targets_vm_id ON deployment_targets(vm_id);
+ALTER TABLE deployment_targets DROP CONSTRAINT IF EXISTS uq_deployment_target_vm_name;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_deployment_target_vm_name_ci
+    ON deployment_targets(vm_id, lower(name)) WHERE active;
+CREATE INDEX IF NOT EXISTS idx_deployment_targets_github_repo
+    ON deployment_targets(github_installation_id, github_repository_id);
+ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS latest_requested_at TIMESTAMP;
+
 CREATE TABLE IF NOT EXISTS deployments (
     id                          VARCHAR(36)  PRIMARY KEY,
     vm_id                       VARCHAR(36)  NOT NULL,
+    deployment_target_id        VARCHAR(36),
+    trigger_type                VARCHAR(20)  NOT NULL DEFAULT 'MANUAL',
+    requested_revision          VARCHAR(64),
     status                      VARCHAR(20)  NOT NULL DEFAULT 'QUEUED',
     source_type                 VARCHAR(20)  NOT NULL,
     source_revision             VARCHAR(64),
@@ -54,6 +118,9 @@ ALTER TABLE deployments ADD COLUMN IF NOT EXISTS health_checks_json TEXT;
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS context VARCHAR(255);
 -- VM 내 특정 경로에 현재 배포를 가리키는 심볼릭 링크를 생성하는 기능 추가
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS install_path VARCHAR(500);
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS deployment_target_id VARCHAR(36);
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS trigger_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL';
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS requested_revision VARCHAR(64);
 
 -- 배포 내리기 상태(STOPPING/STOPPED)는 기존 운영 테이블이 만들어진 뒤 추가됐다. CREATE TABLE IF NOT
 -- EXISTS는 기존 CHECK 제약을 갱신하지 않으므로, 애플리케이션 시작 시 현재 enum 목록으로 재생성한다.
@@ -67,6 +134,15 @@ ALTER TABLE deployments ADD CONSTRAINT chk_deployment_status CHECK (status IN (
 
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id_created_at ON deployments(vm_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deployments_target_created_at
+    ON deployments(deployment_target_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS github_webhook_deliveries (
+    id         VARCHAR(100) PRIMARY KEY,
+    event_type VARCHAR(50)  NOT NULL,
+    status     VARCHAR(30)  NOT NULL,
+    created_at TIMESTAMP    NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS deployment_events (
     id              VARCHAR(36) PRIMARY KEY,

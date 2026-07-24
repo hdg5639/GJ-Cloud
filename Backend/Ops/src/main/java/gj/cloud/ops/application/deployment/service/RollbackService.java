@@ -1,9 +1,10 @@
 package gj.cloud.ops.application.deployment.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.Session;
 import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
+import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
-import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
 import gj.cloud.ops.domain.deployment.enums.DeploymentEventType;
 import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
@@ -15,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 // D.7 롤백 플로우 — SWAPPING 이후 실패(컨테이너 교체/헬스체크) 시 직전 "성공" 배포로 되돌림.
 // 재빌드 없음: 직전 배포의 resolved-compose.yml(build 지시문 없음, 이미지 태그 고정)을 그대로 재사용.
@@ -30,9 +32,15 @@ public class RollbackService {
     private final DeploymentEventPublisher eventPublisher;
     private final GitReleaseManager gitReleaseManager;
     private final SshCommandExecutor sshCommandExecutor;
-    private final VmDeploymentRoutesClient routesClient;
+    private final ObjectMapper objectMapper;
 
-    public void rollback(Session session, String deploymentId, String appId, String bearerToken, String reason) {
+    public void rollback(
+            Session session,
+            String deploymentId,
+            String appId,
+            Consumer<DeploymentRoutesRequest> routeSynchronizer,
+            String reason
+    ) {
         eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, reason + " — 롤백을 시작합니다.");
         updateEntity(deploymentId, e -> e.withStatus(DeploymentStatus.ROLLING_BACK, reason));
 
@@ -57,13 +65,11 @@ public class RollbackService {
             return;
         }
 
-        // 참고: 롤백 대상의 헬스체크 스펙은 영속화돼 있지 않아(ComposeArtifact 자체를 저장하지 않음) 재검증은 생략하고
-        // 기동 성공만으로 판단함 — 헬스체크 스펙까지 재현하려면 ComposeArtifact 영속화가 필요 (후속 개선 대상)
-
         gitReleaseManager.updateCurrentSymlink(session, appId, previousDeploymentId);
 
         try {
-            routesClient.syncRoutes(bearerToken, appId, new DeploymentRoutesRequest(previousDeploymentId, List.of()));
+            routeSynchronizer.accept(new DeploymentRoutesRequest(
+                    appId, previousDeploymentId, readRoutes(previous.getExposedRoutesJson())));
         } catch (Exception e) {
             log.warn("롤백 후 라우트 재동기화 실패(무시): {}", e.getMessage());
         }
@@ -79,6 +85,18 @@ public class RollbackService {
 
     private void updateEntity(String deploymentId, java.util.function.UnaryOperator<DeploymentEntity> mutator) {
         deploymentRepository.findById(deploymentId).ifPresent(entity -> deploymentRepository.save(mutator.apply(entity)));
+    }
+
+    private List<ExposedRoute> readRoutes(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readerForListOf(ExposedRoute.class).readValue(json);
+        } catch (Exception e) {
+            log.warn("롤백 라우트 스펙 복원 실패(빈 라우트로 진행): {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private String trim(String text) {

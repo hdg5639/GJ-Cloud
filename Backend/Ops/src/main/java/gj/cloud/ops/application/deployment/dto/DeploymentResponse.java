@@ -8,6 +8,9 @@ import java.time.LocalDateTime;
 public record DeploymentResponse(
         String id,
         String vmId,
+        String deploymentTargetId,
+        String triggerType,
+        String requestedRevision,
         String status,
         String sourceType,
         String sourceRevision,
@@ -22,6 +25,9 @@ public record DeploymentResponse(
         return new DeploymentResponse(
                 entity.getId(),
                 entity.getVmId(),
+                entity.getDeploymentTargetId(),
+                entity.getTriggerType().name(),
+                entity.getRequestedRevision(),
                 entity.getStatus().name(),
                 entity.getSourceType().name(),
                 entity.getSourceRevision(),

@@ -292,6 +292,9 @@ export interface DockerStatusResponse {
 export interface DeploymentResponse {
   id: string;
   vmId: string;
+  deploymentTargetId: string | null;
+  triggerType: "MANUAL" | "GIT_PUSH" | "RETRY" | "ROLLBACK";
+  requestedRevision: string | null;
   status: string;
   sourceType: "TEMPLATE_SPEC" | "AI_SPEC" | "RAW_COMPOSE";
   sourceRevision: string | null;
@@ -301,6 +304,42 @@ export interface DeploymentResponse {
   createdAt: string;
   updatedAt: string;
   deployedAt: string | null;
+}
+
+export interface DeploymentTargetResponse {
+  id: string;
+  vmId: string;
+  name: string;
+  repositoryUrl: string;
+  repositoryFullName: string | null;
+  branch: string;
+  sourceType: "TEMPLATE_SPEC" | "AI_SPEC" | "RAW_COMPOSE";
+  autoDeployEnabled: boolean;
+  latestRequestedRevision: string | null;
+  latestDeployedRevision: string | null;
+  latestDeploymentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GithubInstallationResponse {
+  installationId: number;
+  accountLogin: string;
+  accountType: string;
+}
+
+export interface GithubRepositoryResponse {
+  id: number;
+  installationId: number;
+  fullName: string;
+  cloneUrl: string;
+  defaultBranch: string;
+  privateRepository: boolean;
+}
+
+export interface GithubInstallationCompleteResponse {
+  installations: GithubInstallationResponse[];
+  vmId: string;
 }
 
 export interface EnvironmentFile {

@@ -14,6 +14,9 @@ import gj.cloud.ops.application.deployment.dto.GenerateDeploymentSpecRequest;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
+import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
+import gj.cloud.ops.application.github.dto.GithubRepositoryAccess;
+import gj.cloud.ops.application.github.service.GithubAppService;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecPolicyValidator;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderer;
@@ -21,17 +24,20 @@ import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
+import gj.cloud.ops.domain.deployment.entity.DeploymentTargetEntity;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.response.ApiResponse;
+import gj.cloud.ops.global.security.OpsPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -56,6 +62,8 @@ public class DeploymentController {
     private final AiSpecGeneratorClient aiSpecGeneratorClient;
     private final AiComposeReviewer aiComposeReviewer;
     private final VmServiceClient vmServiceClient;
+    private final DeploymentTargetService deploymentTargetService;
+    private final GithubAppService githubAppService;
 
     @Operation(summary = "배포 생성 (Raw Compose)", description = "체크아웃~라우트 등록까지 비동기로 진행됩니다. 즉시 202를 반환하고 SSE로 진행 상황을 수신하세요.")
     @PostMapping
@@ -63,9 +71,11 @@ public class DeploymentController {
     public ApiResponse<DeploymentResponse> create(
             HttpServletRequest request,
             @PathVariable UUID vmId,
+            @AuthenticationPrincipal OpsPrincipal principal,
             @Valid @RequestBody DeploymentCreateRequest body
     ) {
         String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
         ComposeArtifact artifact = new ComposeArtifact(
                 body.composeContent(),
                 body.environmentFiles() != null ? body.environmentFiles() : List.of(),
@@ -74,9 +84,27 @@ public class DeploymentController {
                 body.healthChecks() != null ? body.healthChecks() : List.of(),
                 SourceType.RAW_COMPOSE
         );
-        RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken(), body.context(), body.installPath());
+        ResolvedRepository repository = resolveRepository(
+                principal.userId(), body.repoUrl(), body.branch(), body.patToken(),
+                body.githubInstallationId(), body.githubRepositoryId());
+        RepoConfig repoConfig = new RepoConfig(
+                repository.repoUrl(), repository.branch(), repository.token(), body.context(), body.installPath());
+        DeploymentTargetEntity target = createTargetIfRequested(
+                principal, vmId.toString(), body.targetName(), Boolean.TRUE.equals(body.autoDeploy()),
+                repository, artifact, body.context(), body.installPath());
 
-        DeploymentEntity deployment = deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact);
+        DeploymentEntity deployment;
+        try {
+            deployment = target == null
+                    ? deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact)
+                    : deploymentExecutor.enqueueForTarget(
+                            bearerToken, vmId.toString(), target, repoConfig, artifact);
+        } catch (RuntimeException e) {
+            if (target != null) {
+                deploymentTargetService.deactivate(target.getId());
+            }
+            throw e;
+        }
         return ApiResponse.ok(DeploymentResponse.from(deployment));
     }
 
@@ -86,15 +114,38 @@ public class DeploymentController {
     public ApiResponse<DeploymentResponse> createFromSpec(
             HttpServletRequest request,
             @PathVariable UUID vmId,
+            @AuthenticationPrincipal OpsPrincipal principal,
             @Valid @RequestBody DeploymentFromSpecRequest body
     ) {
         String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
         deploymentSpecValidator.validate(body.spec());
         deploymentSpecPolicyValidator.validate(body.spec());
-        ComposeArtifact artifact = deploymentSpecRenderer.render(body.spec());
-        RepoConfig repoConfig = new RepoConfig(body.repoUrl(), body.branch(), body.patToken(), null, body.installPath());
+        ComposeArtifact rendered = deploymentSpecRenderer.render(body.spec());
+        ComposeArtifact artifact = new ComposeArtifact(
+                rendered.composeContent(), rendered.environmentFiles(), rendered.uploadedFiles(),
+                rendered.exposedRoutes(), rendered.healthChecks(), SourceType.AI_SPEC);
+        ResolvedRepository repository = resolveRepository(
+                principal.userId(), body.repoUrl(), body.branch(), body.patToken(),
+                body.githubInstallationId(), body.githubRepositoryId());
+        RepoConfig repoConfig = new RepoConfig(
+                repository.repoUrl(), repository.branch(), repository.token(), null, body.installPath());
+        DeploymentTargetEntity target = createTargetIfRequested(
+                principal, vmId.toString(), body.targetName(), Boolean.TRUE.equals(body.autoDeploy()),
+                repository, artifact, null, body.installPath());
 
-        DeploymentEntity deployment = deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact);
+        DeploymentEntity deployment;
+        try {
+            deployment = target == null
+                    ? deploymentExecutor.enqueue(bearerToken, vmId.toString(), repoConfig, artifact)
+                    : deploymentExecutor.enqueueForTarget(
+                            bearerToken, vmId.toString(), target, repoConfig, artifact);
+        } catch (RuntimeException e) {
+            if (target != null) {
+                deploymentTargetService.deactivate(target.getId());
+            }
+            throw e;
+        }
         return ApiResponse.ok(DeploymentResponse.from(deployment));
     }
 
@@ -106,6 +157,7 @@ public class DeploymentController {
     public ApiResponse<AiGenerationResult> generateSpec(
             HttpServletRequest request,
             @PathVariable UUID vmId,
+            @AuthenticationPrincipal OpsPrincipal principal,
             @Valid @RequestBody GenerateDeploymentSpecRequest body
     ) {
         String bearerToken = extractToken(request);
@@ -113,7 +165,19 @@ public class DeploymentController {
         if (!context.hasPermission(PERMISSION_DEPLOY)) {
             throw new OpsException(OpsErrorCode.FORBIDDEN);
         }
-        AiGenerationResult result = aiSpecGeneratorClient.generate(vmId.toString(), body);
+        ResolvedRepository repository = resolveRepository(
+                principal.userId(), body.repoUrl(), body.branch(), body.patToken(),
+                body.githubInstallationId(), body.githubRepositoryId());
+        GenerateDeploymentSpecRequest resolvedRequest = new GenerateDeploymentSpecRequest(
+                repository.repoUrl(),
+                repository.branch(),
+                repository.token(),
+                body.services(),
+                body.infrastructure(),
+                body.existingNetworkName(),
+                body.githubInstallationId(),
+                body.githubRepositoryId());
+        AiGenerationResult result = aiSpecGeneratorClient.generate(vmId.toString(), resolvedRequest);
         return ApiResponse.ok(result);
     }
 
@@ -239,5 +303,70 @@ public class DeploymentController {
             return header.substring(7);
         }
         return header;
+    }
+
+    private void requireDeployPermission(String bearerToken, String vmId) {
+        if (!vmServiceClient.getContext(bearerToken, vmId).hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+    }
+
+    private DeploymentTargetEntity createTargetIfRequested(
+            OpsPrincipal principal,
+            String vmId,
+            String targetName,
+            boolean autoDeploy,
+            ResolvedRepository repository,
+            ComposeArtifact artifact,
+            String context,
+            String installPath
+    ) {
+        if (!StringUtils.hasText(targetName)) {
+            if (autoDeploy) {
+                throw new OpsException(OpsErrorCode.AUTO_DEPLOY_REQUIRES_GITHUB);
+            }
+            return null;
+        }
+        return deploymentTargetService.create(
+                vmId,
+                principal.userId(),
+                principal.email(),
+                targetName,
+                repository.repoUrl(),
+                repository.branch(),
+                repository.githubAccess(),
+                artifact,
+                context,
+                installPath,
+                autoDeploy
+        );
+    }
+
+    private ResolvedRepository resolveRepository(
+            String userId,
+            String repoUrl,
+            String branch,
+            String patToken,
+            Long installationId,
+            Long repositoryId
+    ) {
+        if (installationId == null && repositoryId == null) {
+            return new ResolvedRepository(repoUrl, branch, patToken, null);
+        }
+        if (installationId == null || repositoryId == null) {
+            throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+        }
+        GithubRepositoryAccess access =
+                githubAppService.resolveRepositoryAccess(userId, installationId, repositoryId);
+        String resolvedBranch = StringUtils.hasText(branch) ? branch : access.defaultBranch();
+        return new ResolvedRepository(access.cloneUrl(), resolvedBranch, access.token(), access);
+    }
+
+    private record ResolvedRepository(
+            String repoUrl,
+            String branch,
+            String token,
+            GithubRepositoryAccess githubAccess
+    ) {
     }
 }

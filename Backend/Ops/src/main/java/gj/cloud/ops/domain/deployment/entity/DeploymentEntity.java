@@ -1,6 +1,7 @@
 package gj.cloud.ops.domain.deployment.entity;
 
 import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
+import gj.cloud.ops.domain.deployment.enums.DeploymentTriggerType;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -22,9 +23,20 @@ public class DeploymentEntity {
     @Id
     private String id;
 
-    // MVP 범위에서는 appId = vmId로 취급 (D.7)
+    // VM 소유 범위. 런타임 appId는 deploymentTargetId가 있으면 target ID, 레거시 행만 vmId를 사용한다.
     @Column(name = "vm_id", nullable = false)
     private String vmId;
+
+    @Column(name = "deployment_target_id")
+    private String deploymentTargetId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trigger_type", nullable = false)
+    @Builder.Default
+    private DeploymentTriggerType triggerType = DeploymentTriggerType.MANUAL;
+
+    @Column(name = "requested_revision", length = 64)
+    private String requestedRevision;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -108,6 +120,41 @@ public class DeploymentEntity {
         return DeploymentEntity.builder()
                 .id(UUID.randomUUID().toString())
                 .vmId(vmId)
+                .status(DeploymentStatus.QUEUED)
+                .sourceType(sourceType)
+                .sourceComposeCiphertext(sourceComposeCiphertext)
+                .previousDeploymentId(previousDeploymentId)
+                .environmentFilesCiphertext(environmentFilesCiphertext)
+                .exposedRoutesJson(exposedRoutesJson)
+                .healthChecksJson(healthChecksJson)
+                .context(context)
+                .installPath(installPath)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+    }
+
+    public static DeploymentEntity createQueuedForTarget(
+            String vmId,
+            String deploymentTargetId,
+            DeploymentTriggerType triggerType,
+            String requestedRevision,
+            SourceType sourceType,
+            String sourceComposeCiphertext,
+            String previousDeploymentId,
+            String environmentFilesCiphertext,
+            String exposedRoutesJson,
+            String healthChecksJson,
+            String context,
+            String installPath
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        return DeploymentEntity.builder()
+                .id(UUID.randomUUID().toString())
+                .vmId(vmId)
+                .deploymentTargetId(deploymentTargetId)
+                .triggerType(triggerType)
+                .requestedRevision(requestedRevision)
                 .status(DeploymentStatus.QUEUED)
                 .sourceType(sourceType)
                 .sourceComposeCiphertext(sourceComposeCiphertext)

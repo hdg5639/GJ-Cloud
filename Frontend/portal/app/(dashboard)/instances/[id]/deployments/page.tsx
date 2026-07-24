@@ -17,6 +17,8 @@ import type {
   UnresolvedField,
   ComposeReviewFinding,
   NetworkInfo,
+  DeploymentTargetResponse,
+  GithubRepositoryResponse,
 } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import { Modal } from "@/components/ui/modal";
@@ -50,6 +52,13 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
   RAW_COMPOSE: "사용자 지정",
   TEMPLATE_SPEC: "기본 템플릿",
   AI_SPEC: "AI 자동생성",
+};
+
+const TRIGGER_TYPE_LABEL: Record<string, string> = {
+  MANUAL: "수동",
+  GIT_PUSH: "Git push",
+  RETRY: "재시도",
+  ROLLBACK: "롤백",
 };
 
 function formatDate(iso: string): string {
@@ -164,8 +173,10 @@ export default function DeploymentsPage() {
   const { accessToken } = useAuth();
 
   const [deployments, setDeployments] = useState<DeploymentResponse[]>([]);
+  const [deploymentTargets, setDeploymentTargets] = useState<DeploymentTargetResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [togglingTargetId, setTogglingTargetId] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("compose");
@@ -183,6 +194,12 @@ export default function DeploymentsPage() {
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("main");
   const [patToken, setPatToken] = useState("");
+  const [targetName, setTargetName] = useState("");
+  const [autoDeploy, setAutoDeploy] = useState(true);
+  const [githubRepositories, setGithubRepositories] = useState<GithubRepositoryResponse[]>([]);
+  const [selectedGithubRepositoryKey, setSelectedGithubRepositoryKey] = useState("");
+  const [githubLoading, setGithubLoading] = useState(false);
+  const [githubConnecting, setGithubConnecting] = useState(false);
 
   // 공통 — VM 내 배포 경로 (심볼릭 링크)
   const [installPath, setInstallPath] = useState("");
@@ -250,6 +267,8 @@ export default function DeploymentsPage() {
 
   function handleRepoUrlChange(value: string) {
     setRepoUrl(value);
+    setSelectedGithubRepositoryKey("");
+    setAutoDeploy(false);
     invalidateAiGeneration();
   }
 
@@ -382,8 +401,12 @@ export default function DeploymentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.ops.deployments.list(accessToken, vmId);
-      setDeployments(res);
+      const [deploymentResult, targetResult] = await Promise.all([
+        api.ops.deployments.list(accessToken, vmId),
+        api.ops.deployments.listTargets(accessToken, vmId),
+      ]);
+      setDeployments(deploymentResult);
+      setDeploymentTargets(targetResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : "배포 이력 조회에 실패했습니다.");
     } finally {
@@ -392,7 +415,8 @@ export default function DeploymentsPage() {
   }, [accessToken, vmId]);
 
   useEffect(() => {
-    load();
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   // 배포 생성 모달을 열 때 VM에 이미 존재하는 Docker 네트워크 목록을 가져옴 — Compose 탭에서는 참고용으로
@@ -401,6 +425,56 @@ export default function DeploymentsPage() {
     if (!showCreate || !accessToken) return;
     api.ops.docker.listNetworks(accessToken, vmId).then(setDockerNetworks).catch(() => setDockerNetworks([]));
   }, [showCreate, accessToken, vmId]);
+
+  const loadGithubRepositories = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      setGithubRepositories(await api.ops.github.listRepositories(accessToken));
+    } catch {
+      setGithubRepositories([]);
+    } finally {
+      setGithubLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!showCreate || !accessToken) return;
+    const timer = window.setTimeout(loadGithubRepositories, 0);
+    return () => window.clearTimeout(timer);
+  }, [showCreate, accessToken, loadGithubRepositories]);
+
+  useEffect(() => {
+    function refreshAfterGithubConnection(connectedVmId: unknown) {
+      if (connectedVmId !== vmId) return;
+      setGithubConnecting(false);
+      setGithubLoading(true);
+      loadGithubRepositories();
+    }
+
+    function handleGithubConnected(event: MessageEvent) {
+      if (event.origin !== window.location.origin
+          || event.data?.type !== "gamjabox:github-connected") {
+        return;
+      }
+      refreshAfterGithubConnection(event.data.vmId);
+    }
+
+    function handleGithubStorage(event: StorageEvent) {
+      if (event.key !== "gamjabox:github-connected" || !event.newValue) return;
+      try {
+        refreshAfterGithubConnection(JSON.parse(event.newValue).vmId);
+      } catch {
+        // 다른 탭의 손상된 알림은 무시하고 현재 입력 상태를 유지한다.
+      }
+    }
+
+    window.addEventListener("message", handleGithubConnected);
+    window.addEventListener("storage", handleGithubStorage);
+    return () => {
+      window.removeEventListener("message", handleGithubConnected);
+      window.removeEventListener("storage", handleGithubStorage);
+    };
+  }, [loadGithubRepositories, vmId]);
 
   // 라우트 편집 UI의 PRO 커스텀 CNAME 게이팅에 필요 — 기존 포트 추가 폼과 동일하게 플랜을 조회해둠
   useEffect(() => {
@@ -439,6 +513,15 @@ export default function DeploymentsPage() {
     setRetryingId(deploymentId);
     setError(null);
     try {
+      const deployment = deployments.find((item) => item.id === deploymentId)
+        ?? await api.ops.deployments.get(accessToken, vmId, deploymentId);
+      if (deployment?.deploymentTargetId) {
+        const retried = await api.ops.deployments.redeployTarget(
+          accessToken, vmId, deployment.deploymentTargetId
+        );
+        router.push(`/instances/${vmId}/deployments/${retried.id}`);
+        return;
+      }
       const spec = await api.ops.deployments.getComposeSpec(accessToken, vmId, deploymentId);
       applyComposeSpec(spec);
     } catch (err) {
@@ -466,6 +549,9 @@ export default function DeploymentsPage() {
     setRepoUrl("");
     setBranch("main");
     setPatToken("");
+    setTargetName("");
+    setAutoDeploy(true);
+    setSelectedGithubRepositoryKey("");
     setComposeContent("");
     setContext("");
     setInstallPath("");
@@ -498,7 +584,74 @@ export default function DeploymentsPage() {
 
   function openCreate() {
     setError(null);
+    setGithubLoading(true);
     setShowCreate(true);
+  }
+
+  async function handleConnectGithub() {
+    if (!accessToken) return;
+    const popup = window.open(
+      "about:blank",
+      "gamjabox-github-connect",
+      "popup=yes,width=760,height=820,resizable=yes,scrollbars=yes"
+    );
+    if (!popup) {
+      setError("팝업이 차단되어 GitHub 연결을 열 수 없습니다. 이 사이트의 팝업을 허용한 뒤 다시 시도해주세요.");
+      return;
+    }
+    const popupWatcher = window.setInterval(() => {
+      if (!popup.closed) return;
+      window.clearInterval(popupWatcher);
+      setGithubConnecting(false);
+    }, 500);
+    setGithubConnecting(true);
+    setError(null);
+    try {
+      const result = await api.ops.github.createInstallUrl(accessToken, vmId);
+      popup.location.replace(result.url);
+    } catch (err) {
+      window.clearInterval(popupWatcher);
+      popup.close();
+      setError(err instanceof Error ? err.message : "GitHub 연결을 시작하지 못했습니다.");
+      setGithubConnecting(false);
+    }
+  }
+
+  function handleGithubRepositoryChange(key: string) {
+    setSelectedGithubRepositoryKey(key);
+    const repository = githubRepositories.find((item) => `${item.installationId}:${item.id}` === key);
+    if (!repository) {
+      setRepoUrl("");
+      setAutoDeploy(false);
+      return;
+    }
+    setRepoUrl(repository.cloneUrl);
+    setBranch(repository.defaultBranch || "main");
+    setPatToken("");
+    setAutoDeploy(true);
+    if (!targetName.trim()) {
+      setTargetName(repository.fullName.split("/").pop() ?? "");
+    }
+    invalidateAiGeneration();
+  }
+
+  async function handleAutoDeployToggle(target: DeploymentTargetResponse) {
+    if (!accessToken) return;
+    setTogglingTargetId(target.id);
+    setError(null);
+    try {
+      const updated = await api.ops.deployments.setAutoDeploy(
+        accessToken,
+        vmId,
+        target.id,
+        !target.autoDeployEnabled
+      );
+      setDeploymentTargets((prev) => prev.map((item) => item.id === updated.id ? updated : item));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "자동 배포 설정을 변경하지 못했습니다.");
+    } finally {
+      setTogglingTargetId(null);
+    }
   }
 
   async function handleCreateFromCompose() {
@@ -510,10 +663,17 @@ export default function DeploymentsPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const githubRepository = githubRepositories.find(
+        (item) => `${item.installationId}:${item.id}` === selectedGithubRepositoryKey
+      );
       const deployment = await api.ops.deployments.create(accessToken, vmId, {
         repoUrl,
         branch,
         patToken: patToken || undefined,
+        targetName: targetName.trim() || undefined,
+        autoDeploy: Boolean(githubRepository && autoDeploy),
+        githubInstallationId: githubRepository?.installationId,
+        githubRepositoryId: githubRepository?.id,
         composeContent,
         context: context.trim() || undefined,
         installPath: installPath.trim() || undefined,
@@ -542,10 +702,15 @@ export default function DeploymentsPage() {
     setEvidenceRefs([]);
     setGenerationWarnings([]);
     try {
+      const githubRepository = githubRepositories.find(
+        (item) => `${item.installationId}:${item.id}` === selectedGithubRepositoryKey
+      );
       const result = await api.ops.deployments.generateSpec(accessToken, vmId, {
         repoUrl,
         branch,
         patToken: patToken || undefined,
+        githubInstallationId: githubRepository?.installationId,
+        githubRepositoryId: githubRepository?.id,
         services: serviceCards
           .filter((s) => s.name && s.runtime && s.context)
           .map((service) => ({
@@ -592,12 +757,19 @@ export default function DeploymentsPage() {
     setError(null);
     try {
       const spec: DeploymentSpec = JSON.parse(generatedSpec);
+      const githubRepository = githubRepositories.find(
+        (item) => `${item.installationId}:${item.id}` === selectedGithubRepositoryKey
+      );
       const deployment = await api.ops.deployments.createFromSpec(accessToken, vmId, {
         repoUrl,
         branch,
         patToken: patToken || undefined,
         spec,
         installPath: installPath.trim() || undefined,
+        targetName: targetName.trim() || undefined,
+        autoDeploy: Boolean(githubRepository && autoDeploy),
+        githubInstallationId: githubRepository?.installationId,
+        githubRepositoryId: githubRepository?.id,
       });
       setShowCreate(false);
       resetCreateForm();
@@ -609,7 +781,9 @@ export default function DeploymentsPage() {
     }
   }
 
-  const repositoryStepReady = Boolean(repoUrl.trim() && branch.trim());
+  const repositoryStepReady = Boolean(
+    repoUrl.trim() && branch.trim() && (retryNotice || targetName.trim())
+  );
   const composeStepReady = Boolean(composeContent.trim());
   const aiHintsStepReady = serviceCards.some((service) => (
     service.name.trim() && service.runtime.trim() && service.context.trim()
@@ -678,63 +852,140 @@ export default function DeploymentsPage() {
         </div>
       )}
 
-      <div className="flex-1 rounded-panel border border-line overflow-auto">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
         {loading ? (
-          <PageLoader label="불러오는 중" />
-        ) : deployments.length === 0 ? (
-          <p className="text-sm text-muted-soft text-center py-16">배포 이력이 없습니다</p>
+          <div className="flex-1 rounded-panel border border-line">
+            <PageLoader label="불러오는 중" />
+          </div>
         ) : (
-          <Table>
-            <thead className="sticky top-0">
-              <tr>
-                <Th>생성일시</Th>
-                <Th>방식</Th>
-                <Th>리비전</Th>
-                <Th>상태</Th>
-                <Th className="w-48">작업</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {deployments.map((d) => (
-                <tr key={d.id} className="hover:bg-white/[0.03]">
-                  <Td className="text-xs text-muted-soft">{formatDate(d.createdAt)}</Td>
-                  <Td>{SOURCE_TYPE_LABEL[d.sourceType] ?? d.sourceType}</Td>
-                  <Td className="text-muted-soft font-mono text-xs">{d.sourceRevision?.slice(0, 10) ?? "—"}</Td>
-                  <Td>
-                    <StatusBadge tone={STATUS_TONE[d.status] ?? "off"}>{d.status}</StatusBadge>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => router.push(`/instances/${vmId}/deployments/${d.id}`)}
-                        className="text-xs text-brand-strong hover:underline font-bold"
-                      >
-                        보기
-                      </button>
-                      {d.status === "FAILED" && (
+          <>
+            {deploymentTargets.length > 0 && (
+              <section className="rounded-panel border border-line bg-panel p-4">
+                <div className="mb-3">
+                  <h2 className="text-sm font-extrabold">배포 대상</h2>
+                  <p className="mt-0.5 text-xs text-muted">
+                    VM 하나에서 앱별 컨테이너·릴리스·라우트를 분리해 운영합니다.
+                  </p>
+                </div>
+                <div className="grid gap-2 lg:grid-cols-2">
+                  {deploymentTargets.map((target) => (
+                    <article key={target.id} className="rounded-[10px] border border-line-strong bg-white/[0.025] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="truncate text-sm font-bold">{target.name}</h3>
+                            <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted">
+                              {SOURCE_TYPE_LABEL[target.sourceType] ?? target.sourceType}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate font-mono text-[11px] text-muted-soft">
+                            {target.repositoryFullName ?? target.repositoryUrl} · {target.branch}
+                          </p>
+                        </div>
                         <button
-                          onClick={() => handleRetry(d.id)}
-                          disabled={retryingId === d.id}
-                          className="text-xs text-muted hover:underline disabled:opacity-50"
+                          type="button"
+                          onClick={() => handleAutoDeployToggle(target)}
+                          disabled={togglingTargetId === target.id || !target.repositoryFullName}
+                          className={cn(
+                            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                            target.autoDeployEnabled
+                              ? "border-brand/35 bg-brand/10 text-brand-strong"
+                              : "border-line-strong text-muted"
+                          )}
+                          title={!target.repositoryFullName ? "GitHub App으로 연결된 대상만 자동 배포를 사용할 수 있습니다." : undefined}
                         >
-                          {retryingId === d.id ? "불러오는 중..." : "재시도"}
+                          {togglingTargetId === target.id
+                            ? "변경 중..."
+                            : target.autoDeployEnabled ? "자동 배포 ON" : "자동 배포 OFF"}
                         </button>
-                      )}
-                      {d.status === "SUCCEEDED" && (
-                        <button
-                          onClick={() => handleRollback(d.id)}
-                          disabled={rollingBackId === d.id}
-                          className="text-xs text-muted hover:underline disabled:opacity-50"
-                        >
-                          {rollingBackId === d.id ? "롤백 요청 중..." : "롤백"}
-                        </button>
-                      )}
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-muted-soft">최근 요청 </span>
+                          <span className="font-mono text-muted">
+                            {target.latestRequestedRevision?.slice(0, 10) ?? "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-soft">현재 활성 </span>
+                          <span className="font-mono text-muted">
+                            {target.latestDeployedRevision?.slice(0, 10) ?? "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section className="min-h-[280px] flex-1 overflow-auto rounded-panel border border-line">
+              {deployments.length === 0 ? (
+                <p className="py-16 text-center text-sm text-muted-soft">배포 이력이 없습니다</p>
+              ) : (
+                <Table>
+                  <thead className="sticky top-0">
+                    <tr>
+                      <Th>생성일시</Th>
+                      <Th>배포 대상</Th>
+                      <Th>방식</Th>
+                      <Th>트리거</Th>
+                      <Th>리비전</Th>
+                      <Th>상태</Th>
+                      <Th className="w-48">작업</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deployments.map((d) => {
+                      const target = deploymentTargets.find((item) => item.id === d.deploymentTargetId);
+                      return (
+                        <tr key={d.id} className="hover:bg-white/[0.03]">
+                          <Td className="text-xs text-muted-soft">{formatDate(d.createdAt)}</Td>
+                          <Td className="text-xs font-bold">{target?.name ?? "레거시"}</Td>
+                          <Td>{SOURCE_TYPE_LABEL[d.sourceType] ?? d.sourceType}</Td>
+                          <Td className="text-xs text-muted">{TRIGGER_TYPE_LABEL[d.triggerType] ?? d.triggerType}</Td>
+                          <Td className="font-mono text-xs text-muted-soft">
+                            {(d.sourceRevision ?? d.requestedRevision)?.slice(0, 10) ?? "—"}
+                          </Td>
+                          <Td>
+                            <StatusBadge tone={STATUS_TONE[d.status] ?? "off"}>{d.status}</StatusBadge>
+                          </Td>
+                          <Td>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => router.push(`/instances/${vmId}/deployments/${d.id}`)}
+                                className="text-xs font-bold text-brand-strong hover:underline"
+                              >
+                                보기
+                              </button>
+                              {d.status === "FAILED" && (
+                                <button
+                                  onClick={() => handleRetry(d.id)}
+                                  disabled={retryingId === d.id}
+                                  className="text-xs text-muted hover:underline disabled:opacity-50"
+                                >
+                                  {retryingId === d.id ? "불러오는 중..." : "재시도"}
+                                </button>
+                              )}
+                              {d.status === "SUCCEEDED" && (
+                                <button
+                                  onClick={() => handleRollback(d.id)}
+                                  disabled={rollingBackId === d.id}
+                                  className="text-xs text-muted hover:underline disabled:opacity-50"
+                                >
+                                  {rollingBackId === d.id ? "롤백 요청 중..." : "롤백"}
+                                </button>
+                              )}
+                            </div>
+                          </Td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              )}
+            </section>
+          </>
         )}
       </div>
 
@@ -813,30 +1064,89 @@ export default function DeploymentsPage() {
 
               {/* 공통: 저장소 연결 */}
               {createStep === 2 && <div className="wizard-step-enter">
-              <Section title="저장소 설정" description="배포할 Git 저장소와 브랜치를 입력하세요. PAT는 저장되지 않고 이번 배포에만 사용됩니다.">
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Git 저장소 URL" htmlFor="deploy-repo-url">
-                    <Input
-                      id="deploy-repo-url"
-                      name="deploy-repo-url"
-                      value={repoUrl}
-                      onChange={(e) => handleRepoUrlChange(e.target.value)}
-                      placeholder="https://github.com/user/repo.git"
-                    />
-                  </Field>
-                  <Field label="브랜치" htmlFor="deploy-branch">
-                    <Input id="deploy-branch" name="deploy-branch" value={branch} onChange={(e) => handleBranchChange(e.target.value)} />
-                  </Field>
-                  <Field label="PAT (비공개 저장소인 경우)" htmlFor="deploy-pat" className="col-span-2">
-                    <Input
-                      id="deploy-pat"
-                      name="deploy-pat"
-                      type="password"
-                      value={patToken}
-                      onChange={(e) => handlePatTokenChange(e.target.value)}
-                      placeholder="공개 저장소면 비워두세요"
-                    />
-                  </Field>
+                <Section
+                  title="저장소 설정"
+                  description="GitHub App을 연결하면 비공개 저장소도 장기 PAT 없이 안전하게 배포하고, push마다 자동 재배포할 수 있습니다."
+                >
+                  <div className="mb-4 rounded-[10px] border border-line-strong bg-white/[0.025] p-3">
+                    <div className="flex items-end gap-2">
+                      <Field label="GitHub 저장소" htmlFor="deploy-github-repository" className="min-w-0 flex-1">
+                        <Select
+                          id="deploy-github-repository"
+                          value={selectedGithubRepositoryKey}
+                          onChange={(e) => handleGithubRepositoryChange(e.target.value)}
+                          disabled={githubLoading}
+                        >
+                          <option value="">
+                            {githubLoading ? "저장소 불러오는 중..." : "GitHub App 저장소 선택"}
+                          </option>
+                          {githubRepositories.map((repository) => (
+                            <option
+                              key={`${repository.installationId}:${repository.id}`}
+                              value={`${repository.installationId}:${repository.id}`}
+                            >
+                              {repository.fullName}{repository.privateRepository ? " · Private" : ""}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                      <Button
+                        type="button"
+                        onClick={handleConnectGithub}
+                        disabled={githubConnecting}
+                        className="shrink-0"
+                      >
+                        {githubConnecting ? "GitHub 이동 중..." : githubRepositories.length > 0 ? "저장소 권한 추가" : "GitHub 연결"}
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-soft">
+                      GitHub App은 선택한 저장소의 코드 읽기와 push 이벤트만 사용합니다.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {!retryNotice && (
+                      <Field label="배포 대상 이름" htmlFor="deploy-target-name" className="col-span-2">
+                        <Input
+                          id="deploy-target-name"
+                          name="deploy-target-name"
+                          value={targetName}
+                          onChange={(e) => setTargetName(e.target.value.slice(0, 60))}
+                          placeholder="예: api, web, admin"
+                        />
+                        <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
+                          같은 VM 안에서 이 앱의 컨테이너, 이미지, 릴리스와 라우트를 다른 앱과 분리하는 이름입니다.
+                        </p>
+                      </Field>
+                    )}
+                    <Field label="Git 저장소 URL" htmlFor="deploy-repo-url">
+                      <Input
+                        id="deploy-repo-url"
+                        name="deploy-repo-url"
+                        value={repoUrl}
+                        onChange={(e) => handleRepoUrlChange(e.target.value)}
+                        placeholder="https://github.com/user/repo.git"
+                        readOnly={Boolean(selectedGithubRepositoryKey)}
+                      />
+                    </Field>
+                    <Field label="브랜치" htmlFor="deploy-branch">
+                      <Input id="deploy-branch" name="deploy-branch" value={branch} onChange={(e) => handleBranchChange(e.target.value)} />
+                    </Field>
+                    {!selectedGithubRepositoryKey && (
+                      <Field label="PAT (비공개 저장소인 경우)" htmlFor="deploy-pat" className="col-span-2">
+                        <Input
+                          id="deploy-pat"
+                          name="deploy-pat"
+                          type="password"
+                          value={patToken}
+                          onChange={(e) => handlePatTokenChange(e.target.value)}
+                          placeholder="공개 저장소면 비워두세요"
+                        />
+                        <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
+                          직접 URL 방식은 일회성 수동 배포입니다. PAT는 저장하지 않습니다.
+                        </p>
+                      </Field>
+                    )}
                     <Field label="저장소 배포 디렉토리 (선택)" htmlFor="deploy-context" className="col-span-2">
                       <Input
                         id="deploy-context"
@@ -852,20 +1162,38 @@ export default function DeploymentsPage() {
                         {" "}(저장소 내부 경로)
                       </p>
                     </Field>
-                  <Field label="VM 배포 경로 (선택)" htmlFor="deploy-install-path" className="col-span-2">
-                    <Input
-                      id="deploy-install-path"
-                      name="deploy-install-path"
-                      value={installPath}
-                      onChange={(e) => setInstallPath(e.target.value)}
-                      placeholder="예: /home/ubuntu/myapp (비워두면 gamjabox가 자동 관리하는 경로만 사용)"
-                    />
-                    <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
-                      VM 내부의 이 경로에 현재 배포를 가리키는 심볼릭 링크를 만듭니다. SSH로 직접 접속했을 때 익숙한 위치에서 배포 결과물을 찾을 수 있어요. (VM 파일시스템 절대경로)
-                    </p>
-                  </Field>
-                </div>
-              </Section>
+                    <Field label="VM 배포 경로 (선택)" htmlFor="deploy-install-path" className="col-span-2">
+                      <Input
+                        id="deploy-install-path"
+                        name="deploy-install-path"
+                        value={installPath}
+                        onChange={(e) => setInstallPath(e.target.value)}
+                        placeholder="예: /home/ubuntu/myapp (비워두면 gamjabox가 자동 관리하는 경로만 사용)"
+                      />
+                      <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
+                        VM 내부의 이 경로에 현재 배포를 가리키는 심볼릭 링크를 만듭니다. (VM 파일시스템 절대경로)
+                      </p>
+                    </Field>
+                    <label className={cn(
+                      "col-span-2 flex items-start gap-2 rounded-[10px] border p-3",
+                      selectedGithubRepositoryKey ? "border-brand/25 bg-brand/[0.05]" : "border-line bg-white/[0.015]"
+                    )}>
+                      <input
+                        type="checkbox"
+                        checked={autoDeploy}
+                        onChange={(e) => setAutoDeploy(e.target.checked)}
+                        disabled={!selectedGithubRepositoryKey}
+                        className="mt-0.5 accent-brand"
+                      />
+                      <span>
+                        <span className="block text-xs font-bold text-foreground">커밋 시 자동 재배포</span>
+                        <span className="mt-0.5 block text-[11px] text-muted-soft">
+                          지정 브랜치에 push되면 정확한 커밋 SHA를 배포합니다. 연속 push는 가장 최신 커밋 하나로 합쳐집니다.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </Section>
               </div>}
 
               {createTab === "compose" ? (
@@ -1038,6 +1366,16 @@ export default function DeploymentsPage() {
                   <div className="wizard-step-enter">
                     <Section title="검토 및 배포" description="입력한 저장소와 Compose 설정을 확인하세요. 수정이 필요하면 이전 단계로 돌아가도 현재 입력은 그대로 유지됩니다.">
                       <dl className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                          <dt className="mb-1 text-muted-soft">배포 대상</dt>
+                          <dd className="font-bold text-foreground">{targetName || "기존 배포 재시도"}</dd>
+                        </div>
+                        <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                          <dt className="mb-1 text-muted-soft">자동 재배포</dt>
+                          <dd className="text-foreground">
+                            {selectedGithubRepositoryKey && autoDeploy ? "Git push 시 자동 실행" : "사용 안 함"}
+                          </dd>
+                        </div>
                         <div className="rounded-md border border-line bg-white/[0.025] p-3">
                           <dt className="mb-1 text-muted-soft">저장소</dt>
                           <dd className="break-all font-mono text-foreground">{repoUrl}</dd>
@@ -1235,6 +1573,16 @@ export default function DeploymentsPage() {
                   {createStep === 4 && <div className="wizard-step-enter space-y-4">
                   <Section title="배포 설정 요약" description="이전 단계에서 입력한 값입니다. 수정하려면 단계 표시나 이전 버튼으로 돌아가세요. 입력 내용은 유지됩니다.">
                     <dl className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                        <dt className="mb-1 text-muted-soft">배포 대상</dt>
+                        <dd className="font-bold text-foreground">{targetName || "기존 배포 재시도"}</dd>
+                      </div>
+                      <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                        <dt className="mb-1 text-muted-soft">자동 재배포</dt>
+                        <dd className="text-foreground">
+                          {selectedGithubRepositoryKey && autoDeploy ? "Git push 시 자동 실행" : "사용 안 함"}
+                        </dd>
+                      </div>
                       <div className="rounded-md border border-line bg-white/[0.025] p-3">
                         <dt className="mb-1 text-muted-soft">저장소 · 브랜치</dt>
                         <dd className="break-all font-mono text-foreground">{repoUrl} · {branch}</dd>

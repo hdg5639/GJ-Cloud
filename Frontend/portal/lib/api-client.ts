@@ -40,6 +40,10 @@ import type {
   AiGenerationResult,
   ComposeReviewFinding,
   DbBackupResponse,
+  DeploymentTargetResponse,
+  GithubInstallationResponse,
+  GithubRepositoryResponse,
+  GithubInstallationCompleteResponse,
 } from "./types";
 
 const API_BASE = {
@@ -576,6 +580,10 @@ export const api = {
           healthChecks?: HealthCheck[];
           context?: string;
           installPath?: string;
+          targetName?: string;
+          autoDeploy?: boolean;
+          githubInstallationId?: number;
+          githubRepositoryId?: number;
         }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/deployments`, {
@@ -586,7 +594,17 @@ export const api = {
       createFromSpec: (
         accessToken: string,
         vmId: string,
-        body: { repoUrl: string; branch: string; patToken?: string; spec: DeploymentSpec; installPath?: string }
+        body: {
+          repoUrl: string;
+          branch: string;
+          patToken?: string;
+          spec: DeploymentSpec;
+          installPath?: string;
+          targetName?: string;
+          autoDeploy?: boolean;
+          githubInstallationId?: number;
+          githubRepositoryId?: number;
+        }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/deployments/from-spec`, {
           method: "POST",
@@ -603,6 +621,8 @@ export const api = {
           services: ServiceCard[];
           infrastructure?: InfraSelection[];
           existingNetworkName?: string;
+          githubInstallationId?: number;
+          githubRepositoryId?: number;
         }
       ) =>
         request<AiGenerationResult>("ops", `/ops/${vmId}/deployments/ai-spec/generate`, {
@@ -614,6 +634,19 @@ export const api = {
         request<ComposeReviewFinding[]>("ops", `/ops/${vmId}/deployments/ai-spec/review`, {
           method: "POST",
           body: JSON.stringify(spec),
+          accessToken,
+        }),
+      listTargets: (accessToken: string, vmId: string) =>
+        request<DeploymentTargetResponse[]>("ops", `/ops/${vmId}/deployment-targets`, { accessToken }),
+      setAutoDeploy: (accessToken: string, vmId: string, targetId: string, enabled: boolean) =>
+        request<DeploymentTargetResponse>("ops", `/ops/${vmId}/deployment-targets/${targetId}/auto-deploy`, {
+          method: "PATCH",
+          body: JSON.stringify({ enabled }),
+          accessToken,
+        }),
+      redeployTarget: (accessToken: string, vmId: string, targetId: string) =>
+        request<DeploymentResponse>("ops", `/ops/${vmId}/deployment-targets/${targetId}/redeploy`, {
+          method: "POST",
           accessToken,
         }),
       // SSE는 EventSource로 커스텀 Authorization 헤더를 못 붙여서(백엔드도 알고 있는 기존 갭),
@@ -698,6 +731,23 @@ export const api = {
           abortController?.abort();
         };
       },
+    },
+    github: {
+      createInstallUrl: (accessToken: string, vmId: string) =>
+        request<{ url: string }>("ops", `/ops/github/install-url?vmId=${encodeURIComponent(vmId)}`, {
+          method: "POST",
+          accessToken,
+        }),
+      completeInstallation: (accessToken: string, code: string, state: string) =>
+        request<GithubInstallationCompleteResponse>("ops", "/ops/github/installations/complete", {
+          method: "POST",
+          body: JSON.stringify({ code, state }),
+          accessToken,
+        }),
+      listInstallations: (accessToken: string) =>
+        request<GithubInstallationResponse[]>("ops", "/ops/github/installations", { accessToken }),
+      listRepositories: (accessToken: string) =>
+        request<GithubRepositoryResponse[]>("ops", "/ops/github/repositories", { accessToken }),
     },
     backups: {
       list: (accessToken: string, vmId: string) =>

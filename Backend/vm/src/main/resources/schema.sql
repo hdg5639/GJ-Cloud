@@ -55,6 +55,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_vm_port_nickname ON vm_ports(vm_id, nicknam
 -- NULL이면 수동 추가 — 배포 라우트 동기화(sync)는 이 값이 있는 행만 add/remove 대상으로 삼음.
 ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS deployment_id VARCHAR(36);
 CREATE INDEX IF NOT EXISTS idx_vm_ports_deployment_id ON vm_ports(vm_id, deployment_id);
+ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS deployment_app_id VARCHAR(36);
+-- 기존 단일 앱 배포 포트는 vmId를 appId로 사용했으므로 무중단 마이그레이션 시 동일한 값으로 보강한다.
+UPDATE vm_ports SET deployment_app_id = vm_id::text
+WHERE deployment_id IS NOT NULL AND deployment_app_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_vm_ports_deployment_app_id ON vm_ports(vm_id, deployment_app_id);
 
 CREATE TABLE IF NOT EXISTS vm_port_access_emails (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

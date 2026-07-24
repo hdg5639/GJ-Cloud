@@ -66,7 +66,7 @@ public class InternalOpsController {
         // aud=ops-service이고, User 쪽 InternalPlanJwtValidator가 이 audience를 허용하도록 완화돼 있음.
         String bearerToken = extractToken(exchange);
         return portService.syncDeploymentRoutes(principal.userId(), principal.email(), vmId,
-                        request.deploymentId(), request.routes(), bearerToken)
+                        request.deploymentAppId(), request.deploymentId(), request.routes(), bearerToken)
                 .thenReturn(ApiResponse.<Void>ok(null));
     }
 

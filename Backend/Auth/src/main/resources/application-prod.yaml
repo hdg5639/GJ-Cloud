@@ -54,6 +54,14 @@ auth:
         secret: ${USER_SERVICE_CLIENT_SECRET}
         audience: auth-service
         scope: user:status-sync
+      ops-service:
+        secret: ${OPS_SERVICE_CLIENT_SECRET}
+        audience: vm-service
+        scope: deployment:automation
+      vm-user-service:
+        secret: ${VM_SERVICE_CLIENT_SECRET}
+        audience: user-service
+        scope: user:plan-read
 
 app:
   email-verification:

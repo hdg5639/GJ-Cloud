@@ -24,10 +24,14 @@ public class ServiceTokenClient {
     private final WebClient webClient = WebClient.create();
 
     public Mono<String> getToken() {
+        return getToken(authProperties.getServiceClientId());
+    }
+
+    public Mono<String> getToken(String clientId) {
         return webClient.post()
                 .uri(authProperties.getServerUrl() + "/auth/token/service")
                 .bodyValue(new ServiceTokenRequest(
-                        authProperties.getServiceClientId(),
+                        clientId,
                         authProperties.getServiceClientSecret()))
                 .retrieve()
                 .bodyToMono(SERVICE_TOKEN_RESPONSE_TYPE)

@@ -58,6 +58,9 @@ public class VmPortEntity implements Persistable<UUID> {
     @Column("deployment_id")
     private String deploymentId;
 
+    @Column("deployment_app_id")
+    private String deploymentAppId;
+
     public static VmPortEntity createPublic(UUID vmId, int port, Protocol protocol,
                                             String nickname, String subdomain, String cfDnsRecordId) {
         return VmPortEntity.builder()
@@ -78,7 +81,10 @@ public class VmPortEntity implements Persistable<UUID> {
                 .createdAt(LocalDateTime.now()).build();
     }
 
-    public VmPortEntity withDeploymentId(String deploymentId) {
-        return this.toBuilder().deploymentId(deploymentId).build();
+    public VmPortEntity withDeployment(String deploymentAppId, String deploymentId) {
+        return this.toBuilder()
+                .deploymentAppId(deploymentAppId)
+                .deploymentId(deploymentId)
+                .build();
     }
 }

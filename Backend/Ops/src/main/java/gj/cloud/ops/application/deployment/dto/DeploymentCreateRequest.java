@@ -19,6 +19,11 @@ public record DeploymentCreateRequest(
         String context,
         // VM 파일시스템 절대경로 (예: "/home/ubuntu/myapp"). 지정하면 현재 활성 release를 가리키는
         // 심볼릭 링크가 이 경로에 생성됨.
-        String installPath
+        String installPath,
+        // 지속형 배포 대상. 지정하면 VM 하나 안에서도 target별 Docker/release/route가 완전히 분리된다.
+        String targetName,
+        Boolean autoDeploy,
+        Long githubInstallationId,
+        Long githubRepositoryId
 ) {
 }
