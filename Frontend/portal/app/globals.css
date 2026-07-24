@@ -191,24 +191,74 @@ body {
 @keyframes brand-intro-text {
   0%,
   18% {
-    max-width: 0;
-    opacity: 0;
-  }
-  22% {
-    opacity: 1;
+    width: 0;
   }
   64% {
-    max-width: 24rem;
+    width: 24rem;
   }
   100% {
-    max-width: 24rem;
-    opacity: 1;
+    width: 24rem;
   }
 }
 
 .brand-intro-text {
+  display: inline-flex;
+  width: 0;
   font-size: 4.8rem;
   line-height: 6.4rem;
+  overflow: visible;
+}
+
+@keyframes brand-intro-letter {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateX(-0.16em) translateY(0.04em) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateX(0) translateY(0) scale(1);
+  }
+}
+
+.brand-intro-letter {
+  flex: none;
+  opacity: 0;
+  animation: brand-intro-letter 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, filter, transform;
+}
+
+.brand-intro-letter:nth-child(1) {
+  animation-delay: 0.65s;
+}
+
+.brand-intro-letter:nth-child(2) {
+  animation-delay: 0.76s;
+}
+
+.brand-intro-letter:nth-child(3) {
+  animation-delay: 0.87s;
+}
+
+.brand-intro-letter:nth-child(4) {
+  animation-delay: 0.98s;
+}
+
+.brand-intro-letter:nth-child(5) {
+  animation-delay: 1.09s;
+}
+
+.brand-intro-letter:nth-child(6) {
+  animation-delay: 1.2s;
+}
+
+.brand-intro-letter:nth-child(7) {
+  animation-delay: 1.31s;
+}
+
+.brand-intro-letter:nth-child(8) {
+  animation-delay: 1.42s;
 }
 
 /* 로고가 좌상단에 정착할 무렵부터 배경 → 소개 → 로그인 폼 → 하단 문구 순서로 시차를 두고
@@ -293,6 +343,7 @@ body {
   .floating-box-enter,
   .brand-intro-icon,
   .brand-intro-text,
+  .brand-intro-letter,
   .auth-reveal,
   .auth-reveal-form {
     animation: none !important;
@@ -314,5 +365,9 @@ body {
 
   .auth-reveal-backdrop-secondary {
     opacity: 0.1 !important;
+  }
+
+  .brand-intro-text {
+    width: auto !important;
   }
 }
