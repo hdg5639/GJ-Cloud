@@ -959,17 +959,14 @@ export default function DeploymentsPage() {
                             disabled={deletingTargetId === target.id}
                             aria-label={`${target.name} 배포 대상 삭제`}
                             title="배포 대상 완전 삭제 (컨테이너·이미지·저장소·라우트 전체 정리)"
-                            className="inline-flex min-h-7 items-center gap-1 rounded-md border border-danger-soft bg-danger/10 px-2 text-[11px] font-bold text-danger transition-colors hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-45"
+                            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-soft transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             {deletingTargetId === target.id ? (
-                              <span>삭제 중...</span>
+                              <span className="text-[10px] font-bold">...</span>
                             ) : (
-                              <>
-                                <svg aria-hidden className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
-                                </svg>
-                                삭제
-                              </>
+                              <svg aria-hidden className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
+                              </svg>
                             )}
                           </button>
                         </div>
