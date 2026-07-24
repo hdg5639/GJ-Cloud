@@ -57,11 +57,11 @@ function CodeBlock({
 function GuideStep({ num, title, children }: { num: number; title: string; children: ReactNode }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.12] text-[11px] font-bold text-foreground">
+      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-900 text-[11px] font-bold text-white">
         {num}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="mb-1.5 text-xs font-bold text-foreground">{title}</p>
+        <p className="mb-1.5 text-xs font-bold text-gray-900">{title}</p>
         {children}
       </div>
     </div>
@@ -107,7 +107,7 @@ export default function InstanceDetailPage() {
   const backLabel = fromOrg ? "협업" : "인스턴스";
   const { accessToken, refresh } = useAuth();
   const [vm, setVm] = useState<VmResponse | null>(null);
-  const [accordionOpen, setAccordionOpen] = useState(false);
+  const [showSshGuide, setShowSshGuide] = useState(false);
   const [installTab, setInstallTab] = useState<"mac" | "win" | "linux">("mac");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [sshGuideTab, setSshGuideTab] = useState<"own" | "generated">("own");
@@ -428,7 +428,6 @@ export default function InstanceDetailPage() {
   if (!vm) return <PageLoader />;
 
   const isRunning = vm.status === "RUNNING";
-  const isStopped = vm.status === "STOPPED";
   const isTransitioning = ["PENDING", "CREATING", "BOOTING", "STARTING", "STOPPING", "SUSPENDING", "DELETING"].includes(vm.status);
 
   const hiddenToolbarIds = new Set(TOOLBAR_COLLAPSE_ORDER.slice(0, toolbarCollapsedCount));
@@ -802,7 +801,9 @@ export default function InstanceDetailPage() {
         />
 
         <button
-          onClick={() => setAccordionOpen(!accordionOpen)}
+          type="button"
+          onClick={() => setShowSshGuide(true)}
+          aria-haspopup="dialog"
           className="flex items-center justify-between w-full mt-3 pt-3 border-t border-line text-muted hover:text-foreground transition-colors"
         >
           <span className="flex items-center gap-1.5 text-[13px]">
@@ -811,13 +812,33 @@ export default function InstanceDetailPage() {
             </svg>
             SSH 접속 방법 보기
           </span>
-          <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${accordionOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M9 18l6-6-6-6"/>
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+            <path d="M14 5h5v5M10 14L19 5M19 14v5h-5M14 19H5V5h5"/>
           </svg>
         </button>
 
-        {accordionOpen && (
-          <div className="mt-4 space-y-6 text-gray-700">
+        <Modal open={showSshGuide} onClose={() => setShowSshGuide(false)}>
+          <div className="mx-auto flex h-[min(880px,92vh)] w-[min(980px,96vw)] flex-col overflow-hidden rounded-[20px] border border-gray-200 bg-[#f8fafc] text-gray-700 shadow-2xl shadow-black/40">
+            <div className="flex shrink-0 items-start justify-between border-b border-gray-200 bg-white px-6 py-5">
+              <div>
+                <span className="text-[11px] font-extrabold tracking-[.11em] text-gray-400">SSH CONNECTION GUIDE</span>
+                <h2 className="mt-1 text-xl font-extrabold text-gray-900">SSH 접속 방법</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {vm.subdomain}.gamjabox.cloud에 접속하기 위한 환경별 설정을 안내합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSshGuide(false)}
+                aria-label="SSH 접속 안내 닫기"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] text-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 sm:p-7">
+              <div className="mx-auto max-w-[880px] space-y-7">
 
             <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
               <span className="text-amber-500 text-sm mt-0.5">⚠</span>
@@ -1022,8 +1043,10 @@ sudo apt-get update && sudo apt-get install cloudflared`}
               </div>
             </div>
 
+              </div>
+            </div>
           </div>
-        )}
+        </Modal>
       </Panel>
 
       {/* SSH 접근 이메일 관리 */}
@@ -1169,7 +1192,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
             <span className="text-[15px] font-bold">협업</span>
             <button
               onClick={() => { setEditingCollab(undefined); setShowCollabWrite(true); }}
-              className="text-[13px] px-3 h-[30px] bg-soft text-brand-strong rounded-md hover:bg-brand/15 font-bold border-0"
+              className="h-8 bg-soft px-3 text-sm font-bold text-brand-strong rounded-md hover:bg-brand/15 border-0"
               style={{ width: "auto" }}
             >
               + 작성
@@ -1181,7 +1204,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
               <button
                 key={t ?? "all"}
                 onClick={() => setCollabTypeFilter(t)}
-                style={{ width: "auto", padding: "0 12px", height: 28, fontSize: 12 }}
+                style={{ width: "auto", padding: "0 12px", height: 30, fontSize: 13 }}
                 className={`rounded-md transition-colors ${
                   collabTypeFilter === t
                     ? "bg-panel border border-line-strong text-foreground"
@@ -1199,7 +1222,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
                 ? collabItems.filter((i) => i.type === collabTypeFilter)
                 : collabItems;
               return filtered.length === 0 ? (
-                <p className="text-[13px] text-muted-soft py-10 text-center">협업 항목이 없습니다.</p>
+                <p className="py-10 text-center text-sm text-muted-soft">협업 항목이 없습니다.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {filtered.map((item) => (

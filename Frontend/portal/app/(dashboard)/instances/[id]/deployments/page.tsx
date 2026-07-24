@@ -180,6 +180,8 @@ export default function DeploymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [togglingTargetId, setTogglingTargetId] = useState<string | null>(null);
   const [deletingTargetId, setDeletingTargetId] = useState<string | null>(null);
+  const [targetPendingDeletion, setTargetPendingDeletion] = useState<DeploymentTargetResponse | null>(null);
+  const [deleteTargetError, setDeleteTargetError] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("compose");
@@ -683,20 +685,29 @@ export default function DeploymentsPage() {
     }
   }
 
-  async function handleDeleteTarget(target: DeploymentTargetResponse) {
-    if (!accessToken) return;
-    if (!confirm(
-      `"${target.name}"을(를) 완전히 삭제하시겠습니까?\n컨테이너 중지 + 이 대상이 만든 모든 이미지와 저장소, 노출된 라우트가 전부 삭제됩니다. 배포 이력 조회는 계속 가능하지만 되돌릴 수 없습니다.`
-    )) {
-      return;
-    }
+  function openDeleteTargetModal(target: DeploymentTargetResponse) {
+    setDeleteTargetError(null);
+    setTargetPendingDeletion(target);
+  }
+
+  function closeDeleteTargetModal() {
+    if (deletingTargetId) return;
+    setDeleteTargetError(null);
+    setTargetPendingDeletion(null);
+  }
+
+  async function handleDeleteTarget() {
+    if (!accessToken || !targetPendingDeletion) return;
+    const target = targetPendingDeletion;
     setDeletingTargetId(target.id);
+    setDeleteTargetError(null);
     setError(null);
     try {
       await api.ops.deployments.deleteTarget(accessToken, vmId, target.id);
+      setTargetPendingDeletion(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "배포 대상 삭제에 실패했습니다.");
+      setDeleteTargetError(err instanceof Error ? err.message : "배포 대상 삭제에 실패했습니다.");
     } finally {
       setDeletingTargetId(null);
     }
@@ -944,17 +955,21 @@ export default function DeploymentsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteTarget(target)}
+                            onClick={() => openDeleteTargetModal(target)}
                             disabled={deletingTargetId === target.id}
+                            aria-label={`${target.name} 배포 대상 삭제`}
                             title="배포 대상 완전 삭제 (컨테이너·이미지·저장소·라우트 전체 정리)"
-                            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
+                            className="inline-flex min-h-7 items-center gap-1 rounded-md border border-danger-soft bg-danger/10 px-2 text-[11px] font-bold text-danger transition-colors hover:bg-danger/15 disabled:cursor-not-allowed disabled:opacity-45"
                           >
                             {deletingTargetId === target.id ? (
-                              <span className="text-[10px] font-bold">...</span>
+                              <span>삭제 중...</span>
                             ) : (
-                              <svg aria-hidden className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
-                              </svg>
+                              <>
+                                <svg aria-hidden className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
+                                </svg>
+                                삭제
+                              </>
                             )}
                           </button>
                         </div>
@@ -1083,6 +1098,57 @@ export default function DeploymentsPage() {
           </>
         )}
       </div>
+
+      <Modal open={Boolean(targetPendingDeletion)} onClose={closeDeleteTargetModal}>
+        {targetPendingDeletion && (
+          <div className="mx-auto w-full max-w-[460px] rounded-panel border border-danger-soft bg-panel p-5">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+                <svg aria-hidden className="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-extrabold text-danger">배포 대상 완전 삭제</h2>
+                <p className="mt-1 text-sm text-muted">
+                  <span className="font-bold text-foreground">{targetPendingDeletion.name}</span>
+                  을(를) 삭제하면 되돌릴 수 없습니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-[10px] border border-danger-soft bg-danger/[0.06] px-4 py-3">
+              <p className="mb-2 text-xs font-bold text-danger">다음 항목이 모두 삭제됩니다.</p>
+              <ul className="space-y-1 text-xs text-muted">
+                <li>· 실행 중인 컨테이너와 이 대상이 만든 모든 Docker 이미지</li>
+                <li>· Git 저장소, 릴리스 디렉터리와 설치 경로 링크</li>
+                <li>· 연결된 모든 공개 라우트</li>
+              </ul>
+              <p className="mt-2 text-[11px] text-muted-soft">배포 이력은 감사 목적으로 유지됩니다.</p>
+            </div>
+
+            {deleteTargetError && (
+              <div className="mb-4 rounded-md border border-danger-soft bg-danger/10 px-3 py-2.5 text-xs text-danger">
+                {deleteTargetError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button size="small" onClick={closeDeleteTargetModal} disabled={Boolean(deletingTargetId)}>
+                취소
+              </Button>
+              <Button
+                variant="danger-solid"
+                size="small"
+                onClick={handleDeleteTarget}
+                disabled={Boolean(deletingTargetId)}
+              >
+                {deletingTargetId ? "삭제 중..." : "완전히 삭제"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* 배포 생성 모달 — 목업의 위저드 톤(큰 패널, eyebrow+제목+설명 헤더, 섹션별 설명)을 따르되
           실제 흐름(Compose 직접 작성 / AI 자동생성 두 갈래, 각기 다른 하위 단계 수)은 그대로 유지 */}

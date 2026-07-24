@@ -13,10 +13,11 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { validateProfileImage } from "@/lib/profile-image";
 
-type Tab = "profile" | "upgrade-requests";
+type Tab = "profile" | "security" | "upgrade-requests";
 
 const NAV_ITEMS: { key: Tab; label: string }[] = [
   { key: "profile", label: "프로필" },
+  { key: "security", label: "보안 및 계정" },
   { key: "upgrade-requests", label: "플랜 및 사용량" },
 ];
 
@@ -54,11 +55,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!accessToken || !profile || tab !== "upgrade-requests") return;
-    setLoadingRequests(true);
-    api.user.getUpgradeRequests(accessToken, profile.userId)
-      .then((data) => setRequests(data))
-      .catch(console.error)
-      .finally(() => setLoadingRequests(false));
+    const timer = window.setTimeout(() => {
+      setLoadingRequests(true);
+      api.user.getUpgradeRequests(accessToken, profile.userId)
+        .then((data) => setRequests(data))
+        .catch(console.error)
+        .finally(() => setLoadingRequests(false));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [accessToken, profile, tab]);
 
   async function handleSave() {
@@ -182,7 +186,7 @@ export default function SettingsPage() {
       </header>
 
       <div className="grid grid-cols-1 gap-[18px] items-start lg:grid-cols-[210px_1fr]">
-        <nav className="grid grid-cols-2 gap-[5px] rounded-panel border border-line bg-panel p-2 lg:grid-cols-1">
+        <nav className="grid grid-cols-3 gap-[5px] rounded-panel border border-line bg-panel p-2 lg:grid-cols-1">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.key}
@@ -267,7 +271,11 @@ export default function SettingsPage() {
                   )}
                 </div>
               </Card>
+            </div>
+          )}
 
+          {tab === "security" && (
+            <div className="space-y-4">
               <Card>
                 <h2 className="text-sm font-bold mb-4">비밀번호 변경</h2>
 

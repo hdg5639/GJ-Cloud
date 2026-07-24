@@ -97,7 +97,7 @@ export function MemberInviteCombobox({
         }}
         onFocus={() => setOpen(true)}
         placeholder="닉네임 또는 이메일로 검색"
-        className="w-full min-h-[42px] rounded-[9px] border border-line-strong bg-panel px-3 text-sm text-foreground outline-none placeholder:text-muted-soft focus:border-brand focus:ring-2 focus:ring-brand/20"
+        className="h-[42px] w-full rounded-[9px] border border-line-strong bg-panel px-3 text-sm text-foreground outline-none placeholder:text-muted-soft focus:border-brand focus:ring-2 focus:ring-brand/20"
       />
       {open && trimmed.length >= 2 && (
         <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-72 overflow-y-auto rounded-[10px] border border-line-strong bg-panel shadow-xl shadow-black/30">
