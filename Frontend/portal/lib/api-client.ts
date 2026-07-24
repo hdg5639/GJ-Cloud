@@ -818,6 +818,8 @@ export interface PortResponse {
   createdAt: string;
   // 배포(자동배포)가 만든 포트면 값이 있고, 사용자가 직접 추가한 포트면 null
   deploymentId: string | null;
+  // 재배포 후에도 유지되는 배포 대상 ID
+  deploymentAppId: string | null;
 }
 
 export interface PortAddRequest {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
+import { api, type PortResponse } from "@/lib/api-client";
 import type {
   DeploymentResponse,
   DeploymentSpec,
@@ -175,6 +175,7 @@ export default function DeploymentsPage() {
 
   const [deployments, setDeployments] = useState<DeploymentResponse[]>([]);
   const [deploymentTargets, setDeploymentTargets] = useState<DeploymentTargetResponse[]>([]);
+  const [deploymentPorts, setDeploymentPorts] = useState<PortResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingTargetId, setTogglingTargetId] = useState<string | null>(null);
@@ -422,12 +423,14 @@ export default function DeploymentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [deploymentResult, targetResult] = await Promise.all([
+      const [deploymentResult, targetResult, portResult] = await Promise.all([
         api.ops.deployments.list(accessToken, vmId),
         api.ops.deployments.listTargets(accessToken, vmId),
+        api.vm.getPorts(accessToken, vmId).catch(() => []),
       ]);
       setDeployments(deploymentResult);
       setDeploymentTargets(targetResult);
+      setDeploymentPorts(portResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : "배포 이력 조회에 실패했습니다.");
     } finally {
@@ -884,7 +887,11 @@ export default function DeploymentsPage() {
                   </p>
                 </div>
                 <div className="grid gap-2 lg:grid-cols-2">
-                  {deploymentTargets.map((target) => (
+                  {deploymentTargets.map((target) => {
+                    const publicPorts = deploymentPorts.filter(
+                      (port) => port.deploymentAppId === target.id && port.visibility === "PUBLIC"
+                    );
+                    return (
                     <article key={target.id} className="rounded-[10px] border border-line-strong bg-white/[0.025] p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -929,8 +936,43 @@ export default function DeploymentsPage() {
                           </span>
                         </div>
                       </div>
+                      {publicPorts.length > 0 && (
+                        <div className="mt-3 border-t border-line pt-3">
+                          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-soft">
+                            공개 CNAME
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {publicPorts.map((port) => (
+                              port.protocol === "HTTP" ? (
+                                <a
+                                  key={port.id}
+                                  href={`https://${port.fullDomain}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`${port.nickname} · ${port.port} 포트를 새 창에서 열기`}
+                                  className="inline-flex max-w-full items-center gap-1 rounded-md border border-brand/25 bg-brand/[0.07] px-2 py-1 font-mono text-[11px] text-brand-strong transition-colors hover:border-brand/45 hover:bg-brand/[0.12]"
+                                >
+                                  <span className="truncate">{port.fullDomain}</span>
+                                  <svg aria-hidden className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5h5m0 0v5m0-5L10 14M19 14v5H5V5h5" />
+                                  </svg>
+                                </a>
+                              ) : (
+                                <span
+                                  key={port.id}
+                                  title={`${port.nickname} · TCP ${port.port} 포트`}
+                                  className="inline-flex max-w-full items-center rounded-md border border-line-strong bg-white/[0.03] px-2 py-1 font-mono text-[11px] text-muted"
+                                >
+                                  <span className="truncate">{port.fullDomain}</span>
+                                </span>
+                              )
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
