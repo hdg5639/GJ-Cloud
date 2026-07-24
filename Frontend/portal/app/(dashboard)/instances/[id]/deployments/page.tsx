@@ -61,6 +61,7 @@ function formatDate(iso: string): string {
 
 type CreateTab = "compose" | "ai";
 type SubdomainCheckStatus = "idle" | "checking" | "available" | "taken" | "reserved" | "pro-only";
+type CreateStep = 1 | 2 | 3 | 4;
 
 // 배포 상세 페이지의 "재시도" 버튼 → 이 목록 페이지로 넘어올 때 프리필 스펙을 임시로 담아두는 키
 // (같은 형식의 키를 deployments/[deploymentId]/page.tsx에서도 그대로 사용)
@@ -85,6 +86,77 @@ function Section({ title, description, children }: { title: string; description:
   );
 }
 
+function DeploymentWizardProgress({
+  createTab,
+  currentStep,
+  furthestStep,
+  onStepChange,
+}: {
+  createTab: CreateTab;
+  currentStep: CreateStep;
+  furthestStep: CreateStep;
+  onStepChange: (step: CreateStep) => void;
+}) {
+  const steps: Array<{ step: CreateStep; label: string }> = [
+    { step: 1, label: "방식 선택" },
+    { step: 2, label: "저장소 설정" },
+    { step: 3, label: createTab === "ai" ? "서비스 힌트" : "Compose 작성" },
+    { step: 4, label: "검토 및 배포" },
+  ];
+
+  return (
+    <ol className="grid grid-cols-4 border-b border-line bg-panel px-6 py-3">
+      {steps.map(({ step, label }, index) => {
+        const active = currentStep === step;
+        const visited = step <= furthestStep;
+        return (
+          <li key={step} className="relative">
+            {index < steps.length - 1 && (
+              <span
+                className={cn(
+                  "absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-[15px] h-px",
+                  step < furthestStep ? "bg-brand/60" : "bg-line-strong"
+                )}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => onStepChange(step)}
+              disabled={!visited}
+              className="relative z-10 flex w-full flex-col items-center gap-1.5 disabled:cursor-not-allowed"
+              aria-current={active ? "step" : undefined}
+            >
+              <span
+                className={cn(
+                  "flex h-[30px] w-[30px] items-center justify-center rounded-full border text-xs font-extrabold transition-colors",
+                  active
+                    ? "border-brand bg-brand text-[#0a0c08]"
+                    : visited
+                      ? "border-brand/60 bg-panel text-brand-strong"
+                      : "border-line-strong bg-panel text-muted-soft"
+                )}
+              >
+                {step < currentStep ? "✓" : step}
+              </span>
+              <span className={cn("text-[11px] font-bold", active ? "text-foreground" : "text-muted-soft")}>
+                {label}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function joinRepositoryContext(rootContext: string, serviceContext: string): string {
+  const root = rootContext.trim().replace(/^\.?\/+|\/+$/g, "");
+  const service = serviceContext.trim().replace(/^\.?\/+|\/+$/g, "");
+  if (!root) return service || ".";
+  if (!service || service === ".") return root;
+  return `${root}/${service}`;
+}
+
 export default function DeploymentsPage() {
   const params = useParams();
   const router = useRouter();
@@ -97,6 +169,11 @@ export default function DeploymentsPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("compose");
+  const [createStep, setCreateStep] = useState<CreateStep>(1);
+  const [furthestStepByTab, setFurthestStepByTab] = useState<Record<CreateTab, CreateStep>>({
+    compose: 1,
+    ai: 1,
+  });
   const [submitting, setSubmitting] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
@@ -143,6 +220,108 @@ export default function DeploymentsPage() {
   const [evidenceRefs, setEvidenceRefs] = useState<string[]>([]);
   const [generationWarnings, setGenerationWarnings] = useState<string[]>([]);
 
+  const furthestCreateStep = furthestStepByTab[createTab];
+
+  function visitCreateStep(step: CreateStep) {
+    if (generating || submitting || reviewing) return;
+    if (step <= furthestCreateStep) setCreateStep(step);
+  }
+
+  function advanceCreateStep(step: CreateStep) {
+    setCreateStep(step);
+    setFurthestStepByTab((prev) => ({
+      ...prev,
+      [createTab]: Math.max(prev[createTab], step) as CreateStep,
+    }));
+  }
+
+  function invalidateAiGeneration() {
+    setGeneratedSpec("");
+    setReviewFindings(null);
+    setGenerationStatus(null);
+    setUnresolvedFields([]);
+    setEvidenceRefs([]);
+    setGenerationWarnings([]);
+    setFurthestStepByTab((prev) => ({
+      ...prev,
+      ai: Math.min(prev.ai, 3) as CreateStep,
+    }));
+  }
+
+  function handleRepoUrlChange(value: string) {
+    setRepoUrl(value);
+    invalidateAiGeneration();
+  }
+
+  function handleBranchChange(value: string) {
+    setBranch(value);
+    invalidateAiGeneration();
+  }
+
+  function handlePatTokenChange(value: string) {
+    setPatToken(value);
+    invalidateAiGeneration();
+  }
+
+  function handleRepositoryContextChange(value: string) {
+    setContext(value);
+    invalidateAiGeneration();
+  }
+
+  function updateServiceCard(index: number, patch: Partial<ServiceCard>) {
+    setServiceCards((prev) => prev.map((service, serviceIndex) => (
+      serviceIndex === index ? { ...service, ...patch } : service
+    )));
+    invalidateAiGeneration();
+  }
+
+  function addServiceCard() {
+    setServiceCards((prev) => [...prev, emptyServiceCard()]);
+    invalidateAiGeneration();
+  }
+
+  function removeServiceCard(index: number) {
+    setServiceCards((prev) => prev.filter((_, serviceIndex) => serviceIndex !== index));
+    setServiceSubdomainCheck((prev) => {
+      const next: Record<number, SubdomainCheckStatus> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        const currentIndex = Number(key);
+        if (currentIndex < index) next[currentIndex] = value;
+        if (currentIndex > index) next[currentIndex - 1] = value;
+      });
+      return next;
+    });
+    invalidateAiGeneration();
+  }
+
+  function addInfrastructure() {
+    setInfraSelections((prev) => [...prev, emptyInfra()]);
+    invalidateAiGeneration();
+  }
+
+  function updateInfrastructure(index: number, patch: Partial<InfraSelection>) {
+    setInfraSelections((prev) => prev.map((infra, infraIndex) => (
+      infraIndex === index ? { ...infra, ...patch } : infra
+    )));
+    invalidateAiGeneration();
+  }
+
+  function removeInfrastructure(index: number) {
+    setInfraSelections((prev) => prev.filter((_, infraIndex) => infraIndex !== index));
+    invalidateAiGeneration();
+  }
+
+  function handleNetworkModeChange(mode: NetworkMode) {
+    setNetworkMode(mode);
+    if (mode === "create") setExistingNetworkName("");
+    invalidateAiGeneration();
+  }
+
+  function handleExistingNetworkChange(value: string) {
+    setExistingNetworkName(value);
+    invalidateAiGeneration();
+  }
+
   function handleRouteCustomSubdomainChange(index: number, value: string) {
     const lower = value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30);
     setRoutes((prev) => prev.map((x, xi) => (xi === index ? { ...x, customSubdomain: lower } : x)));
@@ -167,8 +346,7 @@ export default function DeploymentsPage() {
     const lower = value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30);
     setServiceCards((prev) => prev.map((x, xi) => (xi === index ? { ...x, customSubdomain: lower } : x)));
     setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
-    setGeneratedSpec("");
-    setGenerationStatus(null);
+    invalidateAiGeneration();
     if (serviceSubdomainTimers.current[index]) clearTimeout(serviceSubdomainTimers.current[index]);
     if (!lower || !accessToken) return;
     setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "checking" }));
@@ -191,8 +369,7 @@ export default function DeploymentsPage() {
     )));
     setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
     if (serviceSubdomainTimers.current[index]) clearTimeout(serviceSubdomainTimers.current[index]);
-    setGeneratedSpec("");
-    setGenerationStatus(null);
+    invalidateAiGeneration();
   }
 
   useEffect(() => () => {
@@ -251,6 +428,8 @@ export default function DeploymentsPage() {
     setHealthChecks(spec.healthChecks);
     setShowAdvanced(spec.environmentFiles.length > 0 || spec.exposedRoutes.length > 0 || spec.healthChecks.length > 0);
     setCreateTab("compose");
+    setCreateStep(2);
+    setFurthestStepByTab((prev) => ({ ...prev, compose: 2 }));
     setRetryNotice(true);
     setShowCreate(true);
   }
@@ -307,15 +486,22 @@ export default function DeploymentsPage() {
     setEvidenceRefs([]);
     setGenerationWarnings([]);
     setRetryNotice(false);
+    setCreateStep(1);
+    setFurthestStepByTab({ compose: 1, ai: 1 });
   }
 
   function closeCreate() {
     setShowCreate(false);
+    setError(null);
     resetCreateForm();
   }
 
-  async function handleCreateFromCompose(e: React.FormEvent) {
-    e.preventDefault();
+  function openCreate() {
+    setError(null);
+    setShowCreate(true);
+  }
+
+  async function handleCreateFromCompose() {
     if (!accessToken || !repoUrl || !branch || !composeContent) return;
     const hasUncheckedCustomSubdomain = routes.some(
       (r, i) => r.customSubdomain && routeSubdomainCheck[i] !== "available"
@@ -346,8 +532,8 @@ export default function DeploymentsPage() {
   }
 
   async function handleGenerateSpec() {
-    if (!accessToken || !repoUrl || !branch) return;
-    if (serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")) return;
+    if (!accessToken || !repoUrl || !branch) return false;
+    if (serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")) return false;
     setGenerating(true);
     setError(null);
     setReviewFindings(null);
@@ -360,7 +546,12 @@ export default function DeploymentsPage() {
         repoUrl,
         branch,
         patToken: patToken || undefined,
-        services: serviceCards.filter((s) => s.name && s.runtime && s.context),
+        services: serviceCards
+          .filter((s) => s.name && s.runtime && s.context)
+          .map((service) => ({
+            ...service,
+            context: joinRepositoryContext(context, service.context),
+          })),
         infrastructure: infraSelections.filter((i) => i.type),
         existingNetworkName: networkMode === "reuse" ? existingNetworkName || undefined : undefined,
       });
@@ -369,8 +560,11 @@ export default function DeploymentsPage() {
       setGenerationWarnings(result.warnings);
       setUnresolvedFields(result.unresolved);
       setGeneratedSpec(result.status === "READY" && result.spec ? JSON.stringify(result.spec, null, 2) : "");
+      advanceCreateStep(4);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "AI 스펙 생성에 실패했습니다.");
+      return false;
     } finally {
       setGenerating(false);
     }
@@ -391,8 +585,7 @@ export default function DeploymentsPage() {
     }
   }
 
-  async function handleCreateFromSpec(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreateFromSpec() {
     if (!accessToken || !repoUrl || !branch || !generatedSpec) return;
     if (serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")) return;
     setSubmitting(true);
@@ -416,6 +609,41 @@ export default function DeploymentsPage() {
     }
   }
 
+  const repositoryStepReady = Boolean(repoUrl.trim() && branch.trim());
+  const composeStepReady = Boolean(composeContent.trim());
+  const aiHintsStepReady = serviceCards.some((service) => (
+    service.name.trim() && service.runtime.trim() && service.context.trim()
+  )) && (networkMode === "create" || Boolean(existingNetworkName));
+  const aiSubdomainsReady = !serviceCards.some((service, index) => (
+    service.expose && service.customSubdomain && serviceSubdomainCheck[index] !== "available"
+  ));
+
+  async function handleNextCreateStep() {
+    if (createStep === 1) {
+      advanceCreateStep(2);
+      return;
+    }
+    if (createStep === 2 && repositoryStepReady) {
+      advanceCreateStep(3);
+      return;
+    }
+    if (createStep === 3 && createTab === "compose" && composeStepReady) {
+      advanceCreateStep(4);
+      return;
+    }
+    if (createStep === 3 && createTab === "ai" && aiHintsStepReady && aiSubdomainsReady) {
+      if (generationStatus) {
+        advanceCreateStep(4);
+      } else {
+        await handleGenerateSpec();
+      }
+    }
+  }
+
+  function handlePreviousCreateStep() {
+    setCreateStep((step) => Math.max(1, step - 1) as CreateStep);
+  }
+
   if (!accessToken) return <PageLoader />;
 
   return (
@@ -431,7 +659,7 @@ export default function DeploymentsPage() {
           <h1 className="text-[15px] font-bold whitespace-nowrap">배포</h1>
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
-          <button onClick={() => setShowCreate(true)} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-white/[0.06]">
+          <button onClick={openCreate} className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-bold text-brand-strong transition-colors hover:bg-white/[0.06]">
             ＋ 새 배포
           </button>
           <div className="h-5 w-px shrink-0 bg-line" />
@@ -443,7 +671,7 @@ export default function DeploymentsPage() {
         </div>
       </div>
 
-      {error && (
+      {error && !showCreate && (
         <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
@@ -530,9 +758,23 @@ export default function DeploymentsPage() {
             </button>
           </div>
 
+          <DeploymentWizardProgress
+            createTab={createTab}
+            currentStep={createStep}
+            furthestStep={furthestCreateStep}
+            onStepChange={visitCreateStep}
+          />
+
           {/* 본문 (스크롤 영역) */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="mx-auto max-w-[820px] space-y-4">
+              {error && (
+                <div className="flex items-center justify-between rounded-md border border-danger-soft bg-danger/10 px-4 py-3 text-sm text-danger">
+                  <span>{error}</span>
+                  <button onClick={() => setError(null)} className="text-danger/60 hover:text-danger">✕</button>
+                </div>
+              )}
+
               {retryNotice && (
                 <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] px-3 py-2.5 text-xs text-[#e8b657]">
                   이전 배포의 compose 내용을 불러왔습니다. Git 저장소 URL/브랜치/PAT는 보안상 저장되지 않아 다시 입력해야 합니다. 필요하면 내용을 수정한 뒤 배포를 시작하세요.
@@ -540,7 +782,7 @@ export default function DeploymentsPage() {
               )}
 
               {/* 배포 방식 선택 */}
-              <div>
+              {createStep === 1 && <div className="wizard-step-enter">
                 <h3 className="mb-1 text-sm font-extrabold">배포 방식</h3>
                 <p className="mb-3 text-xs text-muted">두 가지 방식 중 하나를 선택하세요. 언제든 전환할 수 있습니다.</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -567,22 +809,23 @@ export default function DeploymentsPage() {
                     <p className="text-xs text-muted">저장소를 분석해 배포 구성을 자동으로 만들어 줍니다.</p>
                   </button>
                 </div>
-              </div>
+              </div>}
 
               {/* 공통: 저장소 연결 */}
-              <Section title="1. 저장소 연결" description="배포할 Git 저장소와 브랜치를 입력하세요. PAT는 저장되지 않고 이번 배포에만 사용됩니다.">
+              {createStep === 2 && <div className="wizard-step-enter">
+              <Section title="저장소 설정" description="배포할 Git 저장소와 브랜치를 입력하세요. PAT는 저장되지 않고 이번 배포에만 사용됩니다.">
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Git 저장소 URL" htmlFor="deploy-repo-url">
                     <Input
                       id="deploy-repo-url"
                       name="deploy-repo-url"
                       value={repoUrl}
-                      onChange={(e) => setRepoUrl(e.target.value)}
+                      onChange={(e) => handleRepoUrlChange(e.target.value)}
                       placeholder="https://github.com/user/repo.git"
                     />
                   </Field>
                   <Field label="브랜치" htmlFor="deploy-branch">
-                    <Input id="deploy-branch" name="deploy-branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
+                    <Input id="deploy-branch" name="deploy-branch" value={branch} onChange={(e) => handleBranchChange(e.target.value)} />
                   </Field>
                   <Field label="PAT (비공개 저장소인 경우)" htmlFor="deploy-pat" className="col-span-2">
                     <Input
@@ -590,24 +833,25 @@ export default function DeploymentsPage() {
                       name="deploy-pat"
                       type="password"
                       value={patToken}
-                      onChange={(e) => setPatToken(e.target.value)}
+                      onChange={(e) => handlePatTokenChange(e.target.value)}
                       placeholder="공개 저장소면 비워두세요"
                     />
                   </Field>
-                  {createTab === "compose" && (
-                    <Field label="배포 디렉토리 (선택)" htmlFor="deploy-context" className="col-span-2">
+                    <Field label="저장소 배포 디렉토리 (선택)" htmlFor="deploy-context" className="col-span-2">
                       <Input
                         id="deploy-context"
                         name="deploy-context"
                         value={context}
-                        onChange={(e) => setContext(e.target.value)}
+                        onChange={(e) => handleRepositoryContextChange(e.target.value)}
                         placeholder="예: backend (비워두면 저장소 루트에서 배포)"
                       />
                       <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">
-                        모노레포에서 특정 폴더만 배포하고 싶을 때 입력하세요. Compose 파일 업로드와 이미지 빌드가 이 디렉토리를 기준으로 실행됩니다. (저장소 내부 경로)
+                        {createTab === "compose"
+                          ? "모노레포에서 특정 폴더만 배포하고 싶을 때 입력하세요. Compose 파일 업로드와 이미지 빌드가 이 디렉토리를 기준으로 실행됩니다."
+                          : "모노레포에서 분석할 기준 폴더를 입력하세요. AI 서비스 힌트의 경로는 이 디렉토리를 기준으로 계산되고 최종 이미지 빌드에도 그대로 반영됩니다."}
+                        {" "}(저장소 내부 경로)
                       </p>
                     </Field>
-                  )}
                   <Field label="VM 배포 경로 (선택)" htmlFor="deploy-install-path" className="col-span-2">
                     <Input
                       id="deploy-install-path"
@@ -622,10 +866,12 @@ export default function DeploymentsPage() {
                   </Field>
                 </div>
               </Section>
+              </div>}
 
               {createTab === "compose" ? (
-                <form id="deploy-compose-form" onSubmit={handleCreateFromCompose}>
-                  <Section title="2. Compose 작성" description="저장소(또는 위에서 지정한 디렉토리)에서 실행할 서비스를 docker-compose.yaml 형식으로 작성하세요.">
+                createStep === 3 ? (
+                <div className="wizard-step-enter">
+                  <Section title="Compose 작성" description="저장소(또는 위에서 지정한 디렉토리)에서 실행할 서비스를 docker-compose.yaml 형식으로 작성하세요.">
                     <Field label="docker-compose.yaml" htmlFor="deploy-compose">
                       <Textarea
                         id="deploy-compose"
@@ -787,38 +1033,79 @@ export default function DeploymentsPage() {
 {`networks:\n  default:\n    external: true\n    name: <재사용할 네트워크 이름>`}
                     </pre>
                   </Section>
-                </form>
+                </div>
+                ) : createStep === 4 ? (
+                  <div className="wizard-step-enter">
+                    <Section title="검토 및 배포" description="입력한 저장소와 Compose 설정을 확인하세요. 수정이 필요하면 이전 단계로 돌아가도 현재 입력은 그대로 유지됩니다.">
+                      <dl className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                          <dt className="mb-1 text-muted-soft">저장소</dt>
+                          <dd className="break-all font-mono text-foreground">{repoUrl}</dd>
+                        </div>
+                        <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                          <dt className="mb-1 text-muted-soft">브랜치</dt>
+                          <dd className="font-mono text-foreground">{branch}</dd>
+                        </div>
+                        <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                          <dt className="mb-1 text-muted-soft">저장소 배포 디렉토리</dt>
+                          <dd className="font-mono text-foreground">{context.trim() || "저장소 루트"}</dd>
+                        </div>
+                        <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                          <dt className="mb-1 text-muted-soft">VM 배포 경로</dt>
+                          <dd className="font-mono text-foreground">{installPath.trim() || "자동 관리 경로"}</dd>
+                        </div>
+                      </dl>
+                      <div className="mt-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-xs font-bold">docker-compose.yaml</p>
+                          <span className="text-[11px] text-muted-soft">
+                            환경 파일 {envFiles.filter((file) => file.vmPath && file.content).length} · 라우트 {routes.filter((route) => route.serviceName && route.nickname).length} · 헬스체크 {healthChecks.filter((check) => check.serviceName && check.path).length}
+                          </span>
+                        </div>
+                        <pre className="max-h-64 overflow-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
+                          {composeContent}
+                        </pre>
+                      </div>
+                    </Section>
+                  </div>
+                ) : null
               ) : (
                 <>
-                  <Section title="2. 서비스 힌트 (선택)" description="AI가 저장소를 자동으로 분석하지만, 감지가 어려운 서비스가 있다면 힌트를 입력해 정확도를 높일 수 있습니다.">
+                  {createStep === 3 && <div className="wizard-step-enter">
+                  <Section title="서비스 힌트" description="분석할 서비스의 위치와 실행 환경을 알려주세요. 저장소 배포 디렉토리를 입력했다면 아래 경로는 그 디렉토리를 기준으로 계산됩니다.">
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-1.5">
                         <p className="text-xs font-bold text-foreground">서비스</p>
-                        <button type="button" onClick={() => setServiceCards((prev) => [...prev, emptyServiceCard()])} className="text-xs text-brand-strong font-bold">+ 서비스 추가</button>
+                        <button type="button" onClick={addServiceCard} className="text-xs text-brand-strong font-bold">+ 서비스 추가</button>
                       </div>
                       {serviceCards.map((s, i) => (
                         <div key={i} className="rounded-md border border-line p-3 mb-2 space-y-2">
                           <div className="grid grid-cols-3 gap-2">
-                            <input value={s.name} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, name: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                            <select value={s.runtime} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, runtime: e.target.value } : x)))} className="h-8 px-2 border border-line-strong rounded text-xs">
+                            <input value={s.name} onChange={(e) => updateServiceCard(i, { name: e.target.value })} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <select value={s.runtime} onChange={(e) => updateServiceCard(i, { runtime: e.target.value })} className="h-8 px-2 border border-line-strong rounded text-xs">
                               <option value="docker">Docker (직접 빌드)</option>
                               <option value="java">Java</option>
                               <option value="node">Node.js</option>
                               <option value="python">Python</option>
                             </select>
-                            <input value={s.context} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, context: e.target.value } : x)))} placeholder="경로 (예: .)" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <input value={s.context} onChange={(e) => updateServiceCard(i, { context: e.target.value })} placeholder={context.trim() ? "기준 디렉토리 내부 경로 (예: api)" : "저장소 내부 경로 (예: .)"} className="h-8 px-2 border border-line-strong rounded text-xs" />
                           </div>
+                          {context.trim() && (
+                            <p className="text-[10px] text-muted-soft">
+                              실제 분석·빌드 경로: <span className="font-mono text-muted">{joinRepositoryContext(context, s.context)}</span>
+                            </p>
+                          )}
                           <div className="grid grid-cols-3 gap-2">
-                            <input type="number" value={s.containerPort} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, containerPort: Number(e.target.value) } : x)))} placeholder="컨테이너 포트" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                            <input value={s.buildCommand ?? ""} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, buildCommand: e.target.value } : x)))} placeholder="빌드 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
-                            <input value={s.startCommand ?? ""} onChange={(e) => setServiceCards((prev) => prev.map((x, xi) => (xi === i ? { ...x, startCommand: e.target.value } : x)))} placeholder="시작 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <input type="number" value={s.containerPort} onChange={(e) => updateServiceCard(i, { containerPort: Number(e.target.value) })} placeholder="컨테이너 포트" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <input value={s.buildCommand ?? ""} onChange={(e) => updateServiceCard(i, { buildCommand: e.target.value })} placeholder="빌드 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
+                            <input value={s.startCommand ?? ""} onChange={(e) => updateServiceCard(i, { startCommand: e.target.value })} placeholder="시작 명령 (선택)" className="h-8 px-2 border border-line-strong rounded text-xs" />
                           </div>
                           <div className="flex items-center justify-between">
                             <label className="flex items-center gap-1.5 text-xs text-muted">
                               <input type="checkbox" checked={s.expose} onChange={(e) => handleServiceExposureChange(i, e.target.checked)} className="accent-brand" />
                               외부 노출
                             </label>
-                            <button type="button" onClick={() => setServiceCards((prev) => prev.filter((_, xi) => xi !== i))} className="text-xs text-muted-soft hover:text-danger">삭제</button>
+                            <button type="button" onClick={() => removeServiceCard(i)} className="text-xs text-muted-soft hover:text-danger">삭제</button>
                           </div>
                           {s.expose && (() => {
                             const isPro = planType === "PRO";
@@ -881,19 +1168,19 @@ export default function DeploymentsPage() {
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-1.5">
                         <p className="text-xs font-bold text-foreground">공유 인프라</p>
-                        <button type="button" onClick={() => setInfraSelections((prev) => [...prev, emptyInfra()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
+                        <button type="button" onClick={addInfrastructure} className="text-xs text-brand-strong font-bold">+ 추가</button>
                       </div>
                       <p className="mb-1.5 text-[11px] text-muted-soft">서비스가 함께 사용할 DB/캐시 등 공유 인프라를 지정합니다.</p>
                       {infraSelections.map((inf, i) => (
                         <div key={i} className="flex gap-2 mb-2">
-                          <select value={inf.type} onChange={(e) => setInfraSelections((prev) => prev.map((x, xi) => (xi === i ? { ...x, type: e.target.value } : x)))} className="h-8 px-2 border border-line-strong rounded text-xs">
+                          <select value={inf.type} onChange={(e) => updateInfrastructure(i, { type: e.target.value })} className="h-8 px-2 border border-line-strong rounded text-xs">
                             <option value="postgres">PostgreSQL</option>
                             <option value="mysql">MySQL</option>
                             <option value="redis">Redis</option>
                             <option value="mongodb">MongoDB</option>
                           </select>
-                          <input value={inf.version ?? ""} onChange={(e) => setInfraSelections((prev) => prev.map((x, xi) => (xi === i ? { ...x, version: e.target.value } : x)))} placeholder="버전 (선택, 비우면 AI가 선택)" className="flex-1 h-8 px-2 border border-line-strong rounded text-xs" />
-                          <button type="button" onClick={() => setInfraSelections((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger">✕</button>
+                          <input value={inf.version ?? ""} onChange={(e) => updateInfrastructure(i, { version: e.target.value })} placeholder="버전 (선택, 비우면 AI가 선택)" className="flex-1 h-8 px-2 border border-line-strong rounded text-xs" />
+                          <button type="button" onClick={() => removeInfrastructure(i)} className="text-muted-soft hover:text-danger">✕</button>
                         </div>
                       ))}
                     </div>
@@ -907,7 +1194,7 @@ export default function DeploymentsPage() {
                             type="radio"
                             name="deploy-network-mode"
                             checked={networkMode === "create"}
-                            onChange={() => setNetworkMode("create")}
+                            onChange={() => handleNetworkModeChange("create")}
                             className="accent-brand"
                           />
                           새 네트워크 생성
@@ -917,7 +1204,7 @@ export default function DeploymentsPage() {
                             type="radio"
                             name="deploy-network-mode"
                             checked={networkMode === "reuse"}
-                            onChange={() => setNetworkMode("reuse")}
+                            onChange={() => handleNetworkModeChange("reuse")}
                             disabled={dockerNetworks.length === 0}
                             className="accent-brand"
                           />
@@ -926,7 +1213,7 @@ export default function DeploymentsPage() {
                         {networkMode === "reuse" && (
                           <Select
                             value={existingNetworkName}
-                            onChange={(e) => setExistingNetworkName(e.target.value)}
+                            onChange={(e) => handleExistingNetworkChange(e.target.value)}
                             className="mt-1 w-64"
                           >
                             <option value="">네트워크 선택</option>
@@ -941,22 +1228,32 @@ export default function DeploymentsPage() {
                       </div>
                     </div>
 
-                    <Button
-                      type="button"
-                      variant="primary"
-                      onClick={handleGenerateSpec}
-                      disabled={
-                        generating || !repoUrl || !branch || serviceCards.every((s) => !s.name) ||
-                        (networkMode === "reuse" && !existingNetworkName) ||
-                        serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")
-                      }
-                      title={!repoUrl || !branch ? "위쪽 저장소 연결에 Git 저장소 URL/브랜치를 먼저 입력하세요" : undefined}
-                    >
-                      {generating ? "저장소 분석 + AI 생성 중..." : "AI 스펙 생성"}
-                    </Button>
                   </Section>
+                  </div>}
 
                   {/* 결정론적 저장소 분석 결과 — AI 호출 여부와 무관하게 항상 먼저 보여줌 */}
+                  {createStep === 4 && <div className="wizard-step-enter space-y-4">
+                  <Section title="배포 설정 요약" description="이전 단계에서 입력한 값입니다. 수정하려면 단계 표시나 이전 버튼으로 돌아가세요. 입력 내용은 유지됩니다.">
+                    <dl className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                        <dt className="mb-1 text-muted-soft">저장소 · 브랜치</dt>
+                        <dd className="break-all font-mono text-foreground">{repoUrl} · {branch}</dd>
+                      </div>
+                      <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                        <dt className="mb-1 text-muted-soft">저장소 배포 디렉토리</dt>
+                        <dd className="font-mono text-foreground">{context.trim() || "저장소 루트"}</dd>
+                      </div>
+                      <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                        <dt className="mb-1 text-muted-soft">서비스</dt>
+                        <dd className="text-foreground">{serviceCards.filter((service) => service.name).map((service) => service.name).join(", ")}</dd>
+                      </div>
+                      <div className="rounded-md border border-line bg-white/[0.025] p-3">
+                        <dt className="mb-1 text-muted-soft">VM 배포 경로</dt>
+                        <dd className="font-mono text-foreground">{installPath.trim() || "자동 관리 경로"}</dd>
+                      </div>
+                    </dl>
+                  </Section>
+
                   {evidenceRefs.length > 0 && (
                     <Section title="저장소 분석 결과" description="AI 호출 전에 저장소를 결정론적 규칙으로 먼저 분석한 근거입니다.">
                       <div className="space-y-1 text-xs text-[#7ab3f5]">
@@ -995,13 +1292,16 @@ export default function DeploymentsPage() {
                   )}
 
                   {generatedSpec && (
-                    <Section title="3. 생성된 배포 구성" description="결정론적 규칙으로 확정된 부분과 AI가 확정한 부분이 합쳐진 결과입니다. 검토 후 필요하면 직접 수정할 수 있습니다.">
-                      <form id="deploy-spec-form" onSubmit={handleCreateFromSpec} className="space-y-3">
+                    <Section title="생성된 배포 구성" description="결정론적 규칙으로 확정된 부분과 AI가 확정한 부분이 합쳐진 결과입니다. 검토 후 필요하면 직접 수정할 수 있습니다.">
+                      <div className="space-y-3">
                         <Textarea
                           id="deploy-generated-spec"
                           name="deploy-generated-spec"
                           value={generatedSpec}
-                          onChange={(e) => setGeneratedSpec(e.target.value)}
+                          onChange={(e) => {
+                            setGeneratedSpec(e.target.value);
+                            setReviewFindings(null);
+                          }}
                           rows={12}
                           spellCheck={false}
                           className="font-mono resize-none"
@@ -1028,9 +1328,10 @@ export default function DeploymentsPage() {
                             )}
                           </div>
                         )}
-                      </form>
+                      </div>
                     </Section>
                   )}
+                  </div>}
                 </>
               )}
             </div>
@@ -1039,37 +1340,66 @@ export default function DeploymentsPage() {
           {/* 푸터 */}
           <div className="flex shrink-0 items-center gap-2 border-t border-line bg-panel px-6 py-4">
             <span className="flex-1 text-xs text-muted-soft">
-              {createTab === "compose"
-                ? "배포를 시작하면 소스 체크아웃부터 헬스체크까지 자동으로 진행되고, 실시간 로그로 확인할 수 있어요."
-                : "AI가 생성한 스펙으로 배포하면 위와 동일한 파이프라인으로 진행됩니다."}
+              {createStep}/4 단계 · 이전 단계로 돌아가도 이 창을 닫기 전까지 입력 내용이 유지됩니다.
             </span>
             <Button onClick={closeCreate}>취소</Button>
-            {createTab === "compose" ? (
+            {createStep > 1 && (
+              <Button type="button" onClick={handlePreviousCreateStep} disabled={submitting || generating || reviewing}>
+                이전
+              </Button>
+            )}
+            {createStep < 4 && (
               <Button
-                form="deploy-compose-form"
-                type="submit"
+                type="button"
                 variant="primary"
+                onClick={handleNextCreateStep}
                 disabled={
-                  submitting || !repoUrl || !branch || !composeContent ||
-                  routes.some((r, i) => r.customSubdomain && routeSubdomainCheck[i] !== "available")
+                  generating ||
+                  (createStep === 2 && !repositoryStepReady) ||
+                  (createStep === 3 && createTab === "compose" && (
+                    !composeStepReady ||
+                    routes.some((route, index) => route.customSubdomain && routeSubdomainCheck[index] !== "available")
+                  )) ||
+                  (createStep === 3 && createTab === "ai" && (!aiHintsStepReady || !aiSubdomainsReady))
+                }
+              >
+                {createStep === 1 && "저장소 설정"}
+                {createStep === 2 && (createTab === "ai" ? "서비스 힌트 입력" : "Compose 작성")}
+                {createStep === 3 && createTab === "compose" && "검토로 이동"}
+                {createStep === 3 && createTab === "ai" && (
+                  generating ? "저장소 분석 + AI 생성 중..." : generationStatus ? "분석 결과 보기" : "AI 스펙 생성"
+                )}
+              </Button>
+            )}
+            {createStep === 4 && createTab === "compose" && (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleCreateFromCompose}
+                disabled={
+                  submitting || !repositoryStepReady || !composeStepReady ||
+                  routes.some((route, index) => route.customSubdomain && routeSubdomainCheck[index] !== "available")
                 }
               >
                 {submitting ? "배포 시작 중..." : "배포 시작"}
               </Button>
-            ) : (
-              generatedSpec && (
+            )}
+            {createStep === 4 && createTab === "ai" && generatedSpec && (
+              <>
+                <Button type="button" onClick={handleGenerateSpec} disabled={generating || submitting || reviewing}>
+                  {generating ? "다시 생성 중..." : "다시 생성"}
+                </Button>
                 <Button
-                  form="deploy-spec-form"
-                  type="submit"
+                  type="button"
                   variant="primary"
+                  onClick={handleCreateFromSpec}
                   disabled={
-                    submitting || !repoUrl || !branch ||
-                    serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")
+                    submitting || !repositoryStepReady || !aiSubdomainsReady
                   }
                 >
                   {submitting ? "배포 시작 중..." : "이 스펙으로 배포 시작"}
                 </Button>
-              )
+              </>
             )}
           </div>
         </div>
