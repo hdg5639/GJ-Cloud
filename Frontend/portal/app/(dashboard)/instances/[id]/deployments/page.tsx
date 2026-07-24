@@ -1132,7 +1132,7 @@ export default function DeploymentsPage() {
                   {repositorySource === "github" ? (
                     <div className="mb-4 space-y-3 rounded-[10px] border border-brand/25 bg-brand/[0.04] p-4">
                       <div className="flex items-end gap-2">
-                        <Field label="GitHub 저장소" htmlFor="deploy-github-repository" className="min-w-0 flex-1">
+                        <Field label="GitHub 저장소" htmlFor="deploy-github-repository" className="mb-0 min-w-0 flex-1">
                           <Select
                             id="deploy-github-repository"
                             value={selectedGithubRepositoryKey}
@@ -1156,7 +1156,7 @@ export default function DeploymentsPage() {
                           type="button"
                           onClick={handleConnectGithub}
                           disabled={githubConnecting}
-                          className="shrink-0"
+                          className="min-h-[42px] shrink-0"
                         >
                           {githubConnecting ? "GitHub 이동 중..." : githubRepositories.length > 0 ? "저장소 권한 추가" : "GitHub 연결"}
                         </Button>
