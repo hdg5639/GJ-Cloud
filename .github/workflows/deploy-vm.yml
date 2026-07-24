@@ -9,7 +9,12 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    name: Deploy to Dev VM
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - gamjabox-dev
     steps:
       - name: Pull latest code in production directory
         run: |
