@@ -3,6 +3,7 @@ package gj.cloud.vm.application.vm.service.impl;
 import gj.cloud.vm.application.port.service.PortService;
 import gj.cloud.vm.application.ssh.client.OpsServiceClient;
 import gj.cloud.vm.application.ssh.client.UserServiceClient;
+import gj.cloud.vm.application.ssh.dto.SshKeyInternalResponse;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse.PlanAvailability;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
@@ -96,27 +97,33 @@ public class VmServiceImpl implements VmService {
                                 allocateIp(creating.getPlanType())
                         )
                         .flatMap(tuple -> {
-                            List<String> sshPublicKeys = List.of(tuple.getT1().publicKey(), tuple.getT2().publicKey());
+                            SshKeyInternalResponse userKey = tuple.getT1();
+                            List<String> sshPublicKeys = List.of(userKey.publicKey(), tuple.getT2().publicKey());
                             int newVmid = tuple.getT3();
                             String staticIp = tuple.getT4();
                             return proxmoxClient.ensurePoolExists(proxmoxProperties.getPool())
                                     .then(proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName()))
                                     .flatMap(taskId -> vmRepository.save(creating.withVmidAndTaskId(newVmid, taskId)))
-                                    .map(saved -> new Object[]{saved, sshPublicKeys, staticIp});
+                                    .map(saved -> new ProvisioningContext(
+                                            saved, sshPublicKeys, staticIp,
+                                            userKey.publicKey(), userKey.fingerprint()));
                         })
                 )
-                .flatMap(arr -> {
-                    VmEntity cloned = (VmEntity) arr[0];
-                    @SuppressWarnings("unchecked")
-                    List<String> sshPublicKeys = (List<String>) arr[1];
-                    String staticIp = (String) arr[2];
+                .flatMap(context -> {
+                    VmEntity cloned = context.vm();
                     return updateStatus(cloned, VmStatus.BOOTING)
                             .flatMap(booting ->
                                     proxmoxClient.waitForTaskCompletion(booting.getProxmoxTaskId())
-                                            .then(proxmoxClient.configureVm(booting.getVmid(), booting.getPlanType(), sshPublicKeys, staticIp))
+                                            .then(proxmoxClient.configureVm(
+                                                    booting.getVmid(), booting.getPlanType(),
+                                                    context.sshPublicKeys(), context.staticIp()))
                                             .then(proxmoxClient.resizeDisk(booting.getVmid(), booting.getDiskSizeGb()))
                                             .then(proxmoxClient.startVm(booting.getVmid()))
                                             .then(proxmoxClient.waitForIpAssignment(booting.getVmid()))
+                                            .flatMap(ip -> opsServiceClient.waitForSshReadiness(
+                                                            booting.getId(), ip,
+                                                            context.userPublicKey(), context.userFingerprint())
+                                                    .thenReturn(ip))
                                             .flatMap(ip -> {
                                                 VmEntity running = booting.withRunning(ip);
                                                 return vmRepository.save(running)
@@ -134,6 +141,15 @@ public class VmServiceImpl implements VmService {
                             });
                 })
                 .then();
+    }
+
+    private record ProvisioningContext(
+            VmEntity vm,
+            List<String> sshPublicKeys,
+            String staticIp,
+            String userPublicKey,
+            String userFingerprint
+    ) {
     }
 
     private Mono<VmEntity> setupCloudflare(VmEntity vm, String ownerEmail) {

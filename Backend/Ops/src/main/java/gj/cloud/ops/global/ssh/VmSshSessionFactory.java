@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.Optional;
 
 // 콘솔(A절)·파일 브라우저(B절)·향후 배포 파이프라인이 공통으로 재활용하는 SSH 세션 생성 모듈.
 // VM 관리 키(Ed25519, AES-256-GCM 암호화 저장) 복호화 → JSch 세션 연결까지를 캡슐화함.
@@ -39,6 +40,28 @@ public class VmSshSessionFactory {
     }
 
     public Session createSession(String vmId, String internalIp) {
+        try {
+            return connect(vmId, internalIp);
+        } catch (JSchException e) {
+            log.error("VM SSH 연결 실패: vmId={}, error={}", vmId, e.getMessage());
+            throw new OpsException(OpsErrorCode.SSH_CONNECTION_FAILED);
+        }
+    }
+
+    /**
+     * VM 최초 부팅 중에는 sshd나 authorized_keys가 아직 준비되지 않은 것이 정상이다.
+     * 준비 상태 폴링에서는 예상 가능한 연결 실패를 예외/ERROR 로그로 확대하지 않고 빈 값으로 반환한다.
+     */
+    public Optional<Session> tryCreateSession(String vmId, String internalIp) {
+        try {
+            return Optional.of(connect(vmId, internalIp));
+        } catch (JSchException e) {
+            log.debug("VM SSH 준비 대기: vmId={}, error={}", vmId, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private Session connect(String vmId, String internalIp) throws JSchException {
         byte[] privateKeyBytes = null;
         try {
             VmManagementKeyEntity managementKey = managementKeyService.getActiveKeyOrThrow(vmId);
@@ -59,9 +82,6 @@ public class VmSshSessionFactory {
             session.setServerAliveCountMax(SERVER_ALIVE_COUNT_MAX);
             session.connect(CONNECT_TIMEOUT_MS);
             return session;
-        } catch (JSchException e) {
-            log.error("VM SSH 연결 실패: vmId={}, error={}", vmId, e.getMessage());
-            throw new OpsException(OpsErrorCode.SSH_CONNECTION_FAILED);
         } finally {
             // best-effort zeroization: JSch가 내부적으로 별도 복사본을 가질 수 있어 완전한 제거는 보장되지 않음
             if (privateKeyBytes != null) {

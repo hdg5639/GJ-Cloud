@@ -748,7 +748,7 @@ export default function InstanceDetailPage() {
             <p className="mt-0.5 text-xs text-muted">
               {vm.status === "PENDING" && "생성 요청을 처리하고 있어요. "}
               {vm.status === "CREATING" && "Proxmox에서 VM을 생성하고 있어요. "}
-              {vm.status === "BOOTING" && "VM을 부팅하고 네트워크를 구성하고 있어요. "}
+              {vm.status === "BOOTING" && "VM을 부팅하고 네트워크 및 SSH 키 인증을 확인하고 있어요. "}
               완료되면 이 화면이 자동으로 갱신됩니다.
             </p>
           </div>
@@ -842,7 +842,7 @@ export default function InstanceDetailPage() {
 
             <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
               <span className="text-amber-500 text-sm mt-0.5">⚠</span>
-              <p className="text-[11px] text-amber-800">VM 생성 직후에는 DNS 전파 속도로 인해 <strong>5~10분가량 SSH 접속이 되지 않을 수 있습니다.</strong> 잠시 후 다시 시도해주세요.</p>
+              <p className="text-[11px] text-amber-800">VM 생성 중에는 cloud-init의 SSH 키 반영과 실제 인증 가능 여부를 확인합니다. <strong>상태가 실행 중으로 바뀐 뒤 접속해주세요.</strong></p>
             </div>
 
             {/* Step 1 — cloudflared 설치 */}
@@ -929,7 +929,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
     HostName ${vm.subdomain}.gamjabox.cloud
     ProxyCommand cloudflared access ssh --hostname %h
     User ubuntu
-    IdentityFile ~/.ssh/id_ed25519`}
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes`}
                       copiedKey={copiedKey}
                       onCopy={setCopiedKey}
                     />
@@ -996,7 +997,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
     HostName ${vm.subdomain}.gamjabox.cloud
     ProxyCommand cloudflared access ssh --hostname %h
     User ubuntu
-    IdentityFile ~/.ssh/{키이름}_id_ed25519.pem`}
+    IdentityFile ~/.ssh/{키이름}_id_ed25519.pem
+    IdentitiesOnly yes`}
                       copiedKey={copiedKey}
                       onCopy={setCopiedKey}
                     />
@@ -1017,7 +1019,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
               <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-2">config 없이 1회성 접속</p>
               <CodeBlock
                 id="oneliner"
-                value={`ssh -i ~/.ssh/{키파일}.pem -o ProxyCommand="cloudflared access ssh --hostname ${vm.subdomain}.gamjabox.cloud" ubuntu@${vm.subdomain}.gamjabox.cloud`}
+                value={`ssh -o IdentitiesOnly=yes -i ~/.ssh/{키파일}.pem -o ProxyCommand="cloudflared access ssh --hostname ${vm.subdomain}.gamjabox.cloud" ubuntu@${vm.subdomain}.gamjabox.cloud`}
                 copiedKey={copiedKey}
                 onCopy={setCopiedKey}
               />
@@ -1029,7 +1031,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
               <div className="bg-white border border-gray-200 rounded-md divide-y divide-gray-100 text-xs">
                 {[
                   ["Cloudflare 인증 페이지가 안 뜸", "cloudflared 미설치 또는 PATH 미등록", "cloudflared --version 으로 확인"],
-                  ["Permission denied (publickey)", "공개키 미등록 또는 다른 키 사용", "portal SSH 키 목록 및 IdentityFile 경로 재확인"],
+                  ["Permission denied (publickey)", "다른 개인키 선택 또는 ssh-agent 키 충돌", "IdentityFile 경로와 IdentitiesOnly yes 설정 재확인"],
                   ["UNPROTECTED PRIVATE KEY FILE", "개인키 파일 권한 문제", "chmod 600 적용"],
                   ["매번 인증 페이지가 뜸", "Cloudflare Access 세션 만료 (기본 24h)", "재인증 필요 — 정상 동작"],
                   ["인증됐는데 접속 거부", "SSH 접근 허용 이메일 미등록", "인스턴스 상세 → SSH 허용 이메일 확인"],

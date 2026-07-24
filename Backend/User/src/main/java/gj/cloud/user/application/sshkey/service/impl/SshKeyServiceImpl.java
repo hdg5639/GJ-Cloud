@@ -6,6 +6,7 @@ import gj.cloud.user.application.sshkey.dto.SshKeyInternalResponse;
 import gj.cloud.user.application.sshkey.dto.SshKeyRegisterRequest;
 import gj.cloud.user.application.sshkey.dto.SshKeyResponse;
 import gj.cloud.user.application.sshkey.service.SshKeyService;
+import gj.cloud.user.application.sshkey.validation.SshPublicKeyValidator;
 import gj.cloud.user.domain.sshkey.entity.SshKeyEntity;
 import gj.cloud.user.domain.sshkey.repository.SshKeyRepository;
 import gj.cloud.user.global.exception.UserException;
@@ -27,25 +28,19 @@ import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.EdECPrivateKey;
 import java.util.Base64;
 import java.util.List;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class SshKeyServiceImpl implements SshKeyService {
 
     private static final int SSH_KEY_MAX_COUNT = 5;
-    private static final Set<String> SUPPORTED_KEY_TYPES = Set.of(
-            "ssh-rsa", "ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"
-    );
-
     private final SshKeyRepository sshKeyRepository;
+    private final SshPublicKeyValidator sshPublicKeyValidator;
 
     @Override
     @Transactional
     public SshKeyResponse registerKey(String userId, SshKeyRegisterRequest request) {
-        String publicKey = request.publicKey().trim();
-
-        validateKeyFormat(publicKey);
+        String publicKey = sshPublicKeyValidator.validateAndNormalize(request.publicKey());
 
         String fingerprint = computeFingerprint(publicKey);
 
@@ -154,18 +149,6 @@ public class SshKeyServiceImpl implements SshKeyService {
             throw e;
         } catch (Exception e) {
             throw new UserException(UserErrorCode.KEY_GENERATION_FAILED);
-        }
-    }
-
-    private void validateKeyFormat(String publicKey) {
-        String[] parts = publicKey.split("\\s+");
-        if (parts.length < 2 || !SUPPORTED_KEY_TYPES.contains(parts[0])) {
-            throw new UserException(UserErrorCode.INVALID_SSH_KEY_FORMAT);
-        }
-        try {
-            Base64.getDecoder().decode(parts[1]);
-        } catch (IllegalArgumentException e) {
-            throw new UserException(UserErrorCode.INVALID_SSH_KEY_FORMAT);
         }
     }
 
