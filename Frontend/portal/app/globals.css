@@ -156,17 +156,27 @@ body {
       매 프레임 새로 계산되어 아이콘이 자연스럽게 옆으로 비켜서는 효과가 별도 처리 없이 생김
    3) 완성된 워드마크 전체가 좌상단 제자리로 이동 + 원래 크기로 축소 */
 @keyframes brand-intro-icon {
-  0%,
+  0% {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(3.2);
+  }
   58% {
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%) scale(3.2);
+    /* 완성된 워드마크의 이동 구간은 천천히 출발하고 도착 직전에 부드럽게 감속한다. */
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
   100% {
     left: 40px;
     top: 40px;
     transform: translate(0, 0) scale(1);
   }
+}
+
+.brand-intro-icon {
+  will-change: left, top, transform;
 }
 
 @keyframes brand-intro-text {

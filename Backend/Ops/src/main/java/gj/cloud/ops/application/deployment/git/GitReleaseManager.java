@@ -200,6 +200,18 @@ public class GitReleaseManager {
         sshCommandExecutor.exec(session, "git -C '" + bareDir + "' worktree remove --force '" + targetDir + "'", GIT_TIMEOUT_MS);
     }
 
+    // 배포 대상 완전 삭제용 — bare mirror(repository.git)·모든 릴리스 워크트리·current 심볼릭 링크를
+    // 통째로 제거한다. appId는 항상 우리가 발급한 UUID(vmId 또는 targetId)이므로 셸에 안전하게 꽂을 수 있음.
+    public void removeAppDirectory(Session session, String appId) {
+        sshCommandExecutor.execOrThrow(session, "rm -rf '" + appBaseDir(appId) + "'", GIT_TIMEOUT_MS);
+    }
+
+    // linkInstallPath가 만든 심볼릭 링크만 제거(대상 콘텐츠는 건드리지 않음 — rm -f는 링크 자체만 지움).
+    public void unlinkInstallPath(Session session, String installPath) {
+        String validated = validateInstallPath(installPath);
+        sshCommandExecutor.exec(session, "rm -f '" + validated + "'", 10_000);
+    }
+
     // current 심볼릭 링크를 이번 배포로 갱신 (D.7 9단계 / 롤백 시 이전 배포로 되돌릴 때도 사용)
     public void updateCurrentSymlink(Session session, String appId, String deploymentId) {
         String current = appBaseDir(appId) + "/current";

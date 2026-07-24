@@ -179,6 +179,7 @@ export default function DeploymentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingTargetId, setTogglingTargetId] = useState<string | null>(null);
+  const [deletingTargetId, setDeletingTargetId] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("compose");
@@ -682,6 +683,25 @@ export default function DeploymentsPage() {
     }
   }
 
+  async function handleDeleteTarget(target: DeploymentTargetResponse) {
+    if (!accessToken) return;
+    if (!confirm(
+      `"${target.name}"을(를) 완전히 삭제하시겠습니까?\n컨테이너 중지 + 이 대상이 만든 모든 이미지와 저장소, 노출된 라우트가 전부 삭제됩니다. 배포 이력 조회는 계속 가능하지만 되돌릴 수 없습니다.`
+    )) {
+      return;
+    }
+    setDeletingTargetId(target.id);
+    setError(null);
+    try {
+      await api.ops.deployments.deleteTarget(accessToken, vmId, target.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "배포 대상 삭제에 실패했습니다.");
+    } finally {
+      setDeletingTargetId(null);
+    }
+  }
+
   async function handleCreateFromCompose() {
     if (!accessToken || !repoUrl || !branch || !composeContent) return;
     const hasUncheckedCustomSubdomain = routes.some(
@@ -905,22 +925,39 @@ export default function DeploymentsPage() {
                             {target.repositoryFullName ?? target.repositoryUrl} · {target.branch}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleAutoDeployToggle(target)}
-                          disabled={togglingTargetId === target.id || !target.repositoryFullName}
-                          className={cn(
-                            "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-                            target.autoDeployEnabled
-                              ? "border-brand/35 bg-brand/10 text-brand-strong"
-                              : "border-line-strong text-muted"
-                          )}
-                          title={!target.repositoryFullName ? "GitHub App으로 연결된 대상만 자동 배포를 사용할 수 있습니다." : undefined}
-                        >
-                          {togglingTargetId === target.id
-                            ? "변경 중..."
-                            : target.autoDeployEnabled ? "자동 배포 ON" : "자동 배포 OFF"}
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleAutoDeployToggle(target)}
+                            disabled={togglingTargetId === target.id || !target.repositoryFullName}
+                            className={cn(
+                              "rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                              target.autoDeployEnabled
+                                ? "border-brand/35 bg-brand/10 text-brand-strong"
+                                : "border-line-strong text-muted"
+                            )}
+                            title={!target.repositoryFullName ? "GitHub App으로 연결된 대상만 자동 배포를 사용할 수 있습니다." : undefined}
+                          >
+                            {togglingTargetId === target.id
+                              ? "변경 중..."
+                              : target.autoDeployEnabled ? "자동 배포 ON" : "자동 배포 OFF"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTarget(target)}
+                            disabled={deletingTargetId === target.id}
+                            title="배포 대상 완전 삭제 (컨테이너·이미지·저장소·라우트 전체 정리)"
+                            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            {deletingTargetId === target.id ? (
+                              <span className="text-[10px] font-bold">...</span>
+                            ) : (
+                              <svg aria-hidden className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
                         <div>

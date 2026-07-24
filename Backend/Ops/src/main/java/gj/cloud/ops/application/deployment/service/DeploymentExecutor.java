@@ -388,6 +388,88 @@ public class DeploymentExecutor {
         }
     }
 
+    // 배포 대상 완전 삭제 — "내리기"(teardown)는 그 시점의 컨테이너/이미지 1건만 정리하고 target
+    // 레코드·git 저장소·과거 이미지 이력은 그대로 남긴다. 여기서는 컨테이너를 내린 뒤(이미 내려가 있어도
+    // 안전) 이 target이 만든 모든 이미지(과거 배포분 포함)·git bare 저장소/릴리스 디렉토리·노출 라우트를
+    // 전부 지우고 마지막에 target 레코드를 비활성화한다. 배포 이력(DeploymentEntity) 자체는 감사 목적으로
+    // 남겨둔다 — VM 사용자에게 보이는 "관리 중인 앱"과 "이력 로그"를 분리하는 기존 방침과 동일.
+    private static final String TARGET_DELETE_LOCK_VALUE = "TARGET_DELETE";
+
+    public void deleteTarget(String bearerToken, String vmId, DeploymentTargetEntity target) {
+        VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
+        if (!context.hasPermission(PERMISSION_DEPLOY)) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+        if (context.internalIp() == null || !"RUNNING".equals(context.status())) {
+            throw new OpsException(OpsErrorCode.VM_NOT_RUNNING);
+        }
+
+        String appId = target.getId();
+        if (!tryLockWithStaleRecovery(appId, TARGET_DELETE_LOCK_VALUE)) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
+        }
+        try {
+            Session session = null;
+            try {
+                session = sshSessionFactory.createSession(vmId, context.internalIp());
+                sshCommandExecutor.exec(session, "docker compose -p gj_" + appId + " down", DOCKER_COMPOSE_TIMEOUT_MS);
+                cleanupAllTargetImages(session, appId);
+                gitReleaseManager.removeAppDirectory(session, appId);
+                if (target.getInstallPath() != null && !target.getInstallPath().isBlank()) {
+                    gitReleaseManager.unlinkInstallPath(session, target.getInstallPath());
+                }
+            } catch (Exception e) {
+                log.error("배포 대상 삭제 중 VM 정리 실패: targetId={}, error={}", appId, e.getMessage(), e);
+                throw new OpsException(OpsErrorCode.DEPLOYMENT_TARGET_DELETE_FAILED);
+            } finally {
+                if (session != null && session.isConnected()) {
+                    session.disconnect();
+                }
+            }
+
+            try {
+                routesClient.syncRoutes(bearerToken, vmId,
+                        new DeploymentRoutesRequest(appId, TARGET_DELETE_LOCK_VALUE, List.of()));
+            } catch (Exception e) {
+                log.warn("배포 대상 삭제 중 라우트 정리 실패(무시하고 계속): targetId={}, error={}", appId, e.getMessage());
+            }
+
+            deploymentTargetService.deactivate(appId);
+        } finally {
+            lockService.unlock(appId, TARGET_DELETE_LOCK_VALUE);
+        }
+    }
+
+    // 이 target이 배포마다 새로 태그해온 모든 이미지(gamjabox/{targetId}/*)를 한 번에 정리한다.
+    // cleanupDeploymentImages(teardown용)와 달리 특정 deploymentId 하나가 아니라 target 전체 이력을 대상으로 함.
+    private void cleanupAllTargetImages(Session session, String appId) {
+        String prefix = "gamjabox/" + appId + "/";
+        CommandResult list = sshCommandExecutor.exec(session,
+                "docker images --filter 'reference=" + prefix + "*' --format '{{.Repository}}:{{.Tag}}'", 30_000);
+        if (!list.isSuccess()) {
+            log.warn("배포 대상 이미지 목록 조회 실패: targetId={}, stderr={}", appId, trim(list.stderr()));
+            return;
+        }
+        List<String> imageTags = list.stdout().lines()
+                .map(String::trim)
+                .filter(tag -> !tag.isBlank())
+                .filter(tag -> SAFE_DEPLOYMENT_IMAGE_TAG.matcher(tag).matches())
+                .filter(tag -> tag.startsWith(prefix))
+                .distinct()
+                .sorted()
+                .toList();
+        if (imageTags.isEmpty()) {
+            return;
+        }
+        String command = "docker image rm " + String.join(" ", imageTags.stream()
+                .map(tag -> "'" + tag + "'")
+                .toList());
+        CommandResult result = sshCommandExecutor.exec(session, command, IMAGE_CLEANUP_TIMEOUT_MS);
+        if (!result.isSuccess()) {
+            log.warn("배포 대상 이미지 정리 실패: targetId={}, stderr={}", appId, trim(result.stderr()));
+        }
+    }
+
     private void runTeardown(
             String deploymentId,
             String vmId,

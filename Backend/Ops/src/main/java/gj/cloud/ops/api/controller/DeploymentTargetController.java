@@ -18,6 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -89,6 +90,18 @@ public class DeploymentTargetController {
                 repoConfig,
                 targetService.restoreArtifact(target));
         return ApiResponse.ok(DeploymentResponse.from(deployment));
+    }
+
+    // 완전 삭제 — 컨테이너 중지 + 이 target이 만든 모든 이미지/git 저장소/노출 라우트 정리 후
+    // target 레코드를 비활성화한다. 배포 이력(DeploymentEntity)은 감사 목적으로 남는다.
+    @DeleteMapping("/{targetId}")
+    public ApiResponse<Void> delete(
+            HttpServletRequest request, @PathVariable UUID vmId, @PathVariable String targetId
+    ) {
+        String bearerToken = requireDeployPermission(request, vmId);
+        DeploymentTargetEntity target = targetService.findOwned(vmId.toString(), targetId);
+        deploymentExecutor.deleteTarget(bearerToken, vmId.toString(), target);
+        return ApiResponse.ok();
     }
 
     private String requireDeployPermission(HttpServletRequest request, UUID vmId) {
