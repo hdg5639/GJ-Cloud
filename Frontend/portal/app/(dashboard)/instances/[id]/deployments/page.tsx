@@ -1131,32 +1131,37 @@ export default function DeploymentsPage() {
 
                   {repositorySource === "github" ? (
                     <div className="mb-4 space-y-3 rounded-[10px] border border-brand/25 bg-brand/[0.04] p-4">
-                      <div className="flex items-end gap-2">
-                        <Field label="GitHub 저장소" htmlFor="deploy-github-repository" className="mb-0 min-w-0 flex-1">
-                          <Select
-                            id="deploy-github-repository"
-                            value={selectedGithubRepositoryKey}
-                            onChange={(e) => handleGithubRepositoryChange(e.target.value)}
-                            disabled={githubLoading}
-                          >
-                            <option value="">
-                              {githubLoading ? "저장소 불러오는 중..." : "연결된 저장소 선택"}
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-2 gap-y-[7px]">
+                        <label
+                          htmlFor="deploy-github-repository"
+                          className="col-start-1 row-start-1 text-xs font-bold text-muted"
+                        >
+                          GitHub 저장소
+                        </label>
+                        <Select
+                          id="deploy-github-repository"
+                          value={selectedGithubRepositoryKey}
+                          onChange={(e) => handleGithubRepositoryChange(e.target.value)}
+                          disabled={githubLoading}
+                          className="col-start-1 row-start-2 h-[42px]"
+                        >
+                          <option value="">
+                            {githubLoading ? "저장소 불러오는 중..." : "연결된 저장소 선택"}
+                          </option>
+                          {githubRepositories.map((repository) => (
+                            <option
+                              key={`${repository.installationId}:${repository.id}`}
+                              value={`${repository.installationId}:${repository.id}`}
+                            >
+                              {repository.fullName}{repository.privateRepository ? " · Private" : ""}
                             </option>
-                            {githubRepositories.map((repository) => (
-                              <option
-                                key={`${repository.installationId}:${repository.id}`}
-                                value={`${repository.installationId}:${repository.id}`}
-                              >
-                                {repository.fullName}{repository.privateRepository ? " · Private" : ""}
-                              </option>
-                            ))}
-                          </Select>
-                        </Field>
+                          ))}
+                        </Select>
                         <Button
                           type="button"
                           onClick={handleConnectGithub}
                           disabled={githubConnecting}
-                          className="min-h-[42px] shrink-0"
+                          className="col-start-2 row-start-2 h-[42px]"
                         >
                           {githubConnecting ? "GitHub 이동 중..." : githubRepositories.length > 0 ? "저장소 권한 추가" : "GitHub 연결"}
                         </Button>
