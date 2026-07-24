@@ -24,6 +24,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 import java.net.URLEncoder;
@@ -33,7 +35,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -61,25 +62,26 @@ public class GithubAppService {
             @Value("${ops.github.client-id:}") String clientId,
             @Value("${ops.github.client-secret:}") String clientSecret,
             @Value("${ops.github.private-key:}") String privateKeyPem,
+            RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
             StringRedisTemplate redisTemplate,
             GithubInstallationRepository installationRepository
     ) {
-        this.appId = appId;
-        this.appSlug = appSlug;
-        this.clientId = clientId;
-        this.clientSecret = clientSecret;
+        this.appId = normalizeConfigValue(appId);
+        this.appSlug = normalizeConfigValue(appSlug);
+        this.clientId = normalizeConfigValue(clientId);
+        this.clientSecret = normalizeConfigValue(clientSecret);
         this.privateKeyPem = normalizePem(privateKeyPem);
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
         this.installationRepository = installationRepository;
-        this.githubApi = RestClient.builder()
+        this.githubApi = restClientBuilder.clone()
                 .baseUrl("https://api.github.com")
                 .defaultHeader(HttpHeaders.ACCEPT, "application/vnd.github+json")
                 .defaultHeader(HttpHeaders.USER_AGENT, "GamjaBox-Ops")
                 .defaultHeader("X-GitHub-Api-Version", GITHUB_API_VERSION)
                 .build();
-        this.githubOAuth = RestClient.builder()
+        this.githubOAuth = restClientBuilder.clone()
                 .baseUrl("https://github.com")
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.USER_AGENT, "GamjaBox-Ops")
@@ -205,16 +207,18 @@ public class GithubAppService {
 
     private String exchangeUserCode(String code) {
         try {
-            JsonNode response = githubOAuth.post()
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("client_id", clientId);
+            form.add("client_secret", clientSecret);
+            form.add("code", code);
+
+            String responseBody = githubOAuth.post()
                     .uri("/login/oauth/access_token")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "client_id", clientId,
-                            "client_secret", clientSecret,
-                            "code", code))
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
                     .retrieve()
-                    .body(JsonNode.class);
-            String token = response != null ? response.path("access_token").asText() : "";
+                    .body(String.class);
+            String token = parseJsonBody(responseBody).path("access_token").asText();
             if (token.isBlank()) {
                 throw new OpsException(OpsErrorCode.GITHUB_API_FAILED);
             }
@@ -263,14 +267,14 @@ public class GithubAppService {
 
     private String createInstallationToken(Long installationId) {
         try {
-            JsonNode response = githubApi.post()
+            String responseBody = githubApi.post()
                     .uri("/app/installations/{installationId}/access_tokens", installationId)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + createAppJwt())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body("{}")
                     .retrieve()
-                    .body(JsonNode.class);
-            String token = response != null ? response.path("token").asText() : "";
+                    .body(String.class);
+            String token = parseJsonBody(responseBody).path("token").asText();
             if (token.isBlank()) {
                 throw new OpsException(OpsErrorCode.GITHUB_API_FAILED);
             }
@@ -286,12 +290,12 @@ public class GithubAppService {
 
     private JsonNode getWithInstallationToken(String path, String token) {
         try {
-            JsonNode body = githubApi.get()
+            String responseBody = githubApi.get()
                     .uri(path)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .retrieve()
-                    .body(JsonNode.class);
-            return body != null ? body : objectMapper.createObjectNode();
+                    .body(String.class);
+            return parseJsonBody(responseBody);
         } catch (Exception e) {
             log.error("GitHub installation API 요청 실패: path={}, error={}", path, e.getMessage());
             throw new OpsException(OpsErrorCode.GITHUB_API_FAILED);
@@ -300,12 +304,12 @@ public class GithubAppService {
 
     private JsonNode getWithUserToken(String path, String token) {
         try {
-            JsonNode body = githubApi.get()
+            String responseBody = githubApi.get()
                     .uri(path)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .retrieve()
-                    .body(JsonNode.class);
-            return body != null ? body : objectMapper.createObjectNode();
+                    .body(String.class);
+            return parseJsonBody(responseBody);
         } catch (Exception e) {
             log.error("GitHub 사용자 설치 조회 실패: path={}, error={}", path, e.getMessage());
             throw new OpsException(OpsErrorCode.GITHUB_API_FAILED);
@@ -339,5 +343,21 @@ public class GithubAppService {
 
     private static String normalizePem(String value) {
         return value == null ? "" : value.replace("\\n", "\n").trim();
+    }
+
+    private JsonNode parseJsonBody(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return objectMapper.createObjectNode();
+        }
+        try {
+            return objectMapper.readTree(responseBody);
+        } catch (Exception e) {
+            log.error("GitHub API 응답 JSON 파싱 실패: {}", e.getMessage());
+            throw new OpsException(OpsErrorCode.GITHUB_API_FAILED);
+        }
+    }
+
+    private static String normalizeConfigValue(String value) {
+        return value == null ? "" : value.trim();
     }
 }
