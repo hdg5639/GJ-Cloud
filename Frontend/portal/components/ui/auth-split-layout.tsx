@@ -140,21 +140,14 @@ function AnimatedVisualWordmark({ phase }: { phase: BrandIntroPhase }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/gamjabox-symbol.svg" alt="GamjaBox" className="brand-intro-symbol shrink-0" />
       <span
-        aria-label="GamjaBox"
-        className="brand-intro-text whitespace-nowrap font-extrabold tracking-tighter"
+        className="brand-intro-text inline-block overflow-hidden whitespace-nowrap font-extrabold tracking-tighter"
         style={{
           animation: `brand-intro-text ${BRAND_INTRO_DURATION} cubic-bezier(.4,0,.2,1) forwards`,
           fontFamily: "var(--font-manrope)",
         }}
       >
-        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">G</span>
-        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">a</span>
-        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">m</span>
-        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">j</span>
-        <span aria-hidden className="brand-intro-letter text-[#f4f7f1]">a</span>
-        <span aria-hidden className="brand-intro-letter text-[#08B85B]">B</span>
-        <span aria-hidden className="brand-intro-letter text-[#08B85B]">o</span>
-        <span aria-hidden className="brand-intro-letter text-[#08B85B]">x</span>
+        <span className="text-[#f4f7f1]">Gamja</span>
+        <span className="text-[#08B85B]">Box</span>
       </span>
     </div>
   );
