@@ -4,6 +4,7 @@ import gj.cloud.ops.application.deployment.ai.GenerationStatus;
 import gj.cloud.ops.application.deployment.ai.UnresolvedField;
 import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.Capability;
+import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 
 import java.util.List;
@@ -23,6 +24,9 @@ public record PreviewAnalysisResult(
         List<String> evidenceRefs,
         // 인증된 요청에 토큰을 실제로 어떻게 실어 보낼지(§9) — LOGIN 응답으로 받은 값을 나머지 모든
         // 보호된 요청에 동일하게 적용해야 하므로 Capability 하나가 아니라 문서 전체에 하나만 존재한다.
-        AuthStrategy authStrategy
+        AuthStrategy authStrategy,
+        // Direction Recovery Change Request §17 — 이 pages가 어떻게 만들어졌는지 항상 명시적으로
+        // 리포트한다. FALLBACK_CRUD를 SERVICE_AWARE인 것처럼 보여주면 안 된다.
+        GenerationMode generationMode
 ) {
 }

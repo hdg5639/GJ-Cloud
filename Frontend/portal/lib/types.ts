@@ -504,6 +504,10 @@ export interface PreviewPageDraft {
   capabilityIds: string[];
 }
 
+// Direction Recovery Change Request §17 — 이 pages가 어떻게 만들어졌는지 항상 명시적으로 리포트한다.
+// FALLBACK_CRUD를 SERVICE_AWARE인 것처럼 보여주면 안 된다.
+export type PreviewGenerationMode = "SERVICE_AWARE" | "RULE_BASED" | "FALLBACK_CRUD";
+
 export interface PreviewAnalysisResult {
   status: GenerationStatus;
   apiServerUrls: string[];
@@ -513,6 +517,7 @@ export interface PreviewAnalysisResult {
   warnings: string[];
   evidenceRefs: string[];
   authStrategy: PreviewAuthStrategy;
+  generationMode: PreviewGenerationMode;
 }
 
 export interface PageReviewFinding {

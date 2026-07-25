@@ -36,6 +36,13 @@ const STATUS_LABEL: Record<string, string> = {
   UNSUPPORTED: "이 문서로는 생성할 수 없습니다",
 };
 
+// Direction Recovery Change Request §17 — FALLBACK_CRUD를 목적 반영 계획인 것처럼 보여주면 안 된다.
+const GENERATION_MODE_LABEL: Record<string, string> = {
+  SERVICE_AWARE: "AI가 서비스 설명을 반영해 페이지를 구성했습니다",
+  RULE_BASED: "생성 목적에 맞춰 페이지 구성 규칙을 적용했습니다",
+  FALLBACK_CRUD: "생성 목적을 반영하지 못해 기본 API 테스트 구성으로 대체되었습니다",
+};
+
 // GamjaBox_2.0_Key_Features.md 10절 — 신뢰도를 숫자 대신 상태(✓/△/✕)로 보여준다.
 const CONFIDENCE_MARK: Record<string, { symbol: string; className: string }> = {
   HIGH: { symbol: "✓", className: "text-brand-strong" },
@@ -305,6 +312,9 @@ export default function PreviewWizardPage() {
               }`}
             >
               <p className="font-bold">{STATUS_LABEL[result.status] ?? result.status}</p>
+              <p className="mt-1 text-muted">
+                {GENERATION_MODE_LABEL[result.generationMode] ?? result.generationMode}
+              </p>
               {result.unresolved.length > 0 && (
                 <div className="mt-2 space-y-2">
                   {result.unresolved.map((field, i) => (

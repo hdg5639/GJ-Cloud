@@ -10,6 +10,7 @@ import gj.cloud.ops.application.preview.analysis.CapabilityExtractor;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
 import gj.cloud.ops.application.preview.analysis.CompatibilityFinding;
 import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
+import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.OpenApiEvidence;
 import gj.cloud.ops.application.preview.analysis.OpenApiNormalizer;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
@@ -18,6 +19,7 @@ import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.SecuritySchemeEvidence;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
+import gj.cloud.ops.application.preview.planning.RuleBasedPagePlanGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -34,13 +36,26 @@ public class PreviewAnalysisService {
     private final OpenApiNormalizer openApiNormalizer;
     private final CapabilityExtractor capabilityExtractor;
     private final PageDraftGenerator pageDraftGenerator;
+    private final RuleBasedPagePlanGenerator ruleBasedPagePlanGenerator;
     private final AuthStrategyDetector authStrategyDetector;
     private final PreviewBlockResolver blockResolver;
 
     public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request) {
         OpenApiEvidence evidence = openApiNormalizer.normalize(request.apiDocsUrl());
         List<Capability> capabilities = capabilityExtractor.extract(evidence);
-        List<PageDraft> pages = pageDraftGenerator.generate(capabilities);
+
+        // Direction Recovery Change Request §4.1 — purpose가 실제로 페이지 구성에 반영되는지가 이
+        // 서비스의 핵심 정체성이다(project_auto_preview_product_definition). purpose가 없으면(다른
+        // API 클라이언트가 생략한 경우) 기존 PageDraftGenerator로 대체하고 FALLBACK_CRUD로 리포트한다.
+        List<PageDraft> pages;
+        GenerationMode generationMode;
+        if (request.purpose() != null) {
+            pages = ruleBasedPagePlanGenerator.generate(capabilities, request.purpose());
+            generationMode = GenerationMode.RULE_BASED;
+        } else {
+            pages = pageDraftGenerator.generate(capabilities);
+            generationMode = GenerationMode.FALLBACK_CRUD;
+        }
 
         List<UnresolvedField> unresolved = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
@@ -92,6 +107,7 @@ public class PreviewAnalysisService {
         AuthStrategy authStrategy = authStrategyDetector.detect(evidence.securitySchemes());
 
         return new PreviewAnalysisResult(
-                status, evidence.serverUrls(), capabilities, pages, unresolved, warnings, evidenceRefs, authStrategy);
+                status, evidence.serverUrls(), capabilities, pages, unresolved, warnings, evidenceRefs, authStrategy,
+                generationMode);
     }
 }
