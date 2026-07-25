@@ -292,16 +292,27 @@ public class PreviewComposeArtifactBuilder {
               return lower.includes("password") || lower === "pw" || lower === "pwd";
             }
 
-            function extractArray(result: unknown): Record<string, unknown>[] {
+            const ARRAY_ENVELOPE_KEYS = [
+              "content", "items", "data", "list", "results", "records", "rows", "elements", "result", "payload",
+            ];
+            const MAX_ENVELOPE_UNWRAP_DEPTH = 4;
+
+            function extractArray(result: unknown, depth = 0): Record<string, unknown>[] {
               if (Array.isArray(result)) {
                 return result as Record<string, unknown>[];
               }
-              if (result && typeof result === "object") {
-                const obj = result as Record<string, unknown>;
-                for (const key of ["content", "items", "data", "list", "results"]) {
-                  if (Array.isArray(obj[key])) {
-                    return obj[key] as Record<string, unknown>[];
-                  }
+              if (depth >= MAX_ENVELOPE_UNWRAP_DEPTH || !result || typeof result !== "object") {
+                return [];
+              }
+              const obj = result as Record<string, unknown>;
+              const orderedKeys = [
+                ...ARRAY_ENVELOPE_KEYS.filter((key) => key in obj),
+                ...Object.keys(obj).filter((key) => !ARRAY_ENVELOPE_KEYS.includes(key)),
+              ];
+              for (const key of orderedKeys) {
+                const nested = extractArray(obj[key], depth + 1);
+                if (nested.length > 0) {
+                  return nested;
                 }
               }
               return [];

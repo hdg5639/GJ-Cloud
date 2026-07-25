@@ -124,6 +124,83 @@ class OpenApiNormalizerTest {
         assertThat(getVm.parameters()).extracting(ApiParameterEvidence::name).contains("id");
     }
 
+    // 실사용 API는 응답을 순수 배열로 주지 않고 공통 포맷(ApiResponse<T>)으로 한 번, Spring Data
+    // Page류 봉투로 또 한 번 감싸는 경우가 흔하다(예: {success,data:{content:[...],totalElements},
+    // message}). 알려지지 않은 이름의 봉투 키(users)나 allOf로 합성된 Page 스키마도 함께 검증한다.
+    private static final String WRAPPED_RESPONSE_DOC = """
+            {
+              "openapi": "3.0.1",
+              "info": { "title": "wrapped", "version": "1.0" },
+              "components": {
+                "schemas": {
+                  "PageMeta": {
+                    "type": "object",
+                    "properties": { "totalElements": { "type": "integer" } }
+                  },
+                  "WidgetPage": {
+                    "allOf": [
+                      { "$ref": "#/components/schemas/PageMeta" },
+                      { "type": "object", "properties": { "content": { "type": "array", "items": {} } } }
+                    ]
+                  },
+                  "WidgetApiResponse": {
+                    "type": "object",
+                    "properties": {
+                      "success": { "type": "boolean" },
+                      "data": { "$ref": "#/components/schemas/WidgetPage" },
+                      "message": { "type": "string" }
+                    }
+                  }
+                }
+              },
+              "paths": {
+                "/widgets": {
+                  "get": {
+                    "operationId": "listWidgets",
+                    "responses": {
+                      "200": {
+                        "content": {
+                          "application/json": { "schema": { "$ref": "#/components/schemas/WidgetApiResponse" } }
+                        }
+                      }
+                    }
+                  }
+                },
+                "/gadgets": {
+                  "get": {
+                    "operationId": "listGadgets",
+                    "responses": {
+                      "200": {
+                        "content": {
+                          "application/json": {
+                            "schema": {
+                              "type": "object",
+                              "properties": {
+                                "ok": { "type": "boolean" },
+                                "gadgets": { "type": "array", "items": {} }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """;
+
+    @Test
+    void detectsArrayResponsesWrappedInNestedOrCustomNamedEnvelopes() {
+        JsonNode root = normalizer.parse(WRAPPED_RESPONSE_DOC.getBytes(StandardCharsets.UTF_8));
+        OpenApiEvidence evidence = normalizer.extract(root);
+
+        // {success, data: {content: [...] (allOf로 합성)}, message} — 이중 봉투 + allOf
+        assertThat(findOperation(evidence, "GET", "/widgets").responseIsArray()).isTrue();
+        // {ok, gadgets: [...]} — 알려진 봉투 키 목록에 없는 임의 이름
+        assertThat(findOperation(evidence, "GET", "/gadgets").responseIsArray()).isTrue();
+    }
+
     @Test
     void rejectsNonOpenApi3Documents() {
         String swagger2Doc = "{ \"swagger\": \"2.0\", \"info\": { \"title\": \"legacy\" }, \"paths\": {} }";

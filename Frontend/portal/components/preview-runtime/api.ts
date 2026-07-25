@@ -57,17 +57,30 @@ export function isPasswordLikeField(fieldName: string): boolean {
   return lower.includes("password") || lower === "pw" || lower === "pwd";
 }
 
-// 목록 응답에서 실제 배열을 찾는다 — 순수 배열이거나, Spring Data Page류 봉투(content/items/data/list/results).
-export function extractArray(result: unknown): Record<string, unknown>[] {
+const ARRAY_ENVELOPE_KEYS = [
+  "content", "items", "data", "list", "results", "records", "rows", "elements", "result", "payload",
+];
+const MAX_ENVELOPE_UNWRAP_DEPTH = 4;
+
+// 목록 응답에서 실제 배열을 찾는다. API마다 봉투 설계가 다르므로(순수 배열 / {data:[...]} /
+// {success,data:{content:[...],totalElements}}처럼 겹겹이 감싸는 경우까지) 이름을 고정하지 않고
+// 알려진 키를 먼저 확인한 뒤 나머지 속성까지 재귀적으로 훑는다.
+export function extractArray(result: unknown, depth = 0): Record<string, unknown>[] {
   if (Array.isArray(result)) {
     return result as Record<string, unknown>[];
   }
-  if (result && typeof result === "object") {
-    const obj = result as Record<string, unknown>;
-    for (const key of ["content", "items", "data", "list", "results"]) {
-      if (Array.isArray(obj[key])) {
-        return obj[key] as Record<string, unknown>[];
-      }
+  if (depth >= MAX_ENVELOPE_UNWRAP_DEPTH || !result || typeof result !== "object") {
+    return [];
+  }
+  const obj = result as Record<string, unknown>;
+  const orderedKeys = [
+    ...ARRAY_ENVELOPE_KEYS.filter((key) => key in obj),
+    ...Object.keys(obj).filter((key) => !ARRAY_ENVELOPE_KEYS.includes(key)),
+  ];
+  for (const key of orderedKeys) {
+    const nested = extractArray(obj[key], depth + 1);
+    if (nested.length > 0) {
+      return nested;
     }
   }
   return [];

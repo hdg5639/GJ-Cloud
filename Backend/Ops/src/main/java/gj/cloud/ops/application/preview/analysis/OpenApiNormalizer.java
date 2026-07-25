@@ -3,6 +3,7 @@ package gj.cloud.ops.application.preview.analysis;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +38,10 @@ import java.util.Set;
 public class OpenApiNormalizer {
 
     private static final Set<String> SUPPORTED_METHODS = Set.of("get", "post", "put", "patch", "delete");
-    private static final Set<String> ARRAY_ENVELOPE_KEYS = Set.of("content", "items", "data", "list", "results");
+    private static final Set<String> ARRAY_ENVELOPE_KEYS =
+            Set.of("content", "items", "data", "list", "results", "records", "rows", "elements", "result", "payload");
+    // 순환 $ref로 인한 무한 재귀를 막기 위한 목록 봉투 해제 최대 깊이.
+    private static final int MAX_ENVELOPE_UNWRAP_DEPTH = 4;
 
     private final ObjectMapper objectMapper;
 
@@ -284,26 +288,67 @@ public class OpenApiNormalizer {
     }
 
     private boolean looksLikeArraySchema(JsonNode schema, JsonNode schemas) {
-        if (schema.isMissingNode()) {
+        return looksLikeArraySchema(schema, schemas, 0);
+    }
+
+    // API마다 목록 응답 봉투 설계가 제각각임(순수 배열 / {data:[...]} / {success,data:{content:[...],
+    // totalElements}}처럼 겹겹이 감싸는 Spring Data Page + 공통 응답 포맷 조합 등). 이름이 알려진 키를
+    // 먼저 확인해 오탐 가능성을 줄이되, 모르는 이름이어도 배열을 담은 속성이 있으면 목록으로 취급하도록
+    // 구조 기반으로 재귀 탐색한다.
+    private boolean looksLikeArraySchema(JsonNode schema, JsonNode schemas, int depth) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH) {
             return false;
         }
-        if ("array".equals(schema.path("type").asText(null))) {
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode()) {
+            return false;
+        }
+        if ("array".equals(resolved.path("type").asText(null))) {
             return true;
         }
-        // Spring Data Page 등 목록을 감싸는 응답 봉투 — properties 중 하나가 배열이면 목록으로 취급
-        JsonNode properties = schema.path("properties");
+
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return false;
+        }
+
+        for (String key : ARRAY_ENVELOPE_KEYS) {
+            if (properties.has(key) && looksLikeArraySchema(properties.path(key), schemas, depth + 1)) {
+                return true;
+            }
+        }
         var names = properties.fieldNames();
         while (names.hasNext()) {
             String name = names.next();
-            if (!ARRAY_ENVELOPE_KEYS.contains(name)) {
+            if (ARRAY_ENVELOPE_KEYS.contains(name)) {
                 continue;
             }
-            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
-            if ("array".equals(propertySchema.path("type").asText(null))) {
+            if (looksLikeArraySchema(properties.path(name), schemas, depth + 1)) {
                 return true;
             }
         }
         return false;
+    }
+
+    // properties 직접 선언 + allOf로 합성된 속성(재귀적으로)까지 모두 합친다.
+    private JsonNode mergedProperties(JsonNode schema, JsonNode schemas) {
+        ObjectNode merged = objectMapper.createObjectNode();
+        copyProperties(schema.path("properties"), merged);
+        for (JsonNode part : arrayOrEmpty(schema.path("allOf"))) {
+            copyProperties(mergedProperties(resolveSchema(part, schemas), schemas), merged);
+        }
+        return merged;
+    }
+
+    private void copyProperties(JsonNode source, ObjectNode target) {
+        if (!source.isObject()) {
+            return;
+        }
+        var fields = source.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            target.set(entry.getKey(), entry.getValue());
+        }
     }
 
     // #/components/schemas/{Name} 형태의 로컬 $ref만 한 단계 해석. 그 외(외부 URL 등)는 원본을 그대로 반환.
