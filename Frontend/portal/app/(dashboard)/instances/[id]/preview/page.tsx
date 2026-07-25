@@ -81,6 +81,8 @@ export default function PreviewWizardPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [reviewFindings, setReviewFindings] = useState<PageReviewFinding[] | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [planDecisions, setPlanDecisions] = useState<string[] | null>(null);
   const [previewPageId, setPreviewPageId] = useState<string | null>(null);
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
   const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
@@ -101,6 +103,7 @@ export default function PreviewWizardPage() {
     setAnalysisError(null);
     setResult(null);
     setReviewFindings(null);
+    setPlanDecisions(null);
     try {
       const data = await api.ops.preview.analyze(accessToken, {
         apiDocsUrl: apiDocsUrl.trim(),
@@ -139,6 +142,29 @@ export default function PreviewWizardPage() {
       setReviewFindings([]);
     } finally {
       setReviewing(false);
+    }
+  }
+
+  // Direction Recovery Change Request Increment 3 — handleReview와 달리 이 응답은 실제로 pages를
+  // 대체한다(코멘트만 반환하는 게 아님). 실패해도 서버가 항상 유효한 pages를 돌려주므로 여기서
+  // catch할 예외는 네트워크 오류 정도뿐 — 그 경우는 기존 result를 그대로 둔다.
+  async function handlePlan() {
+    if (!accessToken || !result) return;
+    setPlanning(true);
+    try {
+      const planned = await api.ops.preview.plan(accessToken, {
+        serviceDescription: serviceDescription.trim() || undefined,
+        purpose,
+        capabilities: result.capabilities,
+        pages: result.pages,
+      });
+      setResult((prev) => (prev ? { ...prev, pages: planned.pages, generationMode: planned.generationMode } : prev));
+      setPreviewPageId(planned.pages[0]?.id ?? null);
+      setPlanDecisions(planned.decisions);
+    } catch {
+      setPlanDecisions([]);
+    } finally {
+      setPlanning(false);
     }
   }
 
@@ -450,6 +476,26 @@ export default function PreviewWizardPage() {
                         {finding.remediation && <p className="mt-0.5 text-muted">→ {finding.remediation}</p>}
                       </div>
                     ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3">
+              <Button type="button" onClick={handlePlan} disabled={planning || !serviceDescription.trim()}>
+                {planning ? "AI로 재구성 중..." : "AI로 서비스에 맞게 페이지 재구성"}
+              </Button>
+              {!serviceDescription.trim() && (
+                <p className="mt-1 text-[11px] text-muted-soft">서비스 설명을 입력해야 사용할 수 있습니다.</p>
+              )}
+              {planDecisions && (
+                <div className="mt-3 space-y-1 rounded-md border border-line bg-white/[0.03] p-3 text-xs">
+                  {planDecisions.length === 0 ? (
+                    <p className="text-muted-soft">
+                      제안할 재구성이 없거나 검증에 실패해 기존 페이지 구성을 그대로 유지했습니다.
+                    </p>
+                  ) : (
+                    planDecisions.map((decision, i) => <p key={i}>· {decision}</p>)
                   )}
                 </div>
               )}

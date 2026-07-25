@@ -527,6 +527,15 @@ export interface PageReviewFinding {
   remediation: string;
 }
 
+// Direction Recovery Change Request Increment 3 — AiPageReviewer(코멘트만)와 달리 AiPagePlanner의
+// 제안은 검증을 통과하면 실제로 pages를 대체한다. 실패하면 요청에 보낸 pages가 그대로 돌아오고
+// generationMode는 RULE_BASED로 유지된다(SERVICE_AWARE를 사칭하지 않음).
+export interface PreviewPlanResponse {
+  pages: PreviewPageDraft[];
+  decisions: string[];
+  generationMode: PreviewGenerationMode;
+}
+
 export interface DeploymentEventPayload {
   sequence: number;
   eventType: "STAGE_CHANGE" | "BUILD_LOG" | "ERROR" | "DONE";

@@ -1,9 +1,14 @@
 package gj.cloud.ops.api.controller;
 
+import gj.cloud.ops.application.preview.ai.AiPagePlanner;
 import gj.cloud.ops.application.preview.ai.AiPageReviewer;
+import gj.cloud.ops.application.preview.ai.PagePlanResult;
 import gj.cloud.ops.application.preview.ai.PageReviewFinding;
+import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
+import gj.cloud.ops.application.preview.dto.PreviewPlanRequest;
+import gj.cloud.ops.application.preview.dto.PreviewPlanResponse;
 import gj.cloud.ops.application.preview.dto.PreviewReviewRequest;
 import gj.cloud.ops.application.preview.service.PreviewAnalysisService;
 import gj.cloud.ops.global.response.ApiResponse;
@@ -31,6 +36,7 @@ public class PreviewController {
 
     private final PreviewAnalysisService previewAnalysisService;
     private final AiPageReviewer aiPageReviewer;
+    private final AiPagePlanner aiPagePlanner;
 
     @Operation(summary = "OpenAPI 문서 분석", description = "OpenAPI 3.x 문서를 결정론적으로 분석해 capability와 페이지 초안을 반환합니다. 배포는 수행하지 않습니다.")
     @PostMapping("/analyze")
@@ -46,5 +52,18 @@ public class PreviewController {
     ) {
         return ApiResponse.ok(aiPageReviewer.review(
                 principal.userId(), request.serviceDescription(), request.capabilities(), request.pages()));
+    }
+
+    @Operation(summary = "AI 기반 페이지 재구성 제안", description = "capability/페이지 초안을 서비스 설명에 맞춰 AI가 재구성 제안하고, " +
+            "검증을 통과한 제안만 실제로 적용해 돌려줍니다. 검증에 실패하면 입력받은 페이지를 그대로 반환합니다(배포를 막지 않음).")
+    @PostMapping("/plan")
+    public ApiResponse<PreviewPlanResponse> plan(
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody PreviewPlanRequest request
+    ) {
+        PagePlanResult result = aiPagePlanner.plan(principal.userId(), request.serviceDescription(),
+                request.purpose(), request.capabilities(), request.pages());
+        GenerationMode generationMode = result.aiSucceeded() ? GenerationMode.SERVICE_AWARE : GenerationMode.RULE_BASED;
+        return ApiResponse.ok(new PreviewPlanResponse(result.pages(), result.decisions(), generationMode));
     }
 }

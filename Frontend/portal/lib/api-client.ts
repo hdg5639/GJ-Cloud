@@ -48,6 +48,7 @@ import type {
   PreviewAuthStrategy,
   PreviewCapability,
   PreviewPageDraft,
+  PreviewPlanResponse,
   PageReviewFinding,
 } from "./types";
 
@@ -777,6 +778,20 @@ export const api = {
         body: { serviceDescription?: string; capabilities: PreviewCapability[]; pages: PreviewPageDraft[] }
       ) =>
         request<PageReviewFinding[]>("ops", "/ops/preview/review", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      plan: (
+        accessToken: string,
+        body: {
+          serviceDescription?: string;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+        }
+      ) =>
+        request<PreviewPlanResponse>("ops", "/ops/preview/plan", {
           method: "POST",
           body: JSON.stringify(body),
           accessToken,
