@@ -42,6 +42,7 @@ const CONFIDENCE_MARK: Record<string, { symbol: string; className: string }> = {
 };
 
 const ACCESS_TOKEN_PATH_FIELD = "auth.login.accessTokenPath";
+const AUTH_LOGIN_FIELD = "auth.login";
 
 export default function PreviewWizardPage() {
   const params = useParams();
@@ -66,6 +67,10 @@ export default function PreviewWizardPage() {
   const [previewPageId, setPreviewPageId] = useState<string | null>(null);
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
   const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
+  const [manualLoginPath, setManualLoginPath] = useState("");
+  const [manualLoginUsernameField, setManualLoginUsernameField] = useState("email");
+  const [manualLoginPasswordField, setManualLoginPasswordField] = useState("password");
+  const [manualLoginAccessTokenPath, setManualLoginAccessTokenPath] = useState("");
 
   // 3단계 — 배포
   const [targetName, setTargetName] = useState("");
@@ -89,6 +94,10 @@ export default function PreviewWizardPage() {
       setPreviewPageId(data.pages[0]?.id ?? null);
       setPreviewAuthToken(null);
       setAccessTokenPathInput("");
+      setManualLoginPath("");
+      setManualLoginUsernameField("email");
+      setManualLoginPasswordField("password");
+      setManualLoginAccessTokenPath("");
       setStep(2);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "분석에 실패했습니다.");
@@ -151,6 +160,61 @@ export default function PreviewWizardPage() {
         status: unresolved.length === 0 && prev.status === "NEEDS_INPUT" ? "READY" : prev.status,
       };
     });
+  }
+
+  // 자동 탐지가 실패했을 때(AUTH_LOGIN_NOT_FOUND) 사용자가 로그인 API를 직접 등록한다. 서버가 모르는
+  // capability라 confidence는 항상 LOW로 표시하고, AUTH_PAGE 스켈레톤이 없으면 하나 만들어 붙인다.
+  // access token 위치까지 같이 입력하면 뒤이은 accessTokenPath 보완 단계를 또 거치지 않아도 된다.
+  function handleSetManualLogin() {
+    const path = manualLoginPath.trim();
+    if (!path) return;
+    const usernameField = manualLoginUsernameField.trim() || "email";
+    const passwordField = manualLoginPasswordField.trim() || "password";
+    const accessTokenPath = manualLoginAccessTokenPath.trim() || null;
+
+    setResult((prev) => {
+      if (!prev) return prev;
+      const loginCapability: PreviewCapability = {
+        id: "auth.login",
+        resourceName: "auth",
+        type: "LOGIN",
+        operationId: null,
+        path,
+        method: "POST",
+        hasSearch: false,
+        hasSort: false,
+        hasPagination: false,
+        confidence: "LOW",
+        evidence: ["사용자가 직접 지정함"],
+        fields: [usernameField, passwordField],
+        accessTokenPath,
+      };
+      const capabilities = [...prev.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
+      const hasAuthPage = prev.pages.some((p) => p.skeleton === "AUTH_PAGE");
+      const pages = hasAuthPage
+        ? prev.pages
+        : [{ id: "auth-login-manual", title: "로그인", skeleton: "AUTH_PAGE" as const, capabilityIds: ["auth.login"] }, ...prev.pages];
+
+      let unresolved = prev.unresolved.filter((f) => f.field !== AUTH_LOGIN_FIELD);
+      if (!accessTokenPath) {
+        unresolved = [
+          ...unresolved,
+          {
+            field: ACCESS_TOKEN_PATH_FIELD,
+            code: "ACCESS_TOKEN_PATH_UNKNOWN",
+            reason: "로그인 응답에서 access token 위치를 확인하지 못했습니다. 아래에서 직접 지정해주세요.",
+          },
+        ];
+      }
+      return {
+        ...prev,
+        capabilities,
+        pages,
+        unresolved,
+        status: unresolved.length === 0 && prev.status === "NEEDS_INPUT" ? "READY" : prev.status,
+      };
+    });
+    setPreviewPageId((prevId) => prevId ?? "auth-login-manual");
   }
 
   if (!accessToken) return <PageLoader />;
@@ -237,6 +301,50 @@ export default function PreviewWizardPage() {
                           />
                           <Button type="button" onClick={handleSetAccessTokenPath} disabled={!accessTokenPathInput.trim()}>
                             직접 설정
+                          </Button>
+                        </div>
+                      )}
+                      {field.field === AUTH_LOGIN_FIELD && (
+                        <div className="mt-1.5 grid grid-cols-2 gap-2 rounded-md border border-line-strong bg-white/[0.02] p-3">
+                          <Field label="로그인 API 경로" htmlFor="manual-login-path">
+                            <Input
+                              id="manual-login-path"
+                              value={manualLoginPath}
+                              onChange={(e) => setManualLoginPath(e.target.value)}
+                              placeholder="/auth/signin"
+                            />
+                          </Field>
+                          <Field label="Access Token 위치 (선택)" htmlFor="manual-login-token-path">
+                            <Input
+                              id="manual-login-token-path"
+                              value={manualLoginAccessTokenPath}
+                              onChange={(e) => setManualLoginAccessTokenPath(e.target.value)}
+                              placeholder="data.accessToken"
+                            />
+                          </Field>
+                          <Field label="아이디 필드명" htmlFor="manual-login-username">
+                            <Input
+                              id="manual-login-username"
+                              value={manualLoginUsernameField}
+                              onChange={(e) => setManualLoginUsernameField(e.target.value)}
+                              placeholder="email"
+                            />
+                          </Field>
+                          <Field label="비밀번호 필드명" htmlFor="manual-login-password">
+                            <Input
+                              id="manual-login-password"
+                              value={manualLoginPasswordField}
+                              onChange={(e) => setManualLoginPasswordField(e.target.value)}
+                              placeholder="password"
+                            />
+                          </Field>
+                          <Button
+                            type="button"
+                            className="col-span-2"
+                            onClick={handleSetManualLogin}
+                            disabled={!manualLoginPath.trim()}
+                          >
+                            로그인 API 직접 지정
                           </Button>
                         </div>
                       )}
