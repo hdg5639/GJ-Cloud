@@ -1,0 +1,102 @@
+package gj.cloud.ops.application.preview.build;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
+import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.preview.analysis.Capability;
+import gj.cloud.ops.application.preview.analysis.CapabilityType;
+import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
+import gj.cloud.ops.domain.deployment.enums.SourceType;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+// Phase D — 생성된 Vite 프로젝트 소스가 구조적으로 온전한지 검증(플레이스홀더 치환 누락, JSON 임베딩 손상,
+// 필수 파일 누락 등). 실제 npm/vite 빌드까지는 네트워크·시간이 필요해 이 유닛 테스트에서는 하지 않고
+// (수동으로 한 번 확인함), 여기서는 항상 빠르게 도는 구조 검증만 담당한다.
+class PreviewComposeArtifactBuilderTest {
+
+    private final PreviewComposeArtifactBuilder builder = new PreviewComposeArtifactBuilder(new ObjectMapper());
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void generatesAllExpectedFilesWithoutLeftoverPlaceholders() {
+        ComposeArtifact artifact = builder.build("https://api.example.com", sampleCapabilities(), samplePages());
+
+        assertThat(artifact.sourceType()).isEqualTo(SourceType.AUTO_PREVIEW);
+        assertThat(artifact.exposedRoutes()).hasSize(1);
+        assertThat(artifact.exposedRoutes().get(0).nickname()).matches("^preview-[a-z0-9]{8}$");
+        assertThat(artifact.healthChecks()).hasSize(1);
+
+        Map<String, String> files = artifact.uploadedFiles().stream()
+                .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
+
+        assertThat(files.keySet()).containsExactlyInAnyOrder(
+                "package.json", "tsconfig.json", "vite.config.ts", "index.html",
+                "Dockerfile", "src/main.tsx", "src/index.css", "src/App.tsx");
+
+        String appTsx = files.get("src/App.tsx");
+        assertThat(appTsx).doesNotContain("__API_BASE_URL_JSON__", "__CAPABILITIES_JSON__", "__PAGES_JSON__");
+        assertThat(appTsx).contains("https://api.example.com");
+        assertThat(appTsx).contains("\"auth.login\"");
+        assertThat(appTsx).contains("\"vms-page\"");
+
+        // package.json은 유효한 JSON이어야 한다(단순 문자열 결합 실수 감지용)
+        assertThatIsValidJson(files.get("package.json"));
+    }
+
+    private void assertThatIsValidJson(String json) {
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            assertThat(node.has("name")).isTrue();
+        } catch (IOException e) {
+            throw new AssertionError("package.json이 유효한 JSON이 아닙니다", e);
+        }
+    }
+
+    // 수동 npm/vite 빌드 검증용 — 필요할 때만 이 테스트를 개별 실행해 임시 디렉토리에 파일을 쓴다.
+    @Test
+    void writeGeneratedProjectToTempDirForManualBuildVerification() throws IOException {
+        ComposeArtifact artifact = builder.build("https://api.example.com", sampleCapabilities(), samplePages());
+        Path dir = Files.createTempDirectory("gamjabox-preview-verify-");
+        for (UploadedFile file : artifact.uploadedFiles()) {
+            Path target = dir.resolve(file.vmPath());
+            Files.createDirectories(target.getParent());
+            Files.write(target, file.content());
+        }
+        System.out.println("Generated preview project written to: " + dir);
+    }
+
+    private List<Capability> sampleCapabilities() {
+        return List.of(
+                new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",
+                        false, false, false, "HIGH", List.of(), List.of("email", "password")),
+                new Capability("vms.list", "vms", CapabilityType.LIST, "listVms", "/vms", "GET",
+                        true, false, false, "HIGH", List.of(), List.of()),
+                new Capability("vms.detail", "vms", CapabilityType.DETAIL, "getVm", "/vms/{id}", "GET",
+                        false, false, false, "HIGH", List.of(), List.of()),
+                new Capability("vms.create", "vms", CapabilityType.CREATE, "createVm", "/vms", "POST",
+                        false, false, false, "HIGH", List.of(), List.of("name", "planType")),
+                new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{id}", "DELETE",
+                        false, false, false, "HIGH", List.of(), List.of())
+        );
+    }
+
+    private List<PageDraft> samplePages() {
+        return List.of(
+                new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of("auth.login")),
+                new PageDraft("vms-page", "Vms", PageSkeletonType.LIST_DETAIL,
+                        List.of("vms.list", "vms.detail", "vms.create", "vms.delete"))
+        );
+    }
+}

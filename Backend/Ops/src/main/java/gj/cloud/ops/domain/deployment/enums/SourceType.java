@@ -4,5 +4,8 @@ package gj.cloud.ops.domain.deployment.enums;
 public enum SourceType {
     TEMPLATE_SPEC,
     AI_SPEC,
-    RAW_COMPOSE
+    RAW_COMPOSE,
+    // Auto Preview(GamjaBox_2.0_Key_Features.md 1단계) — Git 저장소 없이 Ops가 그 자리에서 생성한
+    // Vite+React 프로젝트. repositoryUrl/branch가 비어있는 DeploymentTargetEntity로 표현된다.
+    AUTO_PREVIEW
 }

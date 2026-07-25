@@ -77,6 +77,11 @@ CREATE INDEX IF NOT EXISTS idx_deployment_targets_github_repo
     ON deployment_targets(github_installation_id, github_repository_id);
 ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS latest_requested_at TIMESTAMP;
 
+-- Auto Preview(SourceType.AUTO_PREVIEW) 반영 — 기존 배포 환경의 CHECK 제약을 확장
+ALTER TABLE deployment_targets DROP CONSTRAINT IF EXISTS chk_deployment_target_source_type;
+ALTER TABLE deployment_targets ADD CONSTRAINT chk_deployment_target_source_type
+    CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE', 'AUTO_PREVIEW'));
+
 CREATE TABLE IF NOT EXISTS deployments (
     id                          VARCHAR(36)  PRIMARY KEY,
     vm_id                       VARCHAR(36)  NOT NULL,
@@ -109,6 +114,10 @@ CREATE TABLE IF NOT EXISTS deployments (
     )),
     CONSTRAINT chk_source_type CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE'))
 );
+
+ALTER TABLE deployments DROP CONSTRAINT IF EXISTS chk_source_type;
+ALTER TABLE deployments ADD CONSTRAINT chk_source_type
+    CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE', 'AUTO_PREVIEW'));
 
 -- 재시도/수정 후 재배포(compose-spec 조회 API)를 위해 추가 — 기존 배포 환경에서도 반영되도록 idempotent하게 추가
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS environment_files_ciphertext TEXT;
