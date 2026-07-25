@@ -8,6 +8,7 @@ import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.AutomationPolicy;
 import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
+import gj.cloud.ops.application.preview.analysis.CapabilityKind;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
@@ -215,7 +216,8 @@ class DeploymentExecutorTest {
 
         Capability login = new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",
                 false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken", null,
-                RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null);
+                RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,
+                CapabilityKind.AUTH, null, List.of());
         PageDraft page = new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of("auth.login"));
         Map<String, List<Block>> pageBlocks = Map.of("auth-login",
                 List.of(new Block("login", "login-form", "page.content", List.of("auth.login"), null)));

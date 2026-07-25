@@ -64,6 +64,15 @@ class PageDraftGeneratorTest {
     private Capability capability(String id, String resourceName, CapabilityType type) {
         return new Capability(id, resourceName, type, null, "/" + resourceName, "GET",
                 false, false, false, "HIGH", List.of(), List.of(), null, null,
-                RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null);
+                RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,
+                kindOf(type), null, List.of());
+    }
+
+    private CapabilityKind kindOf(CapabilityType type) {
+        return switch (type) {
+            case LIST, DETAIL -> CapabilityKind.QUERY;
+            case CREATE, UPDATE, DELETE -> CapabilityKind.MUTATION;
+            case LOGIN -> CapabilityKind.AUTH;
+        };
     }
 }

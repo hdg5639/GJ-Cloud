@@ -5,7 +5,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -32,19 +34,45 @@ public class CapabilityExtractor {
             List.of("content", "items", "data", "list", "results", "records", "rows", "elements", "result", "payload");
     private static final List<String> COUNT_FIELD_PRIORITY =
             List.of("totalelements", "totalcount", "total", "count");
+    // GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md §7.1 "Mandatory initial command
+    // recognition" 그대로. 목록에 없는 이름도 discard하지 않고 일반 COMMAND로 보존한다(extractCommandCapability).
+    private static final Set<String> COMMAND_KEYWORDS = Set.of(
+            "start", "stop", "restart", "invite", "remove", "approve", "reject", "rollback", "deploy",
+            "upload", "download");
 
     public List<Capability> extract(OpenApiEvidence evidence) {
         List<Capability> capabilities = new ArrayList<>();
         Optional<Capability> login = extractLoginCapability(evidence);
         login.ifPresent(capabilities::add);
 
+        // 1st pass — 기존 CRUD 규칙으로 뽑을 수 있는 것만 먼저 확정한다. CRUD로 못 뽑은 오퍼레이션은
+        // 버리지 않고 2nd pass(커맨드 추출)로 넘긴다(Direction Recovery Change Request §7.1).
+        List<ApiOperationEvidence> remaining = new ArrayList<>();
         for (ApiOperationEvidence operation : evidence.operations()) {
             // 로그인으로 이미 분류된 오퍼레이션은 일반 CRUD 규칙("POST /auth/login" → 생성)으로
             // 또 잡히지 않게 제외한다 — 같은 엔드포인트가 두 capability로 중복되면 안 됨.
             if (login.isPresent() && isSameOperation(operation, login.get())) {
                 continue;
             }
-            extractCrudCapability(operation).ifPresent(capabilities::add);
+            Optional<Capability> crud = extractCrudCapability(operation);
+            if (crud.isPresent()) {
+                capabilities.add(crud.get());
+            } else {
+                remaining.add(operation);
+            }
+        }
+
+        // 커맨드 capability의 dependencies(예: vm.start → vm.detail)를 채우기 위해 리소스별 DETAIL id를
+        // 먼저 모아둔다 — 커맨드 오퍼레이션이 OpenAPI 문서에서 DETAIL보다 먼저 나올 수도 있어 2-pass가 필요.
+        Map<String, String> detailIdByResource = new LinkedHashMap<>();
+        for (Capability capability : capabilities) {
+            if (capability.type() == CapabilityType.DETAIL) {
+                detailIdByResource.putIfAbsent(capability.resourceName(), capability.id());
+            }
+        }
+
+        for (ApiOperationEvidence operation : remaining) {
+            extractCommandCapability(operation, detailIdByResource).ifPresent(capabilities::add);
         }
         return capabilities;
     }
@@ -54,6 +82,12 @@ public class CapabilityExtractor {
     }
 
     private Optional<Capability> extractCrudCapability(ApiOperationEvidence operation) {
+        // "/vms/{id}/start"처럼 파라미터 뒤에 리터럴 세그먼트가 오는 하위 액션 경로는 CRUD가 아니다 —
+        // 예전엔 이 경로가 lastSegmentIsParam=false로 판정돼 "start"라는 가짜 리소스에 대한 CREATE로
+        // 오분류됐다. 이런 경로는 여기서 제외하고 extractCommandCapability로 넘긴다.
+        if (isSubActionPath(operation.path())) {
+            return Optional.empty();
+        }
         String resourceName = resourceNameOf(operation.path());
         if (resourceName == null) {
             return Optional.empty();
@@ -134,7 +168,90 @@ public class CapabilityExtractor {
                 Capability.idOf(resourceName, type), resourceName, type,
                 operation.operationId(), operation.path(), operation.method(),
                 hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null, searchParam,
-                risk, defaultAutomationPolicyFor(risk), collectionPath, totalCountPath));
+                risk, defaultAutomationPolicyFor(risk), collectionPath, totalCountPath,
+                kindFor(type), null, List.of()));
+    }
+
+    // Direction Recovery Change Request §7.1 — CapabilityType은 편의 분류일 뿐, capability의 진짜
+    // 정체성은 kind가 담당한다.
+    private CapabilityKind kindFor(CapabilityType type) {
+        return switch (type) {
+            case LIST, DETAIL -> CapabilityKind.QUERY;
+            case CREATE, UPDATE, DELETE -> CapabilityKind.MUTATION;
+            case LOGIN -> CapabilityKind.AUTH;
+        };
+    }
+
+    // "/resource/{id}/action" 형태 — 마지막 세그먼트는 파라미터가 아니지만 그 앞에 파라미터 세그먼트가
+    // 있는 경우. CRUD 어느 것에도 해당하지 않는 커맨드형 오퍼레이션의 특징적인 모양이다.
+    private boolean isSubActionPath(String path) {
+        return !lastSegmentIsParam(path) && hasEarlierParamSegment(path);
+    }
+
+    private boolean hasEarlierParamSegment(String path) {
+        List<String> segments = nonEmptySegments(path);
+        for (int i = 0; i < segments.size() - 1; i++) {
+            if (segments.get(i).startsWith("{")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // CRUD로 뽑지 못한 오퍼레이션을 discard하지 않고 일반 COMMAND capability로 보존한다(§7.1
+    // "Unknown command-style operations must be represented as generic actions rather than discarded").
+    // 지금은 "/resource/{id}/action" 형태만 다룬다 — 파라미터가 전혀 없는 평평한 액션 경로(예:
+    // "POST /system/reindex")는 이번 증분 범위 밖이다.
+    private Optional<Capability> extractCommandCapability(ApiOperationEvidence operation, Map<String, String> detailIdByResource) {
+        if (!isSubActionPath(operation.path())) {
+            return Optional.empty();
+        }
+        String resourceName = parentResourceNameOf(operation.path());
+        String action = lastPathSegment(operation.path());
+        if (resourceName == null || action == null) {
+            return Optional.empty();
+        }
+        action = action.toLowerCase();
+
+        List<String> evidenceLines = new ArrayList<>();
+        evidenceLines.add(operation.method() + " " + operation.path()
+                + (operation.operationId() != null ? " (operationId=" + operation.operationId() + ")" : ""));
+        boolean knownKeyword = COMMAND_KEYWORDS.contains(action);
+        evidenceLines.add(knownKeyword
+                ? "커맨드형 오퍼레이션으로 인식(action=" + action + ")"
+                : "알려진 커맨드 키워드와 일치하지 않지만 discard하지 않고 보존함(action=" + action + ")");
+
+        String confidence = operation.operationId() != null
+                ? RepositoryEvidence.CONFIDENCE_HIGH
+                : RepositoryEvidence.CONFIDENCE_MEDIUM;
+
+        List<String> dependencies = detailIdByResource.containsKey(resourceName)
+                ? List.of(detailIdByResource.get(resourceName))
+                : List.of();
+
+        return Optional.of(new Capability(
+                resourceName + "." + action, resourceName, null,
+                operation.operationId(), operation.path(), operation.method(),
+                false, false, false, confidence, evidenceLines, List.of(), null, null,
+                RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
+                CapabilityKind.COMMAND, action, dependencies));
+    }
+
+    // "/vms/{id}/start" -> "vms" — 경로에서 마지막 파라미터 세그먼트 바로 앞을 소유 리소스로 취급한다.
+    private String parentResourceNameOf(String path) {
+        List<String> segments = nonEmptySegments(path);
+        int lastParamIdx = -1;
+        for (int i = 0; i < segments.size(); i++) {
+            if (segments.get(i).startsWith("{")) {
+                lastParamIdx = i;
+            }
+        }
+        return lastParamIdx > 0 ? segments.get(lastParamIdx - 1) : null;
+    }
+
+    private String lastPathSegment(String path) {
+        List<String> segments = nonEmptySegments(path);
+        return segments.isEmpty() ? null : segments.get(segments.size() - 1);
     }
 
     // auto-preview-design/05-capability-taxonomy.md §5 표의 축소판. IRREVERSIBLE·EXTERNAL_SIDE_EFFECT는
@@ -203,7 +320,8 @@ public class CapabilityExtractor {
                     "auth.login", "auth", CapabilityType.LOGIN,
                     operation.operationId(), operation.path(), operation.method(),
                     false, false, false, confidence, evidenceLines, operation.requestBodyFields(),
-                    accessTokenPath, null, RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null);
+                    accessTokenPath, null, RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,
+                    CapabilityKind.AUTH, null, List.of());
             if (best == null || isHigherConfidence(candidate.confidence(), best.confidence())) {
                 best = candidate;
             }

@@ -7,6 +7,7 @@ import java.util.List;
 public record Capability(
         String id,
         String resourceName,
+        // kind=COMMAND(커맨드형 오퍼레이션)일 때는 null — CRUD 6종 enum에 억지로 끼워 넣지 않는다.
         CapabilityType type,
         String operationId,
         String path,
@@ -38,7 +39,16 @@ public record Capability(
         String collectionPath,
         // 같은 절의 totalCountPath — LIST 응답에서 총 개수가 위치한 dot-path(예: "data.totalElements").
         // 못 찾으면 null이고 렌더러가 배열 길이로 대체한다(extractCount). LIST 외 타입은 항상 null.
-        String totalCountPath
+        String totalCountPath,
+        // GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md §7.1 — capability의 진짜 정체성.
+        // CRUD/LOGIN은 QUERY/MUTATION/AUTH로 역산해서 채우고, `/resource/{id}/action` 형태의 커맨드형
+        // 오퍼레이션은 COMMAND로 표현한다(이 경우 type()은 null — CRUD 6종 enum에 억지로 끼워 넣지 않음).
+        CapabilityKind kind,
+        // kind=COMMAND일 때 실제 동작 이름(예: "start", "invite"). 그 외 kind는 항상 null.
+        String action,
+        // 이 capability가 의미상 의존하는 다른 capability id 목록(예: vm.start → ["vm.detail"]).
+        // COMMAND 외 kind는 항상 빈 리스트.
+        List<String> dependencies
 ) {
     public static String idOf(String resourceName, CapabilityType type) {
         return resourceName + "." + type.name().toLowerCase();

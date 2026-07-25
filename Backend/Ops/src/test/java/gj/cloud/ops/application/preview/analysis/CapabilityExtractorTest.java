@@ -40,6 +40,53 @@ class CapabilityExtractorTest {
         Capability detail = findCapability(capabilities, "vms.detail");
         assertThat(detail.hasSearch()).isFalse();
         assertThat(detail.searchParam()).isNull();
+
+        assertThat(list.kind()).isEqualTo(CapabilityKind.QUERY);
+        assertThat(detail.kind()).isEqualTo(CapabilityKind.QUERY);
+        assertThat(findCapability(capabilities, "vms.create").kind()).isEqualTo(CapabilityKind.MUTATION);
+        assertThat(findCapability(capabilities, "vms.update").kind()).isEqualTo(CapabilityKind.MUTATION);
+        assertThat(findCapability(capabilities, "vms.delete").kind()).isEqualTo(CapabilityKind.MUTATION);
+    }
+
+    // Direction Recovery Change Request §7.1/§4.3 회귀 테스트 — "/resource/{id}/action" 형태의 커맨드형
+    // 오퍼레이션이 discard되지 않고 COMMAND capability로 인식되는지, 그리고 예전엔 "start"라는 가짜
+    // 리소스에 대한 CREATE로 오분류됐던 버그가 고쳐졌는지 확인한다.
+    @Test
+    void extractsKnownCommandKeywordAsCommandCapabilityWithDetailDependency() {
+        List<ApiOperationEvidence> operations = List.of(
+                operation("GET", "/vms/{id}", "getVm", false, List.of()),
+                operation("POST", "/vms/{id}/start", "startVm", false, List.of())
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("vm-service", "1.0", List.of(), List.of(), operations, 0);
+
+        List<Capability> capabilities = extractor.extract(evidence);
+
+        Capability start = findCapability(capabilities, "vms.start");
+        assertThat(start.kind()).isEqualTo(CapabilityKind.COMMAND);
+        assertThat(start.type()).isNull();
+        assertThat(start.resourceName()).isEqualTo("vms");
+        assertThat(start.action()).isEqualTo("start");
+        assertThat(start.dependencies()).containsExactly("vms.detail");
+
+        // 회귀: "start"가 더 이상 독립된 가짜 리소스에 대한 CREATE로 오분류되지 않는다.
+        assertThat(capabilities).noneMatch(c -> "start".equals(c.resourceName()));
+        assertThat(capabilities).noneMatch(c -> c.type() == CapabilityType.CREATE);
+    }
+
+    @Test
+    void unknownCommandKeywordIsPreservedInsteadOfDiscarded() {
+        List<ApiOperationEvidence> operations = List.of(
+                operation("POST", "/vms/{id}/reboot", "rebootVm", false, List.of())
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("vm-service", "1.0", List.of(), List.of(), operations, 0);
+
+        List<Capability> capabilities = extractor.extract(evidence);
+
+        assertThat(capabilities).hasSize(1);
+        Capability reboot = capabilities.get(0);
+        assertThat(reboot.kind()).isEqualTo(CapabilityKind.COMMAND);
+        assertThat(reboot.action()).isEqualTo("reboot");
+        assertThat(reboot.dependencies()).isEmpty();
     }
 
     // auto-preview-design/05-capability-taxonomy.md §5·6 기본 매핑 표 회귀 테스트 — CapabilityType별

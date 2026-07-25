@@ -438,6 +438,18 @@ export type PreviewAutomationPolicy =
   | "EXPLICIT_CONFIRMATION"
   | "TYPED_CONFIRMATION"
   | "DISABLED_IN_AUTO_TEST";
+// GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md §7.1 — capability의 진짜 정체성.
+// 이번 증분에서는 렌더링에 아직 쓰이지 않는다(Variant Registry/Compiler가 생기는 다음 증분에서
+// COMMAND capability를 실제로 그린다).
+export type PreviewCapabilityKind =
+  | "QUERY"
+  | "MUTATION"
+  | "COMMAND"
+  | "AUTH"
+  | "METRIC"
+  | "EVENT_STREAM"
+  | "FILE_TRANSFER"
+  | "WORKFLOW";
 
 // auto-preview-design/04-api-binding-schema.md §9 — 로그인으로 받은 토큰을 나머지 모든 보호된 요청에
 // 어떻게 실어 보낼지. Capability 하나가 아니라 분석 결과 전체에 하나만 존재한다.
@@ -452,7 +464,8 @@ export interface PreviewAuthStrategy {
 export interface PreviewCapability {
   id: string;
   resourceName: string;
-  type: PreviewCapabilityType;
+  // kind=COMMAND일 때는 null — CRUD 6종 enum에 억지로 끼워 넣지 않는다.
+  type: PreviewCapabilityType | null;
   operationId: string | null;
   path: string;
   method: string;
@@ -477,6 +490,11 @@ export interface PreviewCapability {
   // 같은 응답에서 총 개수가 위치한 dot-path(예: "data.totalElements"). 못 찾으면 null이고 렌더러가
   // 배열 길이로 대체한다(extractCount).
   totalCountPath: string | null;
+  kind: PreviewCapabilityKind;
+  // kind=COMMAND일 때 실제 동작 이름(예: "start", "invite"). 그 외 kind는 항상 null.
+  action: string | null;
+  // 이 capability가 의미상 의존하는 다른 capability id 목록(예: vm.start → ["vm.detail"]).
+  dependencies: string[];
 }
 
 export interface PreviewPageDraft {

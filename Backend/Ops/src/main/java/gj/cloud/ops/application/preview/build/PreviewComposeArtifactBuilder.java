@@ -247,11 +247,14 @@ public class PreviewComposeArtifactBuilder {
             type RiskLevel = "SAFE" | "STATE_CHANGING" | "DESTRUCTIVE" | "IRREVERSIBLE" | "EXTERNAL_SIDE_EFFECT";
             type AutomationPolicy =
               | "AUTO_SAFE" | "USER_INITIATED" | "EXPLICIT_CONFIRMATION" | "TYPED_CONFIRMATION" | "DISABLED_IN_AUTO_TEST";
+            type CapabilityKind =
+              | "QUERY" | "MUTATION" | "COMMAND" | "AUTH" | "METRIC" | "EVENT_STREAM" | "FILE_TRANSFER" | "WORKFLOW";
 
             interface Capability {
               id: string;
               resourceName: string;
-              type: CapabilityType;
+              // kind=COMMAND일 때는 null — CRUD 6종 enum에 억지로 끼워 넣지 않는다.
+              type: CapabilityType | null;
               operationId: string | null;
               path: string;
               method: string;
@@ -267,6 +270,11 @@ public class PreviewComposeArtifactBuilder {
               automationPolicy: AutomationPolicy;
               collectionPath: string | null;
               totalCountPath: string | null;
+              // Direction Recovery Change Request §7.1 — 이번 증분에서는 렌더링에 아직 쓰이지 않는다
+              // (Variant Registry/Compiler가 생기는 다음 증분에서 COMMAND capability를 실제로 그린다).
+              kind: CapabilityKind;
+              action: string | null;
+              dependencies: string[];
             }
 
             interface PageDraft {

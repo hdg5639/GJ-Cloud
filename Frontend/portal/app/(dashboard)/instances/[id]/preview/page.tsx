@@ -206,6 +206,9 @@ export default function PreviewWizardPage() {
         automationPolicy: "AUTO_SAFE",
         collectionPath: null,
         totalCountPath: null,
+        kind: "AUTH",
+        action: null,
+        dependencies: [],
       };
       const capabilities = [...prev.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
       const hasAuthPage = prev.pages.some((p) => p.skeleton === "AUTH_PAGE");
@@ -401,7 +404,9 @@ export default function PreviewWizardPage() {
                           className="inline-flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-muted"
                         >
                           {mark && <span className={`font-bold ${mark.className}`}>{mark.symbol}</span>}
-                          {CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type}
+                          {capability.type
+                            ? CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type
+                            : capability.action ?? capability.kind}
                           {risk && <span className={`rounded px-1 py-0.5 font-bold ${risk.className}`}>{risk.label}</span>}
                         </span>
                       );

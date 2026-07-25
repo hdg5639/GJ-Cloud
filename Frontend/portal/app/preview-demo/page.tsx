@@ -14,30 +14,35 @@ const CAPABILITIES: PreviewCapability[] = [
     path: "/auth/login", method: "POST", hasSearch: false, hasSort: false, hasPagination: false,
     confidence: "HIGH", evidence: [], fields: ["email", "password"], accessTokenPath: "data.accessToken", searchParam: null,
     risk: "SAFE", automationPolicy: "AUTO_SAFE", collectionPath: null, totalCountPath: null,
+    kind: "AUTH", action: null, dependencies: [],
   },
   {
     id: "vms.list", resourceName: "vms", type: "LIST", operationId: "listVms",
     path: "/vms", method: "GET", hasSearch: true, hasSort: false, hasPagination: false,
     confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null, searchParam: "search",
     risk: "SAFE", automationPolicy: "AUTO_SAFE", collectionPath: null, totalCountPath: null,
+    kind: "QUERY", action: null, dependencies: [],
   },
   {
     id: "vms.detail", resourceName: "vms", type: "DETAIL", operationId: "getVm",
     path: "/vms/{id}", method: "GET", hasSearch: false, hasSort: false, hasPagination: false,
     confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null, searchParam: null,
     risk: "SAFE", automationPolicy: "AUTO_SAFE", collectionPath: null, totalCountPath: null,
+    kind: "QUERY", action: null, dependencies: [],
   },
   {
     id: "vms.create", resourceName: "vms", type: "CREATE", operationId: "createVm",
     path: "/vms", method: "POST", hasSearch: false, hasSort: false, hasPagination: false,
     confidence: "HIGH", evidence: [], fields: ["name", "planType"], accessTokenPath: null, searchParam: null,
     risk: "STATE_CHANGING", automationPolicy: "USER_INITIATED", collectionPath: null, totalCountPath: null,
+    kind: "MUTATION", action: null, dependencies: [],
   },
   {
     id: "vms.delete", resourceName: "vms", type: "DELETE", operationId: "deleteVm",
     path: "/vms/{id}", method: "DELETE", hasSearch: false, hasSort: false, hasPagination: false,
     confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null, searchParam: null,
     risk: "DESTRUCTIVE", automationPolicy: "EXPLICIT_CONFIRMATION", collectionPath: null, totalCountPath: null,
+    kind: "MUTATION", action: null, dependencies: [],
   },
 ];
 
