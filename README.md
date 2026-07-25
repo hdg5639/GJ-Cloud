@@ -26,17 +26,17 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 
 | 기능 | 설명 |
 |---|---|
-| **VM 프로비저닝** | Proxmox 템플릿 클론 → Static IP 할당 → Cloudflare 연동까지 완전 자동화. SSE로 생성 상태 실시간 수신 |
-| **SSH 접속** | VM마다 전용 서브도메인 자동 발급. Cloudflare Zero Trust로 이메일 인증 기반 접근 제어 |
-| **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. PUBLIC(누구나) / PRIVATE(이메일 허용 목록) 구분 |
+| **VM 프로비저닝** | Proxmox 템플릿 클론 → Static IP 할당 → SSH/cloud-init 준비 검증 → Cloudflare 연동까지 자동화. SSE로 생성 상태 실시간 수신 |
+| **SSH 접속** | VM마다 전용 서브도메인 자동 발급. 관리 키로 접속 준비 상태와 사용자 `authorized_keys`를 검증·복구하고, Cloudflare Zero Trust로 이메일 기반 접근 제어 |
+| **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. PUBLIC / PRIVATE 구분, PRO 플랜의 자동 ID 없는 커스텀 CNAME 지원 |
 | **플랜 관리** | FREE / PRO 플랜 전환, 디스크 온라인 확장. 플랜 변경은 관리자 승인 후 반영 |
 | **협업 (Organization)** | 팀 단위로 VM 공유. 메모·공지·요청 게시판, 역할별 권한(OWNER / ADMIN / MEMBER) |
 | **실시간 메트릭** | CPU·메모리·네트워크·디스크 사용량을 Proxmox API로 수집, SSE 스트림으로 라이브 시각화 |
 | **웹 SSH 콘솔** | 브라우저에서 바로 VM 터미널 접속(WebSocket + xterm.js). 로그인 세션과 분리된 일회용 티켓으로 인증 |
 | **파일 브라우저** | VM 내부 파일 조회·업로드·다운로드·편집·삭제. 텍스트 편집, 이미지/오디오/비디오 미리보기(Range 스트리밍) 지원 |
-| **배포 파이프라인** | Git 저장소 → 이미지 빌드 → 헬스체크 → 실패 시 자동 롤백. GitHub push 자동 재배포, VM 내 다중 앱 격리, 실행 이력 기반 재시도/수동 롤백, SSE 실시간 로그 |
+| **배포 파이프라인** | Git 저장소 → 이미지 빌드 → 헬스체크 → 실패 시 자동 롤백. GitHub push 자동 재배포, VM 내 다중 앱 격리, 실행 이력 기반 재시도/수동 롤백, 배포 대상 완전 삭제, SSE 실시간 로그 |
 | **AI 배포 스펙 생성** | 저장소를 결정론적으로 분석해 확신 가능한 경우(정적 사이트 등)는 AI 호출 없이 규칙 기반으로 확정, 애매한 경우만 구조화 출력으로 AI에 위임. 렌더링된 compose를 AI가 비차단으로 검수 |
-| **Docker 관리** | VM 내부 컨테이너/이미지/네트워크/compose 스택 조회 및 제어 |
+| **Docker 관리** | 비동기 단계별 설치와 진행 상태 폴링, VM 내부 컨테이너/이미지/네트워크/compose 스택 조회 및 제어 |
 | **DB 백업** | PostgreSQL/MySQL/MongoDB/Redis 온디맨드 덤프, 파일 브라우저로 다운로드 |
 
 ---
@@ -62,7 +62,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
             └── OpenAI API            (배포 스펙 AI 자동생성/검수 — 결정론적 분석이 실패한 경우에 한해)
 ```
 
-서비스 간 호출은 사용자 토큰을 그대로 넘기지 않고, 각 서비스가 자체 client-credentials로 발급받은 audience-scoped 토큰을 사용한다(예: VM → Ops 내부 API).
+내부 API는 호출 목적에 따라 인증 문맥을 나눈다. 관리 키 발급처럼 순수 서비스 신원이 필요한 작업은 client-credentials로 발급한 audience/scope 제한 토큰을 사용하고, 사용자별 리소스 조회처럼 최종 사용자 문맥이 필요한 작업은 `sub`를 보존한 위임 체인에서 별도로 검증한다.
 
 사용자 포털 외에, <img src="Frontend/portal/public/controlbox-symbol.svg" alt="ControlBox" width="18" height="18" align="absmiddle"> **ControlBox** — 플랜 변경 승인 등을 처리하는 별도 관리자 콘솔이 비공개 도메인으로 분리 운영된다.
 
@@ -134,14 +134,16 @@ POST /vms  →  PENDING (즉시 202 응답)
     ▼  백그라운드 비동기 파이프라인
     │
     CREATING  →  SSH 공개키 조회 + Static IP 할당
-    BOOTING   →  Proxmox 템플릿 클론 → vmid 배정 → 디스크 리사이즈 → VM 시작
-    RUNNING   →  Guest Agent로 IP 확인
-              →  Cloudflare: CNAME 등록 → Tunnel ingress 추가 → Zero Trust Access 생성
+    BOOTING   →  Proxmox 템플릿 클론 → vmid 배정 → 사용자 키 + Ops 관리 키 주입
+              →  DNS 설정 → 디스크 리사이즈 → VM 시작 → Guest Agent로 IP 확인
+              →  관리 키 SSH 접속·cloud-init 완료·사용자 키 fingerprint 확인
+              →  사용자 authorized_keys 누락 시 관리 키로 안전하게 복구
+    RUNNING   →  Cloudflare: CNAME 등록 → Tunnel ingress 추가 → Zero Trust Access 생성
     │
     ▼  SSE (/vms/events/subscribe) 로 클라이언트 실시간 수신
 ```
 
-실패 시 FAILED로 전환되며 원인이 기록된다.
+SSH 준비 검사는 최대 10분 동안 재시도하며, 관리 키 인증과 사용자 공개키 반영까지 확인된 VM만 RUNNING으로 전환한다. 실패 시 FAILED로 전환되고 원인이 기록된다.
 
 ---
 
@@ -151,6 +153,13 @@ VM을 만든 뒤 그 안에 실제 서비스를 올리는 영역. 두 가지 스
 
 - **Raw Compose 배포** — 사용자가 직접 작성한 docker-compose 스펙(환경변수, 라우트, 헬스체크 포함)을 그대로 배포
 - **AI 보조 배포** — 저장소 URL만 주면 스펙을 자동 생성
+
+생성 화면은 `방식 선택 → 저장소 설정 → 서비스 힌트/Compose 작성 → 검토 및 배포`의 4단계로 구성된다. 방문한 단계는 앞뒤로 이동할 수 있고 입력 상태가 유지된다. Raw Compose와 AI 방식 모두 모노레포의 배포 기준 디렉토리와 VM 내부 install path를 지정할 수 있다.
+
+저장소도 두 방식 중 하나를 명시적으로 선택한다.
+
+- **GitHub 저장소 연결** — GitHub App 설치 범위 안에서 저장소·브랜치를 선택하고 push 자동 재배포를 사용할 수 있다.
+- **Git URL 단발성 배포** — 공개 URL 또는 일회성 PAT로 현재 배포만 실행하며 PAT를 저장하지 않는다.
 
 AI 보조 배포는 매 요청마다 무조건 AI를 호출하지 않는다:
 
@@ -167,6 +176,10 @@ GitHub App으로 저장소를 연결하고 자동 배포를 켜면 지정 브랜
 
 배포 실행 중에는 이미지 빌드·태깅, DB 기반 SSE 실시간 로그(재접속 시 이벤트 재생), 헬스체크 실패 시 자동 롤백이 이뤄진다. 실패한 배포는 같은 스펙으로 재시도하거나 값을 수정 후 재배포할 수 있고, 과거 성공한 배포로 수동 롤백도 가능하다(재빌드 없이 해당 시점 이미지로 컨테이너만 재기동).
 
+외부 노출을 선택하면 생성된 모든 CNAME이 배포 대상 카드에 링크로 표시된다. 기본 주소는 VM·포트 식별자를 포함하고, PRO 사용자는 사용 가능한 이름을 검증받아 자동 ID가 붙지 않는 커스텀 CNAME을 지정할 수 있다.
+
+`내리기`와 `배포 대상 삭제`는 의도적으로 다르다. 내리기는 실행 중인 컨테이너와 해당 배포 이미지를 정리하되 대상을 유지한다. 대상 삭제는 VM이 RUNNING일 때 컨테이너, 대상이 만든 전체 이미지 이력, bare Git 저장소, release/current 디렉토리, install path 심볼릭 링크, Cloudflare 라우트를 제거하고 대상을 비활성화한다. 배포 이력은 감사 목적으로 남긴다.
+
 ---
 
 ## 도메인 구조
@@ -178,6 +191,7 @@ GitHub App으로 저장소를 연결하고 자동 배포를 켜면 지정 브랜
 | `api.*` | 백엔드 API |
 | `{vm-prefix}-{shortId}.*` | 사용자 VM SSH 접속 (VM 생성 시 자동 발급) |
 | `{vm-prefix}-{shortId}-{portNickname}.*` | VM 추가 노출 포트 |
+| `{customSubdomain}.*` | PRO 플랜 커스텀 공개 포트·배포 라우트 |
 
 관리자 콘솔은 별도 비공개 도메인으로 분리되어 있으며 여기서는 다루지 않는다.
 
@@ -187,6 +201,7 @@ GitHub App으로 저장소를 연결하고 자동 배포를 켜면 지정 브랜
 
 ```
 GJ-Cloud/
+├── .github/workflows/  develop·main 서비스별 배포 워크플로우
 ├── Backend/
 │   ├── Auth/    Spring MVC — 인증·JWT·Refresh Token·이메일 인증
 │   ├── User/    Spring MVC — 프로필·SSH 키·플랜
@@ -196,6 +211,29 @@ GJ-Cloud/
 │   └── portal/  Next.js — 사용자 포털 + 관리자 콘솔(같은 앱, 도메인으로 분리)
 └── gamjabox-landing/  정적 마케팅 랜딩 페이지 (Vanilla HTML/CSS/JS)
 ```
+
+---
+
+## 개발 및 배포
+
+백엔드는 서비스별 Gradle wrapper로, 포털은 Next.js 스크립트로 검증한다.
+
+```bash
+# 백엔드 예시
+cd Backend/Ops
+./gradlew test
+./gradlew clean build
+
+# 프론트엔드
+cd Frontend/portal
+npm ci
+npm run lint
+npm run build
+```
+
+GitHub Actions는 서비스별 path filter로 필요한 워크플로우만 실행한다. `develop`은 `gamjabox-dev`, `main`은 `gamjabox-prod` 라벨의 self-hosted Linux/X64 runner를 사용하며, 모든 배포 명령은 서버의 `/home/ubuntu/GJ-Cloud`에서 실행된다. 백엔드와 포털 배포는 새 이미지를 기동한 뒤 컨테이너 내부 IP의 health endpoint를 확인하고, 실패하면 보존한 이전 이미지로 자동 롤백한다.
+
+루트와 각 서비스의 `compose.yaml`, `.env*`, 로컬 프록시 설정은 운영 자격증명을 포함할 수 있어 Git에서 제외한다. 공개 문서와 코드에는 환경변수 이름만 기록하고 실제 값은 서버 런타임 환경에서 관리한다.
 
 ---
 
@@ -235,7 +273,8 @@ GJ-Cloud/
 - VM 이름이 Proxmox/DNS가 요구하는 서브도메인 형식을 만족하지 않으면 클론 요청 자체가 실패 → 생성 전 형식 검증 추가
 - Cloudflare CNAME 등록 요청을 `Map<String, String>`으로 만들어 보내면 `proxied`(boolean) 값이 문자열로 직렬화돼 API가 400을 반환하던 문제 → `Map<String, Object>`로 교체
 - VM cloud-init 설정에 DNS 서버(nameserver)가 아예 빠져 있어서, 게이트웨이가 DNS를 포워딩해주지 않는 네트워크에서는 VM 내부의 모든 도메인 조회(git clone, curl 등)가 실패하던 문제 — 실기 테스트에서 발견, 신규 생성 VM부터 적용(기존 VM은 수동 조치 필요)
-- VM SSH 접속이 `Auth fail for methods 'publickey'`로 실패하는 걸 조사하다가, Proxmox에 보내는 `sshkeys` 파라미터가 `UriUtils.encode()`로 한 번 인코딩된 뒤 `BodyInserters.fromFormData`가 폼 직렬화 시 또 인코딩해서 이중 인코딩되는 걸 원인으로 지목하고 인코딩 한 줄을 제거했는데 — 실제로는 Proxmox의 `sshkeys` 필드 자체가 폼 전송 인코딩과 별개로 "이미 percent-encoded된 값"을 요구하는 자체 검증기를 갖고 있어서 이중 인코딩이 오히려 정상 동작이었음. 제거하자마자 VM 생성 자체가 400(`invalid urlencoded string`)으로 막혀버려 바로 원복 → 정작 처음의 SSH 인증 실패는 이 인코딩과 무관했던 것으로 드러남(재현 조치 없이 이후 정상화). 코드만 보고 추정한 원인으로 바로 고치기보다 실제 요청/응답으로 먼저 재현했어야 했다는 교훈
+- VM SSH 접속의 간헐적 `Auth fail for methods 'publickey'`를 `sshkeys` 이중 인코딩 문제로 오인해 인코딩을 제거했다가, Proxmox가 오히려 percent-encoded 값을 요구해 VM 생성이 400(`invalid urlencoded string`)으로 막힌 회귀가 발생 → 인코딩은 원복하고 결과 기반 준비 검증으로 방향을 전환
+- VM 생성 완료를 Guest Agent의 IP 확인만으로 판정하면 cloud-init과 SSH 키 반영이 아직 끝나지 않은 상태도 RUNNING이 될 수 있었음 → 사용자 키와 VM별 Ops 관리 키를 함께 주입한 뒤 관리 키 SSH 접속, cloud-init 상태, 사용자 키 fingerprint를 최대 10분간 확인하고, `authorized_keys`에서 사용자 키가 누락된 경우 검증된 공개키만 관리 세션으로 복구한 후 RUNNING으로 전환
 
 ### Ops / 배포 파이프라인
 
