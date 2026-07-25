@@ -94,10 +94,14 @@ public class CapabilityExtractor {
             evidenceLines.add("operationId가 없어 경로/메서드 패턴만으로 추정함");
         }
 
+        List<String> fields = (type == CapabilityType.CREATE || type == CapabilityType.UPDATE)
+                ? operation.requestBodyFields()
+                : List.of();
+
         return Optional.of(new Capability(
                 Capability.idOf(resourceName, type), resourceName, type,
                 operation.operationId(), operation.path(), operation.method(),
-                hasSearch, hasSort, hasPagination, confidence, evidenceLines));
+                hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields));
     }
 
     // 문서 전체에서 로그인 오퍼레이션 후보를 찾는다 — 텍스트 힌트(경로/operationId/태그)와 요청 필드
@@ -138,7 +142,7 @@ public class CapabilityExtractor {
             Capability candidate = new Capability(
                     "auth.login", "auth", CapabilityType.LOGIN,
                     operation.operationId(), operation.path(), operation.method(),
-                    false, false, false, confidence, evidenceLines);
+                    false, false, false, confidence, evidenceLines, operation.requestBodyFields());
             if (best == null || isHigherConfidence(candidate.confidence(), best.confidence())) {
                 best = candidate;
             }
