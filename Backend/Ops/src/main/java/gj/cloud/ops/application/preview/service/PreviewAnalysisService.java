@@ -37,7 +37,11 @@ public class PreviewAnalysisService {
         List<UnresolvedField> unresolved = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
-        boolean hasLoginCapability = capabilities.stream().anyMatch(c -> c.type() == CapabilityType.LOGIN);
+        Capability loginCapability = capabilities.stream()
+                .filter(c -> c.type() == CapabilityType.LOGIN)
+                .findFirst()
+                .orElse(null);
+        boolean hasLoginCapability = loginCapability != null;
         boolean anySupportedScheme = evidence.securitySchemes().stream().anyMatch(SecuritySchemeEvidence::isSupportedByMvp);
         boolean anySchemePresent = !evidence.securitySchemes().isEmpty();
 
@@ -47,6 +51,9 @@ public class PreviewAnalysisService {
         } else if (anySchemePresent && !hasLoginCapability) {
             unresolved.add(new UnresolvedField("auth.login", "AUTH_LOGIN_NOT_FOUND",
                     "인증이 필요한 API로 보이지만 로그인 오퍼레이션을 확인하지 못했습니다."));
+        } else if (hasLoginCapability && loginCapability.accessTokenPath() == null) {
+            unresolved.add(new UnresolvedField("auth.login.accessTokenPath", "ACCESS_TOKEN_PATH_UNKNOWN",
+                    "로그인 응답에서 access token 위치를 확인하지 못했습니다. 아래에서 직접 지정해주세요."));
         }
 
         if (pages.isEmpty()) {

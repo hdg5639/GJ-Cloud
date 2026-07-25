@@ -44,7 +44,7 @@ class CapabilityExtractorTest {
     void detectsLoginByCredentialFieldsWithHighConfidence() {
         List<ApiOperationEvidence> operations = List.of(
                 new ApiOperationEvidence("/auth/login", "POST", "login", "로그인", List.of(),
-                        List.of(), List.of("email", "password"), false, false)
+                        List.of(), List.of("email", "password"), false, false, List.of())
         );
         OpenApiEvidence evidence = new OpenApiEvidence("auth-service", "1.0", List.of(), List.of(), operations, 0);
 
@@ -57,10 +57,38 @@ class CapabilityExtractorTest {
     }
 
     @Test
+    void detectsAccessTokenPathFromResponseFieldNameHints() {
+        List<ApiOperationEvidence> operations = List.of(
+                new ApiOperationEvidence("/auth/login", "POST", "login", "로그인", List.of(),
+                        List.of(), List.of("email", "password"), false, false,
+                        List.of("success", "message", "data.accessToken", "data.refreshToken"))
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("auth-service", "1.0", List.of(), List.of(), operations, 0);
+
+        Capability login = extractor.extract(evidence).get(0);
+
+        assertThat(login.accessTokenPath()).isEqualTo("data.accessToken");
+    }
+
+    @Test
+    void leavesAccessTokenPathNullWhenNoFieldNameLooksLikeAToken() {
+        List<ApiOperationEvidence> operations = List.of(
+                new ApiOperationEvidence("/auth/login", "POST", "login", "로그인", List.of(),
+                        List.of(), List.of("email", "password"), false, false,
+                        List.of("success", "message", "data.sessionId"))
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("auth-service", "1.0", List.of(), List.of(), operations, 0);
+
+        Capability login = extractor.extract(evidence).get(0);
+
+        assertThat(login.accessTokenPath()).isNull();
+    }
+
+    @Test
     void doesNotInventLoginWhenNoTextHintOrCredentialFieldsExist() {
         List<ApiOperationEvidence> operations = List.of(
                 new ApiOperationEvidence("/orders", "POST", "createOrder", "주문 생성", List.of(),
-                        List.of(), List.of("itemId", "quantity"), true, false)
+                        List.of(), List.of("itemId", "quantity"), true, false, List.of())
         );
         OpenApiEvidence evidence = new OpenApiEvidence("shop-service", "1.0", List.of(), List.of(), operations, 0);
 
@@ -76,7 +104,7 @@ class CapabilityExtractorTest {
     private ApiOperationEvidence operation(String method, String path, String operationId,
                                             boolean responseIsArray, List<ApiParameterEvidence> parameters) {
         return new ApiOperationEvidence(path, method, operationId, null, List.of(), parameters,
-                List.of(), true, responseIsArray);
+                List.of(), true, responseIsArray, List.of());
     }
 
     private ApiParameterEvidence param(String name, String in) {

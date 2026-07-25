@@ -22,6 +22,10 @@ public class CapabilityExtractor {
     private static final Set<String> USERNAME_FIELD_HINTS =
             Set.of("email", "username", "userid", "loginid", "login_id", "user");
     private static final Set<String> PASSWORD_FIELD_HINTS = Set.of("password", "pw", "pwd");
+    // 우선순위 순서 — accessToken처럼 구체적인 이름을 token 같은 범용 이름보다 먼저 확인한다.
+    // 밑줄/대소문자 차이는 leafFieldName()에서 정규화 후 비교하므로 여기엔 정규화된 형태만 둔다.
+    private static final List<String> ACCESS_TOKEN_FIELD_PRIORITY =
+            List.of("accesstoken", "authtoken", "idtoken", "jwt", "token");
 
     public List<Capability> extract(OpenApiEvidence evidence) {
         List<Capability> capabilities = new ArrayList<>();
@@ -101,7 +105,7 @@ public class CapabilityExtractor {
         return Optional.of(new Capability(
                 Capability.idOf(resourceName, type), resourceName, type,
                 operation.operationId(), operation.path(), operation.method(),
-                hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields));
+                hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null));
     }
 
     // 문서 전체에서 로그인 오퍼레이션 후보를 찾는다 — 텍스트 힌트(경로/operationId/태그)와 요청 필드
@@ -139,10 +143,15 @@ public class CapabilityExtractor {
                 continue;
             }
 
+            String accessTokenPath = detectAccessTokenPath(operation.responseFieldPaths());
+            if (accessTokenPath != null) {
+                evidenceLines.add("응답 필드에서 access token 위치를 추정함: " + accessTokenPath);
+            }
             Capability candidate = new Capability(
                     "auth.login", "auth", CapabilityType.LOGIN,
                     operation.operationId(), operation.path(), operation.method(),
-                    false, false, false, confidence, evidenceLines, operation.requestBodyFields());
+                    false, false, false, confidence, evidenceLines, operation.requestBodyFields(),
+                    accessTokenPath);
             if (best == null || isHigherConfidence(candidate.confidence(), best.confidence())) {
                 best = candidate;
             }
@@ -173,6 +182,40 @@ public class CapabilityExtractor {
     private boolean matchesAny(String field, Set<String> hints) {
         String lower = field.toLowerCase();
         return hints.stream().anyMatch(lower::contains);
+    }
+
+    // 로그인 응답의 스칼라 필드 dot-path들(예: "data.accessToken") 중 이름이 access token처럼 보이는
+    // 것을 찾는다. 우선순위 힌트를 순서대로 훑어 더 구체적인 이름을 먼저 확인하고, 같은 우선순위에서는
+    // 더 얕은(중첩이 적은) 경로를 택한다. 못 찾으면 null — PreviewAnalysisService가 unresolved로 표시한다.
+    private String detectAccessTokenPath(List<String> responseFieldPaths) {
+        for (String hint : ACCESS_TOKEN_FIELD_PRIORITY) {
+            String best = null;
+            for (String path : responseFieldPaths) {
+                if (!hint.equals(normalizeFieldName(leafSegment(path)))) {
+                    continue;
+                }
+                if (best == null || pathDepth(path) < pathDepth(best)) {
+                    best = path;
+                }
+            }
+            if (best != null) {
+                return best;
+            }
+        }
+        return null;
+    }
+
+    private String leafSegment(String dotPath) {
+        int idx = dotPath.lastIndexOf('.');
+        return idx >= 0 ? dotPath.substring(idx + 1) : dotPath;
+    }
+
+    private String normalizeFieldName(String name) {
+        return name.toLowerCase().replace("_", "").replace("-", "");
+    }
+
+    private int pathDepth(String dotPath) {
+        return (int) dotPath.chars().filter(c -> c == '.').count();
     }
 
     private boolean lastSegmentIsParam(String path) {

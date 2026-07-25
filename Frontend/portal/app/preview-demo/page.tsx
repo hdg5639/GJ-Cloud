@@ -12,27 +12,27 @@ const CAPABILITIES: PreviewCapability[] = [
   {
     id: "auth.login", resourceName: "auth", type: "LOGIN", operationId: "login",
     path: "/auth/login", method: "POST", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: ["email", "password"],
+    confidence: "HIGH", evidence: [], fields: ["email", "password"], accessTokenPath: "data.accessToken",
   },
   {
     id: "vms.list", resourceName: "vms", type: "LIST", operationId: "listVms",
     path: "/vms", method: "GET", hasSearch: true, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: [],
+    confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null,
   },
   {
     id: "vms.detail", resourceName: "vms", type: "DETAIL", operationId: "getVm",
     path: "/vms/{id}", method: "GET", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: [],
+    confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null,
   },
   {
     id: "vms.create", resourceName: "vms", type: "CREATE", operationId: "createVm",
     path: "/vms", method: "POST", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: ["name", "planType"],
+    confidence: "HIGH", evidence: [], fields: ["name", "planType"], accessTokenPath: null,
   },
   {
     id: "vms.delete", resourceName: "vms", type: "DELETE", operationId: "deleteVm",
     path: "/vms/{id}", method: "DELETE", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: [],
+    confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null,
   },
 ];
 

@@ -238,6 +238,7 @@ public class PreviewComposeArtifactBuilder {
               confidence: string;
               evidence: string[];
               fields: string[];
+              accessTokenPath: string | null;
             }
 
             interface PageDraft {
@@ -318,7 +319,26 @@ public class PreviewComposeArtifactBuilder {
               return [];
             }
 
-            function extractToken(result: unknown): string | null {
+            // accessTokenPath("data.accessToken" 같은 dot-path)가 분석 단계에서 확인됐거나 사용자가 직접
+            // 지정했다면 그 위치를 그대로 신뢰한다. 없을 때만 흔한 이름으로 추측한다.
+            function readDotPath(result: unknown, dotPath: string): string | null {
+              let current: unknown = result;
+              for (const key of dotPath.split(".")) {
+                if (!current || typeof current !== "object") {
+                  return null;
+                }
+                current = (current as Record<string, unknown>)[key];
+              }
+              return typeof current === "string" && current.length > 0 ? current : null;
+            }
+
+            function extractToken(result: unknown, accessTokenPath: string | null): string | null {
+              if (accessTokenPath) {
+                const viaPath = readDotPath(result, accessTokenPath);
+                if (viaPath) {
+                  return viaPath;
+                }
+              }
               if (!result || typeof result !== "object") {
                 return null;
               }
@@ -374,7 +394,7 @@ public class PreviewComposeArtifactBuilder {
                 setLoading(true);
                 try {
                   const result = await callCapability(capability, null, { body: values });
-                  const token = extractToken(result);
+                  const token = extractToken(result, capability.accessTokenPath);
                   if (!token) {
                     setError("응답에서 토큰을 찾지 못했습니다.");
                     return;

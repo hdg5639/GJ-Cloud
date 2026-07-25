@@ -42,6 +42,8 @@ public class OpenApiNormalizer {
             Set.of("content", "items", "data", "list", "results", "records", "rows", "elements", "result", "payload");
     // 순환 $ref로 인한 무한 재귀를 막기 위한 목록 봉투 해제 최대 깊이.
     private static final int MAX_ENVELOPE_UNWRAP_DEPTH = 4;
+    // 응답 스칼라 필드 dot-path 수집 상한 — 필드가 매우 많은 응답 스키마에서 과도한 작업을 막는다.
+    private static final int MAX_RESPONSE_FIELD_PATHS = 60;
 
     private final ObjectMapper objectMapper;
 
@@ -222,9 +224,10 @@ public class OpenApiNormalizer {
                 : globalSecurityPresent;
 
         boolean responseIsArray = extractResponseIsArray(operation.path("responses"), schemas);
+        List<String> responseFieldPaths = extractResponseFieldPaths(operation.path("responses"), schemas);
 
         return new ApiOperationEvidence(path, method, operationId, summary, tags, parameters,
-                requestBodyFields, requiresAuth, responseIsArray);
+                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths);
     }
 
     private List<ApiParameterEvidence> extractParameters(JsonNode parametersNode) {
@@ -328,6 +331,61 @@ public class OpenApiNormalizer {
             }
         }
         return false;
+    }
+
+    // 성공 응답 스키마에서 스칼라(문자열/숫자/불리언) leaf 필드의 dot-path를 모두 모은다(예: "data.accessToken").
+    // 로그인 응답에서 access token이 어디 있는지 CapabilityExtractor가 이름 힌트로 찾을 때 필요 — looksLikeArraySchema와
+    // 반대로 배열 내부는 절대 들어가지 않는다(토큰은 배열 안에 있지 않음).
+    private List<String> extractResponseFieldPaths(JsonNode responses, JsonNode schemas) {
+        var codes = responses.fieldNames();
+        while (codes.hasNext()) {
+            String code = codes.next();
+            if (!code.startsWith("2")) {
+                continue;
+            }
+            JsonNode content = responses.path(code).path("content");
+            if (!content.isObject() || content.isEmpty()) {
+                continue;
+            }
+            JsonNode schema = resolveSchema(content.elements().next().path("schema"), schemas);
+            List<String> paths = new ArrayList<>();
+            collectScalarFieldPaths(schema, schemas, "", 0, paths);
+            if (!paths.isEmpty()) {
+                return paths;
+            }
+        }
+        return List.of();
+    }
+
+    private void collectScalarFieldPaths(JsonNode schema, JsonNode schemas, String prefix, int depth, List<String> out) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH || out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+            return;
+        }
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode() || "array".equals(resolved.path("type").asText(null))) {
+            return;
+        }
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return;
+        }
+        var names = properties.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String path = prefix.isEmpty() ? name : prefix + "." + name;
+            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
+            String propertyType = propertySchema.path("type").asText(null);
+            if ("array".equals(propertyType)) {
+                // 배열은 대상 아님 — 건너뜀
+            } else if ("object".equals(propertyType) || propertySchema.has("properties") || propertySchema.has("allOf")) {
+                collectScalarFieldPaths(propertySchema, schemas, path, depth + 1, out);
+            } else {
+                out.add(path);
+            }
+            if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+                return;
+            }
+        }
     }
 
     // properties 직접 선언 + allOf로 합성된 속성(재귀적으로)까지 모두 합친다.

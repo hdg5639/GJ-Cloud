@@ -34,6 +34,15 @@ const STATUS_LABEL: Record<string, string> = {
   UNSUPPORTED: "이 문서로는 생성할 수 없습니다",
 };
 
+// GamjaBox_2.0_Key_Features.md 10절 — 신뢰도를 숫자 대신 상태(✓/△/✕)로 보여준다.
+const CONFIDENCE_MARK: Record<string, { symbol: string; className: string }> = {
+  HIGH: { symbol: "✓", className: "text-brand-strong" },
+  MEDIUM: { symbol: "△", className: "text-[#e8b657]" },
+  LOW: { symbol: "✕", className: "text-danger" },
+};
+
+const ACCESS_TOKEN_PATH_FIELD = "auth.login.accessTokenPath";
+
 export default function PreviewWizardPage() {
   const params = useParams();
   const router = useRouter();
@@ -56,6 +65,7 @@ export default function PreviewWizardPage() {
   const [reviewFindings, setReviewFindings] = useState<PageReviewFinding[] | null>(null);
   const [previewPageId, setPreviewPageId] = useState<string | null>(null);
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
+  const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
 
   // 3단계 — 배포
   const [targetName, setTargetName] = useState("");
@@ -78,6 +88,7 @@ export default function PreviewWizardPage() {
       setApiBaseUrl(data.apiServerUrls[0] ?? "");
       setPreviewPageId(data.pages[0]?.id ?? null);
       setPreviewAuthToken(null);
+      setAccessTokenPathInput("");
       setStep(2);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "분석에 실패했습니다.");
@@ -123,6 +134,24 @@ export default function PreviewWizardPage() {
 
   const findCapability = (id: string): PreviewCapability | undefined =>
     result?.capabilities.find((c) => c.id === id);
+
+  // 신뢰도 낮은/확인 못 한 항목을 사용자가 직접 지정하는 보완 UI(§10) — 지금은 access token 위치
+  // 하나만 다룬다. 로컬 상태만 바꾸면 review/deploy가 그대로 result.capabilities를 다시 보내므로
+  // 서버 호출 없이 이후 단계(라이브 프리뷰 로그인, 배포)에 곧바로 반영된다.
+  function handleSetAccessTokenPath() {
+    const path = accessTokenPathInput.trim();
+    if (!path) return;
+    setResult((prev) => {
+      if (!prev) return prev;
+      const unresolved = prev.unresolved.filter((f) => f.field !== ACCESS_TOKEN_PATH_FIELD);
+      return {
+        ...prev,
+        capabilities: prev.capabilities.map((c) => (c.type === "LOGIN" ? { ...c, accessTokenPath: path } : c)),
+        unresolved,
+        status: unresolved.length === 0 && prev.status === "NEEDS_INPUT" ? "READY" : prev.status,
+      };
+    });
+  }
 
   if (!accessToken) return <PageLoader />;
 
@@ -192,11 +221,26 @@ export default function PreviewWizardPage() {
             >
               <p className="font-bold">{STATUS_LABEL[result.status] ?? result.status}</p>
               {result.unresolved.length > 0 && (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2 space-y-2">
                   {result.unresolved.map((field, i) => (
-                    <p key={i}>
-                      · [{field.field}] {field.reason}
-                    </p>
+                    <div key={i}>
+                      <p>
+                        · [{field.field}] {field.reason}
+                      </p>
+                      {field.field === ACCESS_TOKEN_PATH_FIELD && (
+                        <div className="mt-1.5 flex gap-2">
+                          <Input
+                            value={accessTokenPathInput}
+                            onChange={(e) => setAccessTokenPathInput(e.target.value)}
+                            placeholder="예: data.accessToken"
+                            className="max-w-[240px]"
+                          />
+                          <Button type="button" onClick={handleSetAccessTokenPath} disabled={!accessTokenPathInput.trim()}>
+                            직접 설정
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -222,12 +266,14 @@ export default function PreviewWizardPage() {
                     {page.capabilityIds.map((id) => {
                       const capability = findCapability(id);
                       if (!capability) return null;
+                      const mark = CONFIDENCE_MARK[capability.confidence];
                       return (
                         <span
                           key={id}
                           title={`${capability.method} ${capability.path} (신뢰도: ${capability.confidence})`}
                           className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-muted"
                         >
+                          {mark && <span className={`mr-1 font-bold ${mark.className}`}>{mark.symbol}</span>}
                           {CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type}
                         </span>
                       );

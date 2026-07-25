@@ -86,8 +86,27 @@ export function extractArray(result: unknown, depth = 0): Record<string, unknown
   return [];
 }
 
-// 로그인 응답에서 흔한 위치(data.accessToken/token/accessToken)의 토큰 문자열을 찾는다.
-export function extractToken(result: unknown): string | null {
+// 분석 단계(또는 사용자가 직접 지정)에서 확인된 dot-path("data.accessToken" 등)를 우선 신뢰한다 —
+// 분석이 못 찾았거나 그 위치에 값이 없을 때만 흔한 이름(accessToken/token)으로 추측한다.
+function readDotPath(result: unknown, dotPath: string): string | null {
+  let current: unknown = result;
+  for (const key of dotPath.split(".")) {
+    if (!current || typeof current !== "object") {
+      return null;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return typeof current === "string" && current.length > 0 ? current : null;
+}
+
+// 로그인 응답에서 토큰 문자열을 찾는다.
+export function extractToken(result: unknown, accessTokenPath?: string | null): string | null {
+  if (accessTokenPath) {
+    const viaPath = readDotPath(result, accessTokenPath);
+    if (viaPath) {
+      return viaPath;
+    }
+  }
   if (!result || typeof result !== "object") {
     return null;
   }

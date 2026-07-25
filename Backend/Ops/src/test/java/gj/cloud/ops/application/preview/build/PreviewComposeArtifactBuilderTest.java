@@ -80,15 +80,15 @@ class PreviewComposeArtifactBuilderTest {
     private List<Capability> sampleCapabilities() {
         return List.of(
                 new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",
-                        false, false, false, "HIGH", List.of(), List.of("email", "password")),
+                        false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken"),
                 new Capability("vms.list", "vms", CapabilityType.LIST, "listVms", "/vms", "GET",
-                        true, false, false, "HIGH", List.of(), List.of()),
+                        true, false, false, "HIGH", List.of(), List.of(), null),
                 new Capability("vms.detail", "vms", CapabilityType.DETAIL, "getVm", "/vms/{id}", "GET",
-                        false, false, false, "HIGH", List.of(), List.of()),
+                        false, false, false, "HIGH", List.of(), List.of(), null),
                 new Capability("vms.create", "vms", CapabilityType.CREATE, "createVm", "/vms", "POST",
-                        false, false, false, "HIGH", List.of(), List.of("name", "planType")),
+                        false, false, false, "HIGH", List.of(), List.of("name", "planType"), null),
                 new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{id}", "DELETE",
-                        false, false, false, "HIGH", List.of(), List.of())
+                        false, false, false, "HIGH", List.of(), List.of(), null)
         );
     }
 

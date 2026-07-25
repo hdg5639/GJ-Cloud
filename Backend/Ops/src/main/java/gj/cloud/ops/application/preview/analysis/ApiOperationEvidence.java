@@ -14,7 +14,10 @@ public record ApiOperationEvidence(
         List<ApiParameterEvidence> parameters,
         List<String> requestBodyFields,
         boolean requiresAuth,
-        boolean responseIsArray
+        boolean responseIsArray,
+        // 응답 스키마에서 뽑은 스칼라(문자열/숫자/불리언) leaf 필드의 dot-path 목록(예: "data.accessToken").
+        // 로그인 응답에서 access token이 어디 있는지 CapabilityExtractor가 추론할 때만 쓰인다.
+        List<String> responseFieldPaths
 ) {
     public boolean hasPathParam() {
         return path != null && path.contains("{");

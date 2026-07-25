@@ -443,6 +443,10 @@ export interface PreviewCapability {
   confidence: string;
   evidence: string[];
   fields: string[];
+  // LOGIN 응답에서 access token이 위치한 dot-path(예: "data.accessToken"). 분석 단계에서 이름 힌트로
+  // 못 찾으면 null이고 unresolved에 "auth.login.accessTokenPath"가 함께 온다 — 위자드에서 사용자가
+  // 직접 지정하면 이 필드를 덮어써서 review/deploy 요청에 그대로 실어 보낸다.
+  accessTokenPath: string | null;
 }
 
 export interface PreviewPageDraft {
