@@ -4,6 +4,21 @@ import type { PreviewCapability, PreviewRuntimeConfig } from "./types";
 // origin을 CORS로 허용하지 않으면 요청이 브라우저에서 막힌다 — Phase C 범위에서는 해결하지 않고,
 // 실제 배포(Phase D 이후)에서 프록시가 필요한지 별도로 판단한다.
 
+// DetailPanel/CreateEditModal/DeleteConfirmModal은 실제 OpenAPI 경로 파라미터 이름을 모른 채 항상
+// { id: ... } 하나만 넘긴다. 예전엔 문자열 그대로 "{id}"를 찾아 치환해서, capability.path가
+// "/vms/{vmId}"처럼 다른 이름을 쓰면 치환에 실패해 URL에 "{vmId}"가 그대로 남아 요청이 깨졌다.
+// DETAIL/UPDATE/DELETE는 항상 경로의 마지막 세그먼트만 파라미터이므로(CapabilityExtractor의
+// lastSegmentIsParam 규칙), 이름과 무관하게 "경로의 마지막 {...}"를 대상 리소스 ID로 취급해 치환한다.
+// 중첩 리소스(경로 중간에 다른 {orgId} 같은 파라미터가 더 있는 경우)는 아직 지원하지 않는다.
+function replaceLastPathPlaceholder(path: string, value: string): string {
+  const lastOpen = path.lastIndexOf("{");
+  const lastClose = path.lastIndexOf("}");
+  if (lastOpen === -1 || lastClose === -1 || lastClose < lastOpen) {
+    return path;
+  }
+  return path.slice(0, lastOpen) + encodeURIComponent(value) + path.slice(lastClose + 1);
+}
+
 function buildUrl(
   config: PreviewRuntimeConfig,
   capability: PreviewCapability,
@@ -11,8 +26,8 @@ function buildUrl(
   query: Record<string, string> = {}
 ): string {
   let path = capability.path;
-  for (const [key, value] of Object.entries(pathParams)) {
-    path = path.replace(`{${key}}`, encodeURIComponent(value));
+  if (pathParams.id !== undefined) {
+    path = replaceLastPathPlaceholder(path, pathParams.id);
   }
   const base = config.apiBaseUrl.replace(/\/$/, "");
   const url = new URL(base + path);

@@ -266,10 +266,24 @@ public class PreviewComposeArtifactBuilder {
             const CAPABILITIES: Capability[] = __CAPABILITIES_JSON__;
             const PAGES: PageDraft[] = __PAGES_JSON__;
 
+            // DetailPanel/CreateEditModal/DeleteConfirmModal은 실제 경로 파라미터 이름을 모른 채 항상
+            // { id: ... } 하나만 넘긴다. 이름 그대로 "{id}"를 찾아 치환하면 capability.path가
+            // "/vms/{vmId}"처럼 다른 이름을 쓸 때 치환에 실패해 URL에 "{vmId}"가 그대로 남는다.
+            // DETAIL/UPDATE/DELETE는 항상 경로의 마지막 세그먼트만 파라미터이므로 이름과 무관하게
+            // "경로의 마지막 {...}"를 대상 리소스 ID로 치환한다.
+            function replaceLastPathPlaceholder(path: string, value: string): string {
+              const lastOpen = path.lastIndexOf("{");
+              const lastClose = path.lastIndexOf("}");
+              if (lastOpen === -1 || lastClose === -1 || lastClose < lastOpen) {
+                return path;
+              }
+              return path.slice(0, lastOpen) + encodeURIComponent(value) + path.slice(lastClose + 1);
+            }
+
             function buildUrl(capability: Capability, pathParams: Record<string, string> = {}, query: Record<string, string> = {}): string {
               let path = capability.path;
-              for (const [key, value] of Object.entries(pathParams)) {
-                path = path.replace(`{${key}}`, encodeURIComponent(value));
+              if (pathParams.id !== undefined) {
+                path = replaceLastPathPlaceholder(path, pathParams.id);
               }
               const url = new URL(API_BASE_URL.replace(/\\/$/, "") + path);
               for (const [key, value] of Object.entries(query)) {

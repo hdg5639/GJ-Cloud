@@ -88,13 +88,15 @@ class PreviewComposeArtifactBuilderTest {
                 new Capability("vms.list", "vms", CapabilityType.LIST, "listVms", "/vms", "GET",
                         true, false, false, "HIGH", List.of(), List.of(), null, "keyword",
                         RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
-                new Capability("vms.detail", "vms", CapabilityType.DETAIL, "getVm", "/vms/{id}", "GET",
+                // {id}가 아니라 {vmId}를 씀 — 경로 파라미터 이름이 "id"가 아닐 때도 buildUrl이 마지막
+                // {...}를 찾아 치환하는지(이름 매칭이 아니라 위치 매칭인지) 이 값으로 실제 빌드까지 검증한다.
+                new Capability("vms.detail", "vms", CapabilityType.DETAIL, "getVm", "/vms/{vmId}", "GET",
                         false, false, false, "HIGH", List.of(), List.of(), null, null,
                         RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
                 new Capability("vms.create", "vms", CapabilityType.CREATE, "createVm", "/vms", "POST",
                         false, false, false, "HIGH", List.of(), List.of("name", "planType"), null, null,
                         RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED),
-                new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{id}", "DELETE",
+                new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{vmId}", "DELETE",
                         false, false, false, "HIGH", List.of(), List.of(), null, null,
                         RiskLevel.DESTRUCTIVE, AutomationPolicy.EXPLICIT_CONFIRMATION),
                 new Capability("tags.list", "tags", CapabilityType.LIST, "listTags", "/tags", "GET",
