@@ -63,6 +63,6 @@ class PageDraftGeneratorTest {
 
     private Capability capability(String id, String resourceName, CapabilityType type) {
         return new Capability(id, resourceName, type, null, "/" + resourceName, "GET",
-                false, false, false, "HIGH", List.of(), List.of(), null);
+                false, false, false, "HIGH", List.of(), List.of(), null, null);
     }
 }

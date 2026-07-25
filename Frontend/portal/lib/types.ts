@@ -447,6 +447,9 @@ export interface PreviewCapability {
   // 못 찾으면 null이고 unresolved에 "auth.login.accessTokenPath"가 함께 온다 — 위자드에서 사용자가
   // 직접 지정하면 이 필드를 덮어써서 review/deploy 요청에 그대로 실어 보낸다.
   accessTokenPath: string | null;
+  // hasSearch=true일 때 실제 쿼리 파라미터 이름(예: "keyword"). "search"로 고정해서 보내면 API가 다른
+  // 이름을 쓸 때 검색이 조용히 실패하므로 렌더러는 이 값을 그대로 써야 한다.
+  searchParam: string | null;
 }
 
 export interface PreviewPageDraft {

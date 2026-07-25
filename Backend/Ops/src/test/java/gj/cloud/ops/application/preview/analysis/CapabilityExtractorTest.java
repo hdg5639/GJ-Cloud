@@ -34,10 +34,27 @@ class CapabilityExtractorTest {
         assertThat(list.hasSearch()).isTrue();
         assertThat(list.hasSort()).isTrue();
         assertThat(list.hasPagination()).isTrue();
+        assertThat(list.searchParam()).isEqualTo("search");
         assertThat(list.confidence()).isEqualTo(RepositoryEvidence.CONFIDENCE_HIGH);
 
         Capability detail = findCapability(capabilities, "vms.detail");
         assertThat(detail.hasSearch()).isFalse();
+        assertThat(detail.searchParam()).isNull();
+    }
+
+    // 렌더러가 검색 파라미터 이름을 "search"로 하드코딩하면, API가 keyword/q/query 같은 다른 이름을 쓸 때
+    // 검색이 조용히 실패한다 — 감지된 실제 이름이 그대로 보존되는지 확인.
+    @Test
+    void preservesActualQueryParameterNameWhenNotLiterallyNamedSearch() {
+        List<ApiOperationEvidence> operations = List.of(
+                operation("GET", "/posts", "listPosts", true, List.of(param("keyword", "query")))
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("blog-service", "1.0", List.of(), List.of(), operations, 0);
+
+        Capability list = findCapability(extractor.extract(evidence), "posts.list");
+
+        assertThat(list.hasSearch()).isTrue();
+        assertThat(list.searchParam()).isEqualTo("keyword");
     }
 
     @Test

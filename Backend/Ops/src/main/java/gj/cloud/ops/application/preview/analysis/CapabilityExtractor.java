@@ -73,6 +73,9 @@ public class CapabilityExtractor {
         boolean hasSearch = false;
         boolean hasSort = false;
         boolean hasPagination = false;
+        // 실제 쿼리 파라미터 이름을 보존한다 — "search"로 하드코딩해 보내면 keyword/q/query를 쓰는
+        // API에서는 검색이 조용히 안 먹는다(렌더러가 이 이름을 그대로 요청에 실어야 함).
+        String searchParam = null;
         if (type == CapabilityType.LIST) {
             for (ApiParameterEvidence param : operation.parameters()) {
                 if (!"query".equalsIgnoreCase(param.in())) {
@@ -81,6 +84,9 @@ public class CapabilityExtractor {
                 String name = param.name().toLowerCase();
                 if (SEARCH_PARAM_NAMES.contains(name)) {
                     hasSearch = true;
+                    if (searchParam == null) {
+                        searchParam = param.name();
+                    }
                 }
                 if (SORT_PARAM_NAMES.contains(name)) {
                     hasSort = true;
@@ -105,7 +111,7 @@ public class CapabilityExtractor {
         return Optional.of(new Capability(
                 Capability.idOf(resourceName, type), resourceName, type,
                 operation.operationId(), operation.path(), operation.method(),
-                hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null));
+                hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null, searchParam));
     }
 
     // 문서 전체에서 로그인 오퍼레이션 후보를 찾는다 — 텍스트 힌트(경로/operationId/태그)와 요청 필드
@@ -151,7 +157,7 @@ public class CapabilityExtractor {
                     "auth.login", "auth", CapabilityType.LOGIN,
                     operation.operationId(), operation.path(), operation.method(),
                     false, false, false, confidence, evidenceLines, operation.requestBodyFields(),
-                    accessTokenPath);
+                    accessTokenPath, null);
             if (best == null || isHigherConfidence(candidate.confidence(), best.confidence())) {
                 best = candidate;
             }

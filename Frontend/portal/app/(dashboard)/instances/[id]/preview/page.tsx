@@ -192,6 +192,7 @@ export default function PreviewWizardPage() {
         evidence: ["사용자가 직접 지정함"],
         fields: [usernameField, passwordField],
         accessTokenPath,
+        searchParam: null,
       };
       const capabilities = [...prev.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
       const hasAuthPage = prev.pages.some((p) => p.skeleton === "AUTH_PAGE");

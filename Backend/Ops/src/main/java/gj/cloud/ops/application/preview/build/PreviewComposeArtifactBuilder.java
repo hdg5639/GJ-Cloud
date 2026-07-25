@@ -247,6 +247,7 @@ public class PreviewComposeArtifactBuilder {
               evidence: string[];
               fields: string[];
               accessTokenPath: string | null;
+              searchParam: string | null;
             }
 
             interface PageDraft {
@@ -529,7 +530,7 @@ public class PreviewComposeArtifactBuilder {
                   setError(null);
                   const query: Record<string, string> = {};
                   if (capability.hasSearch && search) {
-                    query.search = search;
+                    query[capability.searchParam ?? "search"] = search;
                   }
                   try {
                     const result = await callCapability(capability, authToken, { query });

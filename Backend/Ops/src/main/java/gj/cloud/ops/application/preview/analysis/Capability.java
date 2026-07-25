@@ -21,7 +21,10 @@ public record Capability(
         List<String> fields,
         // LOGIN 응답에서 access token이 위치한 dot-path(예: "data.accessToken") — 이름 힌트로 추론하지 못하면
         // null이고 PreviewAnalysisService가 unresolved로 표시해 사용자가 직접 지정하게 한다. LOGIN 외 타입은 항상 null.
-        String accessTokenPath
+        String accessTokenPath,
+        // hasSearch=true일 때 실제로 감지된 쿼리 파라미터 이름(예: "keyword") — 렌더러가 "search"로
+        // 하드코딩해 보내면 API가 다른 이름을 쓸 때 검색이 조용히 실패한다. LIST 외 타입/미감지 시 null.
+        String searchParam
 ) {
     public static String idOf(String resourceName, CapabilityType type) {
         return resourceName + "." + type.name().toLowerCase();

@@ -81,17 +81,17 @@ class PreviewComposeArtifactBuilderTest {
     private List<Capability> sampleCapabilities() {
         return List.of(
                 new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",
-                        false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken"),
+                        false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken", null),
                 new Capability("vms.list", "vms", CapabilityType.LIST, "listVms", "/vms", "GET",
-                        true, false, false, "HIGH", List.of(), List.of(), null),
+                        true, false, false, "HIGH", List.of(), List.of(), null, "keyword"),
                 new Capability("vms.detail", "vms", CapabilityType.DETAIL, "getVm", "/vms/{id}", "GET",
-                        false, false, false, "HIGH", List.of(), List.of(), null),
+                        false, false, false, "HIGH", List.of(), List.of(), null, null),
                 new Capability("vms.create", "vms", CapabilityType.CREATE, "createVm", "/vms", "POST",
-                        false, false, false, "HIGH", List.of(), List.of("name", "planType"), null),
+                        false, false, false, "HIGH", List.of(), List.of("name", "planType"), null, null),
                 new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{id}", "DELETE",
-                        false, false, false, "HIGH", List.of(), List.of(), null),
+                        false, false, false, "HIGH", List.of(), List.of(), null, null),
                 new Capability("tags.list", "tags", CapabilityType.LIST, "listTags", "/tags", "GET",
-                        false, false, false, "HIGH", List.of(), List.of(), null)
+                        false, false, false, "HIGH", List.of(), List.of(), null, null)
         );
     }
 

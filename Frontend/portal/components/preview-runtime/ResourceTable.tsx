@@ -38,7 +38,7 @@ export function ResourceTable({
       setError(null);
       const query: Record<string, string> = {};
       if (capability.hasSearch && search) {
-        query.search = search;
+        query[capability.searchParam ?? "search"] = search;
       }
       try {
         const result = await callCapability(config, capability, { query });
