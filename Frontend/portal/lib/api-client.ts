@@ -44,6 +44,10 @@ import type {
   GithubInstallationResponse,
   GithubRepositoryResponse,
   GithubInstallationCompleteResponse,
+  PreviewAnalysisResult,
+  PreviewCapability,
+  PreviewPageDraft,
+  PageReviewFinding,
 } from "./types";
 
 const API_BASE = {
@@ -754,6 +758,38 @@ export const api = {
         request<GithubInstallationResponse[]>("ops", "/ops/github/installations", { accessToken }),
       listRepositories: (accessToken: string) =>
         request<GithubRepositoryResponse[]>("ops", "/ops/github/repositories", { accessToken }),
+    },
+    // Auto Preview (GamjaBox_2.0_Key_Features.md 1단계) — analyze/review는 VM에 종속되지 않고
+    // (분석만 함, 배포 안 함), deploy만 VM별 엔드포인트를 쓴다.
+    preview: {
+      analyze: (
+        accessToken: string,
+        body: { apiDocsUrl: string; serviceDescription?: string; purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN" }
+      ) =>
+        request<PreviewAnalysisResult>("ops", "/ops/preview/analyze", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      review: (
+        accessToken: string,
+        body: { serviceDescription?: string; capabilities: PreviewCapability[]; pages: PreviewPageDraft[] }
+      ) =>
+        request<PageReviewFinding[]>("ops", "/ops/preview/review", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      deploy: (
+        accessToken: string,
+        vmId: string,
+        body: { targetName: string; apiBaseUrl: string; capabilities: PreviewCapability[]; pages: PreviewPageDraft[] }
+      ) =>
+        request<DeploymentResponse>("ops", `/ops/${vmId}/preview/deploy`, {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
     },
     backups: {
       list: (accessToken: string, vmId: string) =>

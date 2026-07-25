@@ -54,8 +54,13 @@ public class DeploymentTargetService {
         if (normalizedName.isBlank() || normalizedName.length() > 60) {
             throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
         }
-        validateRepositoryUrl(repositoryUrl);
-        validateBranch(branch);
+        // Auto Preview는 Git 저장소가 없는 target(repositoryUrl/branch가 빈 값)이라 이 검증 대상이 아니다 —
+        // repositoryUrl이 실제로 채워진 경우에만 형식을 검증한다(빈 값 자체를 허용하는 건 이 한 가지 경우뿐).
+        boolean hasRepository = repositoryUrl != null && !repositoryUrl.isBlank();
+        if (hasRepository) {
+            validateRepositoryUrl(repositoryUrl);
+            validateBranch(branch);
+        }
         if (targetRepository.existsByVmIdAndNameIgnoreCaseAndActiveTrue(vmId, normalizedName)) {
             throw new OpsException(OpsErrorCode.DEPLOYMENT_TARGET_NAME_DUPLICATED);
         }

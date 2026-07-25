@@ -46,7 +46,7 @@ public class ProxmoxClient {
     }
 
     public Mono<String> cloneVm(int newVmid, PlanType planType, String name) {
-        int templateVmid = planType.getTemplateVmid();
+        int templateVmid = PlanType.TEMPLATE_VMID;
 
         MultiValueMap<String, String> cloneParams = new LinkedMultiValueMap<>();
         cloneParams.add("newid", String.valueOf(newVmid));
@@ -92,8 +92,12 @@ public class ProxmoxClient {
 
         MultiValueMap<String, String> configParams = new LinkedMultiValueMap<>();
         configParams.add("cores", String.valueOf(config.getCores()));
+        configParams.add("vcpus", String.valueOf(config.getVcpus()));
         configParams.add("memory", config.getMemory());
         configParams.add("cpu", config.getCpu());
+        // 단일 템플릿(9026) 클론 직후에는 cloud-init이 첫 부팅 시 자동 apt upgrade를 실행하지 않도록
+        // 반드시 시작 전에 ciupgrade=0을 적용해야 함 — 늦게 적용하면 이미 부팅이 진행되어 의미가 없음
+        configParams.add("ciupgrade", config.getCiupgrade());
         // 템플릿 기본 사용자에 의존하면 템플릿 교체/재생성 시 키가 다른 계정에 들어갈 수 있다.
         configParams.add("ciuser", config.getCiuser());
         // Proxmox의 sshkeys 파라미터는 자체 검증기가 "urlencoded 문자열이어야 함"을 요구함 — HTTP 폼
@@ -373,6 +377,7 @@ public class ProxmoxClient {
     public Mono<Void> updateResources(int vmid, PlanType planType) {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("cores", String.valueOf(planType.getCores()));
+        params.add("vcpus", String.valueOf(planType.getCores()));
         params.add("memory", planType.getMemory());
         params.add("cpu", "host,hidden=1");
         if (planType == PlanType.FREE) {

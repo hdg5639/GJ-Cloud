@@ -77,6 +77,11 @@ CREATE INDEX IF NOT EXISTS idx_deployment_targets_github_repo
     ON deployment_targets(github_installation_id, github_repository_id);
 ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS latest_requested_at TIMESTAMP;
 
+-- Auto Preview(SourceType.AUTO_PREVIEW) 반영 — 기존 배포 환경의 CHECK 제약을 확장
+ALTER TABLE deployment_targets DROP CONSTRAINT IF EXISTS chk_deployment_target_source_type;
+ALTER TABLE deployment_targets ADD CONSTRAINT chk_deployment_target_source_type
+    CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE', 'AUTO_PREVIEW'));
+
 CREATE TABLE IF NOT EXISTS deployments (
     id                          VARCHAR(36)  PRIMARY KEY,
     vm_id                       VARCHAR(36)  NOT NULL,
@@ -109,6 +114,10 @@ CREATE TABLE IF NOT EXISTS deployments (
     )),
     CONSTRAINT chk_source_type CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE'))
 );
+
+ALTER TABLE deployments DROP CONSTRAINT IF EXISTS chk_source_type;
+ALTER TABLE deployments ADD CONSTRAINT chk_source_type
+    CHECK (source_type IN ('TEMPLATE_SPEC', 'AI_SPEC', 'RAW_COMPOSE', 'AUTO_PREVIEW'));
 
 -- 재시도/수정 후 재배포(compose-spec 조회 API)를 위해 추가 — 기존 배포 환경에서도 반영되도록 idempotent하게 추가
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS environment_files_ciphertext TEXT;
@@ -184,6 +193,23 @@ ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS ambiguity_score INTE
 ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS cache_hit BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS idx_ai_spec_generation_log_vm_id ON ai_spec_generation_log(vm_id);
+
+-- Auto Preview(GamjaBox_2.0_Key_Features.md 1단계) AI 검수 감사 로그. 분석/검수가 특정 VM에
+-- 종속되지 않으므로 ai_spec_generation_log(vm_id 필수)를 그대로 쓰지 않고 requester_user_id로 감사한다.
+CREATE TABLE IF NOT EXISTS ai_preview_generation_log (
+    id                  VARCHAR(36)  PRIMARY KEY,
+    requester_user_id   VARCHAR(64)  NOT NULL,
+    kind                VARCHAR(20)  NOT NULL DEFAULT 'REVIEW',
+    model               VARCHAR(100) NOT NULL,
+    input_tokens        BIGINT       NOT NULL,
+    output_tokens       BIGINT       NOT NULL,
+    succeeded           BOOLEAN      NOT NULL,
+    created_at          TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_ai_preview_generation_log_kind CHECK (kind IN ('GENERATION', 'REVIEW'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_preview_generation_log_requester ON ai_preview_generation_log(requester_user_id);
 
 CREATE TABLE IF NOT EXISTS db_backups (
     id                  VARCHAR(36)  PRIMARY KEY,

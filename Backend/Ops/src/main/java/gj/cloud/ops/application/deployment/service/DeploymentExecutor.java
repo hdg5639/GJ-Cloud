@@ -691,15 +691,27 @@ public class DeploymentExecutor {
         try {
             session = sshSessionFactory.createSession(vmId, internalIp);
 
-            updateStatus(deploymentId, DeploymentStatus.CLONING, "소스 체크아웃 시작 (branch: " + repoConfig.branch() + ")");
-            gitReleaseManager.ensureBareRepo(session, appId, repoConfig.repoUrl(), repoConfig.patToken());
-            String commitSha = gitReleaseManager.fetchAndResolveCommit(
-                    session, appId, repoConfig.branch(), repoConfig.patToken(), requestedRevision);
-            gitReleaseManager.createWorktree(session, appId, deploymentId, commitSha);
-            String releaseDir = gitReleaseManager.releaseDir(appId, deploymentId);
-            updateEntity(deploymentId, e -> e.withSourceRevision(commitSha, releaseDir));
-            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
-                    "소스 체크아웃 완료 (" + repoConfig.branch() + " → " + shortSha(commitSha) + ")");
+            String releaseDir;
+            boolean hasRepository = repoConfig.repoUrl() != null && !repoConfig.repoUrl().isBlank();
+            if (hasRepository) {
+                updateStatus(deploymentId, DeploymentStatus.CLONING, "소스 체크아웃 시작 (branch: " + repoConfig.branch() + ")");
+                gitReleaseManager.ensureBareRepo(session, appId, repoConfig.repoUrl(), repoConfig.patToken());
+                String commitSha = gitReleaseManager.fetchAndResolveCommit(
+                        session, appId, repoConfig.branch(), repoConfig.patToken(), requestedRevision);
+                gitReleaseManager.createWorktree(session, appId, deploymentId, commitSha);
+                releaseDir = gitReleaseManager.releaseDir(appId, deploymentId);
+                updateEntity(deploymentId, e -> e.withSourceRevision(commitSha, releaseDir));
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                        "소스 체크아웃 완료 (" + repoConfig.branch() + " → " + shortSha(commitSha) + ")");
+            } else {
+                // Auto Preview처럼 Git 저장소 없이 전부 생성된 파일(artifact.uploadedFiles())만으로
+                // 배포하는 경우 — clone/worktree 없이 release 디렉토리만 만들고 그 아래로 바로 업로드한다.
+                updateStatus(deploymentId, DeploymentStatus.CLONING, "생성된 소스 준비 중...");
+                releaseDir = gitReleaseManager.releaseDir(appId, deploymentId);
+                sshCommandExecutor.execOrThrow(session, "mkdir -p '" + releaseDir + "'", 10_000);
+                updateEntity(deploymentId, e -> e.withSourceRevision("generated", releaseDir));
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "생성된 소스 준비 완료");
+            }
 
             String contextDir = resolveContextDir(releaseDir, repoConfig.context());
 
