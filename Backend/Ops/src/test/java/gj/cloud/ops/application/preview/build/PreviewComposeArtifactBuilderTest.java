@@ -13,6 +13,7 @@ import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.RiskLevel;
+import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import org.junit.jupiter.api.Test;
 
@@ -38,8 +39,11 @@ class PreviewComposeArtifactBuilderTest {
     @Test
     void generatesAllExpectedFilesWithoutLeftoverPlaceholders() {
         // API_KEY_HEADER로 검증 — Bearer만 가정하던 예전 방식이었다면 이 값이 App.tsx에 안 박혀 있었을 것.
+        // purpose=API_TEST(BlueprintCompiler가 손대지 않는 목적)로 기본 Variant(resource-table)가
+        // 그대로 나오는지 확인한다.
         ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"));
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
+                Purpose.API_TEST);
 
         assertThat(artifact.sourceType()).isEqualTo(SourceType.AUTO_PREVIEW);
         assertThat(artifact.exposedRoutes()).hasSize(1);
@@ -72,6 +76,24 @@ class PreviewComposeArtifactBuilderTest {
         assertThatIsValidJson(files.get("package.json"));
     }
 
+    // Direction Recovery Change Request Increment 4 회귀 테스트 — purpose=PRODUCT_LIKE면
+    // BlueprintCompiler가 list 계열 Block의 componentId를 resource-card-grid로 바꿔 생성된 소스에
+    // 실제로 반영되는지 확인한다.
+    @Test
+    void productLikePurposeCompilesToResourceCardGridVariant() {
+        ComposeArtifact artifact = builder.build(
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
+                Purpose.PRODUCT_LIKE);
+
+        Map<String, String> files = artifact.uploadedFiles().stream()
+                .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
+        String appTsx = files.get("src/App.tsx");
+
+        assertThat(appTsx).contains("\"componentId\":\"resource-card-grid\"");
+        assertThat(appTsx).contains("function ResourceCardGrid(");
+        assertThat(appTsx).doesNotContain("\"componentId\":\"resource-table\"");
+    }
+
     private void assertThatIsValidJson(String json) {
         try {
             JsonNode node = objectMapper.readTree(json);
@@ -85,7 +107,8 @@ class PreviewComposeArtifactBuilderTest {
     @Test
     void writeGeneratedProjectToTempDirForManualBuildVerification() throws IOException {
         ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"));
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
+                Purpose.PRODUCT_LIKE);
         Path dir = Files.createTempDirectory("gamjabox-preview-verify-");
         for (UploadedFile file : artifact.uploadedFiles()) {
             Path target = dir.resolve(file.vmPath());

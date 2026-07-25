@@ -11,6 +11,8 @@ import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
+import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
+import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -35,9 +37,10 @@ public class PreviewComposeArtifactBuilder {
     private final PreviewBlockResolver blockResolver;
 
     public ComposeArtifact build(
-            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy,
+            Purpose purpose
     ) {
-        String appTsx = renderAppTsx(apiBaseUrl, capabilities, pages, authStrategy);
+        String appTsx = renderAppTsx(apiBaseUrl, capabilities, pages, authStrategy, purpose);
 
         List<UploadedFile> uploadedFiles = List.of(
                 file("package.json", PACKAGE_JSON),
@@ -71,9 +74,10 @@ public class PreviewComposeArtifactBuilder {
     }
 
     private String renderAppTsx(
-            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy,
+            Purpose purpose
     ) {
-        Map<String, List<Block>> pageBlocks = blockResolver.resolveAll(pages, capabilities);
+        Map<String, List<Block>> pageBlocks = BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose);
         return APP_TSX_TEMPLATE
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
                 .replace("__CAPABILITIES_JSON__", toJson(capabilities))
@@ -295,7 +299,8 @@ public class PreviewComposeArtifactBuilder {
             // auto-preview-design/01-blueprint-schema.md의 Block Instance 축소판 — PageRenderer가
             // page.skeleton을 직접 switch하는 대신 이 목록을 순회해 조립한다.
             type ComponentId =
-              | "login-form" | "resource-table" | "detail-panel" | "create-edit-modal" | "delete-confirm-modal" | "dashboard-view";
+              | "login-form" | "resource-table" | "resource-card-grid" | "detail-panel" | "create-edit-modal"
+              | "delete-confirm-modal" | "dashboard-view";
             interface Block {
               instanceId: string;
               componentId: ComponentId;
@@ -578,6 +583,13 @@ public class PreviewComposeArtifactBuilder {
               return capabilityId ? findCapabilityById(capabilityId) : undefined;
             }
 
+            // list 계열은 BlueprintCompiler가 purpose에 따라 resource-table/resource-card-grid 중
+            // 하나로 이미 컴파일해뒀다 — 어느 쪽이든 찾아서 실제로 어떤 컴포넌트를 마운트할지는
+            // PageRenderer가 componentId를 보고 정한다.
+            function findListBlock(blocks: Block[]): Block | undefined {
+              return blocks.find((b) => b.componentId === "resource-table" || b.componentId === "resource-card-grid");
+            }
+
             function LoginForm({ capability, onLogin }: { capability: Capability; onLogin: (token: string) => void }) {
               const fields = capability.fields.length > 0 ? capability.fields : ["email", "password"];
               const [values, setValues] = useState<Record<string, string>>({});
@@ -703,6 +715,99 @@ public class PreviewComposeArtifactBuilder {
                         ))}
                       </tbody>
                     </table>
+                  )}
+                </div>
+              );
+            }
+
+            // Direction Recovery Change Request §9.1 "resource-card-grid" — ResourceTable과 데이터
+            // fetching·props는 완전히 동일하고(그래서 BlueprintCompiler가 componentId만 보고 갈아끼울
+            // 수 있음), 표 대신 카드 그리드로 보여준다. PRODUCT_LIKE 목적일 때 고른다.
+            function ResourceCardGrid({
+              capability, authToken, onRowClick, onCreateClick, refreshKey,
+            }: {
+              capability: Capability;
+              authToken: string | null;
+              onRowClick?: (row: Record<string, unknown>) => void;
+              onCreateClick?: () => void;
+              refreshKey: number;
+            }) {
+              const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+              const [loading, setLoading] = useState(true);
+              const [error, setError] = useState<string | null>(null);
+              const [search, setSearch] = useState("");
+
+              useEffect(() => {
+                let cancelled = false;
+                Promise.resolve().then(async () => {
+                  if (cancelled) return;
+                  setLoading(true);
+                  setError(null);
+                  const query: Record<string, string> = {};
+                  if (capability.hasSearch && search) {
+                    query[capability.searchParam ?? "search"] = search;
+                  }
+                  try {
+                    const result = await callCapability(capability, authToken, { query });
+                    if (!cancelled) setRows(extractArray(result, capability.collectionPath));
+                  } catch (err) {
+                    if (!cancelled) setError(err instanceof Error ? err.message : "목록을 불러오지 못했습니다");
+                  } finally {
+                    if (!cancelled) setLoading(false);
+                  }
+                });
+                return () => {
+                  cancelled = true;
+                };
+              }, [capability, authToken, search, refreshKey]);
+
+              return (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
+                    {capability.hasSearch ? (
+                      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" style={{ maxWidth: 240 }} />
+                    ) : (
+                      <span />
+                    )}
+                    {onCreateClick && (
+                      <button className="primary" onClick={onCreateClick}>
+                        + 추가
+                      </button>
+                    )}
+                  </div>
+                  {loading ? (
+                    <p className="muted">불러오는 중...</p>
+                  ) : error ? (
+                    <p className="error">{error}</p>
+                  ) : rows.length === 0 ? (
+                    <p className="muted">데이터가 없습니다</p>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+                      {rows.map((row, index) => {
+                        const entries = Object.entries(row);
+                        const [firstEntry, ...restEntries] = entries;
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => onRowClick?.(row)}
+                            className="panel"
+                            style={{ cursor: onRowClick ? "pointer" : undefined }}
+                          >
+                            {firstEntry && (
+                              <p style={{ fontWeight: 700, marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {formatCellValue(firstEntry[1])}
+                              </p>
+                            )}
+                            {restEntries.slice(0, 4).map(([key, value]) => (
+                              <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
+                                <span className="muted">{key}</span>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{formatCellValue(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               );
@@ -950,7 +1055,8 @@ public class PreviewComposeArtifactBuilder {
                 return <DashboardView capabilities={listCapabilities} authToken={authToken} />;
               }
 
-              const list = findCapabilityForBlock(blocks, "resource-table");
+              const listBlock = findListBlock(blocks);
+              const list = listBlock ? findCapabilityById(listBlock.capabilityIds[0]) : undefined;
               const detail = findCapabilityForBlock(blocks, "detail-panel");
               const create = findCapabilityForBlock(blocks, "create-edit-modal", "CREATE");
               const update = findCapabilityForBlock(blocks, "create-edit-modal", "UPDATE");
@@ -966,13 +1072,23 @@ public class PreviewComposeArtifactBuilder {
 
               return (
                 <div className="grid-2">
-                  <ResourceTable
-                    capability={list}
-                    authToken={authToken}
-                    refreshKey={refreshKey}
-                    onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
-                    onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-                  />
+                  {listBlock?.componentId === "resource-card-grid" ? (
+                    <ResourceCardGrid
+                      capability={list}
+                      authToken={authToken}
+                      refreshKey={refreshKey}
+                      onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+                      onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                    />
+                  ) : (
+                    <ResourceTable
+                      capability={list}
+                      authToken={authToken}
+                      refreshKey={refreshKey}
+                      onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+                      onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                    />
+                  )}
                   {selectedRow && detail && (
                     <div className="panel">
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>

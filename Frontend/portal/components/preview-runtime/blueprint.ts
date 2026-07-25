@@ -1,5 +1,5 @@
 import { findCapabilityById, findCapabilityByType } from "./utils";
-import type { PreviewCapability, PreviewPage } from "./types";
+import type { PreviewCapability, PreviewPage, Purpose } from "./types";
 
 // auto-preview-design/01-blueprint-schema.md의 Block Instance 축소판 — PreviewPageRenderer가
 // page.skeleton을 직접 switch하는 대신 이 목록을 순회해 조립한다. Registry가 없으므로
@@ -8,10 +8,18 @@ import type { PreviewCapability, PreviewPage } from "./types";
 export type ComponentId =
   | "login-form"
   | "resource-table"
+  | "resource-card-grid"
   | "detail-panel"
   | "create-edit-modal"
   | "delete-confirm-modal"
   | "dashboard-view";
+
+// list 계열 컴포넌트 중 기본(resource-table) 대신 특정 purpose가 선호하는 Variant.
+// Direction Recovery Change Request §10.3 purpose-specific preference 축소판 — Backend
+// BlueprintCompiler(Java)와 반드시 동일하게 유지해야 한다(라이브 프리뷰와 실제 배포가 어긋나지 않게).
+const LIST_VARIANT_BY_PURPOSE: Partial<Record<Purpose, ComponentId>> = {
+  PRODUCT_LIKE: "resource-card-grid",
+};
 
 export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay";
 
@@ -83,6 +91,25 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
     blocks.push({ instanceId: "delete", componentId: "delete-confirm-modal", slot: "page.overlay", capabilityIds: [del.id], mode: null });
   }
   return blocks;
+}
+
+// Backend BlueprintCompiler.compile(...)과 동일한 규칙 — resolveBlocks가 만든 기본 Block 목록에서
+// list 계열(resource-table) Block을 purpose가 선호하는 Variant로 교체한다. 다른 Block(로그인/상세/
+// 모달/대시보드)은 절대 건드리지 않는다.
+export function compileBlocks(blocks: Block[], purpose: Purpose | null): Block[] {
+  const preferredListComponentId = purpose ? LIST_VARIANT_BY_PURPOSE[purpose] : undefined;
+  if (!preferredListComponentId) {
+    return blocks;
+  }
+  return blocks.map((block) =>
+    block.componentId === "resource-table" ? { ...block, componentId: preferredListComponentId } : block
+  );
+}
+
+// list 계열은 compileBlocks가 purpose에 따라 resource-table/resource-card-grid 중 하나로 이미
+// 컴파일해뒀다 — 어느 쪽이든 찾아서 실제로 어떤 컴포넌트를 마운트할지는 호출 측이 componentId를 보고 정한다.
+export function findListBlock(blocks: Block[]): Block | undefined {
+  return blocks.find((b) => b.componentId === "resource-table" || b.componentId === "resource-card-grid");
 }
 
 // blocks에서 특정 componentId(+선택적으로 mode)를 가진 block 하나를 찾아 그 block이 가리키는 첫

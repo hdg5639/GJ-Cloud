@@ -21,6 +21,9 @@ public record PreviewBlueprintSnapshot(
         List<PageDraft> pages,
         AuthStrategy authStrategy,
         Map<String, List<Block>> pageBlocks,
-        RegistryStatus status
+        RegistryStatus status,
+        // Direction Recovery Change Request Increment 4 — pageBlocks의 componentId가 이미
+        // BlueprintCompiler로 이 목적에 맞게 컴파일된 결과라, 어떤 목적으로 컴파일됐는지도 함께 남긴다.
+        PreviewAnalyzeRequest.Purpose purpose
 ) {
 }

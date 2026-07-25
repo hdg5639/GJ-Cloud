@@ -18,6 +18,10 @@ public record PreviewDeployRequest(
         @NotBlank String apiBaseUrl,
         @NotEmpty List<Capability> capabilities,
         @NotEmpty List<PageDraft> pages,
-        @NotNull AuthStrategy authStrategy
+        @NotNull AuthStrategy authStrategy,
+        // Direction Recovery Change Request Increment 4 — BlueprintCompiler가 목적별 Component
+        // Variant(예: PRODUCT_LIKE → resource-card-grid)를 고르는 데 쓴다. 없으면(다른 클라이언트가
+        // 생략) 기본 Variant(resource-table)로 컴파일된다.
+        PreviewAnalyzeRequest.Purpose purpose
 ) {
 }

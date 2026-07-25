@@ -429,6 +429,8 @@ export interface ComposeReviewFinding {
 // application/preview/analysis 패키지 record와 필드명을 1:1로 맞춤.
 export type PreviewCapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
 export type PreviewPageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
+// GamjaBox_2.0_Key_Features.md 2절 — BlueprintCompiler가 목적별 Component Variant를 고르는 데 쓴다.
+export type PreviewGenerationPurpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
 // auto-preview-design/05-capability-taxonomy.md §5·6 — CapabilityType별 고정 기본값만 배정한다.
 // IRREVERSIBLE/EXTERNAL_SIDE_EFFECT는 OpenAPI만으로 판별 근거가 없어 규칙 기반으로는 배정하지 않는다.
 export type PreviewRiskLevel = "SAFE" | "STATE_CHANGING" | "DESTRUCTIVE" | "IRREVERSIBLE" | "EXTERNAL_SIDE_EFFECT";

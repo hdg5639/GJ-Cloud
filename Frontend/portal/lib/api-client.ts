@@ -805,6 +805,7 @@ export const api = {
           capabilities: PreviewCapability[];
           pages: PreviewPageDraft[];
           authStrategy: PreviewAuthStrategy;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
         }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/preview/deploy`, {

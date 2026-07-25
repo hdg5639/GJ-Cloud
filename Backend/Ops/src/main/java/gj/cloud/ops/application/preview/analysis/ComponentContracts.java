@@ -3,7 +3,7 @@ package gj.cloud.ops.application.preview.analysis;
 import java.util.List;
 import java.util.Map;
 
-// 6개 고정 런타임 컴포넌트(Frontend/portal/components/preview-runtime/*.tsx, 배포 코드생성 템플릿
+// 고정 런타임 컴포넌트(Frontend/portal/components/preview-runtime/*.tsx, 배포 코드생성 템플릿
 // PreviewComposeArtifactBuilder에 동일하게 이식됨)의 Contract 카탈로그. Registry Entry가 아니라 정적
 // 상수 — 아직 등록/승격/버전 개념이 없다. PreviewBlockResolver가 만드는 Block이 이 카탈로그를
 // 어기지 않는지 ComponentContractComplianceTest가 검증한다.
@@ -17,6 +17,14 @@ public final class ComponentContracts {
                     List.of("page.content"), false, true),
             "resource-table", new ComponentContract(
                     "resource-table", "PATTERN",
+                    List.of(CapabilityType.LIST), false,
+                    List.of("LOADING", "EMPTY", "ERROR", "SUCCESS"),
+                    List.of("page.main"), false, false),
+            // Direction Recovery Change Request §9.1 — resource-table과 같은 계열(list)의 두 번째
+            // Variant. Capability/Slot 요구조건은 resource-table과 완전히 동일해 BlueprintCompiler가
+            // purpose(PRODUCT_LIKE)에 따라 그냥 갈아끼울 수 있다.
+            "resource-card-grid", new ComponentContract(
+                    "resource-card-grid", "PATTERN",
                     List.of(CapabilityType.LIST), false,
                     List.of("LOADING", "EMPTY", "ERROR", "SUCCESS"),
                     List.of("page.main"), false, false),

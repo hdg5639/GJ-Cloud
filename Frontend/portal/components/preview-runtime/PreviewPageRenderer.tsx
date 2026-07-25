@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { LoginForm } from "./LoginForm";
 import { ResourceTable } from "./ResourceTable";
+import { ResourceCardGrid } from "./ResourceCardGrid";
 import { DetailPanel } from "./DetailPanel";
 import { CreateEditModal } from "./CreateEditModal";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { DashboardView } from "./DashboardView";
 import { rowId } from "./api";
 import { findCapabilityById } from "./utils";
-import { findCapabilityForBlock, resolveBlocks } from "./blueprint";
+import { compileBlocks, findCapabilityForBlock, findListBlock, resolveBlocks } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
 // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
@@ -38,7 +39,7 @@ export function PreviewPageRenderer({
   const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const blocks = resolveBlocks(page, capabilities);
+  const blocks = compileBlocks(resolveBlocks(page, capabilities), config.purpose);
 
   if (page.skeleton === "AUTH_PAGE") {
     const login = findCapabilityForBlock(blocks, capabilities, "login-form");
@@ -56,7 +57,8 @@ export function PreviewPageRenderer({
     return <DashboardView capabilities={listCapabilities} config={config} />;
   }
 
-  const list = findCapabilityForBlock(blocks, capabilities, "resource-table");
+  const listBlock = findListBlock(blocks);
+  const list = listBlock ? findCapabilityById(capabilities, listBlock.capabilityIds[0]) : undefined;
   const detail = findCapabilityForBlock(blocks, capabilities, "detail-panel");
   const create = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "CREATE");
   const update = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "UPDATE");
@@ -72,13 +74,23 @@ export function PreviewPageRenderer({
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-      <ResourceTable
-        capability={list}
-        config={config}
-        refreshKey={refreshKey}
-        onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
-        onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-      />
+      {listBlock?.componentId === "resource-card-grid" ? (
+        <ResourceCardGrid
+          capability={list}
+          config={config}
+          refreshKey={refreshKey}
+          onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+          onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+        />
+      ) : (
+        <ResourceTable
+          capability={list}
+          config={config}
+          refreshKey={refreshKey}
+          onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+          onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+        />
+      )}
 
       {selectedRow && detail && (
         <div className="rounded-panel border border-line bg-panel p-4">

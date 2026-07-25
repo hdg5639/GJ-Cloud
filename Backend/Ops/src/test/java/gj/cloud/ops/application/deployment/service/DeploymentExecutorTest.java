@@ -14,6 +14,7 @@ import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
 import gj.cloud.ops.application.preview.analysis.RegistryStatus;
 import gj.cloud.ops.application.preview.analysis.RiskLevel;
+import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
 import gj.cloud.ops.application.vmclient.VmAutomationClient;
@@ -223,7 +224,7 @@ class DeploymentExecutorTest {
                 List.of(new Block("login", "login-form", "page.content", List.of("auth.login"), null)));
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
                 "https://api.example.com", List.of(login), List.of(page), AuthStrategy.bearer(), pageBlocks,
-                RegistryStatus.VALIDATED);
+                RegistryStatus.VALIDATED, Purpose.PRODUCT_LIKE);
 
         DeploymentEntity updated = deploymentExecutor.attachPreviewBlueprint(target, snapshot);
 

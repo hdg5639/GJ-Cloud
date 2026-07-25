@@ -13,6 +13,7 @@ import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.RegistryStatus;
+import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
 import gj.cloud.ops.application.preview.build.PreviewComposeArtifactBuilder;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.dto.PreviewDeployRequest;
@@ -71,7 +72,7 @@ public class PreviewDeployController {
         String bearerToken = requireDeployPermission(request, vmId);
 
         ComposeArtifact artifact = previewComposeArtifactBuilder.build(
-                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy());
+                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), body.purpose());
 
         DeploymentTargetEntity target = deploymentTargetService.create(
                 vmId.toString(),
@@ -91,12 +92,14 @@ public class PreviewDeployController {
         DeploymentEntity deployment = deploymentExecutor.enqueueForTarget(
                 bearerToken, vmId.toString(), target, repoConfig, artifact);
 
-        Map<String, List<Block>> pageBlocks = previewBlockResolver.resolveAll(body.pages(), body.capabilities());
+        Map<String, List<Block>> pageBlocks = BlueprintCompiler.compile(
+                previewBlockResolver.resolveAll(body.pages(), body.capabilities()), body.purpose());
         RegistryStatus status = hasErrorFinding(body.pages(), pageBlocks, body.capabilities())
                 ? RegistryStatus.DRAFT
                 : RegistryStatus.VALIDATED;
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
-                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), pageBlocks, status);
+                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), pageBlocks, status,
+                body.purpose());
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
 
         return ApiResponse.ok(DeploymentResponse.from(deployment));

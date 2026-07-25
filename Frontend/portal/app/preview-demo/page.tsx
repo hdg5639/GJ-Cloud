@@ -103,6 +103,7 @@ export default function PreviewDemoPage() {
     authToken,
     onAuthTokenChange: setAuthToken,
     authStrategy: { type: "BEARER", headerName: "Authorization", prefix: "Bearer ", queryParamName: null },
+    purpose: "PRODUCT_LIKE",
   };
 
   return (
