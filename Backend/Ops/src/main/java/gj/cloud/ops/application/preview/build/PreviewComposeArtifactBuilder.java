@@ -300,7 +300,7 @@ public class PreviewComposeArtifactBuilder {
             // page.skeleton을 직접 switch하는 대신 이 목록을 순회해 조립한다.
             type ComponentId =
               | "login-form" | "resource-table" | "resource-card-grid" | "detail-panel" | "create-edit-modal"
-              | "delete-confirm-modal" | "dashboard-view";
+              | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view";
             interface Block {
               instanceId: string;
               componentId: ComponentId;
@@ -588,6 +588,12 @@ public class PreviewComposeArtifactBuilder {
             // PageRenderer가 componentId를 보고 정한다.
             function findListBlock(blocks: Block[]): Block | undefined {
               return blocks.find((b) => b.componentId === "resource-table" || b.componentId === "resource-card-grid");
+            }
+
+            // destructive 계열도 마찬가지 — BlueprintCompiler가 purpose(ADMIN)에 따라
+            // delete-confirm-modal/typed-confirm-modal 중 하나로 이미 컴파일해뒀다.
+            function findDeleteBlock(blocks: Block[]): Block | undefined {
+              return blocks.find((b) => b.componentId === "delete-confirm-modal" || b.componentId === "typed-confirm-modal");
             }
 
             function LoginForm({ capability, onLogin }: { capability: Capability; onLogin: (token: string) => void }) {
@@ -971,6 +977,65 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            // Direction Recovery Change Request §9.4 "typed-confirm-modal" — DeleteConfirmModal과
+            // 데이터 동작·props는 동일하고, 리소스명을 정확히 입력해야만 삭제 버튼이 활성화된다.
+            // ADMIN 목적일 때 고른다(§3 "Destructive-operation safeguards").
+            function TypedConfirmModal({
+              capability, authToken, targetId, onClose, onSuccess,
+            }: {
+              capability: Capability;
+              authToken: string | null;
+              targetId: string;
+              onClose: () => void;
+              onSuccess: () => void;
+            }) {
+              const [confirmText, setConfirmText] = useState("");
+              const [loading, setLoading] = useState(false);
+              const [error, setError] = useState<string | null>(null);
+              const matches = confirmText.trim() === capability.resourceName;
+
+              async function handleConfirm() {
+                if (!matches) return;
+                setError(null);
+                setLoading(true);
+                try {
+                  await callCapability(capability, authToken, { pathParams: { id: targetId } });
+                  onSuccess();
+                  onClose();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "삭제에 실패했습니다");
+                } finally {
+                  setLoading(false);
+                }
+              }
+
+              return (
+                <div className="modal-backdrop" onClick={onClose}>
+                  <div className="modal" onClick={(e) => e.stopPropagation()}>
+                    <h2 style={{ marginTop: 0 }}>{capability.resourceName} 삭제</h2>
+                    <p className="muted">
+                      삭제하면 복구할 수 없습니다. 계속하려면 <strong>{capability.resourceName}</strong>을(를) 입력하세요.
+                    </p>
+                    <input
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      placeholder={capability.resourceName}
+                      style={{ width: "100%", marginBottom: 12 }}
+                    />
+                    {error && <p className="error">{error}</p>}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="plain" style={{ flex: 1 }} onClick={onClose} disabled={loading}>
+                        취소
+                      </button>
+                      <button className="danger" style={{ flex: 1 }} onClick={handleConfirm} disabled={loading || !matches}>
+                        {loading ? "삭제 중..." : "삭제"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
             interface DashboardCountState {
               loading: boolean;
               value: number | null;
@@ -1060,7 +1125,8 @@ public class PreviewComposeArtifactBuilder {
               const detail = findCapabilityForBlock(blocks, "detail-panel");
               const create = findCapabilityForBlock(blocks, "create-edit-modal", "CREATE");
               const update = findCapabilityForBlock(blocks, "create-edit-modal", "UPDATE");
-              const del = findCapabilityForBlock(blocks, "delete-confirm-modal");
+              const deleteBlock = findDeleteBlock(blocks);
+              const del = deleteBlock ? findCapabilityById(deleteBlock.capabilityIds[0]) : undefined;
 
               if (!list) {
                 return <p className="error">이 페이지에 목록 capability가 없습니다.</p>;
@@ -1121,7 +1187,20 @@ public class PreviewComposeArtifactBuilder {
                       onSuccess={refresh}
                     />
                   )}
-                  {del && overlay.kind === "DELETE" && (
+                  {del && overlay.kind === "DELETE" && deleteBlock?.componentId === "typed-confirm-modal" && (
+                    <TypedConfirmModal
+                      capability={del}
+                      authToken={authToken}
+                      targetId={overlay.id}
+                      onClose={() => setOverlay({ kind: "NONE" })}
+                      onSuccess={() => {
+                        setSelectedRow(null);
+                        setOverlay({ kind: "NONE" });
+                        refresh();
+                      }}
+                    />
+                  )}
+                  {del && overlay.kind === "DELETE" && deleteBlock?.componentId !== "typed-confirm-modal" && (
                     <DeleteConfirmModal
                       capability={del}
                       authToken={authToken}

@@ -94,6 +94,24 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).doesNotContain("\"componentId\":\"resource-table\"");
     }
 
+    // purpose=ADMIN이면 destructive 계열도 typed-confirm-modal로 컴파일되는지 확인한다.
+    @Test
+    void adminPurposeCompilesToTypedConfirmModalVariant() {
+        ComposeArtifact artifact = builder.build(
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
+                Purpose.ADMIN);
+
+        Map<String, String> files = artifact.uploadedFiles().stream()
+                .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
+        String appTsx = files.get("src/App.tsx");
+
+        assertThat(appTsx).contains("\"componentId\":\"typed-confirm-modal\"");
+        assertThat(appTsx).contains("function TypedConfirmModal(");
+        assertThat(appTsx).doesNotContain("\"componentId\":\"delete-confirm-modal\"");
+        // ADMIN은 list 계열은 그대로 resource-table을 유지해야 한다(PRODUCT_LIKE 전용 규칙과 섞이지 않는지 확인).
+        assertThat(appTsx).contains("\"componentId\":\"resource-table\"");
+    }
+
     private void assertThatIsValidJson(String json) {
         try {
             JsonNode node = objectMapper.readTree(json);

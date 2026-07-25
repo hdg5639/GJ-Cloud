@@ -43,6 +43,14 @@ public final class ComponentContracts {
                     List.of(CapabilityType.DELETE), false,
                     List.of("IDLE", "SUBMITTING", "ERROR"),
                     List.of("page.overlay"), false, false),
+            // Direction Recovery Change Request §9.4 — delete-confirm-modal과 같은 계열(destructive)의
+            // 두 번째 Variant. Capability/Slot 요구조건은 동일해 BlueprintCompiler가 purpose(ADMIN)에
+            // 따라 그냥 갈아끼울 수 있다.
+            "typed-confirm-modal", new ComponentContract(
+                    "typed-confirm-modal", "PATTERN",
+                    List.of(CapabilityType.DELETE), false,
+                    List.of("IDLE", "SUBMITTING", "ERROR"),
+                    List.of("page.overlay"), false, false),
             "dashboard-view", new ComponentContract(
                     "dashboard-view", "PAGE_FEATURE",
                     List.of(CapabilityType.LIST), true,

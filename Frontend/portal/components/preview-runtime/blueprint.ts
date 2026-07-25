@@ -12,13 +12,17 @@ export type ComponentId =
   | "detail-panel"
   | "create-edit-modal"
   | "delete-confirm-modal"
+  | "typed-confirm-modal"
   | "dashboard-view";
 
-// list 계열 컴포넌트 중 기본(resource-table) 대신 특정 purpose가 선호하는 Variant.
-// Direction Recovery Change Request §10.3 purpose-specific preference 축소판 — Backend
-// BlueprintCompiler(Java)와 반드시 동일하게 유지해야 한다(라이브 프리뷰와 실제 배포가 어긋나지 않게).
-const LIST_VARIANT_BY_PURPOSE: Partial<Record<Purpose, ComponentId>> = {
-  PRODUCT_LIKE: "resource-card-grid",
+// 계열(같은 Slot·Capability 요구조건을 공유하는 Variant 묶음)마다 기본 componentId를 키로, 특정
+// purpose가 선호하는 Variant를 값으로 둔다. Direction Recovery Change Request §10.3
+// purpose-specific preference 축소판 — Backend BlueprintCompiler(Java)와 반드시 동일하게 유지해야
+// 한다(라이브 프리뷰와 실제 배포가 어긋나지 않게).
+const VARIANT_BY_PURPOSE: Partial<Record<ComponentId, Partial<Record<Purpose, ComponentId>>>> = {
+  "resource-table": { PRODUCT_LIKE: "resource-card-grid" },
+  // Change Request §3 "Administrator purpose — Destructive-operation safeguards".
+  "delete-confirm-modal": { ADMIN: "typed-confirm-modal" },
 };
 
 export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay";
@@ -94,22 +98,27 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
 }
 
 // Backend BlueprintCompiler.compile(...)과 동일한 규칙 — resolveBlocks가 만든 기본 Block 목록에서
-// list 계열(resource-table) Block을 purpose가 선호하는 Variant로 교체한다. 다른 Block(로그인/상세/
-// 모달/대시보드)은 절대 건드리지 않는다.
+// 각 Block을 purpose가 선호하는 Variant로 교체한다(계열이 하나도 안 걸리면 그대로 둠).
 export function compileBlocks(blocks: Block[], purpose: Purpose | null): Block[] {
-  const preferredListComponentId = purpose ? LIST_VARIANT_BY_PURPOSE[purpose] : undefined;
-  if (!preferredListComponentId) {
+  if (!purpose) {
     return blocks;
   }
-  return blocks.map((block) =>
-    block.componentId === "resource-table" ? { ...block, componentId: preferredListComponentId } : block
-  );
+  return blocks.map((block) => {
+    const preferredComponentId = VARIANT_BY_PURPOSE[block.componentId]?.[purpose];
+    return preferredComponentId ? { ...block, componentId: preferredComponentId } : block;
+  });
 }
 
 // list 계열은 compileBlocks가 purpose에 따라 resource-table/resource-card-grid 중 하나로 이미
 // 컴파일해뒀다 — 어느 쪽이든 찾아서 실제로 어떤 컴포넌트를 마운트할지는 호출 측이 componentId를 보고 정한다.
 export function findListBlock(blocks: Block[]): Block | undefined {
   return blocks.find((b) => b.componentId === "resource-table" || b.componentId === "resource-card-grid");
+}
+
+// destructive 계열도 마찬가지 — compileBlocks가 purpose(ADMIN)에 따라 delete-confirm-modal/
+// typed-confirm-modal 중 하나로 이미 컴파일해뒀다.
+export function findDeleteBlock(blocks: Block[]): Block | undefined {
+  return blocks.find((b) => b.componentId === "delete-confirm-modal" || b.componentId === "typed-confirm-modal");
 }
 
 // blocks에서 특정 componentId(+선택적으로 mode)를 가진 block 하나를 찾아 그 block이 가리키는 첫

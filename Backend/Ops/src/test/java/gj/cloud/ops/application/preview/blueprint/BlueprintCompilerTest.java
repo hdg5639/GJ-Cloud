@@ -51,6 +51,31 @@ class BlueprintCompilerTest {
     }
 
     @Test
+    void adminSwapsDeleteConfirmModalToTypedConfirmModal() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "vms-page", List.of(
+                        new Block("list", "resource-table", "page.main", List.of("vms.list"), null),
+                        new Block("delete", "delete-confirm-modal", "page.overlay", List.of("vms.delete"), null)));
+
+        Map<String, List<Block>> compiled = BlueprintCompiler.compile(pageBlocks, Purpose.ADMIN);
+
+        List<Block> compiledBlocks = compiled.get("vms-page");
+        assertThat(compiledBlocks.get(0).componentId()).isEqualTo("resource-table");
+        assertThat(compiledBlocks.get(1).componentId()).isEqualTo("typed-confirm-modal");
+    }
+
+    @Test
+    void nonAdminPurposesLeaveDeleteConfirmModalUnchanged() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "vms-page", List.of(new Block("delete", "delete-confirm-modal", "page.overlay", List.of("vms.delete"), null)));
+
+        assertThat(BlueprintCompiler.compile(pageBlocks, Purpose.API_TEST).get("vms-page").get(0).componentId())
+                .isEqualTo("delete-confirm-modal");
+        assertThat(BlueprintCompiler.compile(pageBlocks, Purpose.PRODUCT_LIKE).get("vms-page").get(0).componentId())
+                .isEqualTo("delete-confirm-modal");
+    }
+
+    @Test
     void handlesMultiplePagesIndependently() {
         Map<String, List<Block>> pageBlocks = Map.of(
                 "vms-page", List.of(new Block("list", "resource-table", "page.main", List.of("vms.list"), null)),

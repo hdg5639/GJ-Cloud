@@ -7,10 +7,11 @@ import { ResourceCardGrid } from "./ResourceCardGrid";
 import { DetailPanel } from "./DetailPanel";
 import { CreateEditModal } from "./CreateEditModal";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { TypedConfirmModal } from "./TypedConfirmModal";
 import { DashboardView } from "./DashboardView";
 import { rowId } from "./api";
 import { findCapabilityById } from "./utils";
-import { compileBlocks, findCapabilityForBlock, findListBlock, resolveBlocks } from "./blueprint";
+import { compileBlocks, findCapabilityForBlock, findDeleteBlock, findListBlock, resolveBlocks } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
 // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
@@ -62,7 +63,8 @@ export function PreviewPageRenderer({
   const detail = findCapabilityForBlock(blocks, capabilities, "detail-panel");
   const create = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "CREATE");
   const update = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "UPDATE");
-  const del = findCapabilityForBlock(blocks, capabilities, "delete-confirm-modal");
+  const deleteBlock = findDeleteBlock(blocks);
+  const del = deleteBlock ? findCapabilityById(capabilities, deleteBlock.capabilityIds[0]) : undefined;
 
   if (!list) {
     return <p className="text-sm text-danger">이 페이지에 목록 capability가 없습니다.</p>;
@@ -142,8 +144,8 @@ export function PreviewPageRenderer({
         />
       )}
 
-      {del && (
-        <DeleteConfirmModal
+      {del && deleteBlock?.componentId === "typed-confirm-modal" ? (
+        <TypedConfirmModal
           open={overlay.kind === "DELETE"}
           onClose={() => setOverlay({ kind: "NONE" })}
           capability={del}
@@ -155,6 +157,21 @@ export function PreviewPageRenderer({
             refresh();
           }}
         />
+      ) : (
+        del && (
+          <DeleteConfirmModal
+            open={overlay.kind === "DELETE"}
+            onClose={() => setOverlay({ kind: "NONE" })}
+            capability={del}
+            config={config}
+            targetId={overlay.kind === "DELETE" ? overlay.id : ""}
+            onSuccess={() => {
+              setSelectedRow(null);
+              setOverlay({ kind: "NONE" });
+              refresh();
+            }}
+          />
+        )
       )}
     </div>
   );
