@@ -9,9 +9,9 @@ import java.util.List;
 public class VmCreate {
 
     private final int newVmid;
-    private final int templateVmid;
     private final String name;
     private final int cores;
+    private final int vcpus;
     private final String cpu;
     private final int cpulimit;
     private final int cpuunits;
@@ -27,6 +27,7 @@ public class VmCreate {
     private final String sshkeys;
     private final String ipconfig0;
     private final String nameserver;
+    private final String ciupgrade;
 
     public static VmCreate from(PlanType planType, int newVmid, String name, List<String> sshPublicKeys,
                                  String bridge, String storage, String staticIp) {
@@ -36,11 +37,11 @@ public class VmCreate {
     private VmCreate(PlanType planType, int newVmid, String name, List<String> sshPublicKeys,
                      String bridge, String storage, String staticIp) {
         this.newVmid = newVmid;
-        this.templateVmid = planType.getTemplateVmid();
         this.name = name;
         this.sshkeys = String.join("\n", sshPublicKeys);
 
         this.cores = planType.getCores();
+        this.vcpus = planType.getCores();
         this.memory = planType.getMemory();
         this.affinity = planType.getAffinity();
 
@@ -58,5 +59,8 @@ public class VmCreate {
         // cloud-init에 nameserver를 지정하지 않으면 게이트웨이(192.168.0.1)가 DNS도 포워딩해준다는 보장이
         // 없어 VM 내부에서 도메인 조회(git clone, curl 등)가 전부 실패할 수 있음 — 공인 DNS로 명시 고정
         this.nameserver = "1.1.1.1 8.8.8.8";
+        // 클론 직후 첫 부팅 시 cloud-init이 자동으로 apt upgrade를 실행하면 부팅 지연·패키지 충돌 위험이 있어
+        // VM 시작 전 반드시 비활성화 상태로 적용해야 함
+        this.ciupgrade = "0";
     }
 }
