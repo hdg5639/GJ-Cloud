@@ -7,14 +7,17 @@ import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.dto.HealthCheck;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
 import gj.cloud.ops.application.preview.analysis.AuthStrategy;
+import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 // Auto Preview(GamjaBox_2.0_Key_Features.md 1단계) Phase D — 확정된 capability/페이지 초안을 실제
@@ -29,6 +32,7 @@ public class PreviewComposeArtifactBuilder {
     private static final int CONTAINER_PORT = 80;
 
     private final ObjectMapper objectMapper;
+    private final PreviewBlockResolver blockResolver;
 
     public ComposeArtifact build(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy
@@ -69,11 +73,13 @@ public class PreviewComposeArtifactBuilder {
     private String renderAppTsx(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy
     ) {
+        Map<String, List<Block>> pageBlocks = blockResolver.resolveAll(pages, capabilities);
         return APP_TSX_TEMPLATE
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
                 .replace("__CAPABILITIES_JSON__", toJson(capabilities))
                 .replace("__PAGES_JSON__", toJson(pages))
-                .replace("__AUTH_STRATEGY_JSON__", toJson(authStrategy));
+                .replace("__AUTH_STRATEGY_JSON__", toJson(authStrategy))
+                .replace("__PAGE_BLOCKS_JSON__", toJson(pageBlocks));
     }
 
     private String toJson(Object value) {
@@ -278,6 +284,18 @@ public class PreviewComposeArtifactBuilder {
               queryParamName: string | null;
             }
 
+            // auto-preview-design/01-blueprint-schema.md의 Block Instance 축소판 — PageRenderer가
+            // page.skeleton을 직접 switch하는 대신 이 목록을 순회해 조립한다.
+            type ComponentId =
+              | "login-form" | "resource-table" | "detail-panel" | "create-edit-modal" | "delete-confirm-modal" | "dashboard-view";
+            interface Block {
+              instanceId: string;
+              componentId: ComponentId;
+              slot: string;
+              capabilityIds: string[];
+              mode: "CREATE" | "UPDATE" | null;
+            }
+
             const API_BASE_URL: string = __API_BASE_URL_JSON__;
             const CAPABILITIES: Capability[] = __CAPABILITIES_JSON__;
             const PAGES: PageDraft[] = __PAGES_JSON__;
@@ -285,6 +303,8 @@ public class PreviewComposeArtifactBuilder {
             // 있다(Capability별로 다르지 않음). Bearer만 가정하던 기존 방식은 API Key 인증 API에서 항상
             // 401/403이 났다.
             const AUTH_STRATEGY: AuthStrategy = __AUTH_STRATEGY_JSON__;
+            // 페이지 ID별 Block 목록 — PreviewBlockResolver가 서버에서 미리 계산해 심어둔다.
+            const PAGE_BLOCKS: Record<string, Block[]> = __PAGE_BLOCKS_JSON__;
 
             // DetailPanel/CreateEditModal/DeleteConfirmModal은 실제 경로 파라미터 이름을 모른 채 항상
             // { id: ... } 하나만 넘긴다. 이름 그대로 "{id}"를 찾아 치환하면 capability.path가
@@ -531,14 +551,13 @@ public class PreviewComposeArtifactBuilder {
               return CAPABILITIES.find((c) => c.id === id);
             }
 
-            function findCapabilityByType(page: PageDraft, type: CapabilityType): Capability | undefined {
-              for (const id of page.capabilityIds) {
-                const capability = findCapabilityById(id);
-                if (capability && capability.type === type) {
-                  return capability;
-                }
-              }
-              return undefined;
+            // PAGE_BLOCKS에서 특정 componentId(+선택적으로 mode)를 가진 block 하나를 찾아 그 block이
+            // 가리키는 첫 capability를 반환한다. PageRenderer가 예전에 findCapabilityByType(page, "X")로
+            // 하던 일을 이제 서버가 미리 계산해둔 Block 목록에서 찾는 것으로 대체한다.
+            function findCapabilityForBlock(blocks: Block[], componentId: ComponentId, mode?: "CREATE" | "UPDATE"): Capability | undefined {
+              const block = blocks.find((b) => b.componentId === componentId && (mode === undefined || b.mode === mode));
+              const capabilityId = block?.capabilityIds[0];
+              return capabilityId ? findCapabilityById(capabilityId) : undefined;
             }
 
             function LoginForm({ capability, onLogin }: { capability: Capability; onLogin: (token: string) => void }) {
@@ -897,8 +916,10 @@ public class PreviewComposeArtifactBuilder {
               const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
               const [refreshKey, setRefreshKey] = useState(0);
 
+              const blocks = PAGE_BLOCKS[page.id] ?? [];
+
               if (page.skeleton === "AUTH_PAGE") {
-                const login = findCapabilityByType(page, "LOGIN");
+                const login = findCapabilityForBlock(blocks, "login-form");
                 if (!login) {
                   return <p className="error">이 페이지에 로그인 capability가 없습니다.</p>;
                 }
@@ -906,17 +927,18 @@ public class PreviewComposeArtifactBuilder {
               }
 
               if (page.skeleton === "DASHBOARD") {
-                const listCapabilities = page.capabilityIds
+                const dashboardBlock = blocks.find((b) => b.componentId === "dashboard-view");
+                const listCapabilities = (dashboardBlock?.capabilityIds ?? [])
                   .map((id) => findCapabilityById(id))
-                  .filter((c): c is Capability => c?.type === "LIST");
+                  .filter((c): c is Capability => c !== undefined);
                 return <DashboardView capabilities={listCapabilities} authToken={authToken} />;
               }
 
-              const list = findCapabilityByType(page, "LIST");
-              const detail = findCapabilityByType(page, "DETAIL");
-              const create = findCapabilityByType(page, "CREATE");
-              const update = findCapabilityByType(page, "UPDATE");
-              const del = findCapabilityByType(page, "DELETE");
+              const list = findCapabilityForBlock(blocks, "resource-table");
+              const detail = findCapabilityForBlock(blocks, "detail-panel");
+              const create = findCapabilityForBlock(blocks, "create-edit-modal", "CREATE");
+              const update = findCapabilityForBlock(blocks, "create-edit-modal", "UPDATE");
+              const del = findCapabilityForBlock(blocks, "delete-confirm-modal");
 
               if (!list) {
                 return <p className="error">이 페이지에 목록 capability가 없습니다.</p>;

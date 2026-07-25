@@ -8,12 +8,13 @@ import { CreateEditModal } from "./CreateEditModal";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { DashboardView } from "./DashboardView";
 import { rowId } from "./api";
-import { findCapabilityById, findCapabilityByType } from "./utils";
+import { findCapabilityById } from "./utils";
+import { findCapabilityForBlock, resolveBlocks } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
 // GamjaBox_2.0_Key_Features.md 3·7절 — 관련 API를 페이지 하나로 묶어서 보여준다. Blueprint
-// Schema/Registry/Slot 시스템 없이, PageDraftGenerator가 만든 스켈레톤 종류(AUTH_PAGE/RESOURCE_LIST/
-// LIST_DETAIL/DASHBOARD)별로 고정된 패턴 컴포넌트만 조립한다.
+// Schema/Registry/Slot 시스템 없이, resolveBlocks가 스켈레톤 종류(AUTH_PAGE/RESOURCE_LIST/
+// LIST_DETAIL/DASHBOARD)별로 만들어주는 Block 목록을 순회해 고정된 패턴 컴포넌트만 조립한다.
 export function PreviewPageRenderer({
   page,
   capabilities,
@@ -29,8 +30,10 @@ export function PreviewPageRenderer({
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const blocks = resolveBlocks(page, capabilities);
+
   if (page.skeleton === "AUTH_PAGE") {
-    const login = findCapabilityByType(capabilities, page, "LOGIN");
+    const login = findCapabilityForBlock(blocks, capabilities, "login-form");
     if (!login) {
       return <p className="text-sm text-danger">이 페이지에 로그인 capability가 없습니다.</p>;
     }
@@ -38,17 +41,18 @@ export function PreviewPageRenderer({
   }
 
   if (page.skeleton === "DASHBOARD") {
-    const listCapabilities = page.capabilityIds
+    const dashboardBlock = blocks.find((b) => b.componentId === "dashboard-view");
+    const listCapabilities = (dashboardBlock?.capabilityIds ?? [])
       .map((id) => findCapabilityById(capabilities, id))
-      .filter((c): c is PreviewCapability => c?.type === "LIST");
+      .filter((c): c is PreviewCapability => c !== undefined);
     return <DashboardView capabilities={listCapabilities} config={config} />;
   }
 
-  const list = findCapabilityByType(capabilities, page, "LIST");
-  const detail = findCapabilityByType(capabilities, page, "DETAIL");
-  const create = findCapabilityByType(capabilities, page, "CREATE");
-  const update = findCapabilityByType(capabilities, page, "UPDATE");
-  const del = findCapabilityByType(capabilities, page, "DELETE");
+  const list = findCapabilityForBlock(blocks, capabilities, "resource-table");
+  const detail = findCapabilityForBlock(blocks, capabilities, "detail-panel");
+  const create = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "CREATE");
+  const update = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "UPDATE");
+  const del = findCapabilityForBlock(blocks, capabilities, "delete-confirm-modal");
 
   if (!list) {
     return <p className="text-sm text-danger">이 페이지에 목록 capability가 없습니다.</p>;

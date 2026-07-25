@@ -10,6 +10,7 @@ import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
+import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.RiskLevel;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 // (수동으로 한 번 확인함), 여기서는 항상 빠르게 도는 구조 검증만 담당한다.
 class PreviewComposeArtifactBuilderTest {
 
-    private final PreviewComposeArtifactBuilder builder = new PreviewComposeArtifactBuilder(new ObjectMapper());
+    private final PreviewComposeArtifactBuilder builder =
+            new PreviewComposeArtifactBuilder(new ObjectMapper(), new PreviewBlockResolver());
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -51,12 +53,19 @@ class PreviewComposeArtifactBuilderTest {
                 "Dockerfile", "src/main.tsx", "src/index.css", "src/App.tsx");
 
         String appTsx = files.get("src/App.tsx");
-        assertThat(appTsx).doesNotContain("__API_BASE_URL_JSON__", "__CAPABILITIES_JSON__", "__PAGES_JSON__");
+        assertThat(appTsx).doesNotContain(
+                "__API_BASE_URL_JSON__", "__CAPABILITIES_JSON__", "__PAGES_JSON__",
+                "__AUTH_STRATEGY_JSON__", "__PAGE_BLOCKS_JSON__");
         assertThat(appTsx).contains("https://api.example.com");
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");
         assertThat(appTsx).contains("\"dashboard\"");
         assertThat(appTsx).contains("\"API_KEY_HEADER\"").contains("\"X-API-Key\"");
+        // Blueprint 1차 — PAGE_BLOCKS가 componentId 기준으로 실제로 채워지는지(빈 객체로 치환되지
+        // 않았는지)까지 확인. "login-form"은 auth-login 페이지의 Block.componentId여야 한다.
+        assertThat(appTsx).contains("\"componentId\":\"login-form\"");
+        assertThat(appTsx).contains("\"componentId\":\"resource-table\"");
+        assertThat(appTsx).contains("\"componentId\":\"dashboard-view\"");
 
         // package.json은 유효한 JSON이어야 한다(단순 문자열 결합 실수 감지용)
         assertThatIsValidJson(files.get("package.json"));
