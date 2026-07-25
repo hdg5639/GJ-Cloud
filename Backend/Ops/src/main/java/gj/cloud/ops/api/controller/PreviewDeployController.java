@@ -5,7 +5,10 @@ import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
 import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
+import gj.cloud.ops.application.preview.analysis.Block;
+import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.build.PreviewComposeArtifactBuilder;
+import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.dto.PreviewDeployRequest;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
@@ -28,6 +31,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 // Auto Preview Phase D — 확정된 capability/페이지 초안을 Vite+React 프로젝트로 생성해 사용자의 기존
@@ -43,6 +48,7 @@ public class PreviewDeployController {
     private static final String PERMISSION_DEPLOY = "DEPLOY";
 
     private final PreviewComposeArtifactBuilder previewComposeArtifactBuilder;
+    private final PreviewBlockResolver previewBlockResolver;
     private final DeploymentTargetService deploymentTargetService;
     private final DeploymentExecutor deploymentExecutor;
     private final VmServiceClient vmServiceClient;
@@ -78,6 +84,12 @@ public class PreviewDeployController {
         RepoConfig repoConfig = new RepoConfig(null, null, null, null, null);
         DeploymentEntity deployment = deploymentExecutor.enqueueForTarget(
                 bearerToken, vmId.toString(), target, repoConfig, artifact);
+
+        Map<String, List<Block>> pageBlocks = previewBlockResolver.resolveAll(body.pages(), body.capabilities());
+        PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
+                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), pageBlocks);
+        deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
+
         return ApiResponse.ok(DeploymentResponse.from(deployment));
     }
 

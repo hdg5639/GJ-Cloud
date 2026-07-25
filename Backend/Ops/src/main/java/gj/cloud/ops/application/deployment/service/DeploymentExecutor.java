@@ -17,6 +17,7 @@ import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.dto.ResolvedCompose;
 import gj.cloud.ops.application.deployment.dto.ServiceImageRef;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
 import gj.cloud.ops.application.deployment.validation.ValidationResult;
@@ -278,6 +279,25 @@ public class DeploymentExecutor {
                 ? readJsonList(entity.getHealthChecksJson(), HealthCheck.class)
                 : List.of();
         return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks, entity.getContext(), entity.getInstallPath());
+    }
+
+    // Auto Preview 배포 시점의 blueprint 스냅샷을 저장한다 — Patch·재분석 없이 나중에 무엇을
+    // 배포했는지 그대로 확인할 수 있게. PreviewDeployController가 enqueueForTarget 직후 한 번만 호출한다.
+    public DeploymentEntity attachPreviewBlueprint(DeploymentEntity deployment, PreviewBlueprintSnapshot snapshot) {
+        return deploymentRepository.save(deployment.withPreviewBlueprint(toJson(snapshot)));
+    }
+
+    // 비밀값이 없어 exposedRoutesJson과 동일하게 평문으로 저장했으므로 복호화 없이 바로 역직렬화한다.
+    // Raw Compose/Git 배포는 저장된 적이 없어 null을 반환한다.
+    public PreviewBlueprintSnapshot getPreviewBlueprint(DeploymentEntity entity) {
+        if (entity.getPreviewBlueprintJson() == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(entity.getPreviewBlueprintJson(), PreviewBlueprintSnapshot.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("preview blueprint JSON 역직렬화 실패", e);
+        }
     }
 
     // 사용자가 임의로 지정한 과거 SUCCEEDED 배포로 수동 롤백. 기존 자동 롤백(RollbackService)과 동일하게

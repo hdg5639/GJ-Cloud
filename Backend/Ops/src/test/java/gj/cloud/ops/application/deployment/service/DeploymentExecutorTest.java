@@ -4,6 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.Session;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
+import gj.cloud.ops.application.preview.analysis.AuthStrategy;
+import gj.cloud.ops.application.preview.analysis.AutomationPolicy;
+import gj.cloud.ops.application.preview.analysis.Block;
+import gj.cloud.ops.application.preview.analysis.Capability;
+import gj.cloud.ops.application.preview.analysis.CapabilityType;
+import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
+import gj.cloud.ops.application.preview.analysis.RiskLevel;
+import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
 import gj.cloud.ops.application.vmclient.VmAutomationClient;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
@@ -30,6 +39,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -195,6 +205,34 @@ class DeploymentExecutorTest {
         verify(deploymentTargetService).clearActiveDeployment(targetId, DEPLOYMENT_ID);
         verify(deploymentTargetService).deactivate(targetId);
         verify(lockService).unlock(targetId, "TARGET_DELETE");
+    }
+
+    @Test
+    void attachPreviewBlueprintPersistsAndRoundTripsThroughJson() {
+        DeploymentEntity target = succeededDeployment();
+        when(deploymentRepository.save(any(DeploymentEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Capability login = new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",
+                false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken", null,
+                RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null);
+        PageDraft page = new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of("auth.login"));
+        Map<String, List<Block>> pageBlocks = Map.of("auth-login",
+                List.of(new Block("login", "login-form", "page.content", List.of("auth.login"), null)));
+        PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
+                "https://api.example.com", List.of(login), List.of(page), AuthStrategy.bearer(), pageBlocks);
+
+        DeploymentEntity updated = deploymentExecutor.attachPreviewBlueprint(target, snapshot);
+
+        verify(deploymentRepository).save(any(DeploymentEntity.class));
+        assertThat(updated.getPreviewBlueprintJson()).isNotNull();
+        assertThat(deploymentExecutor.getPreviewBlueprint(updated)).isEqualTo(snapshot);
+    }
+
+    @Test
+    void getPreviewBlueprintReturnsNullForNonAutoPreviewDeployment() {
+        DeploymentEntity target = succeededDeployment();
+
+        assertThat(deploymentExecutor.getPreviewBlueprint(target)).isNull();
     }
 
     private VmContextResponse runningDeployContext() {

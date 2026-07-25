@@ -17,6 +17,7 @@ import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
 import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
 import gj.cloud.ops.application.github.dto.GithubRepositoryAccess;
 import gj.cloud.ops.application.github.service.GithubAppService;
+import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecPolicyValidator;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderer;
@@ -233,6 +234,18 @@ public class DeploymentController {
         requireDeployPermission(request, vmId);
         DeploymentEntity entity = findOwned(vmId, deploymentId);
         return ApiResponse.ok(deploymentExecutor.getComposeSpec(entity));
+    }
+
+    @Operation(summary = "Auto Preview blueprint 스냅샷 조회",
+            description = "이 배포가 Auto Preview로 생성됐다면, 배포 시점의 capabilities/pages/authStrategy와 " +
+                    "리졸브된 Block 배치를 재분석 없이 그대로 반환합니다. Auto Preview 배포가 아니면 null을 반환합니다.")
+    @GetMapping("/{deploymentId}/preview-blueprint")
+    public ApiResponse<PreviewBlueprintSnapshot> previewBlueprint(
+            HttpServletRequest request, @PathVariable UUID vmId, @PathVariable String deploymentId
+    ) {
+        requireDeployPermission(request, vmId);
+        DeploymentEntity entity = findOwned(vmId, deploymentId);
+        return ApiResponse.ok(deploymentExecutor.getPreviewBlueprint(entity));
     }
 
     @Operation(summary = "특정 성공 배포로 수동 롤백", description = "재빌드 없이 대상 배포 시점의 이미지로 컨테이너만 재기동합니다. 대상은 반드시 SUCCEEDED 상태여야 합니다.")
