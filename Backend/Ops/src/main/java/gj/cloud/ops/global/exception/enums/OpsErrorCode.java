@@ -76,7 +76,14 @@ public enum OpsErrorCode {
 
     // 수동 DB 백업 (11절)
     INVALID_DB_IDENTIFIER(HttpStatus.BAD_REQUEST, "유효하지 않은 DB 식별자입니다."),
-    DB_BACKUP_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "DB 백업에 실패했습니다.");
+    DB_BACKUP_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "DB 백업에 실패했습니다."),
+
+    // Auto Preview — OpenAPI 결정론적 분석 (GamjaBox_2.0_Key_Features.md 1단계)
+    INVALID_API_DOCS_URL(HttpStatus.BAD_REQUEST, "API 문서 URL이 유효하지 않습니다."),
+    API_DOCS_FETCH_FAILED(HttpStatus.BAD_REQUEST, "API 문서를 가져오지 못했습니다. URL을 확인해주세요."),
+    API_DOCS_TOO_LARGE(HttpStatus.BAD_REQUEST, "API 문서 크기가 허용 한도를 초과했습니다."),
+    API_DOCS_PARSE_FAILED(HttpStatus.BAD_REQUEST, "API 문서를 해석하지 못했습니다. OpenAPI 3.x 형식인지 확인해주세요."),
+    API_DOCS_UNSUPPORTED_VERSION(HttpStatus.BAD_REQUEST, "OpenAPI 3.x 문서만 지원합니다.");
 
     private final HttpStatus status;
     private final String message;
