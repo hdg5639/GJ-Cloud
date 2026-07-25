@@ -12,6 +12,9 @@ import java.util.List;
 // 아직 발생하지 않지만(Phase B에서 사용), 프론트가 두 파이프라인을 같은 방식으로 다룰 수 있도록 형태를 맞춘다.
 public record PreviewAnalysisResult(
         GenerationStatus status,
+        // 문서의 servers[].url — Phase D 배포 시 생성된 앱이 실제로 호출할 API 주소의 기본값으로 쓰인다.
+        // 사용자가 그대로 쓸지 다른 주소로 바꿀지 확인할 수 있게 첫 번째 값만 넘기지 않고 전체를 넘긴다.
+        List<String> apiServerUrls,
         List<Capability> capabilities,
         List<PageDraft> pages,
         List<UnresolvedField> unresolved,

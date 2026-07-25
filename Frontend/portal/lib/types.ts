@@ -425,6 +425,50 @@ export interface ComposeReviewFinding {
   evidence: string;
 }
 
+// Auto Preview (GamjaBox_2.0_Key_Features.md 1단계) — Backend/Ops의
+// application/preview/analysis 패키지 record와 필드명을 1:1로 맞춤.
+export type PreviewCapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
+export type PreviewPageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
+
+export interface PreviewCapability {
+  id: string;
+  resourceName: string;
+  type: PreviewCapabilityType;
+  operationId: string | null;
+  path: string;
+  method: string;
+  hasSearch: boolean;
+  hasSort: boolean;
+  hasPagination: boolean;
+  confidence: string;
+  evidence: string[];
+  fields: string[];
+}
+
+export interface PreviewPageDraft {
+  id: string;
+  title: string;
+  skeleton: PreviewPageSkeletonType;
+  capabilityIds: string[];
+}
+
+export interface PreviewAnalysisResult {
+  status: GenerationStatus;
+  apiServerUrls: string[];
+  capabilities: PreviewCapability[];
+  pages: PreviewPageDraft[];
+  unresolved: UnresolvedField[];
+  warnings: string[];
+  evidenceRefs: string[];
+}
+
+export interface PageReviewFinding {
+  code: string;
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  message: string;
+  remediation: string;
+}
+
 export interface DeploymentEventPayload {
   sequence: number;
   eventType: "STAGE_CHANGE" | "BUILD_LOG" | "ERROR" | "DONE";

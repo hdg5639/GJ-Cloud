@@ -67,6 +67,7 @@ public class PreviewAnalysisService {
                 : unresolved.isEmpty() ? GenerationStatus.READY
                 : GenerationStatus.NEEDS_INPUT;
 
-        return new PreviewAnalysisResult(status, capabilities, pages, unresolved, warnings, evidenceRefs);
+        return new PreviewAnalysisResult(
+                status, evidence.serverUrls(), capabilities, pages, unresolved, warnings, evidenceRefs);
     }
 }
