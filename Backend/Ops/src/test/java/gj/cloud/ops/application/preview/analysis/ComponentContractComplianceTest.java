@@ -37,9 +37,13 @@ class ComponentContractComplianceTest {
         );
 
         for (PageDraft page : pages) {
-            for (Block block : resolver.resolve(page, allCapabilities)) {
+            List<Block> blocks = resolver.resolve(page, allCapabilities);
+            for (Block block : blocks) {
                 assertBlockMatchesContract(block, allCapabilities);
             }
+            assertThat(SlotCardinalityValidator.validate(page.skeleton(), blocks))
+                    .withFailMessage("페이지 %s의 Block이 Slot Contract를 어김", page.id())
+                    .isEmpty();
         }
     }
 
