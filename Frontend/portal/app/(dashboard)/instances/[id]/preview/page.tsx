@@ -10,6 +10,8 @@ import { PageLoader } from "@/components/ui/loader";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
+import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
+import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
 
 type Purpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
 
@@ -66,6 +68,7 @@ export default function PreviewWizardPage() {
   const [reviewFindings, setReviewFindings] = useState<PageReviewFinding[] | null>(null);
   const [previewPageId, setPreviewPageId] = useState<string | null>(null);
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
+  const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
   const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
   const [manualLoginPath, setManualLoginPath] = useState("");
   const [manualLoginUsernameField, setManualLoginUsernameField] = useState("email");
@@ -93,6 +96,7 @@ export default function PreviewWizardPage() {
       setApiBaseUrl(data.apiServerUrls[0] ?? "");
       setPreviewPageId(data.pages[0]?.id ?? null);
       setPreviewAuthToken(null);
+      setApiCallLog([]);
       setAccessTokenPathInput("");
       setManualLoginPath("");
       setManualLoginUsernameField("email");
@@ -460,12 +464,28 @@ export default function PreviewWizardPage() {
                         apiBaseUrl: apiBaseUrl.trim(),
                         authToken: previewAuthToken,
                         onAuthTokenChange: setPreviewAuthToken,
+                        onApiCall: (entry) => setApiCallLog((prev) => [entry, ...prev].slice(0, 30)),
                       }}
                     />
                   </div>
                 )}
               </>
             )}
+          </section>
+
+          <section className="rounded-panel border border-line bg-panel p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-extrabold">요청·응답 확인</h2>
+              {apiCallLog.length > 0 && (
+                <Button type="button" onClick={() => setApiCallLog([])}>
+                  기록 지우기
+                </Button>
+              )}
+            </div>
+            <p className="mb-3 text-xs text-muted">
+              위 미리보기에서 화면을 조작하면 실제로 보낸 요청과 받은 응답이 여기 쌓입니다. 각 항목을 눌러 펼쳐보세요.
+            </p>
+            <ApiCallLog entries={apiCallLog} />
           </section>
 
           <div className="flex justify-between">

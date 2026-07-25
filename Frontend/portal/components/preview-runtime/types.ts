@@ -16,4 +16,18 @@ export interface PreviewRuntimeConfig {
   apiBaseUrl: string;
   authToken: string | null;
   onAuthTokenChange: (token: string | null) => void;
+  // GamjaBox_2.0_Key_Features.md 41절 MVP 출력 "요청·응답 확인" — callCapability가 호출마다 한 번씩
+  // 호출해준다. 없으면(예: preview-demo) 그냥 기록하지 않는다.
+  onApiCall?: (entry: ApiCallLogEntry) => void;
+}
+
+export interface ApiCallLogEntry {
+  id: string;
+  method: string;
+  url: string;
+  status: number | null;
+  requestBody: unknown;
+  responseBody: unknown;
+  error: string | null;
+  timestamp: number;
 }

@@ -32,22 +32,44 @@ export async function callCapability(
   } = {}
 ): Promise<unknown> {
   const url = buildUrl(config, capability, options.pathParams, options.query);
-  const res = await fetch(url, {
-    method: capability.method,
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(config.authToken ? { Authorization: `Bearer ${config.authToken}` } : {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  if (!res.ok) {
-    throw new Error(`${capability.method} ${url} 요청이 실패했습니다 (${res.status})`);
+  let status: number | null = null;
+  let responseBody: unknown = null;
+  let errorMessage: string | null = null;
+  try {
+    const res = await fetch(url, {
+      method: capability.method,
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(config.authToken ? { Authorization: `Bearer ${config.authToken}` } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    status = res.status;
+    if (!res.ok) {
+      errorMessage = `${capability.method} ${url} 요청이 실패했습니다 (${res.status})`;
+      throw new Error(errorMessage);
+    }
+    if (res.status === 204) {
+      return null;
+    }
+    const text = await res.text();
+    responseBody = text ? JSON.parse(text) : null;
+    return responseBody;
+  } catch (err) {
+    errorMessage = errorMessage ?? (err instanceof Error ? err.message : "요청 실패");
+    throw err;
+  } finally {
+    config.onApiCall?.({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      method: capability.method,
+      url,
+      status,
+      requestBody: options.body ?? null,
+      responseBody,
+      error: errorMessage,
+      timestamp: Date.now(),
+    });
   }
-  if (res.status === 204) {
-    return null;
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
 }
 
 // Backend/Ops CapabilityExtractor의 PASSWORD_FIELD_HINTS와 동일한 휴리스틱 — 필드명만 보고
