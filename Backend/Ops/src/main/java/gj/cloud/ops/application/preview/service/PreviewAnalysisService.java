@@ -4,13 +4,16 @@ import gj.cloud.ops.application.deployment.ai.GenerationStatus;
 import gj.cloud.ops.application.deployment.ai.UnresolvedField;
 import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.AuthStrategyDetector;
+import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CapabilityExtractor;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
+import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
 import gj.cloud.ops.application.preview.analysis.OpenApiEvidence;
 import gj.cloud.ops.application.preview.analysis.OpenApiNormalizer;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageDraftGenerator;
+import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.SecuritySchemeEvidence;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
@@ -31,6 +34,7 @@ public class PreviewAnalysisService {
     private final CapabilityExtractor capabilityExtractor;
     private final PageDraftGenerator pageDraftGenerator;
     private final AuthStrategyDetector authStrategyDetector;
+    private final PreviewBlockResolver blockResolver;
 
     public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request) {
         OpenApiEvidence evidence = openApiNormalizer.normalize(request.apiDocsUrl());
@@ -66,6 +70,11 @@ public class PreviewAnalysisService {
 
         if (evidence.truncatedOperationCount() > 0) {
             warnings.add("API 개수가 많아 " + evidence.truncatedOperationCount() + "개 오퍼레이션은 분석에서 제외되었습니다.");
+        }
+
+        for (PageDraft page : pages) {
+            List<Block> blocks = blockResolver.resolve(page, capabilities);
+            warnings.addAll(CompatibilityValidator.validate(page, blocks, capabilities));
         }
 
         List<String> evidenceRefs = capabilities.stream()

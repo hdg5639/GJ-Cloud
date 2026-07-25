@@ -296,6 +296,16 @@ public class PreviewComposeArtifactBuilder {
               mode: "CREATE" | "UPDATE" | null;
             }
 
+            // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성
+            // Instance 1개" — showCreate/editTarget/deleteTargetId를 독립된 상태 3개로 관리하면
+            // 이론상 여러 개가 동시에 켜질 수 있어(상세 패널에서 수정 클릭 후 삭제 클릭 등) 하나의
+            // 판별 유니언으로 묶어 상호 배타를 코드로 보장한다.
+            type OverlayState =
+              | { kind: "NONE" }
+              | { kind: "CREATE" }
+              | { kind: "UPDATE"; row: Record<string, unknown> }
+              | { kind: "DELETE"; id: string };
+
             const API_BASE_URL: string = __API_BASE_URL_JSON__;
             const CAPABILITIES: Capability[] = __CAPABILITIES_JSON__;
             const PAGES: PageDraft[] = __PAGES_JSON__;
@@ -911,9 +921,7 @@ public class PreviewComposeArtifactBuilder {
 
             function PageRenderer({ page, authToken, onLogin }: { page: PageDraft; authToken: string | null; onLogin: (token: string) => void }) {
               const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
-              const [showCreate, setShowCreate] = useState(false);
-              const [editTarget, setEditTarget] = useState<Record<string, unknown> | null>(null);
-              const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+              const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
               const [refreshKey, setRefreshKey] = useState(0);
 
               const blocks = PAGE_BLOCKS[page.id] ?? [];
@@ -955,7 +963,7 @@ public class PreviewComposeArtifactBuilder {
                     authToken={authToken}
                     refreshKey={refreshKey}
                     onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
-                    onCreateClick={create ? () => setShowCreate(true) : undefined}
+                    onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
                   />
                   {selectedRow && detail && (
                     <div className="panel">
@@ -963,12 +971,12 @@ public class PreviewComposeArtifactBuilder {
                         <strong>상세</strong>
                         <div style={{ display: "flex", gap: 12 }}>
                           {update && (
-                            <button className="plain" onClick={() => setEditTarget(selectedRow)}>
+                            <button className="plain" onClick={() => setOverlay({ kind: "UPDATE", row: selectedRow })}>
                               수정
                             </button>
                           )}
                           {del && (
-                            <button className="danger" onClick={() => setDeleteTargetId(rowId(selectedRow))}>
+                            <button className="danger" onClick={() => setOverlay({ kind: "DELETE", id: rowId(selectedRow) })}>
                               삭제
                             </button>
                           )}
@@ -977,26 +985,27 @@ public class PreviewComposeArtifactBuilder {
                       <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} />
                     </div>
                   )}
-                  {create && showCreate && (
-                    <CreateEditModal capability={create} authToken={authToken} onClose={() => setShowCreate(false)} onSuccess={refresh} />
+                  {create && overlay.kind === "CREATE" && (
+                    <CreateEditModal capability={create} authToken={authToken} onClose={() => setOverlay({ kind: "NONE" })} onSuccess={refresh} />
                   )}
-                  {update && editTarget && (
+                  {update && overlay.kind === "UPDATE" && (
                     <CreateEditModal
                       capability={update}
                       authToken={authToken}
-                      initialValues={editTarget}
-                      onClose={() => setEditTarget(null)}
+                      initialValues={overlay.row}
+                      onClose={() => setOverlay({ kind: "NONE" })}
                       onSuccess={refresh}
                     />
                   )}
-                  {del && deleteTargetId && (
+                  {del && overlay.kind === "DELETE" && (
                     <DeleteConfirmModal
                       capability={del}
                       authToken={authToken}
-                      targetId={deleteTargetId}
-                      onClose={() => setDeleteTargetId(null)}
+                      targetId={overlay.id}
+                      onClose={() => setOverlay({ kind: "NONE" })}
                       onSuccess={() => {
                         setSelectedRow(null);
+                        setOverlay({ kind: "NONE" });
                         refresh();
                       }}
                     />

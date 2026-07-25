@@ -12,6 +12,16 @@ import { findCapabilityById } from "./utils";
 import { findCapabilityForBlock, resolveBlocks } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
+// auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
+// 1개" — showCreate/editTarget/deleteTargetId를 독립된 상태 3개로 관리하면 이론상 여러 개가 동시에
+// 켜질 수 있어(상세 패널에서 수정 클릭 후 삭제 클릭 등) 하나의 판별 유니언으로 묶어 상호 배타를
+// 코드로 보장한다.
+type OverlayState =
+  | { kind: "NONE" }
+  | { kind: "CREATE" }
+  | { kind: "UPDATE"; row: Record<string, unknown> }
+  | { kind: "DELETE"; id: string };
+
 // GamjaBox_2.0_Key_Features.md 3·7절 — 관련 API를 페이지 하나로 묶어서 보여준다. Blueprint
 // Schema/Registry/Slot 시스템 없이, resolveBlocks가 스켈레톤 종류(AUTH_PAGE/RESOURCE_LIST/
 // LIST_DETAIL/DASHBOARD)별로 만들어주는 Block 목록을 순회해 고정된 패턴 컴포넌트만 조립한다.
@@ -25,9 +35,7 @@ export function PreviewPageRenderer({
   config: PreviewRuntimeConfig;
 }) {
   const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [editTarget, setEditTarget] = useState<Record<string, unknown> | null>(null);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
   const [refreshKey, setRefreshKey] = useState(0);
 
   const blocks = resolveBlocks(page, capabilities);
@@ -69,7 +77,7 @@ export function PreviewPageRenderer({
         config={config}
         refreshKey={refreshKey}
         onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
-        onCreateClick={create ? () => setShowCreate(true) : undefined}
+        onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
       />
 
       {selectedRow && detail && (
@@ -78,7 +86,11 @@ export function PreviewPageRenderer({
             <h3 className="text-sm font-bold">상세</h3>
             <div className="flex gap-3">
               {update && (
-                <button type="button" className="text-xs font-bold text-brand-strong" onClick={() => setEditTarget(selectedRow)}>
+                <button
+                  type="button"
+                  className="text-xs font-bold text-brand-strong"
+                  onClick={() => setOverlay({ kind: "UPDATE", row: selectedRow })}
+                >
                   수정
                 </button>
               )}
@@ -86,7 +98,7 @@ export function PreviewPageRenderer({
                 <button
                   type="button"
                   className="text-xs font-bold text-danger"
-                  onClick={() => setDeleteTargetId(rowId(selectedRow))}
+                  onClick={() => setOverlay({ kind: "DELETE", id: rowId(selectedRow) })}
                 >
                   삭제
                 </button>
@@ -99,8 +111,8 @@ export function PreviewPageRenderer({
 
       {create && (
         <CreateEditModal
-          open={showCreate}
-          onClose={() => setShowCreate(false)}
+          open={overlay.kind === "CREATE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
           capability={create}
           config={config}
           onSuccess={refresh}
@@ -109,24 +121,25 @@ export function PreviewPageRenderer({
 
       {update && (
         <CreateEditModal
-          open={editTarget !== null}
-          onClose={() => setEditTarget(null)}
+          open={overlay.kind === "UPDATE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
           capability={update}
           config={config}
-          initialValues={editTarget ?? undefined}
+          initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
           onSuccess={refresh}
         />
       )}
 
       {del && (
         <DeleteConfirmModal
-          open={deleteTargetId !== null}
-          onClose={() => setDeleteTargetId(null)}
+          open={overlay.kind === "DELETE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
           capability={del}
           config={config}
-          targetId={deleteTargetId ?? ""}
+          targetId={overlay.kind === "DELETE" ? overlay.id : ""}
           onSuccess={() => {
             setSelectedRow(null);
+            setOverlay({ kind: "NONE" });
             refresh();
           }}
         />
