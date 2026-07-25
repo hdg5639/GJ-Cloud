@@ -50,6 +50,7 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).contains("https://api.example.com");
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");
+        assertThat(appTsx).contains("\"dashboard\"");
 
         // package.json은 유효한 JSON이어야 한다(단순 문자열 결합 실수 감지용)
         assertThatIsValidJson(files.get("package.json"));
@@ -88,15 +89,19 @@ class PreviewComposeArtifactBuilderTest {
                 new Capability("vms.create", "vms", CapabilityType.CREATE, "createVm", "/vms", "POST",
                         false, false, false, "HIGH", List.of(), List.of("name", "planType"), null),
                 new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{id}", "DELETE",
+                        false, false, false, "HIGH", List.of(), List.of(), null),
+                new Capability("tags.list", "tags", CapabilityType.LIST, "listTags", "/tags", "GET",
                         false, false, false, "HIGH", List.of(), List.of(), null)
         );
     }
 
     private List<PageDraft> samplePages() {
         return List.of(
+                new PageDraft("dashboard", "대시보드", PageSkeletonType.DASHBOARD, List.of("vms.list", "tags.list")),
                 new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of("auth.login")),
                 new PageDraft("vms-page", "Vms", PageSkeletonType.LIST_DETAIL,
-                        List.of("vms.list", "vms.detail", "vms.create", "vms.delete"))
+                        List.of("vms.list", "vms.detail", "vms.create", "vms.delete")),
+                new PageDraft("tags-page", "Tags", PageSkeletonType.RESOURCE_LIST, List.of("tags.list"))
         );
     }
 }

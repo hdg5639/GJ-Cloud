@@ -143,6 +143,35 @@ export function extractToken(result: unknown, accessTokenPath?: string | null): 
   return null;
 }
 
+const COUNT_FIELD_KEYS = ["totalElements", "total", "totalCount", "count"];
+const MAX_COUNT_FIELD_DEPTH = 3;
+
+// Spring Data Page류 응답은 배열(content)과 같은 깊이에 총 개수(totalElements 등)를 함께 담는 경우가
+// 많아, extractArray와 별개로 그 필드를 먼저 찾는다. 못 찾으면 받은 페이지의 배열 길이로 대체한다 —
+// 정확한 전체 개수는 아니지만(페이지네이션 시) 최소한 데이터가 있다는 신호는 된다.
+function findCountField(value: unknown, depth: number): number | null {
+  if (depth > MAX_COUNT_FIELD_DEPTH || !value || typeof value !== "object") {
+    return null;
+  }
+  const obj = value as Record<string, unknown>;
+  for (const key of COUNT_FIELD_KEYS) {
+    if (typeof obj[key] === "number") {
+      return obj[key] as number;
+    }
+  }
+  for (const key of Object.keys(obj)) {
+    if (obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
+      const nested = findCountField(obj[key], depth + 1);
+      if (nested !== null) return nested;
+    }
+  }
+  return null;
+}
+
+export function extractCount(result: unknown): number {
+  return findCountField(result, 0) ?? extractArray(result).length;
+}
+
 export function formatCellValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "—";

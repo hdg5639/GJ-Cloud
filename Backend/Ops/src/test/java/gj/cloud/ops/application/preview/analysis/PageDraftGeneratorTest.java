@@ -25,7 +25,8 @@ class PageDraftGeneratorTest {
 
         List<PageDraft> pages = generator.generate(capabilities);
 
-        assertThat(pages).hasSize(3);
+        // vms/tags 두 리소스 모두 LIST capability가 있어 대시보드 페이지가 함께 생성된다.
+        assertThat(pages).hasSize(4);
 
         PageDraft authPage = findPage(pages, "auth-login");
         assertThat(authPage.skeleton()).isEqualTo(PageSkeletonType.AUTH_PAGE);
@@ -38,6 +39,22 @@ class PageDraftGeneratorTest {
 
         PageDraft tagsPage = findPage(pages, "tags-page");
         assertThat(tagsPage.skeleton()).isEqualTo(PageSkeletonType.RESOURCE_LIST);
+
+        PageDraft dashboard = findPage(pages, "dashboard");
+        assertThat(dashboard.skeleton()).isEqualTo(PageSkeletonType.DASHBOARD);
+        assertThat(dashboard.capabilityIds()).containsExactlyInAnyOrder("vms.list", "tags.list");
+    }
+
+    @Test
+    void doesNotGenerateDashboardWithOnlyOneListCapableResource() {
+        List<Capability> capabilities = List.of(
+                capability("auth.login", "auth", CapabilityType.LOGIN),
+                capability("vms.list", "vms", CapabilityType.LIST)
+        );
+
+        List<PageDraft> pages = generator.generate(capabilities);
+
+        assertThat(pages).noneMatch(p -> p.skeleton() == PageSkeletonType.DASHBOARD);
     }
 
     private PageDraft findPage(List<PageDraft> pages, String id) {

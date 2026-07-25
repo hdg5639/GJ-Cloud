@@ -6,13 +6,14 @@ import { ResourceTable } from "./ResourceTable";
 import { DetailPanel } from "./DetailPanel";
 import { CreateEditModal } from "./CreateEditModal";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { DashboardView } from "./DashboardView";
 import { rowId } from "./api";
-import { findCapabilityByType } from "./utils";
+import { findCapabilityById, findCapabilityByType } from "./utils";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
 // GamjaBox_2.0_Key_Features.md 3·7절 — 관련 API를 페이지 하나로 묶어서 보여준다. Blueprint
 // Schema/Registry/Slot 시스템 없이, PageDraftGenerator가 만든 스켈레톤 종류(AUTH_PAGE/RESOURCE_LIST/
-// LIST_DETAIL)별로 고정된 5개 패턴 컴포넌트만 조립한다.
+// LIST_DETAIL/DASHBOARD)별로 고정된 패턴 컴포넌트만 조립한다.
 export function PreviewPageRenderer({
   page,
   capabilities,
@@ -34,6 +35,13 @@ export function PreviewPageRenderer({
       return <p className="text-sm text-danger">이 페이지에 로그인 capability가 없습니다.</p>;
     }
     return <LoginForm capability={login} config={config} />;
+  }
+
+  if (page.skeleton === "DASHBOARD") {
+    const listCapabilities = page.capabilityIds
+      .map((id) => findCapabilityById(capabilities, id))
+      .filter((c): c is PreviewCapability => c?.type === "LIST");
+    return <DashboardView capabilities={listCapabilities} config={config} />;
   }
 
   const list = findCapabilityByType(capabilities, page, "LIST");

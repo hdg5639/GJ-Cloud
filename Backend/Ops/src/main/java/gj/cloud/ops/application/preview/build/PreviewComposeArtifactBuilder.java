@@ -213,6 +213,14 @@ public class PreviewComposeArtifactBuilder {
             .modal { width: 380px; background: #14171a; border-radius: 12px; padding: 20px; border: 1px solid #262b26; }
             .grid-2 { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
             @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+            .log-entry { border: 1px solid #262b26; border-radius: 8px; margin-bottom: 6px; background: rgba(255,255,255,0.02); }
+            .log-entry summary { cursor: pointer; list-style: none; padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+            .log-entry summary::-webkit-details-marker { display: none; }
+            .log-status { border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 700; background: rgba(34,197,94,0.15); color: #22c55e; }
+            .log-status.error { background: rgba(239,68,68,0.15); color: #f87171; }
+            .log-url { color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .log-body { padding: 10px 12px; border-top: 1px solid #262b26; }
+            .log-body pre { background: rgba(0,0,0,0.3); border-radius: 6px; padding: 8px; font-size: 11px; overflow-x: auto; color: #9ca3af; }
             """;
 
     // GamjaBox_2.0_Key_Features.md 3·7절 — 관련 API를 페이지 하나로 묶어서 보여준다. Blueprint
@@ -264,28 +272,71 @@ public class PreviewComposeArtifactBuilder {
               return url.toString();
             }
 
+            // 요청·응답 확인 패널(App 하단)이 구독하는 단순 pub-sub — 모든 컴포넌트가 authToken을
+            // 개별 prop으로 받는 이 코드생성 구조에서는 config 객체 하나를 새로 꿰매 넣는 것보다
+            // callCapability 한 곳에서만 이벤트를 쏘고 App이 구독하는 편이 컴포넌트 5개의 시그니처를
+            // 안 건드려서 더 안전하다.
+            interface ApiCallLogEntry {
+              id: string;
+              method: string;
+              url: string;
+              status: number | null;
+              requestBody: unknown;
+              responseBody: unknown;
+              error: string | null;
+              timestamp: number;
+            }
+
+            let apiCallListener: ((entry: ApiCallLogEntry) => void) | null = null;
+
+            function emitApiCall(entry: ApiCallLogEntry) {
+              apiCallListener?.(entry);
+            }
+
             async function callCapability(
               capability: Capability,
               authToken: string | null,
               options: { pathParams?: Record<string, string>; query?: Record<string, string>; body?: Record<string, unknown> } = {}
             ): Promise<unknown> {
               const url = buildUrl(capability, options.pathParams, options.query);
-              const res = await fetch(url, {
-                method: capability.method,
-                headers: {
-                  ...(options.body ? { "Content-Type": "application/json" } : {}),
-                  ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-                },
-                body: options.body ? JSON.stringify(options.body) : undefined,
-              });
-              if (!res.ok) {
-                throw new Error(`${capability.method} ${url} 요청이 실패했습니다 (${res.status})`);
+              let status: number | null = null;
+              let responseBody: unknown = null;
+              let errorMessage: string | null = null;
+              try {
+                const res = await fetch(url, {
+                  method: capability.method,
+                  headers: {
+                    ...(options.body ? { "Content-Type": "application/json" } : {}),
+                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                  },
+                  body: options.body ? JSON.stringify(options.body) : undefined,
+                });
+                status = res.status;
+                if (!res.ok) {
+                  errorMessage = `${capability.method} ${url} 요청이 실패했습니다 (${res.status})`;
+                  throw new Error(errorMessage);
+                }
+                if (res.status === 204) {
+                  return null;
+                }
+                const text = await res.text();
+                responseBody = text ? JSON.parse(text) : null;
+                return responseBody;
+              } catch (err) {
+                errorMessage = errorMessage ?? (err instanceof Error ? err.message : "요청 실패");
+                throw err;
+              } finally {
+                emitApiCall({
+                  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  method: capability.method,
+                  url,
+                  status,
+                  requestBody: options.body ?? null,
+                  responseBody,
+                  error: errorMessage,
+                  timestamp: Date.now(),
+                });
               }
-              if (res.status === 204) {
-                return null;
-              }
-              const text = await res.text();
-              return text ? JSON.parse(text) : null;
             }
 
             function isPasswordLikeField(name: string): boolean {
@@ -317,6 +368,34 @@ public class PreviewComposeArtifactBuilder {
                 }
               }
               return [];
+            }
+
+            const COUNT_FIELD_KEYS = ["totalElements", "total", "totalCount", "count"];
+            const MAX_COUNT_FIELD_DEPTH = 3;
+
+            // Dashboard 카드용 — Spring Data Page류 응답은 배열(content)과 같은 깊이에 총 개수를 함께
+            // 담는 경우가 많아 그 필드를 먼저 찾고, 없으면 받은 페이지의 배열 길이로 대체한다.
+            function findCountField(value: unknown, depth: number): number | null {
+              if (depth > MAX_COUNT_FIELD_DEPTH || !value || typeof value !== "object") {
+                return null;
+              }
+              const obj = value as Record<string, unknown>;
+              for (const key of COUNT_FIELD_KEYS) {
+                if (typeof obj[key] === "number") {
+                  return obj[key] as number;
+                }
+              }
+              for (const key of Object.keys(obj)) {
+                if (obj[key] && typeof obj[key] === "object" && !Array.isArray(obj[key])) {
+                  const nested = findCountField(obj[key], depth + 1);
+                  if (nested !== null) return nested;
+                }
+              }
+              return null;
+            }
+
+            function extractCount(result: unknown): number {
+              return findCountField(result, 0) ?? extractArray(result).length;
             }
 
             // accessTokenPath("data.accessToken" 같은 dot-path)가 분석 단계에서 확인됐거나 사용자가 직접
@@ -670,6 +749,60 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            interface DashboardCountState {
+              loading: boolean;
+              value: number | null;
+              error: string | null;
+            }
+
+            // Dashboard 스켈레톤 — 어떤 리소스가 중요한지 판단하지 않고, page.capabilityIds에 모인
+            // LIST capability마다 개수 카드만 기계적으로 보여준다.
+            function DashboardView({ capabilities, authToken }: { capabilities: Capability[]; authToken: string | null }) {
+              const [counts, setCounts] = useState<Record<string, DashboardCountState>>({});
+
+              useEffect(() => {
+                let cancelled = false;
+                capabilities.forEach((capability) => {
+                  callCapability(capability, authToken)
+                    .then((result) => {
+                      if (cancelled) return;
+                      setCounts((prev) => ({ ...prev, [capability.id]: { loading: false, value: extractCount(result), error: null } }));
+                    })
+                    .catch((err) => {
+                      if (cancelled) return;
+                      setCounts((prev) => ({
+                        ...prev,
+                        [capability.id]: { loading: false, value: null, error: err instanceof Error ? err.message : "불러오기 실패" },
+                      }));
+                    });
+                });
+                return () => {
+                  cancelled = true;
+                };
+              }, [capabilities, authToken]);
+
+              if (capabilities.length === 0) {
+                return <p className="error">이 페이지에 표시할 목록 capability가 없습니다.</p>;
+              }
+
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
+                  {capabilities.map((capability) => {
+                    const state = counts[capability.id] ?? { loading: true, value: null, error: null };
+                    return (
+                      <div key={capability.id} className="panel" style={{ padding: 16 }}>
+                        <p className="muted">{capability.resourceName}</p>
+                        <p style={{ fontSize: 24, fontWeight: 800, margin: "4px 0 0" }}>
+                          {state.loading ? "…" : state.error ? "—" : (state.value ?? "—")}
+                        </p>
+                        {state.error && <p className="error">{state.error}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
             function PageRenderer({ page, authToken, onLogin }: { page: PageDraft; authToken: string | null; onLogin: (token: string) => void }) {
               const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
               const [showCreate, setShowCreate] = useState(false);
@@ -683,6 +816,13 @@ public class PreviewComposeArtifactBuilder {
                   return <p className="error">이 페이지에 로그인 capability가 없습니다.</p>;
                 }
                 return <LoginForm capability={login} onLogin={onLogin} />;
+              }
+
+              if (page.skeleton === "DASHBOARD") {
+                const listCapabilities = page.capabilityIds
+                  .map((id) => findCapabilityById(id))
+                  .filter((c): c is Capability => c?.type === "LIST");
+                return <DashboardView capabilities={listCapabilities} authToken={authToken} />;
               }
 
               const list = findCapabilityByType(page, "LIST");
@@ -756,9 +896,50 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            function ApiCallLog({ entries }: { entries: ApiCallLogEntry[] }) {
+              if (entries.length === 0) {
+                return <p className="muted">아직 API 호출이 없습니다. 위에서 화면을 조작해보세요.</p>;
+              }
+              return (
+                <div>
+                  {entries.map((entry) => (
+                    <details key={entry.id} className="log-entry">
+                      <summary>
+                        <span className={`log-status ${entry.error ? "error" : ""}`}>{entry.status ?? "실패"}</span>
+                        <strong>{entry.method}</strong>
+                        <span className="log-url">{entry.url}</span>
+                        <span className="muted" style={{ marginLeft: "auto" }}>
+                          {new Date(entry.timestamp).toLocaleTimeString()}
+                        </span>
+                      </summary>
+                      <div className="log-body">
+                        {entry.error && <p className="error">{entry.error}</p>}
+                        {entry.requestBody != null && (
+                          <>
+                            <p className="muted">요청 본문</p>
+                            <pre>{JSON.stringify(entry.requestBody, null, 2)}</pre>
+                          </>
+                        )}
+                        <p className="muted">응답</p>
+                        <pre>{entry.responseBody != null ? JSON.stringify(entry.responseBody, null, 2) : "(본문 없음)"}</pre>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              );
+            }
+
             export default function App() {
               const [authToken, setAuthToken] = useState<string | null>(null);
               const [activePage, setActivePage] = useState<PageDraft>(PAGES[0]);
+              const [apiLog, setApiLog] = useState<ApiCallLogEntry[]>([]);
+
+              useEffect(() => {
+                apiCallListener = (entry) => setApiLog((prev) => [entry, ...prev].slice(0, 30));
+                return () => {
+                  apiCallListener = null;
+                };
+              }, []);
 
               return (
                 <div className="container">
@@ -782,6 +963,17 @@ public class PreviewComposeArtifactBuilder {
                   )}
                   <div className="panel">
                     <PageRenderer page={activePage} authToken={authToken} onLogin={setAuthToken} />
+                  </div>
+                  <div className="panel" style={{ marginTop: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <strong style={{ fontSize: 13 }}>요청·응답 확인</strong>
+                      {apiLog.length > 0 && (
+                        <button className="plain" onClick={() => setApiLog([])}>
+                          기록 지우기
+                        </button>
+                      )}
+                    </div>
+                    <ApiCallLog entries={apiLog} />
                   </div>
                 </div>
               );
