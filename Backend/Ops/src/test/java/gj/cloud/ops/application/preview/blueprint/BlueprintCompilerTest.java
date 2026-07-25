@@ -76,6 +76,33 @@ class BlueprintCompilerTest {
     }
 
     @Test
+    void productLikeSwapsBothCreateAndUpdateCreateEditModalToFormDrawer() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "vms-page", List.of(
+                        new Block("create", "create-edit-modal", "page.overlay", List.of("vms.create"), "CREATE"),
+                        new Block("update", "create-edit-modal", "page.overlay", List.of("vms.update"), "UPDATE")));
+
+        Map<String, List<Block>> compiled = BlueprintCompiler.compile(pageBlocks, Purpose.PRODUCT_LIKE);
+
+        List<Block> compiledBlocks = compiled.get("vms-page");
+        assertThat(compiledBlocks.get(0).componentId()).isEqualTo("form-drawer");
+        assertThat(compiledBlocks.get(0).mode()).isEqualTo("CREATE");
+        assertThat(compiledBlocks.get(1).componentId()).isEqualTo("form-drawer");
+        assertThat(compiledBlocks.get(1).mode()).isEqualTo("UPDATE");
+    }
+
+    @Test
+    void nonProductLikePurposesLeaveCreateEditModalUnchanged() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "vms-page", List.of(new Block("create", "create-edit-modal", "page.overlay", List.of("vms.create"), "CREATE")));
+
+        assertThat(BlueprintCompiler.compile(pageBlocks, Purpose.API_TEST).get("vms-page").get(0).componentId())
+                .isEqualTo("create-edit-modal");
+        assertThat(BlueprintCompiler.compile(pageBlocks, Purpose.ADMIN).get("vms-page").get(0).componentId())
+                .isEqualTo("create-edit-modal");
+    }
+
+    @Test
     void handlesMultiplePagesIndependently() {
         Map<String, List<Block>> pageBlocks = Map.of(
                 "vms-page", List.of(new Block("list", "resource-table", "page.main", List.of("vms.list"), null)),

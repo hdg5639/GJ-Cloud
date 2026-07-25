@@ -227,6 +227,8 @@ public class PreviewComposeArtifactBuilder {
             .muted { color: #9ca3af; font-size: 12px; }
             .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
             .modal { width: 380px; background: #14171a; border-radius: 12px; padding: 20px; border: 1px solid #262b26; }
+            .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: flex-end; z-index: 50; }
+            .drawer { width: 420px; max-width: 100%; height: 100%; overflow-y: auto; background: #14171a; padding: 20px; border-left: 1px solid #262b26; }
             .grid-2 { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
             @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
             .log-entry { border: 1px solid #262b26; border-radius: 8px; margin-bottom: 6px; background: rgba(255,255,255,0.02); }
@@ -300,7 +302,7 @@ public class PreviewComposeArtifactBuilder {
             // page.skeleton을 직접 switch하는 대신 이 목록을 순회해 조립한다.
             type ComponentId =
               | "login-form" | "resource-table" | "resource-card-grid" | "detail-panel" | "create-edit-modal"
-              | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view";
+              | "form-drawer" | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view";
             interface Block {
               instanceId: string;
               componentId: ComponentId;
@@ -594,6 +596,14 @@ public class PreviewComposeArtifactBuilder {
             // delete-confirm-modal/typed-confirm-modal 중 하나로 이미 컴파일해뒀다.
             function findDeleteBlock(blocks: Block[]): Block | undefined {
               return blocks.find((b) => b.componentId === "delete-confirm-modal" || b.componentId === "typed-confirm-modal");
+            }
+
+            // create/edit 계열도 마찬가지 — BlueprintCompiler가 purpose(PRODUCT_LIKE)에 따라
+            // create-edit-modal/form-drawer 중 하나로 이미 컴파일해뒀다. mode로 생성/수정 인스턴스를 구분한다.
+            function findCreateEditBlock(blocks: Block[], mode: "CREATE" | "UPDATE"): Block | undefined {
+              return blocks.find(
+                (b) => (b.componentId === "create-edit-modal" || b.componentId === "form-drawer") && b.mode === mode
+              );
             }
 
             function LoginForm({ capability, onLogin }: { capability: Capability; onLogin: (token: string) => void }) {
@@ -932,6 +942,72 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            // Direction Recovery Change Request §9.3 "form-drawer" — CreateEditModal과 데이터
+            // 동작·props는 동일하고, 화면 오른쪽에서 열리는 패널로 보여준다. PRODUCT_LIKE 목적일 때
+            // 고른다(§3 "Cards, detail pages, drawers, and guided creation flows").
+            function FormDrawer({
+              capability, authToken, initialValues, onClose, onSuccess,
+            }: {
+              capability: Capability;
+              authToken: string | null;
+              initialValues?: Record<string, unknown>;
+              onClose: () => void;
+              onSuccess: () => void;
+            }) {
+              const fields = capability.fields;
+              const [values, setValues] = useState<Record<string, string>>(() =>
+                Object.fromEntries(fields.map((field) => [field, initialValues?.[field] != null ? String(initialValues[field]) : ""]))
+              );
+              const [loading, setLoading] = useState(false);
+              const [error, setError] = useState<string | null>(null);
+
+              async function handleSubmit(e: FormEvent) {
+                e.preventDefault();
+                setError(null);
+                setLoading(true);
+                try {
+                  const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
+                  await callCapability(capability, authToken, { body: values, pathParams });
+                  onSuccess();
+                  onClose();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "저장에 실패했습니다");
+                } finally {
+                  setLoading(false);
+                }
+              }
+
+              return (
+                <div className="drawer-backdrop" onClick={onClose}>
+                  <div className="drawer" onClick={(e) => e.stopPropagation()}>
+                    <h2 style={{ marginTop: 0 }}>{capability.type === "CREATE" ? "생성" : "수정"}</h2>
+                    <form onSubmit={handleSubmit}>
+                      {fields.length === 0 && <p className="muted">이 API의 요청 필드를 확인하지 못했습니다.</p>}
+                      {fields.map((field) => (
+                        <label key={field} className="field">
+                          {field}
+                          <input
+                            type={isPasswordLikeField(field) ? "password" : "text"}
+                            value={values[field] ?? ""}
+                            onChange={(e) => setValues((prev) => ({ ...prev, [field]: e.target.value }))}
+                          />
+                        </label>
+                      ))}
+                      {error && <p className="error">{error}</p>}
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button type="button" className="plain" style={{ flex: 1 }} onClick={onClose}>
+                          취소
+                        </button>
+                        <button type="submit" className="primary" style={{ flex: 1 }} disabled={loading}>
+                          {loading ? "저장 중..." : "저장"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              );
+            }
+
             function DeleteConfirmModal({
               capability, authToken, targetId, onClose, onSuccess,
             }: {
@@ -1123,8 +1199,10 @@ public class PreviewComposeArtifactBuilder {
               const listBlock = findListBlock(blocks);
               const list = listBlock ? findCapabilityById(listBlock.capabilityIds[0]) : undefined;
               const detail = findCapabilityForBlock(blocks, "detail-panel");
-              const create = findCapabilityForBlock(blocks, "create-edit-modal", "CREATE");
-              const update = findCapabilityForBlock(blocks, "create-edit-modal", "UPDATE");
+              const createBlock = findCreateEditBlock(blocks, "CREATE");
+              const create = createBlock ? findCapabilityById(createBlock.capabilityIds[0]) : undefined;
+              const updateBlock = findCreateEditBlock(blocks, "UPDATE");
+              const update = updateBlock ? findCapabilityById(updateBlock.capabilityIds[0]) : undefined;
               const deleteBlock = findDeleteBlock(blocks);
               const del = deleteBlock ? findCapabilityById(deleteBlock.capabilityIds[0]) : undefined;
 
@@ -1176,16 +1254,30 @@ public class PreviewComposeArtifactBuilder {
                     </div>
                   )}
                   {create && overlay.kind === "CREATE" && (
-                    <CreateEditModal capability={create} authToken={authToken} onClose={() => setOverlay({ kind: "NONE" })} onSuccess={refresh} />
+                    createBlock?.componentId === "form-drawer" ? (
+                      <FormDrawer capability={create} authToken={authToken} onClose={() => setOverlay({ kind: "NONE" })} onSuccess={refresh} />
+                    ) : (
+                      <CreateEditModal capability={create} authToken={authToken} onClose={() => setOverlay({ kind: "NONE" })} onSuccess={refresh} />
+                    )
                   )}
                   {update && overlay.kind === "UPDATE" && (
-                    <CreateEditModal
-                      capability={update}
-                      authToken={authToken}
-                      initialValues={overlay.row}
-                      onClose={() => setOverlay({ kind: "NONE" })}
-                      onSuccess={refresh}
-                    />
+                    updateBlock?.componentId === "form-drawer" ? (
+                      <FormDrawer
+                        capability={update}
+                        authToken={authToken}
+                        initialValues={overlay.row}
+                        onClose={() => setOverlay({ kind: "NONE" })}
+                        onSuccess={refresh}
+                      />
+                    ) : (
+                      <CreateEditModal
+                        capability={update}
+                        authToken={authToken}
+                        initialValues={overlay.row}
+                        onClose={() => setOverlay({ kind: "NONE" })}
+                        onSuccess={refresh}
+                      />
+                    )
                   )}
                   {del && overlay.kind === "DELETE" && deleteBlock?.componentId === "typed-confirm-modal" && (
                     <TypedConfirmModal

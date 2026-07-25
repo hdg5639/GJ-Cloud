@@ -11,6 +11,7 @@ export type ComponentId =
   | "resource-card-grid"
   | "detail-panel"
   | "create-edit-modal"
+  | "form-drawer"
   | "delete-confirm-modal"
   | "typed-confirm-modal"
   | "dashboard-view";
@@ -23,6 +24,8 @@ const VARIANT_BY_PURPOSE: Partial<Record<ComponentId, Partial<Record<Purpose, Co
   "resource-table": { PRODUCT_LIKE: "resource-card-grid" },
   // Change Request §3 "Administrator purpose — Destructive-operation safeguards".
   "delete-confirm-modal": { ADMIN: "typed-confirm-modal" },
+  // Change Request §3 "Product-like purpose — ... drawers and guided creation flows".
+  "create-edit-modal": { PRODUCT_LIKE: "form-drawer" },
 };
 
 export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay";
@@ -119,6 +122,12 @@ export function findListBlock(blocks: Block[]): Block | undefined {
 // typed-confirm-modal 중 하나로 이미 컴파일해뒀다.
 export function findDeleteBlock(blocks: Block[]): Block | undefined {
   return blocks.find((b) => b.componentId === "delete-confirm-modal" || b.componentId === "typed-confirm-modal");
+}
+
+// create/edit 계열도 마찬가지 — compileBlocks가 purpose(PRODUCT_LIKE)에 따라 create-edit-modal/
+// form-drawer 중 하나로 이미 컴파일해뒀다. mode로 생성/수정 인스턴스를 구분한다.
+export function findCreateEditBlock(blocks: Block[], mode: "CREATE" | "UPDATE"): Block | undefined {
+  return blocks.find((b) => (b.componentId === "create-edit-modal" || b.componentId === "form-drawer") && b.mode === mode);
 }
 
 // blocks에서 특정 componentId(+선택적으로 mode)를 가진 block 하나를 찾아 그 block이 가리키는 첫

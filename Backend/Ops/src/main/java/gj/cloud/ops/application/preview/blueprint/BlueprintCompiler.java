@@ -19,7 +19,9 @@ public final class BlueprintCompiler {
     private static final Map<String, Map<Purpose, String>> VARIANT_BY_PURPOSE = Map.of(
             "resource-table", Map.of(Purpose.PRODUCT_LIKE, "resource-card-grid"),
             // Change Request §3 "Administrator purpose — Destructive-operation safeguards".
-            "delete-confirm-modal", Map.of(Purpose.ADMIN, "typed-confirm-modal")
+            "delete-confirm-modal", Map.of(Purpose.ADMIN, "typed-confirm-modal"),
+            // Change Request §3 "Product-like purpose — ... drawers and guided creation flows".
+            "create-edit-modal", Map.of(Purpose.PRODUCT_LIKE, "form-drawer")
     );
 
     public static Map<String, List<Block>> compile(Map<String, List<Block>> pageBlocks, Purpose purpose) {

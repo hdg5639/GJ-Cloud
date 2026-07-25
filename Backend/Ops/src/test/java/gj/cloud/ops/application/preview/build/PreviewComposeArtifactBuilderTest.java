@@ -92,6 +92,10 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).contains("\"componentId\":\"resource-card-grid\"");
         assertThat(appTsx).contains("function ResourceCardGrid(");
         assertThat(appTsx).doesNotContain("\"componentId\":\"resource-table\"");
+        // create/edit 계열도 같은 purpose로 함께 컴파일되는지 확인한다(vms-page의 CREATE 블록).
+        assertThat(appTsx).contains("\"componentId\":\"form-drawer\"");
+        assertThat(appTsx).contains("function FormDrawer(");
+        assertThat(appTsx).doesNotContain("\"componentId\":\"create-edit-modal\"");
     }
 
     // purpose=ADMIN이면 destructive 계열도 typed-confirm-modal로 컴파일되는지 확인한다.

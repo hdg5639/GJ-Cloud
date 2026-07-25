@@ -38,6 +38,14 @@ public final class ComponentContracts {
                     List.of(CapabilityType.CREATE, CapabilityType.UPDATE), false,
                     List.of("IDLE", "SUBMITTING", "ERROR"),
                     List.of("page.overlay"), false, true),
+            // Direction Recovery Change Request §9.3 — create-edit-modal과 같은 계열(create/edit)의
+            // 두 번째 Variant. Capability/Slot 요구조건은 동일해 BlueprintCompiler가 purpose
+            // (PRODUCT_LIKE)에 따라 그냥 갈아끼울 수 있다.
+            "form-drawer", new ComponentContract(
+                    "form-drawer", "PATTERN",
+                    List.of(CapabilityType.CREATE, CapabilityType.UPDATE), false,
+                    List.of("IDLE", "SUBMITTING", "ERROR"),
+                    List.of("page.overlay"), false, true),
             "delete-confirm-modal", new ComponentContract(
                     "delete-confirm-modal", "PATTERN",
                     List.of(CapabilityType.DELETE), false,

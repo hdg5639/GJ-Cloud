@@ -6,12 +6,13 @@ import { ResourceTable } from "./ResourceTable";
 import { ResourceCardGrid } from "./ResourceCardGrid";
 import { DetailPanel } from "./DetailPanel";
 import { CreateEditModal } from "./CreateEditModal";
+import { FormDrawer } from "./FormDrawer";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { TypedConfirmModal } from "./TypedConfirmModal";
 import { DashboardView } from "./DashboardView";
 import { rowId } from "./api";
 import { findCapabilityById } from "./utils";
-import { compileBlocks, findCapabilityForBlock, findDeleteBlock, findListBlock, resolveBlocks } from "./blueprint";
+import { compileBlocks, findCapabilityForBlock, findCreateEditBlock, findDeleteBlock, findListBlock, resolveBlocks } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
 // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
@@ -61,8 +62,10 @@ export function PreviewPageRenderer({
   const listBlock = findListBlock(blocks);
   const list = listBlock ? findCapabilityById(capabilities, listBlock.capabilityIds[0]) : undefined;
   const detail = findCapabilityForBlock(blocks, capabilities, "detail-panel");
-  const create = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "CREATE");
-  const update = findCapabilityForBlock(blocks, capabilities, "create-edit-modal", "UPDATE");
+  const createBlock = findCreateEditBlock(blocks, "CREATE");
+  const create = createBlock ? findCapabilityById(capabilities, createBlock.capabilityIds[0]) : undefined;
+  const updateBlock = findCreateEditBlock(blocks, "UPDATE");
+  const update = updateBlock ? findCapabilityById(capabilities, updateBlock.capabilityIds[0]) : undefined;
   const deleteBlock = findDeleteBlock(blocks);
   const del = deleteBlock ? findCapabilityById(capabilities, deleteBlock.capabilityIds[0]) : undefined;
 
@@ -123,7 +126,15 @@ export function PreviewPageRenderer({
         </div>
       )}
 
-      {create && (
+      {create && (createBlock?.componentId === "form-drawer" ? (
+        <FormDrawer
+          open={overlay.kind === "CREATE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
+          capability={create}
+          config={config}
+          onSuccess={refresh}
+        />
+      ) : (
         <CreateEditModal
           open={overlay.kind === "CREATE"}
           onClose={() => setOverlay({ kind: "NONE" })}
@@ -131,9 +142,18 @@ export function PreviewPageRenderer({
           config={config}
           onSuccess={refresh}
         />
-      )}
+      ))}
 
-      {update && (
+      {update && (updateBlock?.componentId === "form-drawer" ? (
+        <FormDrawer
+          open={overlay.kind === "UPDATE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
+          capability={update}
+          config={config}
+          initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
+          onSuccess={refresh}
+        />
+      ) : (
         <CreateEditModal
           open={overlay.kind === "UPDATE"}
           onClose={() => setOverlay({ kind: "NONE" })}
@@ -142,7 +162,7 @@ export function PreviewPageRenderer({
           initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
           onSuccess={refresh}
         />
-      )}
+      ))}
 
       {del && deleteBlock?.componentId === "typed-confirm-modal" ? (
         <TypedConfirmModal
