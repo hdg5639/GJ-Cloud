@@ -185,6 +185,23 @@ ALTER TABLE ai_spec_generation_log ADD COLUMN IF NOT EXISTS cache_hit BOOLEAN NO
 
 CREATE INDEX IF NOT EXISTS idx_ai_spec_generation_log_vm_id ON ai_spec_generation_log(vm_id);
 
+-- Auto Preview(GamjaBox_2.0_Key_Features.md 1단계) AI 검수 감사 로그. 분석/검수가 특정 VM에
+-- 종속되지 않으므로 ai_spec_generation_log(vm_id 필수)를 그대로 쓰지 않고 requester_user_id로 감사한다.
+CREATE TABLE IF NOT EXISTS ai_preview_generation_log (
+    id                  VARCHAR(36)  PRIMARY KEY,
+    requester_user_id   VARCHAR(64)  NOT NULL,
+    kind                VARCHAR(20)  NOT NULL DEFAULT 'REVIEW',
+    model               VARCHAR(100) NOT NULL,
+    input_tokens        BIGINT       NOT NULL,
+    output_tokens       BIGINT       NOT NULL,
+    succeeded           BOOLEAN      NOT NULL,
+    created_at          TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_ai_preview_generation_log_kind CHECK (kind IN ('GENERATION', 'REVIEW'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_preview_generation_log_requester ON ai_preview_generation_log(requester_user_id);
+
 CREATE TABLE IF NOT EXISTS db_backups (
     id                  VARCHAR(36)  PRIMARY KEY,
     vm_id               VARCHAR(36)  NOT NULL,
