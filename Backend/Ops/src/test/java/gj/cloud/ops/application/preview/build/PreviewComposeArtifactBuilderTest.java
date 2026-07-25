@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.AutomationPolicy;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
@@ -33,7 +34,9 @@ class PreviewComposeArtifactBuilderTest {
 
     @Test
     void generatesAllExpectedFilesWithoutLeftoverPlaceholders() {
-        ComposeArtifact artifact = builder.build("https://api.example.com", sampleCapabilities(), samplePages());
+        // API_KEY_HEADER로 검증 — Bearer만 가정하던 예전 방식이었다면 이 값이 App.tsx에 안 박혀 있었을 것.
+        ComposeArtifact artifact = builder.build(
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"));
 
         assertThat(artifact.sourceType()).isEqualTo(SourceType.AUTO_PREVIEW);
         assertThat(artifact.exposedRoutes()).hasSize(1);
@@ -53,6 +56,7 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");
         assertThat(appTsx).contains("\"dashboard\"");
+        assertThat(appTsx).contains("\"API_KEY_HEADER\"").contains("\"X-API-Key\"");
 
         // package.json은 유효한 JSON이어야 한다(단순 문자열 결합 실수 감지용)
         assertThatIsValidJson(files.get("package.json"));
@@ -70,7 +74,8 @@ class PreviewComposeArtifactBuilderTest {
     // 수동 npm/vite 빌드 검증용 — 필요할 때만 이 테스트를 개별 실행해 임시 디렉토리에 파일을 쓴다.
     @Test
     void writeGeneratedProjectToTempDirForManualBuildVerification() throws IOException {
-        ComposeArtifact artifact = builder.build("https://api.example.com", sampleCapabilities(), samplePages());
+        ComposeArtifact artifact = builder.build(
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"));
         Path dir = Files.createTempDirectory("gamjabox-preview-verify-");
         for (UploadedFile file : artifact.uploadedFiles()) {
             Path target = dir.resolve(file.vmPath());

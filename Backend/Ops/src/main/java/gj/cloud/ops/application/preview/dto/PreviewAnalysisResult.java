@@ -2,6 +2,7 @@ package gj.cloud.ops.application.preview.dto;
 
 import gj.cloud.ops.application.deployment.ai.GenerationStatus;
 import gj.cloud.ops.application.deployment.ai.UnresolvedField;
+import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 
@@ -19,6 +20,9 @@ public record PreviewAnalysisResult(
         List<PageDraft> pages,
         List<UnresolvedField> unresolved,
         List<String> warnings,
-        List<String> evidenceRefs
+        List<String> evidenceRefs,
+        // 인증된 요청에 토큰을 실제로 어떻게 실어 보낼지(§9) — LOGIN 응답으로 받은 값을 나머지 모든
+        // 보호된 요청에 동일하게 적용해야 하므로 Capability 하나가 아니라 문서 전체에 하나만 존재한다.
+        AuthStrategy authStrategy
 ) {
 }

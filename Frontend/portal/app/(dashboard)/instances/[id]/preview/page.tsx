@@ -145,6 +145,7 @@ export default function PreviewWizardPage() {
         apiBaseUrl: apiBaseUrl.trim(),
         capabilities: result.capabilities,
         pages: result.pages,
+        authStrategy: result.authStrategy,
       });
       router.push(`/instances/${vmId}/deployments/${deployment.id}`);
     } catch (err) {
@@ -480,6 +481,7 @@ export default function PreviewWizardPage() {
                         authToken: previewAuthToken,
                         onAuthTokenChange: setPreviewAuthToken,
                         onApiCall: (entry) => setApiCallLog((prev) => [entry, ...prev].slice(0, 30)),
+                        authStrategy: result.authStrategy,
                       }}
                     />
                   </div>

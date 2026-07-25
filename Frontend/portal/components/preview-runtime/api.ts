@@ -34,7 +34,22 @@ function buildUrl(
   for (const [key, value] of Object.entries(query)) {
     if (value) url.searchParams.set(key, value);
   }
+  if (config.authToken && config.authStrategy.type === "API_KEY_QUERY" && config.authStrategy.queryParamName) {
+    url.searchParams.set(config.authStrategy.queryParamName, config.authToken);
+  }
   return url.toString();
+}
+
+// 로그인으로 받은 토큰을 config.authStrategy가 정한 방식대로 헤더에 싣는다 — Bearer만 가정하면
+// API Key 인증 API에서 요청이 항상 401/403이 난다.
+function buildAuthHeaders(config: PreviewRuntimeConfig): Record<string, string> {
+  const { authToken, authStrategy } = config;
+  if (!authToken || authStrategy.type === "NONE" || authStrategy.type === "API_KEY_QUERY") {
+    return {};
+  }
+  const headerName = authStrategy.headerName ?? "Authorization";
+  const prefix = authStrategy.prefix ?? "";
+  return { [headerName]: `${prefix}${authToken}` };
 }
 
 export async function callCapability(
@@ -55,7 +70,7 @@ export async function callCapability(
       method: capability.method,
       headers: {
         ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...(config.authToken ? { Authorization: `Bearer ${config.authToken}` } : {}),
+        ...buildAuthHeaders(config),
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });

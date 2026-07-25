@@ -6,6 +6,7 @@ import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
 import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.dto.HealthCheck;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
@@ -29,8 +30,10 @@ public class PreviewComposeArtifactBuilder {
 
     private final ObjectMapper objectMapper;
 
-    public ComposeArtifact build(String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages) {
-        String appTsx = renderAppTsx(apiBaseUrl, capabilities, pages);
+    public ComposeArtifact build(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy
+    ) {
+        String appTsx = renderAppTsx(apiBaseUrl, capabilities, pages, authStrategy);
 
         List<UploadedFile> uploadedFiles = List.of(
                 file("package.json", PACKAGE_JSON),
@@ -63,11 +66,14 @@ public class PreviewComposeArtifactBuilder {
         return new UploadedFile(vmPath, content.getBytes(StandardCharsets.UTF_8));
     }
 
-    private String renderAppTsx(String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages) {
+    private String renderAppTsx(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy
+    ) {
         return APP_TSX_TEMPLATE
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
                 .replace("__CAPABILITIES_JSON__", toJson(capabilities))
-                .replace("__PAGES_JSON__", toJson(pages));
+                .replace("__PAGES_JSON__", toJson(pages))
+                .replace("__AUTH_STRATEGY_JSON__", toJson(authStrategy));
     }
 
     private String toJson(Object value) {
@@ -264,9 +270,21 @@ public class PreviewComposeArtifactBuilder {
               capabilityIds: string[];
             }
 
+            type AuthStrategyType = "NONE" | "BEARER" | "API_KEY_HEADER" | "API_KEY_QUERY";
+            interface AuthStrategy {
+              type: AuthStrategyType;
+              headerName: string | null;
+              prefix: string | null;
+              queryParamName: string | null;
+            }
+
             const API_BASE_URL: string = __API_BASE_URL_JSON__;
             const CAPABILITIES: Capability[] = __CAPABILITIES_JSON__;
             const PAGES: PageDraft[] = __PAGES_JSON__;
+            // 로그인으로 받은 토큰을 나머지 모든 보호된 요청에 어떻게 실어 보낼지 — 문서 전체에 하나만
+            // 있다(Capability별로 다르지 않음). Bearer만 가정하던 기존 방식은 API Key 인증 API에서 항상
+            // 401/403이 났다.
+            const AUTH_STRATEGY: AuthStrategy = __AUTH_STRATEGY_JSON__;
 
             // DetailPanel/CreateEditModal/DeleteConfirmModal은 실제 경로 파라미터 이름을 모른 채 항상
             // { id: ... } 하나만 넘긴다. 이름 그대로 "{id}"를 찾아 치환하면 capability.path가
@@ -282,7 +300,12 @@ public class PreviewComposeArtifactBuilder {
               return path.slice(0, lastOpen) + encodeURIComponent(value) + path.slice(lastClose + 1);
             }
 
-            function buildUrl(capability: Capability, pathParams: Record<string, string> = {}, query: Record<string, string> = {}): string {
+            function buildUrl(
+              capability: Capability,
+              authToken: string | null,
+              pathParams: Record<string, string> = {},
+              query: Record<string, string> = {}
+            ): string {
               let path = capability.path;
               if (pathParams.id !== undefined) {
                 path = replaceLastPathPlaceholder(path, pathParams.id);
@@ -291,7 +314,19 @@ public class PreviewComposeArtifactBuilder {
               for (const [key, value] of Object.entries(query)) {
                 if (value) url.searchParams.set(key, value);
               }
+              if (authToken && AUTH_STRATEGY.type === "API_KEY_QUERY" && AUTH_STRATEGY.queryParamName) {
+                url.searchParams.set(AUTH_STRATEGY.queryParamName, authToken);
+              }
               return url.toString();
+            }
+
+            function buildAuthHeaders(authToken: string | null): Record<string, string> {
+              if (!authToken || AUTH_STRATEGY.type === "NONE" || AUTH_STRATEGY.type === "API_KEY_QUERY") {
+                return {};
+              }
+              const headerName = AUTH_STRATEGY.headerName ?? "Authorization";
+              const prefix = AUTH_STRATEGY.prefix ?? "";
+              return { [headerName]: `${prefix}${authToken}` };
             }
 
             // 요청·응답 확인 패널(App 하단)이 구독하는 단순 pub-sub — 모든 컴포넌트가 authToken을
@@ -320,7 +355,7 @@ public class PreviewComposeArtifactBuilder {
               authToken: string | null,
               options: { pathParams?: Record<string, string>; query?: Record<string, string>; body?: Record<string, unknown> } = {}
             ): Promise<unknown> {
-              const url = buildUrl(capability, options.pathParams, options.query);
+              const url = buildUrl(capability, authToken, options.pathParams, options.query);
               let status: number | null = null;
               let responseBody: unknown = null;
               let errorMessage: string | null = null;
@@ -329,7 +364,7 @@ public class PreviewComposeArtifactBuilder {
                   method: capability.method,
                   headers: {
                     ...(options.body ? { "Content-Type": "application/json" } : {}),
-                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                    ...buildAuthHeaders(authToken),
                   },
                   body: options.body ? JSON.stringify(options.body) : undefined,
                 });

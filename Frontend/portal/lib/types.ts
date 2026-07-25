@@ -439,6 +439,16 @@ export type PreviewAutomationPolicy =
   | "TYPED_CONFIRMATION"
   | "DISABLED_IN_AUTO_TEST";
 
+// auto-preview-design/04-api-binding-schema.md §9 — 로그인으로 받은 토큰을 나머지 모든 보호된 요청에
+// 어떻게 실어 보낼지. Capability 하나가 아니라 분석 결과 전체에 하나만 존재한다.
+export type PreviewAuthStrategyType = "NONE" | "BEARER" | "API_KEY_HEADER" | "API_KEY_QUERY";
+export interface PreviewAuthStrategy {
+  type: PreviewAuthStrategyType;
+  headerName: string | null;
+  prefix: string | null;
+  queryParamName: string | null;
+}
+
 export interface PreviewCapability {
   id: string;
   resourceName: string;
@@ -484,6 +494,7 @@ export interface PreviewAnalysisResult {
   unresolved: UnresolvedField[];
   warnings: string[];
   evidenceRefs: string[];
+  authStrategy: PreviewAuthStrategy;
 }
 
 export interface PageReviewFinding {

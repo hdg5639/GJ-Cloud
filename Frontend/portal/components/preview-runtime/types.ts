@@ -9,13 +9,19 @@ export type {
   PreviewPageSkeletonType as PageSkeletonType,
   PreviewCapability,
   PreviewPageDraft as PreviewPage,
+  PreviewAuthStrategy,
 } from "@/lib/types";
+
+import type { PreviewAuthStrategy } from "@/lib/types";
 
 export interface PreviewRuntimeConfig {
   // 분석된 OpenAPI 문서의 서버 URL — 렌더러가 실제로 fetch를 호출할 때 이 값 + capability.path를 합친다.
   apiBaseUrl: string;
   authToken: string | null;
   onAuthTokenChange: (token: string | null) => void;
+  // 로그인으로 받은 토큰을 나머지 모든 보호된 요청에 어떻게 실어 보낼지(§9) — 분석 결과 전체에 하나만
+  // 있다. Bearer만 가정하던 예전 방식은 API Key 인증 API에서 요청이 항상 실패했다.
+  authStrategy: PreviewAuthStrategy;
   // GamjaBox_2.0_Key_Features.md 41절 MVP 출력 "요청·응답 확인" — callCapability가 호출마다 한 번씩
   // 호출해준다. 없으면(예: preview-demo) 그냥 기록하지 않는다.
   onApiCall?: (entry: ApiCallLogEntry) => void;

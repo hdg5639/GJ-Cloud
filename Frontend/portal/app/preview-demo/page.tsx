@@ -97,6 +97,7 @@ export default function PreviewDemoPage() {
     apiBaseUrl: "https://mock.example.com",
     authToken,
     onAuthTokenChange: setAuthToken,
+    authStrategy: { type: "BEARER", headerName: "Authorization", prefix: "Bearer ", queryParamName: null },
   };
 
   return (

@@ -2,6 +2,8 @@ package gj.cloud.ops.application.preview.service;
 
 import gj.cloud.ops.application.deployment.ai.GenerationStatus;
 import gj.cloud.ops.application.deployment.ai.UnresolvedField;
+import gj.cloud.ops.application.preview.analysis.AuthStrategy;
+import gj.cloud.ops.application.preview.analysis.AuthStrategyDetector;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CapabilityExtractor;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
@@ -28,6 +30,7 @@ public class PreviewAnalysisService {
     private final OpenApiNormalizer openApiNormalizer;
     private final CapabilityExtractor capabilityExtractor;
     private final PageDraftGenerator pageDraftGenerator;
+    private final AuthStrategyDetector authStrategyDetector;
 
     public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request) {
         OpenApiEvidence evidence = openApiNormalizer.normalize(request.apiDocsUrl());
@@ -74,7 +77,9 @@ public class PreviewAnalysisService {
                 : unresolved.isEmpty() ? GenerationStatus.READY
                 : GenerationStatus.NEEDS_INPUT;
 
+        AuthStrategy authStrategy = authStrategyDetector.detect(evidence.securitySchemes());
+
         return new PreviewAnalysisResult(
-                status, evidence.serverUrls(), capabilities, pages, unresolved, warnings, evidenceRefs);
+                status, evidence.serverUrls(), capabilities, pages, unresolved, warnings, evidenceRefs, authStrategy);
     }
 }

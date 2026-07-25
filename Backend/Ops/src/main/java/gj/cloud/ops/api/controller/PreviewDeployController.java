@@ -59,7 +59,7 @@ public class PreviewDeployController {
         String bearerToken = requireDeployPermission(request, vmId);
 
         ComposeArtifact artifact = previewComposeArtifactBuilder.build(
-                body.apiBaseUrl(), body.capabilities(), body.pages());
+                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy());
 
         DeploymentTargetEntity target = deploymentTargetService.create(
                 vmId.toString(),

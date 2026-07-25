@@ -45,6 +45,7 @@ import type {
   GithubRepositoryResponse,
   GithubInstallationCompleteResponse,
   PreviewAnalysisResult,
+  PreviewAuthStrategy,
   PreviewCapability,
   PreviewPageDraft,
   PageReviewFinding,
@@ -783,7 +784,13 @@ export const api = {
       deploy: (
         accessToken: string,
         vmId: string,
-        body: { targetName: string; apiBaseUrl: string; capabilities: PreviewCapability[]; pages: PreviewPageDraft[] }
+        body: {
+          targetName: string;
+          apiBaseUrl: string;
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          authStrategy: PreviewAuthStrategy;
+        }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/preview/deploy`, {
           method: "POST",
