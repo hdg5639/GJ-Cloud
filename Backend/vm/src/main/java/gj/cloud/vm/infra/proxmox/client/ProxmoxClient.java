@@ -95,7 +95,6 @@ public class ProxmoxClient {
         configParams.add("vcpus", String.valueOf(config.getVcpus()));
         configParams.add("memory", config.getMemory());
         configParams.add("cpu", config.getCpu());
-        configParams.add("affinity", config.getAffinity());
         // 단일 템플릿(9026) 클론 직후에는 cloud-init이 첫 부팅 시 자동 apt upgrade를 실행하지 않도록
         // 반드시 시작 전에 ciupgrade=0을 적용해야 함 — 늦게 적용하면 이미 부팅이 진행되어 의미가 없음
         configParams.add("ciupgrade", config.getCiupgrade());
@@ -381,7 +380,6 @@ public class ProxmoxClient {
         params.add("vcpus", String.valueOf(planType.getCores()));
         params.add("memory", planType.getMemory());
         params.add("cpu", "host,hidden=1");
-        params.add("affinity", planType.getAffinity());
         if (planType == PlanType.FREE) {
             params.add("cpulimit", "4");
             params.add("cpuunits", "1024");
