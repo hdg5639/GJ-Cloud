@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.preview.analysis.AutomationPolicy;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
+import gj.cloud.ops.application.preview.analysis.RiskLevel;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import org.junit.jupiter.api.Test;
 
@@ -81,17 +83,23 @@ class PreviewComposeArtifactBuilderTest {
     private List<Capability> sampleCapabilities() {
         return List.of(
                 new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",
-                        false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken", null),
+                        false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken", null,
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
                 new Capability("vms.list", "vms", CapabilityType.LIST, "listVms", "/vms", "GET",
-                        true, false, false, "HIGH", List.of(), List.of(), null, "keyword"),
+                        true, false, false, "HIGH", List.of(), List.of(), null, "keyword",
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
                 new Capability("vms.detail", "vms", CapabilityType.DETAIL, "getVm", "/vms/{id}", "GET",
-                        false, false, false, "HIGH", List.of(), List.of(), null, null),
+                        false, false, false, "HIGH", List.of(), List.of(), null, null,
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
                 new Capability("vms.create", "vms", CapabilityType.CREATE, "createVm", "/vms", "POST",
-                        false, false, false, "HIGH", List.of(), List.of("name", "planType"), null, null),
+                        false, false, false, "HIGH", List.of(), List.of("name", "planType"), null, null,
+                        RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED),
                 new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{id}", "DELETE",
-                        false, false, false, "HIGH", List.of(), List.of(), null, null),
+                        false, false, false, "HIGH", List.of(), List.of(), null, null,
+                        RiskLevel.DESTRUCTIVE, AutomationPolicy.EXPLICIT_CONFIRMATION),
                 new Capability("tags.list", "tags", CapabilityType.LIST, "listTags", "/tags", "GET",
-                        false, false, false, "HIGH", List.of(), List.of(), null, null)
+                        false, false, false, "HIGH", List.of(), List.of(), null, null,
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE)
         );
     }
 

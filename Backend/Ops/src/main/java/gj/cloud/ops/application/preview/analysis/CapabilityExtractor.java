@@ -108,10 +108,35 @@ public class CapabilityExtractor {
                 ? operation.requestBodyFields()
                 : List.of();
 
+        RiskLevel risk = defaultRiskFor(type);
         return Optional.of(new Capability(
                 Capability.idOf(resourceName, type), resourceName, type,
                 operation.operationId(), operation.path(), operation.method(),
-                hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null, searchParam));
+                hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null, searchParam,
+                risk, defaultAutomationPolicyFor(risk)));
+    }
+
+    // auto-preview-design/05-capability-taxonomy.md §5 표의 축소판. IRREVERSIBLE·EXTERNAL_SIDE_EFFECT는
+    // 여기서 절대 배정하지 않는다 — OpenAPI 메서드/경로만으로는 "복구 가능한 삭제"인지 "영구 삭제"인지
+    // 구분할 근거가 없고, 근거 없이 확정하지 않는 게 이 분석기 전체의 원칙(Phase A 철학)이다.
+    private RiskLevel defaultRiskFor(CapabilityType type) {
+        return switch (type) {
+            case LIST, DETAIL, LOGIN -> RiskLevel.SAFE;
+            case CREATE, UPDATE -> RiskLevel.STATE_CHANGING;
+            case DELETE -> RiskLevel.DESTRUCTIVE;
+        };
+    }
+
+    // 05-capability-taxonomy.md §6 기본 매핑 표 그대로. 지금은 저장만 하고 실제로 실행을 막는 곳은
+    // 없다 — MVP에 자동 실행 파이프라인 자체가 없기 때문(사용자가 항상 버튼을 직접 누름).
+    private AutomationPolicy defaultAutomationPolicyFor(RiskLevel risk) {
+        return switch (risk) {
+            case SAFE -> AutomationPolicy.AUTO_SAFE;
+            case STATE_CHANGING -> AutomationPolicy.USER_INITIATED;
+            case DESTRUCTIVE -> AutomationPolicy.EXPLICIT_CONFIRMATION;
+            case IRREVERSIBLE -> AutomationPolicy.TYPED_CONFIRMATION;
+            case EXTERNAL_SIDE_EFFECT -> AutomationPolicy.DISABLED_IN_AUTO_TEST;
+        };
     }
 
     // 문서 전체에서 로그인 오퍼레이션 후보를 찾는다 — 텍스트 힌트(경로/operationId/태그)와 요청 필드
@@ -157,7 +182,7 @@ public class CapabilityExtractor {
                     "auth.login", "auth", CapabilityType.LOGIN,
                     operation.operationId(), operation.path(), operation.method(),
                     false, false, false, confidence, evidenceLines, operation.requestBodyFields(),
-                    accessTokenPath, null);
+                    accessTokenPath, null, RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE);
             if (best == null || isHigherConfidence(candidate.confidence(), best.confidence())) {
                 best = candidate;
             }

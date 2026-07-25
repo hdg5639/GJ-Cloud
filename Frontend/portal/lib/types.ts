@@ -429,6 +429,15 @@ export interface ComposeReviewFinding {
 // application/preview/analysis 패키지 record와 필드명을 1:1로 맞춤.
 export type PreviewCapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
 export type PreviewPageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
+// auto-preview-design/05-capability-taxonomy.md §5·6 — CapabilityType별 고정 기본값만 배정한다.
+// IRREVERSIBLE/EXTERNAL_SIDE_EFFECT는 OpenAPI만으로 판별 근거가 없어 규칙 기반으로는 배정하지 않는다.
+export type PreviewRiskLevel = "SAFE" | "STATE_CHANGING" | "DESTRUCTIVE" | "IRREVERSIBLE" | "EXTERNAL_SIDE_EFFECT";
+export type PreviewAutomationPolicy =
+  | "AUTO_SAFE"
+  | "USER_INITIATED"
+  | "EXPLICIT_CONFIRMATION"
+  | "TYPED_CONFIRMATION"
+  | "DISABLED_IN_AUTO_TEST";
 
 export interface PreviewCapability {
   id: string;
@@ -450,6 +459,8 @@ export interface PreviewCapability {
   // hasSearch=true일 때 실제 쿼리 파라미터 이름(예: "keyword"). "search"로 고정해서 보내면 API가 다른
   // 이름을 쓸 때 검색이 조용히 실패하므로 렌더러는 이 값을 그대로 써야 한다.
   searchParam: string | null;
+  risk: PreviewRiskLevel;
+  automationPolicy: PreviewAutomationPolicy;
 }
 
 export interface PreviewPageDraft {

@@ -232,6 +232,9 @@ public class PreviewComposeArtifactBuilder {
 
             type CapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
             type PageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
+            type RiskLevel = "SAFE" | "STATE_CHANGING" | "DESTRUCTIVE" | "IRREVERSIBLE" | "EXTERNAL_SIDE_EFFECT";
+            type AutomationPolicy =
+              | "AUTO_SAFE" | "USER_INITIATED" | "EXPLICIT_CONFIRMATION" | "TYPED_CONFIRMATION" | "DISABLED_IN_AUTO_TEST";
 
             interface Capability {
               id: string;
@@ -248,6 +251,8 @@ public class PreviewComposeArtifactBuilder {
               fields: string[];
               accessTokenPath: string | null;
               searchParam: string | null;
+              risk: RiskLevel;
+              automationPolicy: AutomationPolicy;
             }
 
             interface PageDraft {

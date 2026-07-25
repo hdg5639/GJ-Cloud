@@ -43,6 +43,14 @@ const CONFIDENCE_MARK: Record<string, { symbol: string; className: string }> = {
   LOW: { symbol: "✕", className: "text-danger" },
 };
 
+// auto-preview-design/05-capability-taxonomy.md §5 — SAFE는 표시하지 않고 주의가 필요한 것만 배지로 강조.
+const RISK_LABEL: Record<string, { label: string; className: string }> = {
+  STATE_CHANGING: { label: "상태변경", className: "bg-white/[0.06] text-muted" },
+  DESTRUCTIVE: { label: "파괴적", className: "bg-[#e8b657]/15 text-[#e8b657]" },
+  IRREVERSIBLE: { label: "복구불가", className: "bg-danger/15 text-danger" },
+  EXTERNAL_SIDE_EFFECT: { label: "외부영향", className: "bg-danger/15 text-danger" },
+};
+
 const ACCESS_TOKEN_PATH_FIELD = "auth.login.accessTokenPath";
 const AUTH_LOGIN_FIELD = "auth.login";
 
@@ -193,6 +201,8 @@ export default function PreviewWizardPage() {
         fields: [usernameField, passwordField],
         accessTokenPath,
         searchParam: null,
+        risk: "SAFE",
+        automationPolicy: "AUTO_SAFE",
       };
       const capabilities = [...prev.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
       const hasAuthPage = prev.pages.some((p) => p.skeleton === "AUTH_PAGE");
@@ -380,14 +390,16 @@ export default function PreviewWizardPage() {
                       const capability = findCapability(id);
                       if (!capability) return null;
                       const mark = CONFIDENCE_MARK[capability.confidence];
+                      const risk = RISK_LABEL[capability.risk];
                       return (
                         <span
                           key={id}
-                          title={`${capability.method} ${capability.path} (신뢰도: ${capability.confidence})`}
-                          className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-muted"
+                          title={`${capability.method} ${capability.path} (신뢰도: ${capability.confidence}, 위험도: ${capability.risk})`}
+                          className="inline-flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-muted"
                         >
-                          {mark && <span className={`mr-1 font-bold ${mark.className}`}>{mark.symbol}</span>}
+                          {mark && <span className={`font-bold ${mark.className}`}>{mark.symbol}</span>}
                           {CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type}
+                          {risk && <span className={`rounded px-1 py-0.5 font-bold ${risk.className}`}>{risk.label}</span>}
                         </span>
                       );
                     })}

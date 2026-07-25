@@ -42,6 +42,32 @@ class CapabilityExtractorTest {
         assertThat(detail.searchParam()).isNull();
     }
 
+    // auto-preview-design/05-capability-taxonomy.md §5·6 기본 매핑 표 회귀 테스트 — CapabilityType별
+    // 위험도 기본값과 그 위험도의 기본 자동화 정책이 문서와 어긋나지 않는지 확인.
+    @Test
+    void assignsDefaultRiskAndAutomationPolicyPerCapabilityType() {
+        List<ApiOperationEvidence> operations = List.of(
+                operation("GET", "/vms", "listVms", true, List.of()),
+                operation("GET", "/vms/{id}", "getVm", false, List.of()),
+                operation("POST", "/vms", "createVm", false, List.of()),
+                operation("PATCH", "/vms/{id}", "updateVm", false, List.of()),
+                operation("DELETE", "/vms/{id}", "deleteVm", false, List.of())
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("vm-service", "1.0", List.of(), List.of(), operations, 0);
+
+        List<Capability> capabilities = extractor.extract(evidence);
+
+        assertThat(findCapability(capabilities, "vms.list").risk()).isEqualTo(RiskLevel.SAFE);
+        assertThat(findCapability(capabilities, "vms.list").automationPolicy()).isEqualTo(AutomationPolicy.AUTO_SAFE);
+        assertThat(findCapability(capabilities, "vms.detail").risk()).isEqualTo(RiskLevel.SAFE);
+        assertThat(findCapability(capabilities, "vms.create").risk()).isEqualTo(RiskLevel.STATE_CHANGING);
+        assertThat(findCapability(capabilities, "vms.create").automationPolicy()).isEqualTo(AutomationPolicy.USER_INITIATED);
+        assertThat(findCapability(capabilities, "vms.update").risk()).isEqualTo(RiskLevel.STATE_CHANGING);
+        assertThat(findCapability(capabilities, "vms.delete").risk()).isEqualTo(RiskLevel.DESTRUCTIVE);
+        assertThat(findCapability(capabilities, "vms.delete").automationPolicy())
+                .isEqualTo(AutomationPolicy.EXPLICIT_CONFIRMATION);
+    }
+
     // 렌더러가 검색 파라미터 이름을 "search"로 하드코딩하면, API가 keyword/q/query 같은 다른 이름을 쓸 때
     // 검색이 조용히 실패한다 — 감지된 실제 이름이 그대로 보존되는지 확인.
     @Test
