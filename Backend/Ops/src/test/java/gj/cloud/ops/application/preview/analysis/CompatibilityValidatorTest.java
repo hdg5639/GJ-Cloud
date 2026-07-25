@@ -20,13 +20,15 @@ class CompatibilityValidatorTest {
     }
 
     @Test
-    void loginWithoutPasswordLikeFieldIsFlagged() {
+    void loginWithoutPasswordLikeFieldIsFlaggedAsWarningNotError() {
         Capability login = loginCapability(List.of("email", "otp"));
         PageDraft page = new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of(login.id()));
         List<Block> blocks = resolver.resolve(page, List.of(login));
 
-        assertThat(CompatibilityValidator.validate(page, blocks, List.of(login)))
-                .anyMatch(f -> f.contains("비밀번호로 보이는 필드가 없습니다"));
+        List<CompatibilityFinding> findings = CompatibilityValidator.validate(page, blocks, List.of(login));
+        assertThat(findings).anyMatch(f -> f.message().contains("비밀번호로 보이는 필드가 없습니다"));
+        // 로그인 폼 필드 부족은 정보성 경고일 뿐, Registry VALIDATED 승격을 막는 ERROR가 아니다.
+        assertThat(findings).noneMatch(f -> f.severity() == CompatibilitySeverity.ERROR);
     }
 
     @Test
@@ -51,6 +53,17 @@ class CompatibilityValidatorTest {
         List<Block> blocks = resolver.resolve(page, capabilities);
 
         assertThat(CompatibilityValidator.validate(page, blocks, capabilities)).isEmpty();
+    }
+
+    @Test
+    void slotContractViolationIsFlaggedAsError() {
+        Capability login = loginCapability(List.of("email", "password"));
+        PageDraft page = new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of(login.id()));
+        // resolver가 만들지 않을 잘못된 Block(page.overlay는 AUTH_PAGE가 제공하지 않는 Slot)을 직접 구성.
+        List<Block> blocks = List.of(new Block("login", "login-form", "page.overlay", List.of(login.id()), null));
+
+        List<CompatibilityFinding> findings = CompatibilityValidator.validate(page, blocks, List.of(login));
+        assertThat(findings).anyMatch(f -> f.severity() == CompatibilitySeverity.ERROR);
     }
 
     private Capability loginCapability(List<String> fields) {

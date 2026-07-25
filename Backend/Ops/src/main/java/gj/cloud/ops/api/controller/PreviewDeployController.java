@@ -6,7 +6,13 @@ import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
 import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
 import gj.cloud.ops.application.preview.analysis.Block;
+import gj.cloud.ops.application.preview.analysis.Capability;
+import gj.cloud.ops.application.preview.analysis.CompatibilityFinding;
+import gj.cloud.ops.application.preview.analysis.CompatibilitySeverity;
+import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
+import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
+import gj.cloud.ops.application.preview.analysis.RegistryStatus;
 import gj.cloud.ops.application.preview.build.PreviewComposeArtifactBuilder;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.dto.PreviewDeployRequest;
@@ -86,11 +92,28 @@ public class PreviewDeployController {
                 bearerToken, vmId.toString(), target, repoConfig, artifact);
 
         Map<String, List<Block>> pageBlocks = previewBlockResolver.resolveAll(body.pages(), body.capabilities());
+        RegistryStatus status = hasErrorFinding(body.pages(), pageBlocks, body.capabilities())
+                ? RegistryStatus.DRAFT
+                : RegistryStatus.VALIDATED;
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
-                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), pageBlocks);
+                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), pageBlocks, status);
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
 
         return ApiResponse.ok(DeploymentResponse.from(deployment));
+    }
+
+    // auto-preview-design/09-registry-lifecycle.md §11 MVP 관계 — "Schema·Build 통과 시
+    // PROJECT+VALIDATED". Build는 이미 위에서 예외 없이 ComposeArtifact가 만들어진 시점에 통과했고,
+    // 여기서는 Contract·Slot·Compatibility Hard Gate(ERROR Finding)만 마저 확인한다.
+    private boolean hasErrorFinding(List<PageDraft> pages, Map<String, List<Block>> pageBlocks, List<Capability> capabilities) {
+        for (PageDraft page : pages) {
+            for (CompatibilityFinding finding : CompatibilityValidator.validate(page, pageBlocks.get(page.id()), capabilities)) {
+                if (finding.severity() == CompatibilitySeverity.ERROR) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private String requireDeployPermission(HttpServletRequest request, UUID vmId) {

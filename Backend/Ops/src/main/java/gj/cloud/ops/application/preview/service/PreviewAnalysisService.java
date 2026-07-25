@@ -8,6 +8,7 @@ import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CapabilityExtractor;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
+import gj.cloud.ops.application.preview.analysis.CompatibilityFinding;
 import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
 import gj.cloud.ops.application.preview.analysis.OpenApiEvidence;
 import gj.cloud.ops.application.preview.analysis.OpenApiNormalizer;
@@ -74,7 +75,9 @@ public class PreviewAnalysisService {
 
         for (PageDraft page : pages) {
             List<Block> blocks = blockResolver.resolve(page, capabilities);
-            warnings.addAll(CompatibilityValidator.validate(page, blocks, capabilities));
+            for (CompatibilityFinding finding : CompatibilityValidator.validate(page, blocks, capabilities)) {
+                warnings.add(finding.message());
+            }
         }
 
         List<String> evidenceRefs = capabilities.stream()
