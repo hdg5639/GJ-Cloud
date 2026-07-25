@@ -434,6 +434,15 @@ public class DeploymentExecutor {
                 log.warn("배포 대상 삭제 중 라우트 정리 실패(무시하고 계속): targetId={}, error={}", appId, e.getMessage());
             }
 
+            // 컨테이너는 이미 위에서 내려갔는데 활성 배포(latestDeploymentId)의 DeploymentEntity.status는
+            // 그대로 두면 SUCCEEDED로 영원히 남아 배포 이력 목록에서 계속 "실행 중"처럼 보인다.
+            // runTeardown과 동일하게 STOPPED 처리 + 활성 배포 포인터 해제까지 해줘야 이력이 실제 상태와 맞는다.
+            String activeDeploymentId = target.getLatestDeploymentId();
+            if (activeDeploymentId != null) {
+                updateEntity(activeDeploymentId, entity -> entity.withStatus(DeploymentStatus.STOPPED));
+                deploymentTargetService.clearActiveDeployment(appId, activeDeploymentId);
+            }
+
             deploymentTargetService.deactivate(appId);
         } finally {
             lockService.unlock(appId, TARGET_DELETE_LOCK_VALUE);

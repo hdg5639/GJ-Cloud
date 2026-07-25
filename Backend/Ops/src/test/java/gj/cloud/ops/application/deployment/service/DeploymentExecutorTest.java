@@ -9,6 +9,7 @@ import gj.cloud.ops.application.vmclient.VmAutomationClient;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
+import gj.cloud.ops.domain.deployment.entity.DeploymentTargetEntity;
 import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
@@ -153,6 +154,47 @@ class DeploymentExecutorTest {
                 120_000);
         assertThat(stored.get().getStatus()).isEqualTo(DeploymentStatus.STOPPED);
         verify(lockService).unlock(VM_ID, DEPLOYMENT_ID);
+    }
+
+    // 배포 대상 완전 삭제는 컨테이너를 내리지만, 활성 배포(latestDeploymentId)의 DeploymentEntity.status를
+    // 그대로 두면 배포 이력 목록에서 영원히 SUCCEEDED(=실행 중처럼 보임)로 남는다. runTeardown과 동일하게
+    // STOPPED 처리 + 활성 배포 포인터 해제가 함께 일어나는지 검증한다.
+    @Test
+    void deleteTargetStopsTheActiveDeploymentHistoryEntry() {
+        String targetId = "target-1";
+        DeploymentTargetEntity target = DeploymentTargetEntity.builder()
+                .id(targetId)
+                .vmId(VM_ID)
+                .ownerUserId("owner-1")
+                .ownerEmail("owner@example.com")
+                .name("my-app")
+                .repositoryUrl("https://github.com/example/repo")
+                .branch("main")
+                .sourceType(SourceType.TEMPLATE_SPEC)
+                .active(true)
+                .latestDeploymentId(DEPLOYMENT_ID)
+                .build();
+        AtomicReference<DeploymentEntity> stored = new AtomicReference<>(succeededDeployment());
+
+        when(vmServiceClient.getContext(TOKEN, VM_ID)).thenReturn(runningDeployContext());
+        when(lockService.tryLock(targetId, "TARGET_DELETE")).thenReturn(true);
+        when(sshSessionFactory.createSession(VM_ID, "10.0.0.10")).thenReturn(session);
+        when(sshCommandExecutor.exec(any(Session.class), any(String.class), anyLong()))
+                .thenReturn(new CommandResult(0, "", ""));
+        when(deploymentRepository.findById(DEPLOYMENT_ID))
+                .thenAnswer(invocation -> Optional.ofNullable(stored.get()));
+        when(deploymentRepository.save(any(DeploymentEntity.class))).thenAnswer(invocation -> {
+            DeploymentEntity saved = invocation.getArgument(0);
+            stored.set(saved);
+            return saved;
+        });
+
+        deploymentExecutor.deleteTarget(TOKEN, VM_ID, target);
+
+        assertThat(stored.get().getStatus()).isEqualTo(DeploymentStatus.STOPPED);
+        verify(deploymentTargetService).clearActiveDeployment(targetId, DEPLOYMENT_ID);
+        verify(deploymentTargetService).deactivate(targetId);
+        verify(lockService).unlock(targetId, "TARGET_DELETE");
     }
 
     private VmContextResponse runningDeployContext() {
