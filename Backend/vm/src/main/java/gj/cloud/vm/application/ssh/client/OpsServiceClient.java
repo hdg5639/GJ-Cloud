@@ -29,12 +29,16 @@ public class OpsServiceClient {
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiResponse<SshReadinessResponse>> SSH_READINESS_RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
-    private static final Duration SSH_READINESS_TIMEOUT = Duration.ofMinutes(10);
     private static final Duration SSH_READINESS_RETRY_DELAY = Duration.ofSeconds(5);
-    private static final long SSH_READINESS_MAX_RETRIES = 120;
 
     private final WebClient webClient;
     private final ServiceTokenClient serviceTokenClient;
+
+    // 실기 확인 결과 cloud-init이 템플릿/네트워크 상태에 따라 10분을 넘겨 끝나는 경우가 있었음(VM 시계가
+    // NTP 동기화 전이라 정확한 소요 시간은 알 수 없지만, cloud-init 자체는 status: done으로 정상 완료됨 —
+    // 즉 우리 쪽 판정 로직이 아니라 타임아웃 값이 너무 타이트했던 것). 재배포 없이 튜닝할 수 있게 설정값으로 뺌.
+    @Value("${vm.ssh-readiness.timeout-minutes:20}")
+    private long sshReadinessTimeoutMinutes;
 
     public OpsServiceClient(@Value("${ops.service-url}") String opsServiceUrl, ServiceTokenClient serviceTokenClient) {
         this.webClient = WebClient.builder().baseUrl(opsServiceUrl).build();
@@ -64,6 +68,10 @@ public class OpsServiceClient {
     ) {
         SshReadinessRequest request =
                 new SshReadinessRequest(internalIp, expectedUserPublicKey, expectedUserKeyFingerprint);
+        Duration timeout = Duration.ofMinutes(sshReadinessTimeoutMinutes);
+        // 재시도 횟수를 타임아웃과 별개의 상수로 따로 두면 둘이 어긋날 수 있어(과거처럼 타임아웃만 늘리고
+        // 횟수를 안 늘리면 timeout()이 아니라 retryWhen이 먼저 포기해버림), 타임아웃 값에서 그대로 계산한다.
+        long maxRetries = timeout.dividedBy(SSH_READINESS_RETRY_DELAY);
 
         return Mono.defer(() -> probeSshReadiness(vmId, request))
                 .flatMap(response -> {
@@ -78,7 +86,7 @@ public class OpsServiceClient {
                     }
                     return Mono.error(new SshReadinessPendingException(response.stage()));
                 })
-                .retryWhen(Retry.fixedDelay(SSH_READINESS_MAX_RETRIES, SSH_READINESS_RETRY_DELAY)
+                .retryWhen(Retry.fixedDelay(maxRetries, SSH_READINESS_RETRY_DELAY)
                         .filter(SshReadinessPendingException.class::isInstance)
                         .doBeforeRetry(signal -> {
                             long attempt = signal.totalRetries() + 1;
@@ -89,7 +97,7 @@ public class OpsServiceClient {
                                         vmId, pending.stage(), attempt);
                             }
                         }))
-                .timeout(SSH_READINESS_TIMEOUT)
+                .timeout(timeout)
                 .onErrorMap(error -> {
                     if (error instanceof VmException) {
                         return error;
