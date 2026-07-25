@@ -26,6 +26,12 @@ public class CapabilityExtractor {
     // 밑줄/대소문자 차이는 leafFieldName()에서 정규화 후 비교하므로 여기엔 정규화된 형태만 둔다.
     private static final List<String> ACCESS_TOKEN_FIELD_PRIORITY =
             List.of("accesstoken", "authtoken", "idtoken", "jwt", "token");
+    // OpenApiNormalizer.ARRAY_ENVELOPE_KEYS와 같은 우선순위(순서 있는 리스트가 필요해 별도로 둠) —
+    // collectionPath 후보 중 알려진 봉투 이름을 먼저 확인한다.
+    private static final List<String> ARRAY_ENVELOPE_KEY_PRIORITY =
+            List.of("content", "items", "data", "list", "results", "records", "rows", "elements", "result", "payload");
+    private static final List<String> COUNT_FIELD_PRIORITY =
+            List.of("totalelements", "totalcount", "total", "count");
 
     public List<Capability> extract(OpenApiEvidence evidence) {
         List<Capability> capabilities = new ArrayList<>();
@@ -97,6 +103,21 @@ public class CapabilityExtractor {
             }
         }
 
+        // LIST 응답에서 실제 배열/총개수 위치를 미리 추정해둔다 — 안 해두면 렌더러가 매 요청마다 런타임
+        // 재귀 휴리스틱으로 다시 찾아야 하고, 응답에 배열 필드가 여러 개면 엉뚱한 걸 고를 수도 있다.
+        String collectionPath = null;
+        String totalCountPath = null;
+        if (type == CapabilityType.LIST) {
+            collectionPath = detectCollectionPath(operation.arrayFieldPaths());
+            totalCountPath = detectTotalCountPath(operation.responseFieldPaths());
+            if (collectionPath != null) {
+                evidenceLines.add("응답 필드에서 목록 위치를 추정함: " + collectionPath);
+            }
+            if (totalCountPath != null) {
+                evidenceLines.add("응답 필드에서 총 개수 위치를 추정함: " + totalCountPath);
+            }
+        }
+
         String confidence = operation.operationId() != null
                 ? RepositoryEvidence.CONFIDENCE_HIGH
                 : RepositoryEvidence.CONFIDENCE_MEDIUM;
@@ -113,7 +134,7 @@ public class CapabilityExtractor {
                 Capability.idOf(resourceName, type), resourceName, type,
                 operation.operationId(), operation.path(), operation.method(),
                 hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null, searchParam,
-                risk, defaultAutomationPolicyFor(risk)));
+                risk, defaultAutomationPolicyFor(risk), collectionPath, totalCountPath));
     }
 
     // auto-preview-design/05-capability-taxonomy.md §5 표의 축소판. IRREVERSIBLE·EXTERNAL_SIDE_EFFECT는
@@ -182,7 +203,7 @@ public class CapabilityExtractor {
                     "auth.login", "auth", CapabilityType.LOGIN,
                     operation.operationId(), operation.path(), operation.method(),
                     false, false, false, confidence, evidenceLines, operation.requestBodyFields(),
-                    accessTokenPath, null, RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE);
+                    accessTokenPath, null, RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null);
             if (best == null || isHigherConfidence(candidate.confidence(), best.confidence())) {
                 best = candidate;
             }
@@ -220,6 +241,48 @@ public class CapabilityExtractor {
     // 더 얕은(중첩이 적은) 경로를 택한다. 못 찾으면 null — PreviewAnalysisService가 unresolved로 표시한다.
     private String detectAccessTokenPath(List<String> responseFieldPaths) {
         for (String hint : ACCESS_TOKEN_FIELD_PRIORITY) {
+            String best = null;
+            for (String path : responseFieldPaths) {
+                if (!hint.equals(normalizeFieldName(leafSegment(path)))) {
+                    continue;
+                }
+                if (best == null || pathDepth(path) < pathDepth(best)) {
+                    best = path;
+                }
+            }
+            if (best != null) {
+                return best;
+            }
+        }
+        return null;
+    }
+
+    // LIST 응답의 배열 필드 dot-path들(예: "data.content") 중 목록 봉투로 흔히 쓰이는 이름을 우선
+    // 확인한다. 알려진 이름이 하나도 없어도 배열이 정확히 하나뿐이면 그게 목록이라고 확정한다(모호할
+    // 근거가 없는 한 유일한 후보를 버릴 이유가 없음). 후보가 여러 개면서 이름도 모르면 null.
+    private String detectCollectionPath(List<String> arrayFieldPaths) {
+        for (String hint : ARRAY_ENVELOPE_KEY_PRIORITY) {
+            String best = null;
+            for (String path : arrayFieldPaths) {
+                if (!hint.equals(normalizeFieldName(leafSegment(path)))) {
+                    continue;
+                }
+                if (best == null || pathDepth(path) < pathDepth(best)) {
+                    best = path;
+                }
+            }
+            if (best != null) {
+                return best;
+            }
+        }
+        return arrayFieldPaths.size() == 1 ? arrayFieldPaths.get(0) : null;
+    }
+
+    // LIST 응답의 스칼라 필드 dot-path들 중 총 개수처럼 보이는 이름을 찾는다. detectAccessTokenPath와
+    // 같은 우선순위 탐색 패턴 — Spring Data Page류는 배열(content)과 같은 깊이에 totalElements가 있는
+    // 경우가 많아 responseFieldPaths(스칼라 전체)를 그대로 재사용한다.
+    private String detectTotalCountPath(List<String> responseFieldPaths) {
+        for (String hint : COUNT_FIELD_PRIORITY) {
             String best = null;
             for (String path : responseFieldPaths) {
                 if (!hint.equals(normalizeFieldName(leafSegment(path)))) {

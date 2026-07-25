@@ -99,10 +99,7 @@ const ARRAY_ENVELOPE_KEYS = [
 ];
 const MAX_ENVELOPE_UNWRAP_DEPTH = 4;
 
-// 목록 응답에서 실제 배열을 찾는다. API마다 봉투 설계가 다르므로(순수 배열 / {data:[...]} /
-// {success,data:{content:[...],totalElements}}처럼 겹겹이 감싸는 경우까지) 이름을 고정하지 않고
-// 알려진 키를 먼저 확인한 뒤 나머지 속성까지 재귀적으로 훑는다.
-export function extractArray(result: unknown, depth = 0): Record<string, unknown>[] {
+function extractArrayHeuristic(result: unknown, depth = 0): Record<string, unknown>[] {
   if (Array.isArray(result)) {
     return result as Record<string, unknown>[];
   }
@@ -115,7 +112,7 @@ export function extractArray(result: unknown, depth = 0): Record<string, unknown
     ...Object.keys(obj).filter((key) => !ARRAY_ENVELOPE_KEYS.includes(key)),
   ];
   for (const key of orderedKeys) {
-    const nested = extractArray(obj[key], depth + 1);
+    const nested = extractArrayHeuristic(obj[key], depth + 1);
     if (nested.length > 0) {
       return nested;
     }
@@ -123,17 +120,36 @@ export function extractArray(result: unknown, depth = 0): Record<string, unknown
   return [];
 }
 
-// 분석 단계(또는 사용자가 직접 지정)에서 확인된 dot-path("data.accessToken" 등)를 우선 신뢰한다 —
-// 분석이 못 찾았거나 그 위치에 값이 없을 때만 흔한 이름(accessToken/token)으로 추측한다.
-function readDotPath(result: unknown, dotPath: string): string | null {
+// 분석 단계(또는 사용자가 직접 지정)에서 확인된 dot-path를 우선 신뢰한다 — 없거나 그 위치에 값이
+// 없을 때만 기존 방식(이름 추측 / 재귀 탐색)으로 대체한다.
+function readValueAtPath(result: unknown, dotPath: string): unknown {
   let current: unknown = result;
   for (const key of dotPath.split(".")) {
     if (!current || typeof current !== "object") {
-      return null;
+      return undefined;
     }
     current = (current as Record<string, unknown>)[key];
   }
-  return typeof current === "string" && current.length > 0 ? current : null;
+  return current;
+}
+
+function readDotPath(result: unknown, dotPath: string): string | null {
+  const value = readValueAtPath(result, dotPath);
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+// 목록 응답에서 실제 배열을 찾는다. 분석 단계(OpenApiNormalizer)가 collectionPath를 미리 확정해뒀으면
+// 그 위치를 우선 신뢰하고, 없거나 그 위치에 배열이 없으면 기존 재귀 휴리스틱으로 대체한다. API마다
+// 봉투 설계가 다르므로(순수 배열 / {data:[...]} / {success,data:{content:[...],totalElements}}처럼
+// 겹겹이 감싸는 경우까지) 휴리스틱은 알려진 키를 먼저 확인한 뒤 나머지 속성까지 재귀적으로 훑는다.
+export function extractArray(result: unknown, collectionPath?: string | null): Record<string, unknown>[] {
+  if (collectionPath) {
+    const viaPath = readValueAtPath(result, collectionPath);
+    if (Array.isArray(viaPath)) {
+      return viaPath as Record<string, unknown>[];
+    }
+  }
+  return extractArrayHeuristic(result);
 }
 
 // 로그인 응답에서 토큰 문자열을 찾는다.
@@ -183,8 +199,18 @@ function findCountField(value: unknown, depth: number): number | null {
   return null;
 }
 
-export function extractCount(result: unknown): number {
-  return findCountField(result, 0) ?? extractArray(result).length;
+export function extractCount(
+  result: unknown,
+  totalCountPath?: string | null,
+  collectionPath?: string | null
+): number {
+  if (totalCountPath) {
+    const viaPath = readValueAtPath(result, totalCountPath);
+    if (typeof viaPath === "number") {
+      return viaPath;
+    }
+  }
+  return findCountField(result, 0) ?? extractArray(result, collectionPath).length;
 }
 
 export function formatCellValue(value: unknown): string {

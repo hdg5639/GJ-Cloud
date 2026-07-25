@@ -253,6 +253,8 @@ public class PreviewComposeArtifactBuilder {
               searchParam: string | null;
               risk: RiskLevel;
               automationPolicy: AutomationPolicy;
+              collectionPath: string | null;
+              totalCountPath: string | null;
             }
 
             interface PageDraft {
@@ -369,7 +371,7 @@ public class PreviewComposeArtifactBuilder {
             ];
             const MAX_ENVELOPE_UNWRAP_DEPTH = 4;
 
-            function extractArray(result: unknown, depth = 0): Record<string, unknown>[] {
+            function extractArrayHeuristic(result: unknown, depth = 0): Record<string, unknown>[] {
               if (Array.isArray(result)) {
                 return result as Record<string, unknown>[];
               }
@@ -382,12 +384,42 @@ public class PreviewComposeArtifactBuilder {
                 ...Object.keys(obj).filter((key) => !ARRAY_ENVELOPE_KEYS.includes(key)),
               ];
               for (const key of orderedKeys) {
-                const nested = extractArray(obj[key], depth + 1);
+                const nested = extractArrayHeuristic(obj[key], depth + 1);
                 if (nested.length > 0) {
                   return nested;
                 }
               }
               return [];
+            }
+
+            // 분석 단계(또는 사용자가 직접 지정)에서 확인된 dot-path를 우선 신뢰한다 — 없거나 그 위치에
+            // 값이 없을 때만 기존 방식(이름 추측 / 재귀 탐색)으로 대체한다.
+            function readValueAtPath(result: unknown, dotPath: string): unknown {
+              let current: unknown = result;
+              for (const key of dotPath.split(".")) {
+                if (!current || typeof current !== "object") {
+                  return undefined;
+                }
+                current = (current as Record<string, unknown>)[key];
+              }
+              return current;
+            }
+
+            function readDotPath(result: unknown, dotPath: string): string | null {
+              const value = readValueAtPath(result, dotPath);
+              return typeof value === "string" && value.length > 0 ? value : null;
+            }
+
+            // 목록 응답에서 실제 배열을 찾는다. 분석 단계가 collectionPath를 미리 확정해뒀으면 그 위치를
+            // 우선 신뢰하고, 없거나 그 위치에 배열이 없으면 기존 재귀 휴리스틱으로 대체한다.
+            function extractArray(result: unknown, collectionPath?: string | null): Record<string, unknown>[] {
+              if (collectionPath) {
+                const viaPath = readValueAtPath(result, collectionPath);
+                if (Array.isArray(viaPath)) {
+                  return viaPath as Record<string, unknown>[];
+                }
+              }
+              return extractArrayHeuristic(result);
             }
 
             const COUNT_FIELD_KEYS = ["totalElements", "total", "totalCount", "count"];
@@ -414,21 +446,14 @@ public class PreviewComposeArtifactBuilder {
               return null;
             }
 
-            function extractCount(result: unknown): number {
-              return findCountField(result, 0) ?? extractArray(result).length;
-            }
-
-            // accessTokenPath("data.accessToken" 같은 dot-path)가 분석 단계에서 확인됐거나 사용자가 직접
-            // 지정했다면 그 위치를 그대로 신뢰한다. 없을 때만 흔한 이름으로 추측한다.
-            function readDotPath(result: unknown, dotPath: string): string | null {
-              let current: unknown = result;
-              for (const key of dotPath.split(".")) {
-                if (!current || typeof current !== "object") {
-                  return null;
+            function extractCount(result: unknown, totalCountPath?: string | null, collectionPath?: string | null): number {
+              if (totalCountPath) {
+                const viaPath = readValueAtPath(result, totalCountPath);
+                if (typeof viaPath === "number") {
+                  return viaPath;
                 }
-                current = (current as Record<string, unknown>)[key];
               }
-              return typeof current === "string" && current.length > 0 ? current : null;
+              return findCountField(result, 0) ?? extractArray(result, collectionPath).length;
             }
 
             function extractToken(result: unknown, accessTokenPath: string | null): string | null {
@@ -553,7 +578,7 @@ public class PreviewComposeArtifactBuilder {
                   }
                   try {
                     const result = await callCapability(capability, authToken, { query });
-                    if (!cancelled) setRows(extractArray(result));
+                    if (!cancelled) setRows(extractArray(result, capability.collectionPath));
                   } catch (err) {
                     if (!cancelled) setError(err instanceof Error ? err.message : "목록을 불러오지 못했습니다");
                   } finally {
@@ -786,7 +811,14 @@ public class PreviewComposeArtifactBuilder {
                   callCapability(capability, authToken)
                     .then((result) => {
                       if (cancelled) return;
-                      setCounts((prev) => ({ ...prev, [capability.id]: { loading: false, value: extractCount(result), error: null } }));
+                      setCounts((prev) => ({
+                        ...prev,
+                        [capability.id]: {
+                          loading: false,
+                          value: extractCount(result, capability.totalCountPath, capability.collectionPath),
+                          error: null,
+                        },
+                      }));
                     })
                     .catch((err) => {
                       if (cancelled) return;

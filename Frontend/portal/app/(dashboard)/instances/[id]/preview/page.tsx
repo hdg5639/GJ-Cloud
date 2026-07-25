@@ -203,6 +203,8 @@ export default function PreviewWizardPage() {
         searchParam: null,
         risk: "SAFE",
         automationPolicy: "AUTO_SAFE",
+        collectionPath: null,
+        totalCountPath: null,
       };
       const capabilities = [...prev.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
       const hasAuthPage = prev.pages.some((p) => p.skeleton === "AUTH_PAGE");

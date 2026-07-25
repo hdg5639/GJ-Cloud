@@ -225,9 +225,10 @@ public class OpenApiNormalizer {
 
         boolean responseIsArray = extractResponseIsArray(operation.path("responses"), schemas);
         List<String> responseFieldPaths = extractResponseFieldPaths(operation.path("responses"), schemas);
+        List<String> arrayFieldPaths = extractArrayFieldPaths(operation.path("responses"), schemas);
 
         return new ApiOperationEvidence(path, method, operationId, summary, tags, parameters,
-                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths);
+                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths, arrayFieldPaths);
     }
 
     private List<ApiParameterEvidence> extractParameters(JsonNode parametersNode) {
@@ -381,6 +382,67 @@ public class OpenApiNormalizer {
                 collectScalarFieldPaths(propertySchema, schemas, path, depth + 1, out);
             } else {
                 out.add(path);
+            }
+            if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+                return;
+            }
+        }
+    }
+
+    // 응답 스키마에서 배열 타입 필드의 dot-path를 모두 모은다(예: "data.content") — looksLikeArraySchema와
+    // 반대로 "배열이 있는가"가 아니라 "그 배열이 어디 있는가"가 필요할 때 쓴다(CapabilityExtractor가
+    // collectionPath를 추정할 때). 최상위 자체가 배열이면(봉투 없음) 빈 경로는 넣지 않는다 — 그 경우는
+    // 런타임에서 Array.isArray로 이미 자명하게 판별되므로 굳이 persist할 필요가 없다. 배열을 찾으면 그
+    // 내부(items)까지는 더 들어가지 않는다 — 목록 위치만 필요하고 항목 내부 필드는 대상이 아니다.
+    private List<String> extractArrayFieldPaths(JsonNode responses, JsonNode schemas) {
+        var codes = responses.fieldNames();
+        while (codes.hasNext()) {
+            String code = codes.next();
+            if (!code.startsWith("2")) {
+                continue;
+            }
+            JsonNode content = responses.path(code).path("content");
+            if (!content.isObject() || content.isEmpty()) {
+                continue;
+            }
+            JsonNode schema = resolveSchema(content.elements().next().path("schema"), schemas);
+            List<String> paths = new ArrayList<>();
+            collectArrayFieldPaths(schema, schemas, "", 0, paths);
+            if (!paths.isEmpty()) {
+                return paths;
+            }
+        }
+        return List.of();
+    }
+
+    private void collectArrayFieldPaths(JsonNode schema, JsonNode schemas, String prefix, int depth, List<String> out) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH || out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+            return;
+        }
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode()) {
+            return;
+        }
+        if ("array".equals(resolved.path("type").asText(null))) {
+            if (!prefix.isEmpty()) {
+                out.add(prefix);
+            }
+            return;
+        }
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return;
+        }
+        var names = properties.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String path = prefix.isEmpty() ? name : prefix + "." + name;
+            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
+            String propertyType = propertySchema.path("type").asText(null);
+            if ("array".equals(propertyType)) {
+                out.add(path);
+            } else if ("object".equals(propertyType) || propertySchema.has("properties") || propertySchema.has("allOf")) {
+                collectArrayFieldPaths(propertySchema, schemas, path, depth + 1, out);
             }
             if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
                 return;

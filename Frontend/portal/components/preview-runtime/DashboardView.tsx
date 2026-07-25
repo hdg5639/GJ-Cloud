@@ -27,7 +27,14 @@ export function DashboardView({
       callCapability(config, capability)
         .then((result) => {
           if (cancelled) return;
-          setCounts((prev) => ({ ...prev, [capability.id]: { loading: false, value: extractCount(result), error: null } }));
+          setCounts((prev) => ({
+            ...prev,
+            [capability.id]: {
+              loading: false,
+              value: extractCount(result, capability.totalCountPath, capability.collectionPath),
+              error: null,
+            },
+          }));
         })
         .catch((err) => {
           if (cancelled) return;

@@ -84,24 +84,26 @@ class PreviewComposeArtifactBuilderTest {
         return List.of(
                 new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",
                         false, false, false, "HIGH", List.of(), List.of("email", "password"), "data.accessToken", null,
-                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null),
+                // 목록/총개수 위치를 이중 봉투(data.content/data.totalElements)로 미리 지정해 생성된 앱이
+                // 실제로 이 경로를 우선 사용하는지(런타임 재귀 휴리스틱으로 대체되지 않는지) 빌드까지 검증한다.
                 new Capability("vms.list", "vms", CapabilityType.LIST, "listVms", "/vms", "GET",
                         true, false, false, "HIGH", List.of(), List.of(), null, "keyword",
-                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, "data.content", "data.totalElements"),
                 // {id}가 아니라 {vmId}를 씀 — 경로 파라미터 이름이 "id"가 아닐 때도 buildUrl이 마지막
                 // {...}를 찾아 치환하는지(이름 매칭이 아니라 위치 매칭인지) 이 값으로 실제 빌드까지 검증한다.
                 new Capability("vms.detail", "vms", CapabilityType.DETAIL, "getVm", "/vms/{vmId}", "GET",
                         false, false, false, "HIGH", List.of(), List.of(), null, null,
-                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE),
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null),
                 new Capability("vms.create", "vms", CapabilityType.CREATE, "createVm", "/vms", "POST",
                         false, false, false, "HIGH", List.of(), List.of("name", "planType"), null, null,
-                        RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED),
+                        RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null),
                 new Capability("vms.delete", "vms", CapabilityType.DELETE, "deleteVm", "/vms/{vmId}", "DELETE",
                         false, false, false, "HIGH", List.of(), List.of(), null, null,
-                        RiskLevel.DESTRUCTIVE, AutomationPolicy.EXPLICIT_CONFIRMATION),
+                        RiskLevel.DESTRUCTIVE, AutomationPolicy.EXPLICIT_CONFIRMATION, null, null),
                 new Capability("tags.list", "tags", CapabilityType.LIST, "listTags", "/tags", "GET",
                         false, false, false, "HIGH", List.of(), List.of(), null, null,
-                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE)
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null)
         );
     }
 

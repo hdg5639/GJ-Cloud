@@ -461,6 +461,12 @@ export interface PreviewCapability {
   searchParam: string | null;
   risk: PreviewRiskLevel;
   automationPolicy: PreviewAutomationPolicy;
+  // LIST 응답에서 실제 배열이 위치한 dot-path(예: "data.content"). 못 찾으면 null이고 렌더러가
+  // 기존 재귀 휴리스틱(extractArray)으로 대체한다.
+  collectionPath: string | null;
+  // 같은 응답에서 총 개수가 위치한 dot-path(예: "data.totalElements"). 못 찾으면 null이고 렌더러가
+  // 배열 길이로 대체한다(extractCount).
+  totalCountPath: string | null;
 }
 
 export interface PreviewPageDraft {

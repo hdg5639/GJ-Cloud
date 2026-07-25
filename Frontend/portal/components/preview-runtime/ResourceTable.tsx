@@ -43,7 +43,7 @@ export function ResourceTable({
       try {
         const result = await callCapability(config, capability, { query });
         if (!cancelled) {
-          setRows(extractArray(result));
+          setRows(extractArray(result, capability.collectionPath));
         }
       } catch (err) {
         if (!cancelled) {

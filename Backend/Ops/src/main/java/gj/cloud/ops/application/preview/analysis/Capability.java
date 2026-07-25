@@ -31,7 +31,14 @@ public record Capability(
         RiskLevel risk,
         // risk의 기본 매핑값을 그대로 저장한다(05번 문서 §6 표). 지금은 참고용 메타데이터일 뿐 —
         // MVP에는 아직 이 값으로 실행을 막는 자동화 파이프라인 자체가 없다.
-        AutomationPolicy automationPolicy
+        AutomationPolicy automationPolicy,
+        // auto-preview-design/04-api-binding-schema.md §7.2 — LIST 응답에서 실제 배열이 위치한
+        // dot-path(예: "data.content"). 못 찾으면 null이고 렌더러가 기존 런타임 재귀 휴리스미(extractArray)로
+        // 대체한다. LIST 외 타입은 항상 null.
+        String collectionPath,
+        // 같은 절의 totalCountPath — LIST 응답에서 총 개수가 위치한 dot-path(예: "data.totalElements").
+        // 못 찾으면 null이고 렌더러가 배열 길이로 대체한다(extractCount). LIST 외 타입은 항상 null.
+        String totalCountPath
 ) {
     public static String idOf(String resourceName, CapabilityType type) {
         return resourceName + "." + type.name().toLowerCase();
