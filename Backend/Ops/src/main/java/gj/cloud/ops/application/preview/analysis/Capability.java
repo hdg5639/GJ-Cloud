@@ -59,4 +59,12 @@ public record Capability(
     public static String idOf(String resourceName, CapabilityType type) {
         return resourceName + "." + type.name().toLowerCase();
     }
+
+    // 서로 다른 오퍼레이션이 같은 (resourceName, type)로 매핑돼 id가 충돌할 때(예: /upload/video와
+    // /memos/video가 둘 다 "video.create") CapabilityExtractor가 유일한 id로 바꿔주기 위한 복사 생성자.
+    public Capability withId(String newId) {
+        return new Capability(newId, resourceName, type, operationId, path, method, hasSearch, hasSort,
+                hasPagination, confidence, evidence, fields, accessTokenPath, searchParam, risk, automationPolicy,
+                collectionPath, totalCountPath, kind, action, dependencies);
+    }
 }

@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,8 +43,12 @@ public class CapabilityExtractor {
 
     public List<Capability> extract(OpenApiEvidence evidence) {
         List<Capability> capabilities = new ArrayList<>();
+        // id는 "{resourceName}.{type}"라 서로 다른 오퍼레이션이 같은 마지막 경로 세그먼트를 쓰면
+        // 충돌한다(예: /upload/video·/memos/video·/memo/video가 모두 "video.create"). 배포 하드
+        // 게이트가 중복 id를 거부하므로, 뽑는 즉시 유일 id로 등록해 충돌을 결정론적으로 해소한다.
+        Set<String> usedIds = new HashSet<>();
         Optional<Capability> login = extractLoginCapability(evidence);
-        login.ifPresent(capabilities::add);
+        login.ifPresent(capability -> capabilities.add(registerUnique(capability, usedIds)));
 
         // 1st pass — 기존 CRUD 규칙으로 뽑을 수 있는 것만 먼저 확정한다. CRUD로 못 뽑은 오퍼레이션은
         // 버리지 않고 2nd pass(커맨드 추출)로 넘긴다(Direction Recovery Change Request §7.1).
@@ -56,7 +61,7 @@ public class CapabilityExtractor {
             }
             Optional<Capability> crud = extractCrudCapability(operation);
             if (crud.isPresent()) {
-                capabilities.add(crud.get());
+                capabilities.add(registerUnique(crud.get(), usedIds));
             } else {
                 remaining.add(operation);
             }
@@ -64,6 +69,7 @@ public class CapabilityExtractor {
 
         // 커맨드 capability의 dependencies(예: vm.start → vm.detail)를 채우기 위해 리소스별 DETAIL id를
         // 먼저 모아둔다 — 커맨드 오퍼레이션이 OpenAPI 문서에서 DETAIL보다 먼저 나올 수도 있어 2-pass가 필요.
+        // usedIds 유일화가 끝난 뒤라 여기서 모으는 DETAIL id는 이미 최종(유일) id다.
         Map<String, String> detailIdByResource = new LinkedHashMap<>();
         for (Capability capability : capabilities) {
             if (capability.type() == CapabilityType.DETAIL) {
@@ -72,9 +78,24 @@ public class CapabilityExtractor {
         }
 
         for (ApiOperationEvidence operation : remaining) {
-            extractCommandCapability(operation, detailIdByResource).ifPresent(capabilities::add);
+            extractCommandCapability(operation, detailIdByResource)
+                    .ifPresent(capability -> capabilities.add(registerUnique(capability, usedIds)));
         }
         return capabilities;
+    }
+
+    // id가 이미 쓰였으면 "-2", "-3" … 접미사를 붙여 유일하게 만든다. 접미사는 문서상 오퍼레이션
+    // 순서로 결정되므로 같은 입력이면 항상 같은 결과가 나온다(AC-9 결정론 유지).
+    private Capability registerUnique(Capability capability, Set<String> usedIds) {
+        if (usedIds.add(capability.id())) {
+            return capability;
+        }
+        int suffix = 2;
+        String candidate;
+        do {
+            candidate = capability.id() + "-" + suffix++;
+        } while (!usedIds.add(candidate));
+        return capability.withId(candidate);
     }
 
     private boolean isSameOperation(ApiOperationEvidence operation, Capability capability) {
