@@ -11,8 +11,10 @@ import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
+import gj.cloud.ops.application.preview.binding.ApiBinding;
 import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
@@ -40,11 +42,25 @@ public class PreviewComposeArtifactBuilder {
     private final PreviewBlockResolver blockResolver;
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
 
+    // 테스트/단순 호출용 편의 오버로드 — pagePlans/flows/bindings를 pages+capabilities에서 결정론적으로
+    // 파생한다. 배포 경로(PreviewDeployController)는 patch state의 정본 flows/bindings를 그대로 넘기는
+    // 아래 오버로드를 직접 쓴다(AI가 수정한 flow/binding이 재파생으로 덮여 사라지지 않도록).
     public ComposeArtifact build(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy,
             Purpose purpose
     ) {
-        String appTsx = renderAppTsx(apiBaseUrl, capabilities, pages, authStrategy, purpose);
+        List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
+        RuleBasedFlowGenerator.ValidatedResult generated =
+                ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
+        return build(apiBaseUrl, capabilities, pages, generated.result().flows(), generated.result().bindings(),
+                authStrategy, purpose);
+    }
+
+    public ComposeArtifact build(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose
+    ) {
+        String appTsx = renderAppTsx(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose);
 
         List<UploadedFile> uploadedFiles = List.of(
                 file("package.json", PACKAGE_JSON),
@@ -82,15 +98,14 @@ public class PreviewComposeArtifactBuilder {
     }
 
     private String renderAppTsx(
-            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy,
-            Purpose purpose
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose
     ) {
-        Map<String, List<Block>> pageBlocks = BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose);
-        // Workflow Composition Phase 2 Change Request §22 7번 — analyze()/PreviewDeployController의
-        // 스냅샷 계산과 같은 방식으로 다시 만든다(중복 계산이지만 pageBlocks도 이미 이 메서드와
-        // PreviewDeployController 양쪽에서 각각 계산되던 기존 패턴과 동일 — 결정론적이라 문제없음).
-        List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
-        RuleBasedFlowGenerator.ValidatedResult flowResult = ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
+        // Workflow Composition Phase 2 Change Request §10 — flows/bindings는 호출측이 넘겨준 값을
+        // 그대로 쓴다(여기서 재파생하면 AI가 수정한 flow/binding이 배포 산출물에서 사라진다).
+        // pageBlocks는 pages(=toDrafts(pagePlans))로 계산 — compilePagePlanBlocks와 동일 경로다.
+        Map<String, List<Block>> pageBlocks =
+                BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose);
         return appTsxTemplate()
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
                 .replace("__CAPABILITIES_JSON__", toJson(capabilities))
@@ -98,8 +113,8 @@ public class PreviewComposeArtifactBuilder {
                 .replace("__AUTH_STRATEGY_JSON__", toJson(authStrategy))
                 .replace("__PURPOSE_JSON__", toJson(purpose != null ? purpose.name() : null))
                 .replace("__PAGE_BLOCKS_JSON__", toJson(pageBlocks))
-                .replace("__FLOWS_JSON__", toJson(flowResult.result().flows()))
-                .replace("__BINDINGS_JSON__", toJson(flowResult.result().bindings()));
+                .replace("__FLOWS_JSON__", toJson(flows))
+                .replace("__BINDINGS_JSON__", toJson(bindings));
     }
 
     private String toJson(Object value) {

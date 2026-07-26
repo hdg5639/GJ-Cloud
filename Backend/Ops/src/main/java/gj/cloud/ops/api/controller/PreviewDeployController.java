@@ -109,7 +109,7 @@ public class PreviewDeployController {
         }
 
         ComposeArtifact artifact = previewComposeArtifactBuilder.build(
-                body.apiBaseUrl(), body.capabilities(), effectivePages, pagePlans, flows, bindings,
+                body.apiBaseUrl(), body.capabilities(), effectivePages, flows, bindings,
                 body.authStrategy(), body.purpose());
 
         DeploymentTargetEntity target = deploymentTargetService.create(
