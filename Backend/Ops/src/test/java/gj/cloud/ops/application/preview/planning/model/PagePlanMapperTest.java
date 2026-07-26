@@ -15,11 +15,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // Workflow Composition Phase 2 Change Request WP-1 — PagePlanMapper가 기존 PageDraft 생성기 결과에서
-// 결정론적으로 알 수 있는 것만 파생하는지 확인한다(Navigation/LayoutBlueprint가 채울 필드는 항상 빈 값).
+// 결정론적으로 알 수 있는 것만 파생하는지 확인한다(Navigation이 채울 필드는 항상 빈 값). layoutRef는
+// §10(LayoutBlueprint) 조각에서 채워지게 됐다.
 class PagePlanMapperTest {
 
     @Test
-    void mapsEachSkeletonTypeToItsPageType() {
+    void mapsEachSkeletonTypeToItsPageTypeAndLayoutRef() {
         List<PageDraft> pages = List.of(
                 new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of()),
                 new PageDraft("dashboard", "대시보드", PageSkeletonType.DASHBOARD, List.of()),
@@ -30,9 +31,13 @@ class PagePlanMapperTest {
         List<PagePlan> plans = PagePlanMapper.from(pages, List.of());
 
         assertThat(plans.get(0).pageType()).isEqualTo(PageType.AUTH);
+        assertThat(plans.get(0).layoutRef()).isEqualTo("auth-layout");
         assertThat(plans.get(1).pageType()).isEqualTo(PageType.DASHBOARD);
+        assertThat(plans.get(1).layoutRef()).isEqualTo("dashboard-layout");
         assertThat(plans.get(2).pageType()).isEqualTo(PageType.RESOURCE_LIST);
+        assertThat(plans.get(2).layoutRef()).isEqualTo("resource-list-layout");
         assertThat(plans.get(3).pageType()).isEqualTo(PageType.LIST_DETAIL);
+        assertThat(plans.get(3).layoutRef()).isEqualTo("list-detail-layout");
     }
 
     @Test
@@ -44,7 +49,7 @@ class PagePlanMapperTest {
         assertThat(plan.route()).isEqualTo("/vms-page");
         assertThat(plan.capabilityIds()).containsExactly("vms.list");
         assertThat(plan.confidence()).isEqualTo(RepositoryEvidence.CONFIDENCE_HIGH);
-        assertThat(plan.layoutRef()).isNull();
+        assertThat(plan.layoutRef()).isEqualTo("resource-list-layout");
         assertThat(plan.routeParameters()).isEmpty();
         assertThat(plan.queryParameters()).isEmpty();
         assertThat(plan.navigationRules()).isEmpty();
