@@ -302,7 +302,7 @@ public class PreviewComposeArtifactBuilder {
             type ComponentId =
               | "login-form" | "resource-table" | "resource-card-grid" | "detail-panel" | "create-edit-modal"
               | "form-drawer" | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view"
-              | "quick-action-button-group";
+              | "recent-activity-dashboard" | "quick-action-button-group";
             interface Block {
               instanceId: string;
               componentId: ComponentId;
@@ -596,6 +596,12 @@ public class PreviewComposeArtifactBuilder {
             // delete-confirm-modal/typed-confirm-modal 중 하나로 이미 컴파일해뒀다.
             function findDeleteBlock(blocks: Block[]): Block | undefined {
               return blocks.find((b) => b.componentId === "delete-confirm-modal" || b.componentId === "typed-confirm-modal");
+            }
+
+            // dashboard 계열도 마찬가지 — BlueprintCompiler가 purpose(PRODUCT_LIKE)에 따라
+            // dashboard-view/recent-activity-dashboard 중 하나로 이미 컴파일해뒀다.
+            function findDashboardBlock(blocks: Block[]): Block | undefined {
+              return blocks.find((b) => b.componentId === "dashboard-view" || b.componentId === "recent-activity-dashboard");
             }
 
             // create/edit 계열도 마찬가지 — BlueprintCompiler가 purpose(PRODUCT_LIKE)에 따라
@@ -1221,6 +1227,88 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            const MAX_ROWS_PER_RESOURCE = 5;
+            const ID_LIKE_FIELDS = ["id", "ID", "Id", "uuid"];
+
+            // 행 하나를 사람이 읽을 수 있는 한 줄 요약으로 압축한다 — 스키마를 모르는 채로 임의 API
+            // 응답을 보여줘야 해서, id를 뺀 처음 두 필드만 보여준다.
+            function summarizeRow(row: Record<string, unknown>): string {
+              const entries = Object.entries(row)
+                .filter(([key]) => !ID_LIKE_FIELDS.includes(key))
+                .slice(0, 2);
+              if (entries.length === 0) {
+                return rowId(row);
+              }
+              return entries.map(([key, value]) => `${key}: ${formatCellValue(value)}`).join(" · ");
+            }
+
+            interface FeedState {
+              loading: boolean;
+              rows: Record<string, unknown>[];
+              error: string | null;
+            }
+
+            // Direction Recovery Change Request §9.5 "recent-activity-dashboard" — dashboard-view와
+            // 데이터 요구조건(LIST capability 여러 개)은 동일하고, 개수 카드 대신 리소스마다 최근 항목
+            // 몇 개를 피드 형태로 보여준다.
+            function RecentActivityDashboard({
+              capabilities, authToken,
+            }: {
+              capabilities: Capability[];
+              authToken: string | null;
+            }) {
+              const [feeds, setFeeds] = useState<Record<string, FeedState>>({});
+
+              useEffect(() => {
+                let cancelled = false;
+                capabilities.forEach((capability) => {
+                  callCapability(capability, authToken)
+                    .then((result) => {
+                      if (cancelled) return;
+                      const rows = extractArray(result, capability.collectionPath).slice(0, MAX_ROWS_PER_RESOURCE);
+                      setFeeds((prev) => ({ ...prev, [capability.id]: { loading: false, rows, error: null } }));
+                    })
+                    .catch((err) => {
+                      if (cancelled) return;
+                      setFeeds((prev) => ({
+                        ...prev,
+                        [capability.id]: { loading: false, rows: [], error: err instanceof Error ? err.message : "불러오기 실패" },
+                      }));
+                    });
+                });
+                return () => {
+                  cancelled = true;
+                };
+              }, [capabilities, authToken]);
+
+              if (capabilities.length === 0) {
+                return <p className="error">이 페이지에 표시할 목록 capability가 없습니다.</p>;
+              }
+
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+                  {capabilities.map((capability) => {
+                    const state = feeds[capability.id] ?? { loading: true, rows: [], error: null };
+                    return (
+                      <div key={capability.id} className="panel" style={{ padding: 16 }}>
+                        <p className="muted">{capability.resourceName}</p>
+                        {state.loading && <p className="muted">불러오는 중...</p>}
+                        {state.error && <p className="error">{state.error}</p>}
+                        {!state.loading && !state.error && state.rows.length === 0 && (
+                          <p className="muted">항목이 없습니다</p>
+                        )}
+                        <ul style={{ margin: "8px 0 0", paddingLeft: 16, fontSize: 12 }}>
+                          {state.rows.map((row, index) => (
+                            <li key={rowId(row) || index}>{summarizeRow(row)}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
             function PageRenderer({ page, authToken, onLogin }: { page: PageDraft; authToken: string | null; onLogin: (token: string) => void }) {
               const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
               const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
@@ -1237,11 +1325,15 @@ public class PreviewComposeArtifactBuilder {
               }
 
               if (page.skeleton === "DASHBOARD") {
-                const dashboardBlock = blocks.find((b) => b.componentId === "dashboard-view");
+                const dashboardBlock = findDashboardBlock(blocks);
                 const listCapabilities = (dashboardBlock?.capabilityIds ?? [])
                   .map((id) => findCapabilityById(id))
                   .filter((c): c is Capability => c !== undefined);
-                return <DashboardView capabilities={listCapabilities} authToken={authToken} />;
+                return dashboardBlock?.componentId === "recent-activity-dashboard" ? (
+                  <RecentActivityDashboard capabilities={listCapabilities} authToken={authToken} />
+                ) : (
+                  <DashboardView capabilities={listCapabilities} authToken={authToken} />
+                );
               }
 
               const listBlock = findListBlock(blocks);

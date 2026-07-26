@@ -21,7 +21,9 @@ public final class BlueprintCompiler {
             // Change Request §3 "Administrator purpose — Destructive-operation safeguards".
             "delete-confirm-modal", Map.of(Purpose.ADMIN, "typed-confirm-modal"),
             // Change Request §3 "Product-like purpose — ... drawers and guided creation flows".
-            "create-edit-modal", Map.of(Purpose.PRODUCT_LIKE, "form-drawer")
+            "create-edit-modal", Map.of(Purpose.PRODUCT_LIKE, "form-drawer"),
+            // §9.5 dashboard 계열 두 번째 Variant — PRODUCT_LIKE는 개수 카드보다 최근 항목 피드를 선호.
+            "dashboard-view", Map.of(Purpose.PRODUCT_LIKE, "recent-activity-dashboard")
     );
 
     public static Map<String, List<Block>> compile(Map<String, List<Block>> pageBlocks, Purpose purpose) {

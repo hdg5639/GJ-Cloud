@@ -10,10 +10,19 @@ import { FormDrawer } from "./FormDrawer";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { TypedConfirmModal } from "./TypedConfirmModal";
 import { DashboardView } from "./DashboardView";
+import { RecentActivityDashboard } from "./RecentActivityDashboard";
 import { QuickActionButtonGroup } from "./QuickActionButtonGroup";
 import { rowId } from "./api";
 import { findCapabilityById } from "./utils";
-import { compileBlocks, findCapabilityForBlock, findCreateEditBlock, findDeleteBlock, findListBlock, resolveBlocks } from "./blueprint";
+import {
+  compileBlocks,
+  findCapabilityForBlock,
+  findCreateEditBlock,
+  findDashboardBlock,
+  findDeleteBlock,
+  findListBlock,
+  resolveBlocks,
+} from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
 // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
@@ -53,11 +62,15 @@ export function PreviewPageRenderer({
   }
 
   if (page.skeleton === "DASHBOARD") {
-    const dashboardBlock = blocks.find((b) => b.componentId === "dashboard-view");
+    const dashboardBlock = findDashboardBlock(blocks);
     const listCapabilities = (dashboardBlock?.capabilityIds ?? [])
       .map((id) => findCapabilityById(capabilities, id))
       .filter((c): c is PreviewCapability => c !== undefined);
-    return <DashboardView capabilities={listCapabilities} config={config} />;
+    return dashboardBlock?.componentId === "recent-activity-dashboard" ? (
+      <RecentActivityDashboard capabilities={listCapabilities} config={config} />
+    ) : (
+      <DashboardView capabilities={listCapabilities} config={config} />
+    );
   }
 
   const listBlock = findListBlock(blocks);

@@ -15,6 +15,7 @@ export type ComponentId =
   | "delete-confirm-modal"
   | "typed-confirm-modal"
   | "dashboard-view"
+  | "recent-activity-dashboard"
   | "quick-action-button-group";
 
 // 계열(같은 Slot·Capability 요구조건을 공유하는 Variant 묶음)마다 기본 componentId를 키로, 특정
@@ -27,6 +28,8 @@ const VARIANT_BY_PURPOSE: Partial<Record<ComponentId, Partial<Record<Purpose, Co
   "delete-confirm-modal": { ADMIN: "typed-confirm-modal" },
   // Change Request §3 "Product-like purpose — ... drawers and guided creation flows".
   "create-edit-modal": { PRODUCT_LIKE: "form-drawer" },
+  // §9.5 dashboard 계열 두 번째 Variant — PRODUCT_LIKE는 개수 카드보다 최근 항목 피드를 선호.
+  "dashboard-view": { PRODUCT_LIKE: "recent-activity-dashboard" },
 };
 
 export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay" | "page.actions";
@@ -128,6 +131,12 @@ export function compileBlocks(blocks: Block[], purpose: Purpose | null): Block[]
 // 컴파일해뒀다 — 어느 쪽이든 찾아서 실제로 어떤 컴포넌트를 마운트할지는 호출 측이 componentId를 보고 정한다.
 export function findListBlock(blocks: Block[]): Block | undefined {
   return blocks.find((b) => b.componentId === "resource-table" || b.componentId === "resource-card-grid");
+}
+
+// dashboard 계열도 마찬가지 — compileBlocks가 purpose(PRODUCT_LIKE)에 따라 dashboard-view/
+// recent-activity-dashboard 중 하나로 이미 컴파일해뒀다.
+export function findDashboardBlock(blocks: Block[]): Block | undefined {
+  return blocks.find((b) => b.componentId === "dashboard-view" || b.componentId === "recent-activity-dashboard");
 }
 
 // destructive 계열도 마찬가지 — compileBlocks가 purpose(ADMIN)에 따라 delete-confirm-modal/

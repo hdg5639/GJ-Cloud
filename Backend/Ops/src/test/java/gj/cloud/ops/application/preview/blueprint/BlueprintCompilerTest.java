@@ -41,13 +41,34 @@ class BlueprintCompilerTest {
     @Test
     void otherComponentIdsAreNeverSwapped() {
         Map<String, List<Block>> pageBlocks = Map.of(
-                "auth-login", List.of(new Block("login", "login-form", "page.content", List.of("auth.login"), null)),
-                "dashboard", List.of(new Block("dashboard", "dashboard-view", "page.content", List.of("vms.list"), null)));
+                "auth-login", List.of(new Block("login", "login-form", "page.content", List.of("auth.login"), null)));
 
         Map<String, List<Block>> compiled = BlueprintCompiler.compile(pageBlocks, Purpose.PRODUCT_LIKE);
 
         assertThat(compiled.get("auth-login").get(0).componentId()).isEqualTo("login-form");
-        assertThat(compiled.get("dashboard").get(0).componentId()).isEqualTo("dashboard-view");
+    }
+
+    @Test
+    void productLikeSwapsDashboardViewToRecentActivityDashboard() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "dashboard", List.of(new Block("dashboard", "dashboard-view", "page.content", List.of("vms.list"), null)));
+
+        Map<String, List<Block>> compiled = BlueprintCompiler.compile(pageBlocks, Purpose.PRODUCT_LIKE);
+
+        assertThat(compiled.get("dashboard").get(0).componentId()).isEqualTo("recent-activity-dashboard");
+    }
+
+    @Test
+    void otherPurposesLeaveDashboardViewUnchanged() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "dashboard", List.of(new Block("dashboard", "dashboard-view", "page.content", List.of("vms.list"), null)));
+
+        assertThat(BlueprintCompiler.compile(pageBlocks, Purpose.API_TEST).get("dashboard").get(0).componentId())
+                .isEqualTo("dashboard-view");
+        assertThat(BlueprintCompiler.compile(pageBlocks, Purpose.ADMIN).get("dashboard").get(0).componentId())
+                .isEqualTo("dashboard-view");
+        assertThat(BlueprintCompiler.compile(pageBlocks, null).get("dashboard").get(0).componentId())
+                .isEqualTo("dashboard-view");
     }
 
     @Test
