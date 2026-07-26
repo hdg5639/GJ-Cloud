@@ -2,18 +2,24 @@ package gj.cloud.ops.application.preview.dto;
 
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.binding.ApiBinding;
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-// /ops/preview/analyze가 돌려준 capabilities/pages(RULE_BASED 후보안)를 그대로 되돌려받아 AI에게
-// 서비스에 맞는 페이지 재구성을 제안받는다. PreviewReviewRequest(코멘트만 반환)와 모양은 비슷하지만
-// 이 요청의 결과는 실제로 pages를 대체한다는 점이 다르다.
+// /plan/propose는 PageDraft뿐 아니라 현재 PagePlan/Flow/Binding 정본을 함께 받아야 SET_LAYOUT,
+// ADD_NAVIGATION, ADD_FLOW 같은 제안이 기존 사용자 수정 상태 위에 누적될 수 있다. pagePlans가 없는
+// 구버전 클라이언트는 Controller에서 pages를 PagePlanMapper로 변환해 호환한다.
 public record PreviewPlanRequest(
         @Size(max = 2000) String serviceDescription,
         PreviewAnalyzeRequest.Purpose purpose,
         @NotEmpty List<Capability> capabilities,
-        @NotEmpty List<PageDraft> pages
+        @NotEmpty List<PageDraft> pages,
+        List<PagePlan> pagePlans,
+        List<FlowBlueprint> flows,
+        List<ApiBinding> bindings
 ) {
 }

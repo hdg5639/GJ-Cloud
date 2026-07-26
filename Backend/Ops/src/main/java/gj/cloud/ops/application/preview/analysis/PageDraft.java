@@ -8,4 +8,7 @@ public record PageDraft(
         PageSkeletonType skeleton,
         List<String> capabilityIds
 ) {
+    public PageDraft {
+        capabilityIds = capabilityIds == null ? List.of() : List.copyOf(capabilityIds);
+    }
 }

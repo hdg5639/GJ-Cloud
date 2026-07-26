@@ -21,7 +21,7 @@ export function QuickActionButtonGroup({
   onSuccess?: () => void;
   // command에 대응하는 FlowBlueprint가 있으면 호출 측이 전체 flow(API_CALL + refresh bindings)를
   // 실행한다. 없으면 기존 직접 호출로 안전하게 폴백한다.
-  onExecute?: (capability: PreviewCapability) => Promise<void>;
+  onExecute?: (capability: PreviewCapability) => Promise<boolean | void>;
 }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -31,7 +31,10 @@ export function QuickActionButtonGroup({
     setPendingId(capability.id);
     try {
       if (onExecute) {
-        await onExecute(capability);
+        const completed = await onExecute(capability);
+        if (completed === false) {
+          return;
+        }
       } else {
         await callCapability(config, capability, { pathParams: { id: targetId } });
       }

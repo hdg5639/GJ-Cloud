@@ -29,7 +29,7 @@ export function FormDrawer({
   onSuccess: () => void;
   // CreateEditModal과 동일 — FlowBlueprint가 배정된 CREATE 액션이면 이 드로어는 폼 값만 넘기고
   // 실제 API 호출/후속 단계는 호출 측이 FlowExecutor로 실행한다.
-  onSubmitOverride?: (values: Record<string, string>) => Promise<void>;
+  onSubmitOverride?: (values: Record<string, string>) => Promise<boolean | void>;
   // 중첩 리소스 생성(/parents/{id}/children)처럼 생성 폼 자체에도 부모 경로 파라미터가 필요한 경우.
   // 수정 폼의 row id보다 우선한다.
   pathParamId?: string;
@@ -47,7 +47,10 @@ export function FormDrawer({
     setLoading(true);
     try {
       if (onSubmitOverride) {
-        await onSubmitOverride(values);
+        const completed = await onSubmitOverride(values);
+        if (completed === false) {
+          return;
+        }
       } else {
         const resolvedPathId = pathParamId ?? (initialValues ? rowId(initialValues) : "");
         const pathParams: Record<string, string> = resolvedPathId ? { id: resolvedPathId } : {};

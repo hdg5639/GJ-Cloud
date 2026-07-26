@@ -6,18 +6,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-// GamjaBox_Auto_Preview_Workflow_Composition_Phase2_Change_Request.md §6/§17 — PagePlanValidator와
-// 같은 static 유틸리티 관례. 아직 "적용"할 대상이 없어(FlowExecutor 없음) PagePlanApplyResult 같은
-// Result 레코드로 감싸지 않고 에러 문자열 목록만 반환한다.
-//
-// 순환 탐지(§17)는 이번 조각 범위 밖 — 지금 모델에는 step 간 "다음 step으로 분기" 링크가 없어(순서
-// 그대로 순차 실행이 유일한 흐름) 순환이 발생할 자리 자체가 없다. 여러 Flow/Page가 서로를 참조해
-// 순환이 생기는 경우(AI의 ADD_FLOW/ASSIGN_FLOW, Navigation 그래프)는 그 참조 자체가 아직 없어서
-// WP-4/Navigation 도입 시 처리한다.
+// Workflow Composition Phase 2 §6/§17의 정적 Workflow 검증기. Runtime 실행 전에 step 상한,
+// 참조, 제한 표현식, Polling 정책과 아직 지원하지 않는 step 타입을 차단한다. Flow step은 순차 배열이라
+// step-level 순환은 표현할 수 없고, Binding refresh 순환은 PagePlanPatchValidator가 별도로 검사한다.
 public final class FlowBlueprintValidator {
 
     public static List<String> validate(FlowBlueprint flow, Set<String> knownPageIds) {
         List<String> errors = new ArrayList<>();
+        if (flow == null) {
+            return List.of("FlowBlueprint가 null임");
+        }
+        if (flow.id() == null || flow.id().isBlank()) {
+            errors.add("flow id가 비어있음");
+        }
+        knownPageIds = knownPageIds == null ? Set.of() : knownPageIds;
 
         if (flow.steps().size() > FlowExecutionPolicy.MAX_STEPS) {
             errors.add("step 개수가 상한(" + FlowExecutionPolicy.MAX_STEPS + ")을 초과함: " + flow.steps().size());
@@ -30,7 +32,13 @@ public final class FlowBlueprintValidator {
 
         Set<String> stepIds = new HashSet<>();
         for (FlowStep step : flow.steps()) {
-            if (!stepIds.add(step.id())) {
+            if (step == null) {
+                errors.add("null FlowStep은 허용되지 않음");
+                continue;
+            }
+            if (step.id() == null || step.id().isBlank()) {
+                errors.add("step id가 비어있음");
+            } else if (!stepIds.add(step.id())) {
                 errors.add("중복된 step id: " + step.id());
             }
             errors.addAll(validateStep(step, knownPageIds));
@@ -40,6 +48,10 @@ public final class FlowBlueprintValidator {
 
     private static List<String> validateStep(FlowStep step, Set<String> knownPageIds) {
         List<String> errors = new ArrayList<>();
+        if (step.type() == null) {
+            errors.add((step.id() == null ? "<unknown>" : step.id()) + ": step.type이 비어있음");
+            return errors;
+        }
         switch (step.type()) {
             case API_CALL, REFRESH_BINDING -> requireNonBlank(errors, step.id(), "bindingRef", step.bindingRef());
             case SET_CONTEXT -> {
@@ -96,11 +108,16 @@ public final class FlowBlueprintValidator {
         }
         if (intervalMs < FlowExecutionPolicy.MIN_INTERVAL_MS) {
             errors.add(step.id() + "(POLL): intervalMs가 최소값(" + FlowExecutionPolicy.MIN_INTERVAL_MS + "ms) 미만");
+        } else if (intervalMs > FlowExecutionPolicy.MAX_INTERVAL_MS) {
+            errors.add(step.id() + "(POLL): intervalMs가 최대값(" + FlowExecutionPolicy.MAX_INTERVAL_MS + "ms) 초과");
         }
     }
 
     private static List<String> validatePollCondition(String stepId, FlowStep.PollCondition condition) {
         List<String> errors = new ArrayList<>();
+        if (condition == null) {
+            return List.of(stepId + "(POLL): null until 조건은 허용되지 않음");
+        }
         if (condition.path() == null || condition.path().isBlank()) {
             errors.add(stepId + "(POLL): until 조건의 path가 비어있음");
         }
@@ -130,8 +147,13 @@ public final class FlowBlueprintValidator {
             return;
         }
         for (Map.Entry<String, String> entry : map.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank()) {
+                errors.add(stepId + ": " + fieldName + " key가 비어있음");
+            }
             String value = entry.getValue();
-            if (FlowExpression.isExpressionLike(value) && FlowExpression.parse(value).isEmpty()) {
+            if (value == null) {
+                errors.add(stepId + ": " + fieldName + "." + entry.getKey() + " 값이 null임");
+            } else if (FlowExpression.isExpressionLike(value) && FlowExpression.parse(value).isEmpty()) {
                 errors.add(stepId + ": " + fieldName + "." + entry.getKey() + "가 허용되지 않는 표현식 형식임(" + value + ")");
             }
         }

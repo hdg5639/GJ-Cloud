@@ -15,7 +15,7 @@ import java.util.Map;
 public record FlowStep(
         String id,
         FlowStepType type,
-        // ApiBinding 모델(§8, WP-3)이 아직 없어 지금은 문자열 참조로만 들고 있는다.
+        // Product Blueprint의 ApiBinding.id를 참조한다. Validator가 존재 여부를 배포 전에 검증한다.
         String bindingRef,
         // 예: {"body": "$form"}. 값이 "$"로 시작하면 FlowExpression으로 검증된다.
         Map<String, String> input,

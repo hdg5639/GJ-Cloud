@@ -73,6 +73,28 @@ class ApiBindingValidatorTest {
     }
 
     @Test
+    void duplicateBindingIdsAreRejected() {
+        ApiBinding first = new ApiBinding("duplicate", "vms.create", List.of(), List.of(), List.of());
+        ApiBinding second = new ApiBinding("duplicate", "vms.create", List.of(), List.of(), List.of());
+
+        assertThat(ApiBindingValidator.validate(List.of(first, second), List.of(createVm)))
+                .anyMatch(error -> error.contains("중복된 binding id"));
+    }
+
+    @Test
+    void duplicateInputTargetsAndBlankSourcesAreRejected() {
+        ApiBinding binding = new ApiBinding("binding-1", "vms.create", List.of(
+                new ApiBinding.InputMapping("name", ApiBinding.InputMapping.InputTarget.BODY, "$form.name"),
+                new ApiBinding.InputMapping("name", ApiBinding.InputMapping.InputTarget.BODY, "")
+        ), List.of(), List.of());
+
+        List<String> errors = ApiBindingValidator.validate(List.of(binding), List.of(createVm));
+
+        assertThat(errors).anyMatch(error -> error.contains("중복된 inputMapping target"));
+        assertThat(errors).anyMatch(error -> error.contains("from이 비어있음"));
+    }
+
+    @Test
     void disallowedExpressionSyntaxInInputMappingIsAnError() {
         ApiBinding binding = new ApiBinding("binding-1", "vms.create",
                 List.of(new ApiBinding.InputMapping("body", ApiBinding.InputMapping.InputTarget.BODY,

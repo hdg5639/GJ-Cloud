@@ -49,7 +49,7 @@ public final class ComponentContracts {
                     "full-detail-page", "PATTERN",
                     List.of(CapabilityType.DETAIL), false,
                     List.of("LOADING", "ERROR", "SUCCESS"),
-                    List.of("page.main"), false, false, List.of(),
+                    List.of("page.main", "page.primary"), false, false, List.of(),
                     "detail", List.of(Purpose.PRODUCT_LIKE))),
             Map.entry("create-edit-modal", new ComponentContract(
                     "create-edit-modal", "PATTERN",

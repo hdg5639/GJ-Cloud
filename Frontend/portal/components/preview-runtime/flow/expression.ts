@@ -4,7 +4,7 @@
 // FlowBlueprintValidator/ApiBindingValidator가 이미 이 문법으로 Blueprint를 검증했다는 전제이므로,
 // 여기서 parse가 실패하면 검증을 안 거친 Blueprint가 들어온 것 — 실행기 쪽 버그로 취급한다.
 
-export type FlowExpressionScope = "FORM" | "ROUTE" | "CONTEXT" | "STEPS" | "CURRENT_USER";
+export type FlowExpressionScope = "FORM" | "ROUTE" | "CONTEXT" | "STEPS" | "CURRENT_USER" | "ROW";
 
 export interface FlowExpression {
   raw: string;
@@ -12,7 +12,7 @@ export interface FlowExpression {
   path: string[];
 }
 
-const PATTERN = /^\$(form|route|context|steps|currentUser)((?:\.[A-Za-z0-9_-]+)*)$/;
+const PATTERN = /^\$(form|route|context|steps|currentUser|row)((?:\.[A-Za-z0-9_-]+)*)$/;
 
 const SCOPE_BY_TOKEN: Record<string, FlowExpressionScope> = {
   form: "FORM",
@@ -20,6 +20,7 @@ const SCOPE_BY_TOKEN: Record<string, FlowExpressionScope> = {
   context: "CONTEXT",
   steps: "STEPS",
   currentUser: "CURRENT_USER",
+  row: "ROW",
 };
 
 // "$"로 시작하는 값만 표현식으로 취급한다 — 그 외 문자열(메시지 텍스트 등)은 리터럴로 그대로 둔다.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LoginForm } from "./LoginForm";
 import { ResourceTable } from "./ResourceTable";
 import { ResourceCardGrid } from "./ResourceCardGrid";
@@ -14,6 +14,7 @@ import { RecentActivityDashboard } from "./RecentActivityDashboard";
 import { QuickActionButtonGroup } from "./QuickActionButtonGroup";
 import { FullDetailPage } from "./FullDetailPage";
 import { ChildResourceList } from "./ChildResourceList";
+import { AsyncFlowProgressModal, type FlowRunView } from "./AsyncFlowProgressModal";
 import { callCapability, rowId } from "./api";
 import { findCapabilityById } from "./utils";
 import {
@@ -26,56 +27,80 @@ import {
 } from "./blueprint";
 import type { Block } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
-import { createFlowContext, executeFlow } from "./flow/flowExecutor";
+import type { PreviewNavigationRule, PreviewPagePlan } from "@/lib/types";
+import {
+  createFlowContext,
+  executeFlow,
+  resolveExpression,
+  type FlowExecutionResult,
+} from "./flow/flowExecutor";
 import { createCapabilityBindingCaller } from "./flow/runtime";
 import type { ApiBinding, FlowBlueprint } from "./flow/types";
 
-// auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
-// 1개" — showCreate/editTarget/deleteTargetId를 독립된 상태 3개로 관리하면 이론상 여러 개가 동시에
-// 켜질 수 있어(상세 패널에서 수정 클릭 후 삭제 클릭 등) 하나의 판별 유니언으로 묶어 상호 배타를
-// 코드로 보장한다.
 type OverlayState =
   | { kind: "NONE" }
   | { kind: "CREATE" }
   | { kind: "UPDATE"; row: Record<string, unknown> }
   | { kind: "DELETE"; id: string };
 
-// GamjaBox_2.0_Key_Features.md 3·7절 — 관련 API를 페이지 하나로 묶어서 보여준다. Direction Recovery
-// Change Request §13.1 — 이 컴포넌트는 어떤 Block이 존재해야 하는지(조립 규칙)를 스스로 판단하지
-// 않는다. Block은 백엔드(PreviewBlockResolver+BlueprintCompiler)가 이미 계산해 `blocks` prop으로
-// 넘어오고, 여기서는 그 Block마다 어떤 React 컴포넌트로 그릴지만 결정한다.
-// Workflow Composition Phase 2 Change Request §7 "Navigation Requirements" — 상세 선택 상태를
-// 이 컴포넌트가 스스로 들고 있지 않고(controlled) 호출 측(마법사)이 URL 쿼리파라미터와 동기화해
-// 넘겨준다. 그래야 새로고침·브라우저 뒤로/앞으로가기·직접 URL 진입이 실제로 동작한다.
+type NavigationType = PreviewNavigationRule["type"];
+
+function flowTitle(flow: FlowBlueprint, capability?: PreviewCapability): string {
+  return capability?.action ?? capability?.resourceName ?? flow.trigger?.actionId ?? flow.id;
+}
+
+function asStringRecord(values: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values)
+      .filter(([, value]) => value !== null && value !== undefined)
+      .map(([key, value]) => [key, String(value)])
+  );
+}
+
 export function PreviewPageRenderer({
   page,
+  pagePlan,
   capabilities,
   blocks,
   config,
   selectedRow,
   onSelectRow,
+  routeParameters = {},
+  onNavigate,
   flows = [],
   bindings = [],
 }: {
   page: PreviewPage;
+  pagePlan?: PreviewPagePlan;
   capabilities: PreviewCapability[];
   blocks: Block[];
   config: PreviewRuntimeConfig;
   selectedRow: Record<string, unknown> | null;
   onSelectRow: (row: Record<string, unknown> | null) => void;
-  // Workflow Composition Phase 2 Change Request §22 7번 — RuleBasedFlowGenerator가 만든 workflow.
-  // 아직 CREATE 패턴만 실제로 실행한다(§14 WP-8의 첫 배선, FlowExecutor를 처음 실사용).
+  routeParameters?: Record<string, string>;
+  onNavigate?: (pageId: string | null, parameters: Record<string, string>, type: NavigationType) => void;
   flows?: FlowBlueprint[];
   bindings?: ApiBinding[];
 }) {
   const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [flowRun, setFlowRun] = useState<FlowRunView | null>(null);
+  const flowAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => flowAbortRef.current?.abort();
+  }, []);
+
+  useEffect(() => {
+    flowAbortRef.current?.abort();
+    flowAbortRef.current = null;
+    setFlowRun(null);
+    setOverlay({ kind: "NONE" });
+  }, [page.id]);
 
   if (page.skeleton === "AUTH_PAGE") {
     const login = findCapabilityForBlock(blocks, capabilities, "login-form");
-    if (!login) {
-      return <p className="text-sm text-danger">이 페이지에 로그인 capability가 없습니다.</p>;
-    }
+    if (!login) return <p className="text-sm text-danger">이 페이지에 로그인 capability가 없습니다.</p>;
     return <LoginForm capability={login} config={config} />;
   }
 
@@ -83,7 +108,7 @@ export function PreviewPageRenderer({
     const dashboardBlock = findDashboardBlock(blocks);
     const listCapabilities = (dashboardBlock?.capabilityIds ?? [])
       .map((id) => findCapabilityById(capabilities, id))
-      .filter((c): c is PreviewCapability => c !== undefined);
+      .filter((capability): capability is PreviewCapability => capability !== undefined);
     return dashboardBlock?.componentId === "recent-activity-dashboard" ? (
       <RecentActivityDashboard capabilities={listCapabilities} config={config} />
     ) : (
@@ -95,70 +120,145 @@ export function PreviewPageRenderer({
   const list = listBlock ? findCapabilityById(capabilities, listBlock.capabilityIds[0]) : undefined;
   const detailBlock = findDetailBlock(blocks);
   const detail = detailBlock ? findCapabilityById(capabilities, detailBlock.capabilityIds[0]) : undefined;
-  const isFullDetailPage = detailBlock?.componentId === "full-detail-page";
+  const isFullDetailPage = page.skeleton === "RESOURCE_DETAIL" || detailBlock?.componentId === "full-detail-page";
   const createBlock = findCreateEditBlock(blocks, "CREATE");
   const create = createBlock ? findCapabilityById(capabilities, createBlock.capabilityIds[0]) : undefined;
   const updateBlock = findCreateEditBlock(blocks, "UPDATE");
   const update = updateBlock ? findCapabilityById(capabilities, updateBlock.capabilityIds[0]) : undefined;
   const deleteBlock = findDeleteBlock(blocks);
   const del = deleteBlock ? findCapabilityById(capabilities, deleteBlock.capabilityIds[0]) : undefined;
-  const commandBlock = blocks.find((b) => b.componentId === "quick-action-button-group");
+  const commandBlock = blocks.find((block) => block.componentId === "quick-action-button-group");
   const commandCapabilities = (commandBlock?.capabilityIds ?? [])
     .map((id) => findCapabilityById(capabilities, id))
-    .filter((c): c is PreviewCapability => c !== undefined);
+    .filter((capability): capability is PreviewCapability => capability !== undefined);
   const childBlocks = blocks.filter((block) => block.componentId === "child-resource-list");
 
-  if (!list) {
+  const routeTargetId =
+    pagePlan?.routeParameters.map((parameter) => routeParameters[parameter.name]).find(Boolean) ??
+    routeParameters.selected ??
+    routeParameters.id ??
+    (selectedRow ? rowId(selectedRow) : "");
+  const effectiveRow = selectedRow ?? (routeTargetId ? { id: routeTargetId, ...routeParameters } : null);
+
+  if (!list && page.skeleton !== "RESOURCE_DETAIL") {
     return <p className="text-sm text-danger">이 페이지에 목록 capability가 없습니다.</p>;
+  }
+  if (page.skeleton === "RESOURCE_DETAIL" && (!detail || !routeTargetId)) {
+    return (
+      <div className="rounded-panel border border-line bg-panel p-5 text-sm text-muted">
+        {!detail ? "이 상세 페이지에 DETAIL capability가 없습니다." : "상세 페이지에 필요한 경로 파라미터가 없습니다."}
+      </div>
+    );
   }
 
   function refresh() {
     setRefreshKey((key) => key + 1);
   }
 
-  // §14 WP-8 "FlowExecutor를 실제로 배선" — 이 페이지의 CREATE 액션에 RuleBasedFlowGenerator가 만든
-  // flow가 있으면(trigger.pageId===이 페이지, trigger.actionId===create.id) CreateEditModal/FormDrawer가
-  // 직접 API를 부르지 않고 폼 값만 넘겨, 여기서 flow 전체(API_CALL→NAVIGATE)를 실행한다. NAVIGATE는
-  // 지금 생성기가 항상 자기 자신(같은 페이지) + selected 파라미터로만 만들어서 onSelectRow 호출로
-  // 충분하다 — 다른 페이지로 이동하는 NAVIGATE는 아직 생성되지 않아 처리하지 않는다(알려진 범위).
+  function performNavigation(pageId: string | null, parameters: Record<string, unknown>, type: NavigationType = "OPEN_PAGE") {
+    const stringParameters = asStringRecord(parameters);
+    if (onNavigate) {
+      onNavigate(pageId, stringParameters, type);
+      return;
+    }
+    const selected = stringParameters.selected ?? stringParameters.id ?? Object.values(stringParameters)[0];
+    onSelectRow(selected ? { id: selected } : null);
+  }
+
+  function applyNavigationRule(rule: PreviewNavigationRule, row: Record<string, unknown>) {
+    const context = createFlowContext({ row, route: routeParameters });
+    const parameters: Record<string, unknown> = {};
+    for (const [name, expression] of Object.entries(rule.parameters ?? {})) {
+      parameters[name] = resolveExpression(expression, context);
+    }
+    performNavigation(rule.targetPageId, parameters, rule.type);
+  }
+
+  function handleRowSelection(row: Record<string, unknown>) {
+    const rule = pagePlan?.navigationRules.find((candidate) => candidate.trigger === "row.select");
+    if (rule) {
+      applyNavigationRule(rule, row);
+    } else {
+      onSelectRow(row);
+    }
+  }
+
+  async function runFlow(
+    flow: FlowBlueprint,
+    seed: Parameters<typeof createFlowContext>[0],
+    capability?: PreviewCapability
+  ): Promise<FlowExecutionResult> {
+    flowAbortRef.current?.abort();
+    const controller = new AbortController();
+    flowAbortRef.current = controller;
+    setFlowRun({
+      flowId: flow.id,
+      title: flowTitle(flow, capability),
+      status: "RUNNING",
+      stepStatuses: {},
+      message: null,
+    });
+
+    try {
+      const result = await executeFlow(flow, bindings, createFlowContext(seed), {
+        signal: controller.signal,
+        callBinding: createCapabilityBindingCaller(capabilities, config, controller.signal),
+        navigate: (targetPageId, parameters) => performNavigation(targetPageId, parameters, "OPEN_PAGE"),
+        onMessage: (kind, message) =>
+          setFlowRun((current) => current ? { ...current, message, status: kind === "ERROR" ? "ERROR" : current.status } : current),
+        onPollStatusChange: (stepId, status) =>
+          setFlowRun((current) => current ? {
+            ...current,
+            stepStatuses: { ...current.stepStatuses, [stepId]: status },
+          } : current),
+        onRefreshBindingError: (bindingId, error) =>
+          setFlowRun((current) => current ? {
+            ...current,
+            message: `${bindingId} 새로고침 실패: ${error instanceof Error ? error.message : String(error)}`,
+          } : current),
+      });
+      setFlowRun((current) => current ? { ...current, status: result.status } : current);
+      return result;
+    } catch (error) {
+      setFlowRun((current) => current ? {
+        ...current,
+        status: controller.signal.aborted ? "CANCELLED" : "ERROR",
+        message: error instanceof Error ? error.message : "워크플로우 실행에 실패했습니다.",
+      } : current);
+      throw error;
+    } finally {
+      if (flowAbortRef.current === controller) flowAbortRef.current = null;
+    }
+  }
+
   const createFlow = create
     ? flows.find((flow) => flow.trigger?.pageId === page.id && flow.trigger?.actionId === create.id)
     : undefined;
 
-  async function runCreateFlow(flow: FlowBlueprint, formValues: Record<string, string>) {
-    const ctx = createFlowContext({ form: formValues });
-    await executeFlow(flow, bindings, ctx, {
-      callBinding: createCapabilityBindingCaller(capabilities, config),
-      navigate: (_pageId, parameters) => {
-        const selected = parameters.selected != null ? String(parameters.selected) : null;
-        onSelectRow(selected ? { id: selected } : null);
-      },
-    });
+  async function runCreateFlow(flow: FlowBlueprint, formValues: Record<string, string>): Promise<boolean> {
+    const result = await runFlow(flow, { form: formValues, route: routeParameters }, create);
+    if (result.status !== "SUCCESS") return false;
     refresh();
+    return true;
   }
 
-  // COMMAND capability도 RuleBasedFlowGenerator가 만든 flow를 실제로 실행한다. 이전에는 flow가
-  // 응답에 존재해도 QuickActionButtonGroup이 callCapability를 직접 호출해 refreshBindingIds가
-  // 무시됐다. 선택 행 ID를 $route.selected로 주입하고, flow가 없을 때만 컴포넌트의 직접 호출로
-  // 폴백한다.
-  async function runCommandFlow(capability: PreviewCapability, targetId: string) {
-    const flow = flows.find((candidate) =>
-      candidate.trigger?.pageId === page.id && candidate.trigger?.actionId === capability.id
+  async function runCommandFlow(capability: PreviewCapability, targetId: string): Promise<boolean> {
+    const flow = flows.find(
+      (candidate) => candidate.trigger?.pageId === page.id && candidate.trigger?.actionId === capability.id
     );
     if (!flow) {
-      await callCapability(config, capability, { pathParams: { id: targetId } });
-      return;
+      await callCapability(config, capability, { pathParams: { ...routeParameters, id: targetId } });
+      return true;
     }
-    const ctx = createFlowContext({ route: { selected: targetId } });
-    await executeFlow(flow, bindings, ctx, {
-      callBinding: createCapabilityBindingCaller(capabilities, config),
-      navigate: (_pageId, parameters) => {
-        const selected = parameters.selected != null ? String(parameters.selected) : null;
-        if (selected) {
-          onSelectRow({ id: selected });
-        }
+    const result = await runFlow(
+      flow,
+      {
+        route: { ...routeParameters, selected: targetId, id: targetId },
+        row: effectiveRow,
       },
-    });
+      capability
+    );
+    return result.status === "SUCCESS";
   }
 
   function renderChildResources(parentId: string) {
@@ -183,26 +283,16 @@ export function PreviewPageRenderer({
     });
   }
 
-  // 두 레이아웃(side-detail-panel/full-detail-page)이 공유하는 수정/삭제 버튼 — 선택된 row를 파라미터로
-  // 명시적으로 받아, 클로저로 selectedRow(| null 타입)를 그대로 참조할 때 생기는 null 체크 문제를 피한다.
   function renderHeaderActions(row: Record<string, unknown>) {
     return (
       <div className="flex gap-3">
         {update && (
-          <button
-            type="button"
-            className="text-xs font-bold text-brand-strong"
-            onClick={() => setOverlay({ kind: "UPDATE", row })}
-          >
+          <button type="button" className="text-xs font-bold text-brand-strong" onClick={() => setOverlay({ kind: "UPDATE", row })}>
             수정
           </button>
         )}
         {del && (
-          <button
-            type="button"
-            className="text-xs font-bold text-danger"
-            onClick={() => setOverlay({ kind: "DELETE", id: rowId(row) })}
-          >
+          <button type="button" className="text-xs font-bold text-danger" onClick={() => setOverlay({ kind: "DELETE", id: rowId(row) })}>
             삭제
           </button>
         )}
@@ -210,75 +300,74 @@ export function PreviewPageRenderer({
     );
   }
 
+  function renderDetail(targetRow: Record<string, unknown>, standalone: boolean) {
+    const id = routeTargetId || rowId(targetRow);
+    return (
+      <div className="rounded-panel border border-line bg-panel p-4">
+        <div className="mb-3 flex items-center justify-between">
+          {standalone ? (
+            <button type="button" className="text-xs font-bold text-brand-strong" onClick={() => performNavigation(null, {}, "GO_BACK")}>
+              ← 이전으로
+            </button>
+          ) : (
+            <h3 className="text-sm font-bold">상세</h3>
+          )}
+          {renderHeaderActions(targetRow)}
+        </div>
+        {commandCapabilities.length > 0 && (
+          <div className="mb-3">
+            <QuickActionButtonGroup
+              capabilities={commandCapabilities}
+              config={config}
+              targetId={id}
+              onSuccess={refresh}
+              onExecute={(capability) => runCommandFlow(capability, id)}
+            />
+          </div>
+        )}
+        {detail && (isFullDetailPage ? (
+          <FullDetailPage capability={detail} config={config} id={id} refreshKey={refreshKey} />
+        ) : (
+          <DetailPanel capability={detail} config={config} id={id} refreshKey={refreshKey} />
+        ))}
+        {renderChildResources(id)}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      {selectedRow && detail && isFullDetailPage ? (
-        <div className="rounded-panel border border-line bg-panel p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <button
-              type="button"
-              className="text-xs font-bold text-brand-strong"
-              onClick={() => onSelectRow(null)}
-            >
+      {page.skeleton === "RESOURCE_DETAIL" && effectiveRow ? (
+        renderDetail(effectiveRow, true)
+      ) : selectedRow && detail && isFullDetailPage ? (
+        <div>
+          <div className="mb-3">
+            <button type="button" className="text-xs font-bold text-brand-strong" onClick={() => onSelectRow(null)}>
               ← 목록으로
             </button>
-            {renderHeaderActions(selectedRow)}
           </div>
-          {commandCapabilities.length > 0 && (
-            <div className="mb-3">
-              <QuickActionButtonGroup
-                capabilities={commandCapabilities}
-                config={config}
-                targetId={rowId(selectedRow)}
-                onSuccess={refresh}
-                onExecute={(capability) => runCommandFlow(capability, rowId(selectedRow))}
-              />
-            </div>
-          )}
-          <FullDetailPage capability={detail} config={config} id={rowId(selectedRow)} refreshKey={refreshKey} />
-          {renderChildResources(rowId(selectedRow))}
+          {renderDetail(selectedRow, false)}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           {listBlock?.componentId === "resource-card-grid" ? (
             <ResourceCardGrid
-              capability={list}
+              capability={list!}
               config={config}
               refreshKey={refreshKey}
-              onRowClick={detail || update || del || commandBlock ? (row) => onSelectRow(row) : undefined}
+              onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
               onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
             />
           ) : (
             <ResourceTable
-              capability={list}
+              capability={list!}
               config={config}
               refreshKey={refreshKey}
-              onRowClick={detail || update || del || commandBlock ? (row) => onSelectRow(row) : undefined}
+              onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
               onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
             />
           )}
-
-          {selectedRow && (detail || commandCapabilities.length > 0) && (
-            <div className="rounded-panel border border-line bg-panel p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-bold">상세</h3>
-                {renderHeaderActions(selectedRow)}
-              </div>
-              {commandCapabilities.length > 0 && (
-                <div className="mb-3">
-                  <QuickActionButtonGroup
-                    capabilities={commandCapabilities}
-                    config={config}
-                    targetId={rowId(selectedRow)}
-                    onSuccess={refresh}
-                    onExecute={(capability) => runCommandFlow(capability, rowId(selectedRow))}
-                  />
-                </div>
-              )}
-              {detail && <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} refreshKey={refreshKey} />}
-              {renderChildResources(rowId(selectedRow))}
-            </div>
-          )}
+          {selectedRow && (detail || commandCapabilities.length > 0) && renderDetail(selectedRow, false)}
         </div>
       )}
 
@@ -309,6 +398,7 @@ export function PreviewPageRenderer({
           capability={update}
           config={config}
           initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
+          pathParamId={routeTargetId || undefined}
           onSuccess={refresh}
         />
       ) : (
@@ -318,6 +408,7 @@ export function PreviewPageRenderer({
           capability={update}
           config={config}
           initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
+          pathParamId={routeTargetId || undefined}
           onSuccess={refresh}
         />
       ))}
@@ -330,27 +421,37 @@ export function PreviewPageRenderer({
           config={config}
           targetId={overlay.kind === "DELETE" ? overlay.id : ""}
           onSuccess={() => {
+            if (page.skeleton === "RESOURCE_DETAIL") {
+              performNavigation(null, {}, "GO_BACK");
+            }
             onSelectRow(null);
             setOverlay({ kind: "NONE" });
             refresh();
           }}
         />
-      ) : (
-        del && (
-          <DeleteConfirmModal
-            open={overlay.kind === "DELETE"}
-            onClose={() => setOverlay({ kind: "NONE" })}
-            capability={del}
-            config={config}
-            targetId={overlay.kind === "DELETE" ? overlay.id : ""}
-            onSuccess={() => {
-              onSelectRow(null);
-              setOverlay({ kind: "NONE" });
-              refresh();
-            }}
-          />
-        )
-      )}
+      ) : del ? (
+        <DeleteConfirmModal
+          open={overlay.kind === "DELETE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
+          capability={del}
+          config={config}
+          targetId={overlay.kind === "DELETE" ? overlay.id : ""}
+          onSuccess={() => {
+            if (page.skeleton === "RESOURCE_DETAIL") {
+              performNavigation(null, {}, "GO_BACK");
+            }
+            onSelectRow(null);
+            setOverlay({ kind: "NONE" });
+            refresh();
+          }}
+        />
+      ) : null}
+
+      <AsyncFlowProgressModal
+        run={flowRun}
+        onCancel={() => flowAbortRef.current?.abort()}
+        onClose={() => setFlowRun(null)}
+      />
     </div>
   );
 }

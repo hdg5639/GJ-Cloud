@@ -14,17 +14,22 @@ import type { BindingRequest } from "./flowExecutor";
 // 중첩 리소스를 지원하지 않는 것과 동일하게, 여기서도 값 하나만(사실상 하나만 있다고 가정) "id"로
 // 넘긴다 — 여러 값이 있으면 그중 하나만 실제로 쓰인다는 뜻으로, RuleBasedFlowGenerator가 만드는
 // capability.path()도 항상 마지막 세그먼트 하나만 파라미터라 지금은 문제되지 않는다.
-export function createCapabilityBindingCaller(capabilities: PreviewCapability[], config: PreviewRuntimeConfig) {
+export function createCapabilityBindingCaller(
+  capabilities: PreviewCapability[],
+  config: PreviewRuntimeConfig,
+  signal?: AbortSignal
+) {
   return async function callBinding(binding: ApiBinding, request: BindingRequest): Promise<unknown> {
     const capability = findCapabilityById(capabilities, binding.capabilityId);
     if (!capability) {
       throw new Error(`알 수 없는 capabilityId: ${binding.capabilityId}`);
     }
-    const pathValue = Object.values(request.path)[0];
     return callCapability(config, capability, {
-      pathParams: pathValue !== undefined ? { id: pathValue } : {},
+      pathParams: request.path,
       query: request.query,
       body: Object.keys(request.body).length > 0 ? request.body : undefined,
+      headers: request.headers,
+      signal,
     });
   };
 }

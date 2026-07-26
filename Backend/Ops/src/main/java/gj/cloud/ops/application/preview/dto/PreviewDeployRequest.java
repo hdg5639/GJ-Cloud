@@ -2,7 +2,11 @@ package gj.cloud.ops.application.preview.dto;
 
 import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.Capability;
+import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.binding.ApiBinding;
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -10,18 +14,18 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-// analyze(+review)가 돌려준 capabilities/pages/authStrategy를 그대로 되돌려받아 배포한다 —
-// analyze/review와 동일하게 Ops는 분석 결과를 세션/DB로 들고 있지 않고 클라이언트가 확정한 최신
-// 상태를 그대로 보낸다.
+// 분석 이후 사용자가 확정한 최신 Product Blueprint 상태를 그대로 배포한다. 서버는 이 상태를 다시
+// 최종 검증하며, pagePlans가 없는 구버전 요청만 pages에서 규칙 기반으로 재생성한다.
 public record PreviewDeployRequest(
         @NotBlank @Size(max = 60) String targetName,
         @NotBlank String apiBaseUrl,
         @NotEmpty List<Capability> capabilities,
         @NotEmpty List<PageDraft> pages,
+        List<PagePlan> pagePlans,
+        List<FlowBlueprint> flows,
+        List<ApiBinding> bindings,
         @NotNull AuthStrategy authStrategy,
-        // Direction Recovery Change Request Increment 4 — BlueprintCompiler가 목적별 Component
-        // Variant(예: PRODUCT_LIKE → resource-card-grid)를 고르는 데 쓴다. 없으면(다른 클라이언트가
-        // 생략) 기본 Variant(resource-table)로 컴파일된다.
-        PreviewAnalyzeRequest.Purpose purpose
+        PreviewAnalyzeRequest.Purpose purpose,
+        GenerationMode generationMode
 ) {
 }

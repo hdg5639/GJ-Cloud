@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 
 // GamjaBox_Auto_Preview_Workflow_Composition_Phase2_Change_Request.md §6/§17 — "Arbitrary JavaScript
 // expressions must not be supported. Use a restricted expression language". 화이트리스트 정규식
-// 하나로 스코프(form/route/context/steps/currentUser) + 점경로 세그먼트만 허용한다 — 함수 호출·연산자·
+// 하나로 스코프(form/route/context/steps/currentUser/row) + 점경로 세그먼트만 허용한다 — 함수 호출·연산자·
 // 따옴표·괄호 등 임의 JS 문법은 패턴 자체에 없어 구조적으로 통과할 수 없다. 세그먼트가 실제로 가리키는
 // step/response 필드가 존재하는지 같은 의미 검증은 API 체이닝(§8, WP-3)의 몫 — 여기서는 문법만 본다.
 public record FlowExpression(String raw, Scope scope, List<String> path) {
@@ -17,11 +17,12 @@ public record FlowExpression(String raw, Scope scope, List<String> path) {
         ROUTE,
         CONTEXT,
         STEPS,
-        CURRENT_USER
+        CURRENT_USER,
+        ROW
     }
 
     private static final Pattern PATTERN =
-            Pattern.compile("^\\$(form|route|context|steps|currentUser)((?:\\.[A-Za-z0-9_-]+)*)$");
+            Pattern.compile("^\\$(form|route|context|steps|currentUser|row)((?:\\.[A-Za-z0-9_-]+)*)$");
 
     public static Optional<FlowExpression> parse(String raw) {
         if (raw == null) {
@@ -49,6 +50,7 @@ public record FlowExpression(String raw, Scope scope, List<String> path) {
             case "context" -> Scope.CONTEXT;
             case "steps" -> Scope.STEPS;
             case "currentUser" -> Scope.CURRENT_USER;
+            case "row" -> Scope.ROW;
             default -> throw new IllegalStateException("PATTERN이 통과시켰는데 알 수 없는 스코프: " + token);
         };
     }

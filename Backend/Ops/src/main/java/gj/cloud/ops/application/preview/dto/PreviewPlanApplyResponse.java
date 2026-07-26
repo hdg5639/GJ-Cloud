@@ -8,12 +8,9 @@ import gj.cloud.ops.application.preview.planning.model.PagePlan;
 
 import java.util.List;
 
-// errors가 비어있지 않으면(all-or-nothing 실패) pages는 요청으로 받은 pages 그대로다 — §17 원칙과
-// 동일하게 실패를 성공인 것처럼 포장하지 않는다. 이때 generationMode는 항상 RULE_BASED(아무것도 실제로
-// 적용되지 않았으므로 SERVICE_AWARE라고 보고하지 않음). pagePlans도 이 pages와 동일한 기준으로
-// 파생된다(Workflow Composition Phase 2 WP-1). flows/bindings도 마찬가지로 적용된(또는 실패해 그대로인)
-// pages 기준으로 RuleBasedFlowGenerator가 다시 만든다 — MERGE_PAGES/SPLIT_PAGE 등으로 capabilityIds
-// 그룹핑이 바뀌면 workflow도 같이 바뀌어야 하기 때문(WP-1 pagePlans 재계산과 동일한 이유).
+// WP-4 계획 Patch 적용 결과. errors가 있으면 all-or-nothing으로 원본 PagePlan/Flow/Binding 정본을
+// 그대로 반환하고 RULE_BASED로 보고한다. 성공하면 사용자 승인 operation이 반영된 정본과 결정 기록을
+// 반환하며, 이 상태가 Block 재컴파일·배포 요청·Blueprint Snapshot까지 그대로 전달된다.
 public record PreviewPlanApplyResponse(
         List<PageDraft> pages,
         List<PagePlan> pagePlans,

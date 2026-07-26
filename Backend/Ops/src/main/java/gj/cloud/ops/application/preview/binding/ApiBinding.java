@@ -1,5 +1,7 @@
 package gj.cloud.ops.application.preview.binding;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 // GamjaBox_Auto_Preview_Workflow_Composition_Phase2_Change_Request.md §4/§8 — "ApiBinding" 모델.
@@ -19,6 +21,16 @@ public record ApiBinding(
         // "refresh targets" — 이 바인딩 호출이 성공한 뒤 새로고침해야 할 다른 ApiBinding id 목록.
         List<String> refreshBindingIds
 ) {
+    public ApiBinding {
+        inputMappings = immutableList(inputMappings);
+        outputMappings = immutableList(outputMappings);
+        refreshBindingIds = immutableList(refreshBindingIds);
+    }
+
+    private static <T> List<T> immutableList(List<T> values) {
+        return values == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(values));
+    }
+
     // target은 targetKind(PATH/QUERY/BODY/HEADER)에 따라 실제 파라미터/필드 이름. from은 WP-2
     // FlowExpression과 동일한 문법("$form.name" 등) 또는 리터럴.
     public record InputMapping(String target, InputTarget targetKind, String from) {

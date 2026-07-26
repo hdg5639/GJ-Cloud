@@ -13,6 +13,7 @@ import type {
   PagePlanOperationView,
   PreviewFlowStep,
   PreviewApiBinding,
+  PreviewPagePlan,
 } from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import { PageLoader } from "@/components/ui/loader";
@@ -150,27 +151,70 @@ export default function PreviewWizardPage() {
       : { id: selectedIdFromUrl }
     : null;
 
-  function updateQuery(next: { page?: string | null; selected?: string | null }) {
+  const activePagePlan = result?.pagePlans.find((plan) => plan.id === previewPageId);
+  // Planner가 선언한 route parameter뿐 아니라 NavigationRule이 넘긴 안전한 query state도 Runtime에
+  // 전달한다. 최종 백엔드 검증이 target page/parameter를 검사하므로 여기서 다시 이름을 추측해
+  // 누락시키지 않는다. page 자체는 라우팅 메타데이터이므로 제외한다.
+  const activeRouteParameters = Object.fromEntries(
+    Array.from(searchParams.entries()).filter(([name]) => name !== "page")
+  );
+
+  function allRouteParameterNames(): Set<string> {
+    return new Set([
+      "selected",
+      "id",
+      ...(result?.pagePlans.flatMap((plan) => plan.routeParameters.map((parameter) => parameter.name)) ?? []),
+    ]);
+  }
+
+  function writePreviewQuery(
+    pageId: string | null,
+    parameters: Record<string, string> = {},
+    mode: "push" | "replace" = "push"
+  ) {
     const nextParams = new URLSearchParams(searchParams.toString());
-    if ("page" in next) {
-      if (next.page) nextParams.set("page", next.page);
-      else nextParams.delete("page");
+    for (const name of allRouteParameterNames()) nextParams.delete(name);
+    if (pageId) nextParams.set("page", pageId);
+    else nextParams.delete("page");
+    for (const [name, value] of Object.entries(parameters)) {
+      if (value) nextParams.set(name, value);
     }
-    if ("selected" in next) {
-      if (next.selected) nextParams.set("selected", next.selected);
-      else nextParams.delete("selected");
-    }
-    router.push(`${pathname}?${nextParams.toString()}`);
+    const query = nextParams.toString();
+    const href = query ? `${pathname}?${query}` : pathname;
+    if (mode === "replace") router.replace(href);
+    else router.push(href);
   }
 
   function setPreviewPageId(id: string | null) {
     setSelectedRowState(null);
-    updateQuery({ page: id, selected: null });
+    writePreviewQuery(id);
   }
 
   function selectRow(row: Record<string, unknown> | null) {
     setSelectedRowState(row);
-    updateQuery({ selected: row ? rowId(row) : null });
+    const next = new URLSearchParams(searchParams.toString());
+    if (row) next.set("selected", rowId(row));
+    else next.delete("selected");
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
+  }
+
+  function navigatePreview(
+    targetPageId: string | null,
+    parameters: Record<string, string>,
+    type: "OPEN_PAGE" | "OPEN_OVERLAY" | "GO_BACK" | "REPLACE_ROUTE"
+  ) {
+    if (type === "GO_BACK") {
+      router.back();
+      return;
+    }
+    if (type === "OPEN_OVERLAY") {
+      // 현재 MVP Runtime에는 페이지 간 overlay host가 없으므로 route state로 안전하게 폴백한다.
+      writePreviewQuery(targetPageId ?? previewPageId, parameters);
+      return;
+    }
+    setSelectedRowState(null);
+    writePreviewQuery(targetPageId, parameters, type === "REPLACE_ROUTE" ? "replace" : "push");
   }
 
   // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않도록,
@@ -193,10 +237,15 @@ export default function PreviewWizardPage() {
   // Direction Recovery Change Request §13.1 — capability/페이지가 바뀔 때마다 이 함수로 Block을
   // 다시 계산받는다. 실패해도 조용히 무시한다(마지막으로 받은 pageBlocks가 그대로 남을 뿐, 분석·검수·
   // 배포 자체를 막지 않음 — AI 검수/재구성이 실패를 안전하게 무시하는 것과 같은 원칙).
-  async function refreshBlocks(capabilities: PreviewCapability[], pages: PreviewPageDraft[], forPurpose: Purpose) {
+  async function refreshBlocks(
+    capabilities: PreviewCapability[],
+    pages: PreviewPageDraft[],
+    pagePlans: PreviewPagePlan[],
+    forPurpose: Purpose
+  ) {
     if (!accessToken) return;
     try {
-      const data = await api.ops.preview.blocks(accessToken, { capabilities, pages, purpose: forPurpose });
+      const data = await api.ops.preview.blocks(accessToken, { capabilities, pages, pagePlans, purpose: forPurpose });
       setPageBlocks(data.pageBlocks);
     } catch {
       // 무시 — 위 주석 참고.
@@ -220,7 +269,7 @@ export default function PreviewWizardPage() {
         purpose,
       });
       setResult(data);
-      refreshBlocks(data.capabilities, data.pages, purpose);
+      refreshBlocks(data.capabilities, data.pages, data.pagePlans, purpose);
       setApiBaseUrl(data.apiServerUrls[0] ?? "");
       setPreviewPageId(data.pages[0]?.id ?? null);
       setPreviewAuthToken(null);
@@ -268,6 +317,9 @@ export default function PreviewWizardPage() {
         purpose,
         capabilities: result.capabilities,
         pages: result.pages,
+        pagePlans: result.pagePlans,
+        flows: result.flows,
+        bindings: result.bindings,
       });
       setProposedOperations(proposal.operations);
       setSelectedOperationIds(new Set(proposal.operations.filter((op) => op.valid).map((op) => op.id)));
@@ -304,6 +356,15 @@ export default function PreviewWizardPage() {
         newTitle: op.newTitle,
         capabilityId: op.capabilityId,
         destinationPageId: op.destinationPageId,
+        capabilityIds: op.capabilityIds,
+        pageType: op.pageType,
+        layoutRef: op.layoutRef,
+        featureKey: op.featureKey,
+        featureEnabled: op.featureEnabled,
+        navigationRule: op.navigationRule,
+        flow: op.flow,
+        flowId: op.flowId,
+        actionId: op.actionId,
         reason: op.reason,
       }));
     if (selectedOps.length === 0) return;
@@ -313,6 +374,9 @@ export default function PreviewWizardPage() {
       const applied = await api.ops.preview.planApply(accessToken, {
         capabilities: result.capabilities,
         pages: result.pages,
+        pagePlans: result.pagePlans,
+        flows: result.flows,
+        bindings: result.bindings,
         operations: selectedOps,
       });
       if (applied.errors.length > 0) {
@@ -327,7 +391,7 @@ export default function PreviewWizardPage() {
         bindings: applied.bindings,
         generationMode: applied.generationMode,
       });
-      refreshBlocks(result.capabilities, applied.pages, purpose);
+      refreshBlocks(result.capabilities, applied.pages, applied.pagePlans, purpose);
       setPreviewPageId(applied.pages[0]?.id ?? null);
       setProposedOperations(null);
       setSelectedOperationIds(new Set());
@@ -360,6 +424,20 @@ export default function PreviewWizardPage() {
         return `"${op.newTitle}" 페이지 신설`;
       case "REMOVE_PAGE":
         return `"${pageTitle(op.pageId)}" 페이지 삭제`;
+      case "SPLIT_PAGE":
+        return `"${pageTitle(op.pageId)}"에서 "${op.newTitle}" 페이지 분리`;
+      case "SET_PAGE_TYPE":
+        return `"${pageTitle(op.pageId)}" 페이지 유형을 ${op.pageType}로 변경`;
+      case "SET_LAYOUT":
+        return `"${pageTitle(op.pageId)}" 레이아웃을 ${op.layoutRef}로 변경`;
+      case "SET_FEATURE":
+        return `"${pageTitle(op.pageId)}"의 ${op.featureKey} 기능을 ${op.featureEnabled ? "활성화" : "비활성화"}`;
+      case "ADD_NAVIGATION":
+        return `${op.navigationRule?.sourcePageId ?? "페이지"}에 ${op.navigationRule?.trigger ?? "이동"} 네비게이션 추가`;
+      case "ADD_FLOW":
+        return `${op.flow?.id ?? "신규"} 워크플로우 추가`;
+      case "ASSIGN_FLOW":
+        return `${op.flowId} 워크플로우를 "${pageTitle(op.pageId)}"의 ${op.actionId} 액션에 연결`;
       default:
         return op.reason ?? "";
     }
@@ -375,8 +453,12 @@ export default function PreviewWizardPage() {
         apiBaseUrl: apiBaseUrl.trim(),
         capabilities: result.capabilities,
         pages: result.pages,
+        pagePlans: result.pagePlans,
+        flows: result.flows,
+        bindings: result.bindings,
         authStrategy: result.authStrategy,
         purpose,
+        generationMode: result.generationMode,
       });
       router.push(`/instances/${vmId}/deployments/${deployment.id}`);
     } catch (err) {
@@ -402,7 +484,7 @@ export default function PreviewWizardPage() {
       unresolved,
       status: unresolved.length === 0 && result.status === "NEEDS_INPUT" ? "READY" : result.status,
     });
-    refreshBlocks(capabilities, result.pages, purpose);
+    refreshBlocks(capabilities, result.pages, result.pagePlans, purpose);
   }
 
   // 자동 탐지가 실패했을 때(AUTH_LOGIN_NOT_FOUND) 사용자가 로그인 API를 직접 등록한다. 서버가 모르는
@@ -443,6 +525,23 @@ export default function PreviewWizardPage() {
     const pages = hasAuthPage
       ? result.pages
       : [{ id: "auth-login-manual", title: "로그인", skeleton: "AUTH_PAGE" as const, capabilityIds: ["auth.login"] }, ...result.pages];
+    const pagePlans = hasAuthPage
+      ? result.pagePlans
+      : [{
+          id: "auth-login-manual",
+          title: "로그인",
+          route: "/login",
+          pageType: "AUTH" as const,
+          layoutRef: "auth-layout",
+          capabilityIds: ["auth.login"],
+          routeParameters: [],
+          queryParameters: [],
+          navigationRules: [],
+          features: {},
+          confidence: "LOW",
+          reason: "사용자가 로그인 API를 직접 지정함",
+          unsupportedCapabilityWarnings: [],
+        }, ...result.pagePlans];
 
     let unresolved = result.unresolved.filter((f) => f.field !== AUTH_LOGIN_FIELD);
     if (!accessTokenPath) {
@@ -459,13 +558,14 @@ export default function PreviewWizardPage() {
       ...result,
       capabilities,
       pages,
+      pagePlans,
       unresolved,
       status: unresolved.length === 0 && result.status === "NEEDS_INPUT" ? "READY" : result.status,
     });
     if (!previewPageId) {
       setPreviewPageId("auth-login-manual");
     }
-    refreshBlocks(capabilities, pages, purpose);
+    refreshBlocks(capabilities, pages, pagePlans, purpose);
   }
 
   if (!accessToken) return <PageLoader />;
@@ -781,10 +881,13 @@ export default function PreviewWizardPage() {
                   <div className="rounded-md border border-line-strong bg-white/[0.02] p-4">
                     <PreviewPageRenderer
                       page={result.pages.find((p) => p.id === previewPageId)!}
+                      pagePlan={activePagePlan}
                       capabilities={result.capabilities}
                       blocks={pageBlocks[previewPageId] ?? []}
                       selectedRow={effectiveSelectedRow}
                       onSelectRow={selectRow}
+                      routeParameters={activeRouteParameters}
+                      onNavigate={navigatePreview}
                       flows={result.flows}
                       bindings={result.bindings}
                       config={{

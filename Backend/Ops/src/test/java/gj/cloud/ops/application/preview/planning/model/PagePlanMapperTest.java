@@ -25,6 +25,7 @@ class PagePlanMapperTest {
                 new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of()),
                 new PageDraft("dashboard", "대시보드", PageSkeletonType.DASHBOARD, List.of()),
                 new PageDraft("posts-page", "Posts", PageSkeletonType.RESOURCE_LIST, List.of()),
+                new PageDraft("vm-detail", "VM 상세", PageSkeletonType.RESOURCE_DETAIL, List.of()),
                 new PageDraft("vms-page", "Vms", PageSkeletonType.LIST_DETAIL, List.of())
         );
 
@@ -36,8 +37,10 @@ class PagePlanMapperTest {
         assertThat(plans.get(1).layoutRef()).isEqualTo("dashboard-layout");
         assertThat(plans.get(2).pageType()).isEqualTo(PageType.RESOURCE_LIST);
         assertThat(plans.get(2).layoutRef()).isEqualTo("resource-list-layout");
-        assertThat(plans.get(3).pageType()).isEqualTo(PageType.LIST_DETAIL);
-        assertThat(plans.get(3).layoutRef()).isEqualTo("list-detail-layout");
+        assertThat(plans.get(3).pageType()).isEqualTo(PageType.RESOURCE_DETAIL);
+        assertThat(plans.get(3).layoutRef()).isEqualTo("resource-detail-layout");
+        assertThat(plans.get(4).pageType()).isEqualTo(PageType.LIST_DETAIL);
+        assertThat(plans.get(4).layoutRef()).isEqualTo("list-detail-layout");
     }
 
     @Test

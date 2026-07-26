@@ -66,6 +66,28 @@ class PreviewBlockResolverTest {
     }
 
     @Test
+    void resourceDetailSkeletonProducesFullDetailActionsAndChildResourcesWithoutListBlock() {
+        Capability detail = capabilityWithPath("vms.detail", "vms", CapabilityType.DETAIL,
+                "/vms/{vmId}", "GET");
+        Capability start = commandCapability("vms.start", "vms", "start");
+        Capability portsList = capabilityWithPath("ports.list", "ports", CapabilityType.LIST,
+                "/vms/{vmId}/ports", "GET");
+        Capability portsCreate = capabilityWithPath("ports.create", "ports", CapabilityType.CREATE,
+                "/vms/{vmId}/ports", "POST");
+        PageDraft page = new PageDraft("vm-detail", "VM 상세", PageSkeletonType.RESOURCE_DETAIL,
+                List.of(detail.id(), start.id(), portsList.id(), portsCreate.id()));
+
+        List<Block> blocks = resolver.resolve(page, List.of(detail, start, portsList, portsCreate));
+
+        assertThat(blocks).containsExactly(
+                new Block("detail", "detail-panel", "page.primary", List.of(detail.id()), null),
+                new Block("actions", "quick-action-button-group", "page.actions", List.of(start.id()), null),
+                new Block("child-ports", "child-resource-list", "page.secondary",
+                        List.of(portsList.id(), portsCreate.id()), null));
+        assertThat(blocks).noneMatch(block -> block.componentId().equals("resource-table"));
+    }
+
+    @Test
     void resourceListSkeletonWithOnlyListCapabilityProducesSingleBlock() {
         Capability list = capability("posts.list", "posts", CapabilityType.LIST);
         PageDraft page = new PageDraft("posts-page", "Posts", PageSkeletonType.RESOURCE_LIST, List.of("posts.list"));

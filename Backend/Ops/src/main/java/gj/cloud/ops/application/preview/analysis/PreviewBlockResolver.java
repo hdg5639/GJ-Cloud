@@ -26,6 +26,7 @@ public class PreviewBlockResolver {
         return switch (page.skeleton()) {
             case AUTH_PAGE -> resolveAuthPage(page, capabilities);
             case DASHBOARD -> resolveDashboard(page, capabilities);
+            case RESOURCE_DETAIL -> resolveResourceDetail(page, capabilities);
             case RESOURCE_LIST, LIST_DETAIL -> resolveDefault(page, capabilities);
         };
     }
@@ -45,6 +46,62 @@ public class PreviewBlockResolver {
                 .map(Capability::id)
                 .toList();
         return List.of(new Block("dashboard", "dashboard-view", "page.content", listCapabilityIds, null));
+    }
+
+    private List<Block> resolveResourceDetail(PageDraft page, List<Capability> capabilities) {
+        Capability detail = findByType(page, capabilities, CapabilityType.DETAIL);
+        if (detail == null) {
+            return List.of();
+        }
+        Capability update = findByTypeForResource(page, capabilities, CapabilityType.UPDATE, detail.resourceName());
+        Capability delete = findByTypeForResource(page, capabilities, CapabilityType.DELETE, detail.resourceName());
+
+        List<Block> blocks = new ArrayList<>();
+        blocks.add(new Block("detail", "full-detail-page", "page.primary", List.of(detail.id()), null));
+
+        List<String> commandIds = page.capabilityIds().stream()
+                .map(id -> findById(capabilities, id))
+                .filter(c -> c != null && c.kind() == CapabilityKind.COMMAND)
+                .map(Capability::id)
+                .toList();
+        if (!commandIds.isEmpty()) {
+            blocks.add(new Block("actions", "quick-action-button-group", "page.actions", commandIds, null));
+        }
+        if (update != null) {
+            blocks.add(new Block("update", "create-edit-modal", "page.overlay", List.of(update.id()), "UPDATE"));
+        }
+        if (delete != null) {
+            blocks.add(new Block("delete", "delete-confirm-modal", "page.overlay", List.of(delete.id()), null));
+        }
+
+        for (Capability childList : page.capabilityIds().stream()
+                .map(id -> findById(capabilities, id))
+                .filter(c -> c != null && c.type() == CapabilityType.LIST)
+                .filter(c -> isNestedUnderDetail(detail, c))
+                .toList()) {
+            List<String> childCapabilityIds = new ArrayList<>();
+            childCapabilityIds.add(childList.id());
+            page.capabilityIds().stream()
+                    .map(id -> findById(capabilities, id))
+                    .filter(c -> c != null && c.type() == CapabilityType.CREATE)
+                    .filter(c -> c.resourceName().equals(childList.resourceName()))
+                    .filter(c -> isNestedUnderDetail(detail, c))
+                    .findFirst()
+                    .ifPresent(c -> childCapabilityIds.add(c.id()));
+            blocks.add(new Block("child-" + sanitizeInstanceId(childList.resourceName()),
+                    "child-resource-list", "page.secondary", childCapabilityIds, null));
+        }
+        return blocks;
+    }
+
+    private boolean isNestedUnderDetail(Capability detail, Capability candidate) {
+        String detailPath = detail.path();
+        int lastParamStart = detailPath.lastIndexOf("/{");
+        if (lastParamStart < 0) {
+            return false;
+        }
+        String prefix = detailPath.substring(0, lastParamStart);
+        return candidate.path().startsWith(prefix + "/{") && !candidate.path().equals(detailPath);
     }
 
     private List<Block> resolveDefault(PageDraft page, List<Capability> capabilities) {

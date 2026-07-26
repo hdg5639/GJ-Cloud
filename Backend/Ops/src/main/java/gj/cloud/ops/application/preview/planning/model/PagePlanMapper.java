@@ -11,11 +11,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// GamjaBox_Auto_Preview_Workflow_Composition_Phase2_Change_Request.md WP-1 — 기존 결정론적 생성기
-// (RuleBasedPagePlanGenerator/PageDraftGenerator)를 건드리지 않고, 그 결과(PageDraft)에서 지금
-// 확실히 알 수 있는 것만 PagePlan으로 파생한다. Navigation/FlowBlueprint가 채울 필드는 지금 빈 값으로
-// 둔다(§22 우선순위상 아직 그 작업들이 없음). layoutRef는 §10(LayoutBlueprint) 조각에서 채워졌다 —
-// PageSkeletonType 4종 전부 LayoutBlueprints.ALL에 대응하는 항목이 있어 항상 채워진다.
+// WP-1 호환 Mapper. 기존 결정론적 PageDraft를 초기 PagePlan으로 승격하고, AI/사용자 Patch가
+// 만든 PagePlan을 구버전 Block 경로용 PageDraft로 다시 내릴 수 있게 한다. 독립 상세 타입과 모든
+// 기본 Layout reference를 보존하며, Navigation/Flow는 별도 정본 상태에서 관리한다.
 public final class PagePlanMapper {
 
     public static List<PagePlan> from(List<PageDraft> pages, List<Capability> capabilities) {
@@ -24,6 +22,22 @@ public final class PagePlanMapper {
             capabilityById.put(capability.id(), capability);
         }
         return pages.stream().map(page -> toPagePlan(page, capabilityById)).toList();
+    }
+
+    public static List<PageDraft> toDrafts(List<PagePlan> pagePlans) {
+        return pagePlans.stream().map(PagePlanMapper::toDraft).toList();
+    }
+
+    public static PageDraft toDraft(PagePlan pagePlan) {
+        PageSkeletonType skeleton = switch (pagePlan.pageType()) {
+            case AUTH -> PageSkeletonType.AUTH_PAGE;
+            case DASHBOARD -> PageSkeletonType.DASHBOARD;
+            case RESOURCE_DETAIL -> PageSkeletonType.RESOURCE_DETAIL;
+            case LIST_DETAIL -> PageSkeletonType.LIST_DETAIL;
+            case RESOURCE_LIST, RESOURCE_OVERVIEW, WORKFLOW, SETTINGS, ACTIVITY, FILE_MANAGER, ORGANIZATION ->
+                    PageSkeletonType.RESOURCE_LIST;
+        };
+        return new PageDraft(pagePlan.id(), pagePlan.title(), skeleton, pagePlan.capabilityIds());
     }
 
     private static PagePlan toPagePlan(PageDraft page, Map<String, Capability> capabilityById) {
@@ -60,6 +74,7 @@ public final class PagePlanMapper {
             case AUTH_PAGE -> PageType.AUTH;
             case DASHBOARD -> PageType.DASHBOARD;
             case RESOURCE_LIST -> PageType.RESOURCE_LIST;
+            case RESOURCE_DETAIL -> PageType.RESOURCE_DETAIL;
             case LIST_DETAIL -> PageType.LIST_DETAIL;
         };
     }
@@ -72,6 +87,7 @@ public final class PagePlanMapper {
             case AUTH_PAGE -> "auth-layout";
             case DASHBOARD -> "dashboard-layout";
             case RESOURCE_LIST -> "resource-list-layout";
+            case RESOURCE_DETAIL -> "resource-detail-layout";
             case LIST_DETAIL -> "list-detail-layout";
         };
         return LayoutBlueprints.ALL.containsKey(layoutId) ? layoutId : null;
@@ -82,6 +98,7 @@ public final class PagePlanMapper {
             case AUTH_PAGE -> "로그인 capability 기준으로 생성됨";
             case DASHBOARD -> "리소스별 LIST capability를 모아 생성됨";
             case RESOURCE_LIST -> "리소스 CRUD 규칙에 따라 생성됨(상세 없음)";
+            case RESOURCE_DETAIL -> "독립 상세 페이지 계획에서 생성됨";
             case LIST_DETAIL -> "리소스 CRUD 규칙에 따라 생성됨(목록+상세)";
         };
     }

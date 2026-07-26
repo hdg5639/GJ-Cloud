@@ -22,10 +22,7 @@ public record PreviewAnalysisResult(
         List<String> apiServerUrls,
         List<Capability> capabilities,
         List<PageDraft> pages,
-        // Workflow Composition Phase 2 Change Request WP-1 — PageDraft에서 결정론적으로 파생한 풍부한
-        // 페이지 모델(route/pageType/features 등). PageDraft는 여전히 실제 Block 리졸브·컴파일·배포
-        // 경로의 정본이고(폴백 유지), pagePlans는 다음 작업(Navigation/FlowBlueprint)이 소비할 자리를
-        // 미리 마련해둔 것 — 지금은 어떤 소비자도 없다.
+        // 실행 가능한 페이지 계획의 정본. PageDraft는 FALLBACK_CRUD 및 구버전 요청 호환용으로 유지한다.
         List<PagePlan> pagePlans,
         // Workflow Composition Phase 2 §22 7번(수직 슬라이스)으로 가는 첫 조각 — RuleBasedFlowGenerator가
         // pagePlans로부터 결정론적으로 만든 것 중 FlowBlueprintValidator/ApiBindingValidator를 통과한

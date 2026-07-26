@@ -428,7 +428,7 @@ export interface ComposeReviewFinding {
 // Auto Preview (GamjaBox_2.0_Key_Features.md 1단계) — Backend/Ops의
 // application/preview/analysis 패키지 record와 필드명을 1:1로 맞춤.
 export type PreviewCapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
-export type PreviewPageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
+export type PreviewPageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "RESOURCE_DETAIL" | "LIST_DETAIL" | "DASHBOARD";
 // GamjaBox_2.0_Key_Features.md 2절 — BlueprintCompiler가 목적별 Component Variant를 고르는 데 쓴다.
 export type PreviewGenerationPurpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
 // auto-preview-design/05-capability-taxonomy.md §5·6 — CapabilityType별 고정 기본값만 배정한다.
@@ -655,7 +655,19 @@ export interface PageReviewFinding {
 // Direction Recovery Change Request Increment 5(2부) "Plan Review UI" — AiPageReviewer(코멘트만)와
 // 달리 AiPagePlanner의 제안은 사용자가 검토해 실제로 pages를 바꿀 수 있다. propose(AI 호출, 아무것도
 // 적용 안 함) / apply(사용자가 고른 서브셋만 결정론적으로 적용) 두 단계로 나뉜다.
-export type PagePlanOperationType = "RENAME_PAGE" | "MERGE_PAGES" | "MOVE_CAPABILITY" | "ADD_PAGE" | "REMOVE_PAGE";
+export type PagePlanOperationType =
+  | "RENAME_PAGE"
+  | "MERGE_PAGES"
+  | "MOVE_CAPABILITY"
+  | "ADD_PAGE"
+  | "REMOVE_PAGE"
+  | "SPLIT_PAGE"
+  | "SET_PAGE_TYPE"
+  | "SET_LAYOUT"
+  | "SET_FEATURE"
+  | "ADD_NAVIGATION"
+  | "ADD_FLOW"
+  | "ASSIGN_FLOW";
 
 // /plan/apply 요청에 보낼 원본 오퍼레이션 — 타입마다 실제로 쓰는 필드가 다르고 그 외는 항상 null.
 export interface PagePlanOperation {
@@ -665,6 +677,15 @@ export interface PagePlanOperation {
   newTitle: string | null;
   capabilityId: string | null;
   destinationPageId: string | null;
+  capabilityIds: string[] | null;
+  pageType: PreviewPageType | null;
+  layoutRef: string | null;
+  featureKey: string | null;
+  featureEnabled: boolean | null;
+  navigationRule: PreviewNavigationRule | null;
+  flow: PreviewFlowBlueprint | null;
+  flowId: string | null;
+  actionId: string | null;
   reason: string | null;
 }
 

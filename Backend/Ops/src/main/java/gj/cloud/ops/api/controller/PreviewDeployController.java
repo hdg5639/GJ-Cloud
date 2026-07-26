@@ -10,14 +10,21 @@ import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CompatibilityFinding;
 import gj.cloud.ops.application.preview.analysis.CompatibilitySeverity;
 import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
+import gj.cloud.ops.application.preview.analysis.ComponentRegistry;
+import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.RegistryStatus;
+import gj.cloud.ops.application.preview.binding.ApiBinding;
+import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
 import gj.cloud.ops.application.preview.build.PreviewComposeArtifactBuilder;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.dto.PreviewDeployRequest;
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
+import gj.cloud.ops.application.preview.planning.patch.PagePlanPatchValidator;
+import gj.cloud.ops.application.preview.planning.patch.PlanPatchState;
 import gj.cloud.ops.application.preview.service.PreviewBlueprintService;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
@@ -31,6 +38,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,14 +52,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-// Auto Preview Phase D — 확정된 capability/페이지 초안을 Vite+React 프로젝트로 생성해 사용자의 기존
-// VM에 새 배포 대상으로 추가한다(전용 Preview VM 풀은 만들지 않음, MVP 결정). Git 저장소가 없는
-// target이라 repositoryUrl/branch를 빈 문자열로 저장하고, DeploymentTargetService.create()/
-// DeploymentExecutor.runPipeline의 "저장소 없음" 분기가 이를 받아 처리한다.
 @Tag(name = "Preview", description = "Auto Preview — 생성된 소스를 VM에 배포")
 @RestController
 @RequestMapping("/ops/{vmId}/preview")
 @RequiredArgsConstructor
+@Slf4j
 public class PreviewDeployController {
 
     private static final String PERMISSION_DEPLOY = "DEPLOY";
@@ -63,7 +68,7 @@ public class PreviewDeployController {
     private final DeploymentExecutor deploymentExecutor;
     private final VmServiceClient vmServiceClient;
 
-    @Operation(summary = "Auto Preview 배포", description = "capability/페이지 초안으로 Vite 프로젝트를 생성해 새 배포 대상으로 배포합니다.")
+    @Operation(summary = "Auto Preview 배포", description = "검증된 Product Blueprint를 Vite 프로젝트로 생성해 새 배포 대상으로 배포합니다.")
     @PostMapping("/deploy")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<DeploymentResponse> deploy(
@@ -74,8 +79,38 @@ public class PreviewDeployController {
     ) {
         String bearerToken = requireDeployPermission(request, vmId);
 
+        List<PagePlan> pagePlans = body.pagePlans() == null || body.pagePlans().isEmpty()
+                ? PagePlanMapper.from(body.pages(), body.capabilities())
+                : body.pagePlans();
+        List<FlowBlueprint> flows;
+        List<ApiBinding> bindings;
+        if (body.flows() == null || body.bindings() == null) {
+            RuleBasedFlowGenerator.ValidatedResult generated =
+                    ruleBasedFlowGenerator.generateValidated(pagePlans, body.capabilities());
+            flows = generated.result().flows();
+            bindings = generated.result().bindings();
+        } else {
+            flows = body.flows();
+            bindings = body.bindings();
+        }
+
+        PlanPatchState state = new PlanPatchState(pagePlans, flows, bindings);
+        List<String> blueprintErrors = PagePlanPatchValidator.validateFinal(state, body.capabilities());
+        if (!blueprintErrors.isEmpty()) {
+            log.warn("Auto Preview 배포 Blueprint 검증 실패: {}", String.join("; ", blueprintErrors));
+            throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
+        }
+
+        List<PageDraft> effectivePages = PagePlanMapper.toDrafts(pagePlans);
+        Map<String, List<Block>> pageBlocks =
+                previewBlueprintService.compilePagePlanBlocks(pagePlans, body.capabilities(), body.purpose());
+        if (hasErrorFinding(effectivePages, pageBlocks, body.capabilities())) {
+            throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
+        }
+
         ComposeArtifact artifact = previewComposeArtifactBuilder.build(
-                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), body.purpose());
+                body.apiBaseUrl(), body.capabilities(), effectivePages, pagePlans, flows, bindings,
+                body.authStrategy(), body.purpose());
 
         DeploymentTargetEntity target = deploymentTargetService.create(
                 vmId.toString(),
@@ -95,29 +130,23 @@ public class PreviewDeployController {
         DeploymentEntity deployment = deploymentExecutor.enqueueForTarget(
                 bearerToken, vmId.toString(), target, repoConfig, artifact);
 
-        Map<String, List<Block>> pageBlocks =
-                previewBlueprintService.compilePageBlocks(body.pages(), body.capabilities(), body.purpose());
-        RegistryStatus status = hasErrorFinding(body.pages(), pageBlocks, body.capabilities())
-                ? RegistryStatus.DRAFT
-                : RegistryStatus.VALIDATED;
-        List<PagePlan> pagePlans = PagePlanMapper.from(body.pages(), body.capabilities());
-        RuleBasedFlowGenerator.ValidatedResult flowResult =
-                ruleBasedFlowGenerator.generateValidated(pagePlans, body.capabilities());
+        GenerationMode generationMode = body.generationMode() == null
+                ? GenerationMode.RULE_BASED : body.generationMode();
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
-                body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), pageBlocks, status,
-                body.purpose(), pagePlans, flowResult.result().flows(), flowResult.result().bindings());
+                body.apiBaseUrl(), body.capabilities(), effectivePages, body.authStrategy(), pageBlocks,
+                RegistryStatus.VALIDATED, body.purpose(), pagePlans, flows, bindings, generationMode,
+                BlueprintCompiler.VERSION, ComponentRegistry.VERSION);
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
-
         return ApiResponse.ok(DeploymentResponse.from(deployment));
     }
 
-    // auto-preview-design/09-registry-lifecycle.md §11 MVP 관계 — "Schema·Build 통과 시
-    // PROJECT+VALIDATED". Build는 이미 위에서 예외 없이 ComposeArtifact가 만들어진 시점에 통과했고,
-    // 여기서는 Contract·Slot·Compatibility Hard Gate(ERROR Finding)만 마저 확인한다.
-    private boolean hasErrorFinding(List<PageDraft> pages, Map<String, List<Block>> pageBlocks, List<Capability> capabilities) {
+    private boolean hasErrorFinding(List<PageDraft> pages, Map<String, List<Block>> pageBlocks,
+                                    List<Capability> capabilities) {
         for (PageDraft page : pages) {
-            for (CompatibilityFinding finding : CompatibilityValidator.validate(page, pageBlocks.get(page.id()), capabilities)) {
+            for (CompatibilityFinding finding : CompatibilityValidator.validate(
+                    page, pageBlocks.getOrDefault(page.id(), List.of()), capabilities)) {
                 if (finding.severity() == CompatibilitySeverity.ERROR) {
+                    log.warn("Auto Preview component compatibility 실패 [{}]: {}", page.id(), finding.message());
                     return true;
                 }
             }

@@ -26,7 +26,11 @@ function buildUrl(
   query: Record<string, string> = {}
 ): string {
   let path = capability.path;
-  if (pathParams.id !== undefined) {
+  for (const [name, value] of Object.entries(pathParams)) {
+    if (name === "id") continue;
+    path = path.replaceAll(`{${name}}`, encodeURIComponent(value));
+  }
+  if (pathParams.id !== undefined && path.includes("{")) {
     path = replaceLastPathPlaceholder(path, pathParams.id);
   }
   const base = config.apiBaseUrl.replace(/\/$/, "");
@@ -59,6 +63,8 @@ export async function callCapability(
     pathParams?: Record<string, string>;
     query?: Record<string, string>;
     body?: Record<string, unknown>;
+    headers?: Record<string, string>;
+    signal?: AbortSignal;
   } = {}
 ): Promise<unknown> {
   const url = buildUrl(config, capability, options.pathParams, options.query);
@@ -71,8 +77,10 @@ export async function callCapability(
       headers: {
         ...(options.body ? { "Content-Type": "application/json" } : {}),
         ...buildAuthHeaders(config),
+        ...options.headers,
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: options.signal,
     });
     status = res.status;
     if (!res.ok) {

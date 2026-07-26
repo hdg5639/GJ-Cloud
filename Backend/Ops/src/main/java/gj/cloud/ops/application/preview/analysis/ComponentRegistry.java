@@ -9,6 +9,8 @@ import java.util.stream.Collectors;
 // 자체가 만족하기 때문 — 사용 이벤트를 쌓아 VERIFIED를 거칠 대상이 아니다.
 public final class ComponentRegistry {
 
+    public static final String VERSION = "system-1";
+
     public static final Map<String, ComponentRegistryEntry> ALL = ComponentContracts.ALL.entrySet().stream()
             .collect(Collectors.toMap(
                     Map.Entry::getKey,

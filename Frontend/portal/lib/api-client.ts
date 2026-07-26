@@ -48,6 +48,10 @@ import type {
   PreviewAuthStrategy,
   PreviewCapability,
   PreviewPageDraft,
+  PreviewPagePlan,
+  PreviewFlowBlueprint,
+  PreviewApiBinding,
+  PreviewGenerationMode,
   PagePlanOperation,
   PagePlanProposalResult,
   PreviewPlanApplyResponse,
@@ -794,6 +798,9 @@ export const api = {
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
           capabilities: PreviewCapability[];
           pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
         }
       ) =>
         request<PagePlanProposalResult>("ops", "/ops/preview/plan/propose", {
@@ -806,6 +813,9 @@ export const api = {
         body: {
           capabilities: PreviewCapability[];
           pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
           operations: PagePlanOperation[];
         }
       ) =>
@@ -822,6 +832,7 @@ export const api = {
         body: {
           capabilities: PreviewCapability[];
           pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
         }
       ) =>
@@ -838,8 +849,12 @@ export const api = {
           apiBaseUrl: string;
           capabilities: PreviewCapability[];
           pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
           authStrategy: PreviewAuthStrategy;
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          generationMode?: PreviewGenerationMode;
         }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/preview/deploy`, {

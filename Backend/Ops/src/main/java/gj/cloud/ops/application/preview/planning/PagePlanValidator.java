@@ -43,6 +43,8 @@ public final class PagePlanValidator {
                 case MOVE_CAPABILITY -> applyMoveCapability(op, pagesById, validCapabilityIds, errors, decisions);
                 case ADD_PAGE -> applyAddPage(op, pagesById, errors, decisions);
                 case REMOVE_PAGE -> applyRemovePage(op, pagesById, errors, decisions);
+                case SPLIT_PAGE, SET_PAGE_TYPE, SET_LAYOUT, SET_FEATURE, ADD_NAVIGATION, ADD_FLOW, ASSIGN_FLOW ->
+                        errors.add(op.type() + ": legacy PageDraft validator에서는 지원하지 않음 — PagePlanPatchValidator를 사용할 것");
             }
         }
 

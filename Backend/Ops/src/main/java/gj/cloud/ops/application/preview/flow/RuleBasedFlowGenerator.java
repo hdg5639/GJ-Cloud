@@ -5,6 +5,7 @@ import gj.cloud.ops.application.preview.analysis.CapabilityKind;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
 import gj.cloud.ops.application.preview.binding.ApiBindingValidator;
+import gj.cloud.ops.application.preview.planning.model.NavigationRule;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import org.springframework.stereotype.Component;
 
@@ -19,24 +20,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-// GamjaBox_Auto_Preview_Workflow_Composition_Phase2_Change_Request.md §22 7번(수직 슬라이스)로 가는
-// 첫 조각. WP-4(AiPagePlanner의 ADD_FLOW/ASSIGN_FLOW)는 아직 없어 지금은 이 규칙기반 생성기만
-// FlowBlueprint+ApiBinding을 실제로 만들어낸다 — RuleBasedPagePlanGenerator와 같은 관례로, purpose
-// 해석이나 서비스 설명 이해 없이 OpenAPI로부터 결정론적으로 알 수 있는 패턴만 다룬다.
-//
-// 생성하는 패턴 2가지(둘 다 §15 수직 슬라이스 시나리오에 필요):
-// 1) 같은 페이지에 CREATE+DETAIL이 모두 있으면: 생성 성공 후 새로 만든 행을 같은 페이지 안에서 선택
-//    상태로 만든다(Navigation 증분이 세운 "?selected=<id>" 관례를 재사용 — LIST_DETAIL은 목록+상세가
-//    한 페이지라 별도 상세 라우트가 없고, NAVIGATE의 pageId는 항상 자기 자신).
-// 2) COMMAND(kind=COMMAND, 예: vm.start)는 Capability.dependencies가 이미 가리키는 대상(보통
-//    DETAIL)을 실행 후 새로고침한다 — dependencies는 CapabilityExtractor가 이미 채워둔 필드라
-//    여기서 새로 추론하지 않는다.
-//
-// 의도적으로 POLL step은 만들지 않는다 — Capability 모델에 응답의 "상태" 필드 이름이나 종료 값이
-// 전혀 없어서(LIST의 collectionPath/totalCountPath 같은 필드가 DETAIL 응답에는 없음), 결정론적
-// 생성기가 폴링 종료 조건을 지어내면 §12 "AI는 API 오퍼레이션을 지어내면 안 된다"는 원칙과 같은
-// 이유로 위험하다. AC-4(bounded polling)는 상태 필드 휴리스틱 추출이나 AI Planner가 생기는 다음
-// 증분의 몫으로 명시적으로 미룬다.
+// Workflow Composition Phase 2의 결정론적 Flow 생성기. PagePlan의 create.success/row.select
+// Navigation과 COMMAND dependency를 이용해 CREATE 결과 연결·상세 이동·명령 후 refresh를 만든다.
+// AI의 ADD_FLOW/ASSIGN_FLOW와 함께 동작하지만, OpenAPI만으로 확정할 수 없는 상태 필드·완료 값은
+// 추측하지 않는다. 따라서 규칙 기반 POLL은 생성하지 않고 사용자가 승인한 Flow 또는 명시적 Binding에
+// 한해서 Runtime이 bounded polling을 실행한다.
 @Component
 public class RuleBasedFlowGenerator {
 
@@ -53,14 +41,17 @@ public class RuleBasedFlowGenerator {
     // 바인딩이 여러 flow에 공유될 수 있어 "이 flow만 빼고 바인딩은 유지"가 항상 안전하지 않기 때문).
     // 호출 측(PreviewAnalysisService/PreviewController)이 반복 구현하지 않도록 이 클래스가 직접 제공한다.
     public ValidatedResult generateValidated(List<PagePlan> pages, List<Capability> capabilities) {
-        Result raw = generate(pages, capabilities);
-        Set<String> knownPageIds = pages.stream().map(PagePlan::id).collect(Collectors.toSet());
+        List<PagePlan> safePages = pages == null ? List.of() : pages;
+        List<Capability> safeCapabilities = capabilities == null ? List.of() : capabilities;
+        Result raw = generate(safePages, safeCapabilities);
+        Set<String> knownPageIds = safePages.stream().filter(Objects::nonNull)
+                .map(PagePlan::id).filter(Objects::nonNull).collect(Collectors.toSet());
 
         List<String> errors = new ArrayList<>();
         for (FlowBlueprint flow : raw.flows()) {
             errors.addAll(FlowBlueprintValidator.validate(flow, knownPageIds));
         }
-        errors.addAll(ApiBindingValidator.validate(raw.bindings(), capabilities));
+        errors.addAll(ApiBindingValidator.validate(raw.bindings(), safeCapabilities));
 
         if (!errors.isEmpty()) {
             return new ValidatedResult(new Result(List.of(), List.of()), errors);
@@ -69,9 +60,13 @@ public class RuleBasedFlowGenerator {
     }
 
     public Result generate(List<PagePlan> pages, List<Capability> capabilities) {
+        pages = pages == null ? List.of() : pages;
+        capabilities = capabilities == null ? List.of() : capabilities;
         Map<String, Capability> capabilityById = new LinkedHashMap<>();
         for (Capability capability : capabilities) {
-            capabilityById.put(capability.id(), capability);
+            if (capability != null && capability.id() != null) {
+                capabilityById.putIfAbsent(capability.id(), capability);
+            }
         }
 
         List<FlowBlueprint> flows = new ArrayList<>();
@@ -83,12 +78,15 @@ public class RuleBasedFlowGenerator {
         List<ApiBinding> ownBindings = new ArrayList<>();
 
         for (PagePlan page : pages) {
+            if (page == null) {
+                continue;
+            }
             List<Capability> pageCapabilities = page.capabilityIds().stream()
                     .map(capabilityById::get)
                     .filter(Objects::nonNull)
                     .toList();
 
-            generateCreateFlow(page, pageCapabilities).ifPresent(result -> {
+            generateCreateFlow(page, pageCapabilities, pages).ifPresent(result -> {
                 flows.add(result.flow());
                 ownBindings.addAll(result.bindings());
             });
@@ -109,27 +107,55 @@ public class RuleBasedFlowGenerator {
     private record GeneratedFlow(FlowBlueprint flow, List<ApiBinding> bindings) {
     }
 
-    private Optional<GeneratedFlow> generateCreateFlow(PagePlan page, List<Capability> pageCapabilities) {
+    private Optional<GeneratedFlow> generateCreateFlow(
+            PagePlan page, List<Capability> pageCapabilities, List<PagePlan> allPages
+    ) {
         Capability create = findByType(pageCapabilities, CapabilityType.CREATE);
-        Capability detail = findByType(pageCapabilities, CapabilityType.DETAIL);
-        if (create == null || detail == null) {
+        if (create == null) {
             return Optional.empty();
         }
 
-        ApiBinding createBinding = buildBinding(create, List.of(new ApiBinding.OutputMapping("data.id", "createdId")),
-                List.of());
+        NavigationRule navigation = page.navigationRules().stream()
+                .filter(Objects::nonNull)
+                .filter(rule -> "create.success".equals(rule.trigger()))
+                .findFirst()
+                .or(() -> page.navigationRules().stream().filter(Objects::nonNull)
+                        .filter(rule -> "row.select".equals(rule.trigger())).findFirst())
+                .orElse(null);
+        Capability localDetail = findByType(pageCapabilities, CapabilityType.DETAIL);
+        if (localDetail == null && navigation == null) {
+            return Optional.empty();
+        }
 
+        List<ApiBinding.OutputMapping> outputMappings = List.of(
+                new ApiBinding.OutputMapping("data.id", "createdId"),
+                new ApiBinding.OutputMapping("result.id", "createdId"),
+                new ApiBinding.OutputMapping("payload.id", "createdId"),
+                new ApiBinding.OutputMapping("id", "createdId")
+        );
+        ApiBinding createBinding = buildBinding(page, create, outputMappings, List.of());
         FlowStep callStep = new FlowStep("submit-create", FlowStepType.API_CALL, createBinding.id(),
                 null, null, null, null, null, null, null, null, null);
-        FlowStep navigateStep = new FlowStep("select-created-row", FlowStepType.NAVIGATE, null,
-                null, null, page.id(), Map.of("selected", "$context.createdId"),
-                null, null, null, null, null);
 
-        FlowBlueprint flow = new FlowBlueprint(
-                page.id() + "-create-flow",
-                new FlowBlueprint.FlowTrigger(page.id(), create.id()),
-                List.of(callStep, navigateStep));
+        String targetPageId = navigation != null ? navigation.targetPageId() : page.id();
+        PagePlan targetPage = allPages.stream().filter(Objects::nonNull)
+                .filter(candidate -> Objects.equals(candidate.id(), targetPageId)).findFirst().orElse(page);
+        Map<String, String> parameters = new LinkedHashMap<>();
+        if (navigation != null && navigation.parameters() != null) {
+            navigation.parameters().forEach((key, value) ->
+                    parameters.put(key, value != null && value.startsWith("$row.") ? "$context.createdId" : value));
+        }
+        if (parameters.isEmpty()) {
+            String parameterName = targetPage.routeParameters().isEmpty()
+                    ? "selected"
+                    : targetPage.routeParameters().get(0).name();
+            parameters.put(parameterName, "$context.createdId");
+        }
 
+        FlowStep navigateStep = new FlowStep("open-created-resource", FlowStepType.NAVIGATE, null,
+                null, null, targetPageId, parameters, null, null, null, null, null);
+        FlowBlueprint flow = new FlowBlueprint(page.id() + "-create-flow",
+                new FlowBlueprint.FlowTrigger(page.id(), create.id()), List.of(callStep, navigateStep));
         return Optional.of(new GeneratedFlow(flow, List.of(createBinding)));
     }
 
@@ -145,11 +171,11 @@ public class RuleBasedFlowGenerator {
                 continue;
             }
             ApiBinding refreshBinding = refreshBindingsByCapabilityId.computeIfAbsent(dependencyId,
-                    id -> buildBinding(dependency, List.of(), List.of()));
+                    id -> buildBinding(page, dependency, List.of(), List.of()));
             refreshBindingIds.add(refreshBinding.id());
         }
 
-        ApiBinding commandBinding = buildBinding(command, List.of(), refreshBindingIds);
+        ApiBinding commandBinding = buildBinding(page, command, List.of(), refreshBindingIds);
 
         FlowStep callStep = new FlowStep("run-command", FlowStepType.API_CALL, commandBinding.id(),
                 null, null, null, null, null, null, null, null, null);
@@ -163,19 +189,21 @@ public class RuleBasedFlowGenerator {
     }
 
     // capability.path()의 경로 파라미터마다 PATH InputMapping을, CREATE/UPDATE의 요청 본문 필드마다
-    // BODY InputMapping을 만든다. 경로 파라미터 값의 출처는 항상 "현재 선택된 행"(Navigation 증분이
-    // 세운 "?selected=<id>" 관례, $route.selected)으로 가정한다 — 중첩 리소스(경로 중간에 다른
-    // {orgId} 같은 파라미터가 더 있는 경우)는 프론트 replaceLastPathPlaceholder와 동일하게 아직
-    // 지원하지 않는 알려진 제약이다.
-    private ApiBinding buildBinding(Capability capability, List<ApiBinding.OutputMapping> outputMappings,
+    // BODY InputMapping을 만든다. 독립 상세 페이지에서는 PagePlan.routeParameters를 실제 source로
+    // 사용하고, LIST_DETAIL의 기존 선택행 관례만 $route.selected로 폴백한다. OpenAPI의 {vmId}와
+    // PagePlan의 :id처럼 이름이 달라도 페이지 route parameter가 하나뿐이면 그 값을 사용한다.
+    // 여러 route parameter가 있는데 이름까지 다르면 안전하게 추론할 수 없으므로 $route.selected로
+    // 폴백하고, 최종 Binding 검토/Override에서 명시적으로 고치게 한다.
+    private ApiBinding buildBinding(PagePlan page, Capability capability,
+                                     List<ApiBinding.OutputMapping> outputMappings,
                                      List<String> refreshBindingIds) {
         List<ApiBinding.InputMapping> inputMappings = new ArrayList<>();
 
-        Matcher matcher = PATH_PARAM.matcher(capability.path());
+        Matcher matcher = PATH_PARAM.matcher(capability.path() == null ? "" : capability.path());
         while (matcher.find()) {
             String paramName = matcher.group(1);
             inputMappings.add(new ApiBinding.InputMapping(paramName, ApiBinding.InputMapping.InputTarget.PATH,
-                    "$route.selected"));
+                    resolveRouteSource(page, paramName)));
         }
 
         if (capability.type() == CapabilityType.CREATE || capability.type() == CapabilityType.UPDATE) {
@@ -189,11 +217,34 @@ public class RuleBasedFlowGenerator {
                 refreshBindingIds);
     }
 
+
+    private String resolveRouteSource(PagePlan page, String capabilityPathParameter) {
+        if (page != null && page.routeParameters() != null && !page.routeParameters().isEmpty()) {
+            List<String> routeNames = page.routeParameters().stream()
+                    .filter(Objects::nonNull)
+                    .map(parameter -> parameter.name())
+                    .filter(Objects::nonNull)
+                    .toList();
+            Optional<String> exact = routeNames.stream()
+                    .filter(capabilityPathParameter::equals)
+                    .findFirst();
+            if (exact.isPresent()) {
+                return "$route." + exact.get();
+            }
+            if (routeNames.size() == 1) {
+                return "$route." + routeNames.get(0);
+            }
+        }
+        return "$route.selected";
+    }
+
     private Capability findByType(List<Capability> capabilities, CapabilityType type) {
-        return capabilities.stream().filter(c -> c.type() == type).findFirst().orElse(null);
+        return capabilities.stream().filter(Objects::nonNull)
+                .filter(c -> c.type() == type).findFirst().orElse(null);
     }
 
     private List<Capability> findCommands(List<Capability> capabilities) {
-        return capabilities.stream().filter(c -> c.kind() == CapabilityKind.COMMAND).toList();
+        return capabilities.stream().filter(Objects::nonNull)
+                .filter(c -> c.kind() == CapabilityKind.COMMAND).toList();
     }
 }

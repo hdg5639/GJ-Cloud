@@ -23,6 +23,8 @@ import java.util.Optional;
 // blocks)/7번(pin versions)은 LayoutBlueprint(§10)·버전 개념이 아직 없어 범위 밖 — 명시적으로 미룬다.
 public final class BlueprintCompiler {
 
+    public static final String VERSION = "2";
+
     // detail 계열만 예외적으로 Slot 자체가 바뀐다 — 선택된 리소스의 상세를 사이드 칼럼이 아니라 전체
     // 폭으로 보여주려면 목록(Block "list")이 차지하던 자리(page.main)를 대신 차지해야 한다. 이 변화가
     // 필요한 Variant만 여기 등록하고(나머지 계열은 등록 안 해 Slot 불변), REPLACES_OVERRIDE로 그

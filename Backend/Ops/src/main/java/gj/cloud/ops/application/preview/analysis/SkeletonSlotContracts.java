@@ -22,6 +22,11 @@ public final class SkeletonSlotContracts {
                     "page.overlay", Cardinality.ZERO_OR_MORE,
                     "page.actions", Cardinality.ZERO_OR_ONE,
                     "page.secondary", Cardinality.ZERO_OR_MORE),
+            PageSkeletonType.RESOURCE_DETAIL, Map.of(
+                    "page.primary", Cardinality.EXACTLY_ONE,
+                    "page.actions", Cardinality.ZERO_OR_ONE,
+                    "page.secondary", Cardinality.ZERO_OR_MORE,
+                    "page.overlay", Cardinality.ZERO_OR_MORE),
             PageSkeletonType.LIST_DETAIL, Map.of(
                     "page.main", Cardinality.EXACTLY_ONE,
                     "page.aside", Cardinality.ZERO_OR_ONE,

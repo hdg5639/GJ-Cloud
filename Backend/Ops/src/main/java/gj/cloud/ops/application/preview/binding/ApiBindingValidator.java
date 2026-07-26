@@ -11,13 +11,14 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// GamjaBox_Auto_Preview_Workflow_Composition_Phase2_Change_Request.md §8 "Required validation" —
-// PagePlanValidator/FlowBlueprintValidator와 같은 static 유틸리티 관례. 아직 "적용"할 대상이 없어
-// 에러 문자열 목록만 반환한다.
+// Workflow Composition Phase 2 §8의 API Binding Hard Gate. 중복·필수 경로 매핑·제한 표현식·
+// 민감 응답 저장·refresh 참조와 순환을 배포 전에 검증하며, Portal/정적 Runtime은 이 검증을 통과한
+// Binding만 실행한다.
 public final class ApiBindingValidator {
 
     private static final Pattern DOT_PATH = Pattern.compile("^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)*$");
     private static final Pattern IDENTIFIER = Pattern.compile("^[A-Za-z0-9_]+$");
+    private static final Pattern BINDING_ID = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$");
     private static final Pattern PATH_PARAM = Pattern.compile("\\{([^}]+)}");
 
     // §17 "secret field redaction" — 프론트 CreateEditModal 등의 isPasswordLikeField와 같은 이름
@@ -29,13 +30,33 @@ public final class ApiBindingValidator {
     public static List<String> validate(List<ApiBinding> bindings, List<Capability> capabilities) {
         List<String> errors = new ArrayList<>();
         Map<String, Capability> capabilityById = new LinkedHashMap<>();
-        for (Capability capability : capabilities) {
-            capabilityById.put(capability.id(), capability);
+        if (capabilities != null) {
+            for (Capability capability : capabilities) {
+                if (capability != null && capability.id() != null) {
+                    capabilityById.put(capability.id(), capability);
+                }
+            }
         }
-        Set<String> bindingIds = bindings.stream().map(ApiBinding::id).collect(java.util.stream.Collectors.toSet());
+        if (bindings == null) {
+            return List.of("ApiBinding 목록이 null임");
+        }
+        Set<String> bindingIds = new java.util.LinkedHashSet<>();
+        for (ApiBinding binding : bindings) {
+            if (binding == null) {
+                errors.add("null ApiBinding은 허용되지 않음");
+                continue;
+            }
+            if (binding.id() == null || !BINDING_ID.matcher(binding.id()).matches()) {
+                errors.add("유효하지 않은 binding id: " + binding.id());
+            } else if (!bindingIds.add(binding.id())) {
+                errors.add("중복된 binding id: " + binding.id());
+            }
+        }
 
         for (ApiBinding binding : bindings) {
-            errors.addAll(validateBinding(binding, capabilityById, bindingIds));
+            if (binding != null) {
+                errors.addAll(validateBinding(binding, capabilityById, bindingIds));
+            }
         }
         errors.addAll(detectRefreshCycles(bindings));
         return errors;
@@ -52,17 +73,36 @@ public final class ApiBindingValidator {
             errors.addAll(validateRequiredPathMappings(binding, capability));
         }
 
+        Set<String> inputTargets = new java.util.LinkedHashSet<>();
         for (ApiBinding.InputMapping mapping : binding.inputMappings()) {
+            if (mapping == null) {
+                errors.add(binding.id() + ": null inputMapping은 허용되지 않음");
+                continue;
+            }
             if (mapping.target() == null || mapping.target().isBlank()) {
                 errors.add(binding.id() + ": inputMapping target이 비어있음");
             }
-            if (FlowExpression.isExpressionLike(mapping.from()) && FlowExpression.parse(mapping.from()).isEmpty()) {
+            if (mapping.targetKind() == null) {
+                errors.add(binding.id() + ": inputMapping(" + mapping.target() + ")의 targetKind가 비어있음");
+            } else if (mapping.target() != null && !mapping.target().isBlank()) {
+                String key = mapping.targetKind() + ":" + mapping.target();
+                if (!inputTargets.add(key)) {
+                    errors.add(binding.id() + ": 중복된 inputMapping target(" + key + ")");
+                }
+            }
+            if (mapping.from() == null || mapping.from().isBlank()) {
+                errors.add(binding.id() + ": inputMapping(" + mapping.target() + ")의 from이 비어있음");
+            } else if (FlowExpression.isExpressionLike(mapping.from()) && FlowExpression.parse(mapping.from()).isEmpty()) {
                 errors.add(binding.id() + ": inputMapping(" + mapping.target() + ")의 from이 허용되지 않는 표현식 형식임("
                         + mapping.from() + ")");
             }
         }
 
         for (ApiBinding.OutputMapping mapping : binding.outputMappings()) {
+            if (mapping == null) {
+                errors.add(binding.id() + ": null outputMapping은 허용되지 않음");
+                continue;
+            }
             if (mapping.from() == null || !DOT_PATH.matcher(mapping.from()).matches()) {
                 errors.add(binding.id() + ": outputMapping의 from이 유효한 점경로가 아님(" + mapping.from() + ")");
             }
@@ -89,11 +129,12 @@ public final class ApiBindingValidator {
     private static List<String> validateRequiredPathMappings(ApiBinding binding, Capability capability) {
         List<String> errors = new ArrayList<>();
         Set<String> mappedPathTargets = binding.inputMappings().stream()
+                .filter(java.util.Objects::nonNull)
                 .filter(m -> m.targetKind() == ApiBinding.InputMapping.InputTarget.PATH)
                 .map(ApiBinding.InputMapping::target)
                 .collect(java.util.stream.Collectors.toSet());
 
-        Matcher matcher = PATH_PARAM.matcher(capability.path());
+        Matcher matcher = PATH_PARAM.matcher(capability.path() == null ? "" : capability.path());
         while (matcher.find()) {
             String paramName = matcher.group(1);
             if (!mappedPathTargets.contains(paramName)) {
@@ -115,7 +156,9 @@ public final class ApiBindingValidator {
     private static List<String> detectRefreshCycles(List<ApiBinding> bindings) {
         Map<String, List<String>> graph = new LinkedHashMap<>();
         for (ApiBinding binding : bindings) {
-            graph.put(binding.id(), binding.refreshBindingIds());
+            if (binding != null && binding.id() != null) {
+                graph.putIfAbsent(binding.id(), binding.refreshBindingIds());
+            }
         }
 
         List<String> errors = new ArrayList<>();

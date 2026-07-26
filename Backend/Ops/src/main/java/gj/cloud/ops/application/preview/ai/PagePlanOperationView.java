@@ -1,8 +1,14 @@
 package gj.cloud.ops.application.preview.ai;
 
-// Direction Recovery Change Request Increment 5(2부) — Plan Review UI. AiPagePlanner.propose가
-// PagePlanOperation마다 원본 후보 페이지 기준으로 개별 검증해 valid/validationError를 매긴다.
-// id는 인덱스 기반 문자열(예: "0")로, 사용자가 apply 단계에서 선택한 서브셋을 식별하는 용도로만 쓴다.
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.planning.model.NavigationRule;
+import gj.cloud.ops.application.preview.planning.model.PageType;
+
+import java.util.List;
+
+// /plan/propose 응답용 검토 View. 원본 operation 필드에 순서 기반 id와 개별 구조 검증 결과를 더한다.
+// valid=true는 "이 시점의 누적 제안 상태에 구조적으로 적용 가능"이라는 뜻이며, 사용자가 선택한
+// 조합 전체가 배포 가능한지는 /plan/apply의 최종 검증이 다시 판단한다.
 public record PagePlanOperationView(
         String id,
         PagePlanOperationType type,
@@ -11,9 +17,41 @@ public record PagePlanOperationView(
         String newTitle,
         String capabilityId,
         String destinationPageId,
+        List<String> capabilityIds,
+        PageType pageType,
+        String layoutRef,
+        String featureKey,
+        Boolean featureEnabled,
+        NavigationRule navigationRule,
+        FlowBlueprint flow,
+        String flowId,
+        String actionId,
         String reason,
         boolean valid,
-        // valid=false일 때만 값이 있음(구조 검증 또는 Compatibility 검증 실패 사유).
         String validationError
 ) {
+    public static PagePlanOperationView from(String id, PagePlanOperation operation, boolean valid,
+                                              String validationError) {
+        return new PagePlanOperationView(
+                id,
+                operation.type(),
+                operation.pageId(),
+                operation.otherPageId(),
+                operation.newTitle(),
+                operation.capabilityId(),
+                operation.destinationPageId(),
+                operation.capabilityIds(),
+                operation.pageType(),
+                operation.layoutRef(),
+                operation.featureKey(),
+                operation.featureEnabled(),
+                operation.navigationRule(),
+                operation.flow(),
+                operation.flowId(),
+                operation.actionId(),
+                operation.reason(),
+                valid,
+                validationError
+        );
+    }
 }

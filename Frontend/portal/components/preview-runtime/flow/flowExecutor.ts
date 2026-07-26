@@ -1,9 +1,7 @@
-// §14 "Blueprint runtime"(WP-8)의 첫 조각 — FlowExecutor. ProductRuntime/PageRuntime/LayoutRenderer/
-// BlockRenderer/NavigationRuntime/BindingRuntime은 아직 없고, PreviewPageRenderer.tsx도 아직 이
-// 모듈을 부르지 않는다(AI/규칙기반 생성기가 실제 페이지에 FlowBlueprint를 아직 배정하지 않아서,
-// WP-4 ADD_FLOW/ASSIGN_FLOW). 이 파일은 순수 로직만 담고, 실제 HTTP 호출·네비게이션·타이머는 모두
-// FlowExecutorDeps로 주입받는다 — 어느 페이지도 안 쓰는 지금 시점에도 독립적으로 검증 가능하게 하려는
-// 목적(WP-1~3이 "모델+검증기만 먼저"로 조각낸 것과 같은 이유).
+// Workflow Composition Phase 2 §14의 Blueprint Flow Runtime. Portal 미리보기와 배포 정적
+// 아티팩트가 동일한 실행 계약을 사용하며, 실제 HTTP·Navigation·타이머는 deps로 주입한다.
+// Backend에서 검증된 제한 표현식과 bounded polling만 실행하고, AbortSignal로 페이지 이탈/사용자
+// 취소를 정상 상태(CANCELLED)로 구분한다.
 import { isExpressionLike, parseFlowExpression, type FlowExpression } from "./expression";
 import type {
   ApiBinding,
@@ -21,7 +19,17 @@ export interface FlowContext {
   context: Record<string, unknown>;
   steps: Record<string, { response: unknown }>;
   currentUser: Record<string, unknown> | null;
+  row: Record<string, unknown> | null;
 }
+
+export type FlowExecutionStatus = "SUCCESS" | "CANCELLED" | "TIMEOUT" | "STOPPED";
+
+export interface FlowExecutionResult {
+  status: FlowExecutionStatus;
+  context: FlowContext;
+}
+
+type StepOutcome = "continue" | "stop" | "cancelled" | "timeout";
 
 export function createFlowContext(seed: Partial<FlowContext> = {}): FlowContext {
   return {
@@ -30,6 +38,7 @@ export function createFlowContext(seed: Partial<FlowContext> = {}): FlowContext 
     context: seed.context ?? {},
     steps: seed.steps ?? {},
     currentUser: seed.currentUser ?? null,
+    row: seed.row ?? null,
   };
 }
 
@@ -99,12 +108,17 @@ function resolveScopeRoot(ctx: FlowContext, expr: FlowExpression): unknown {
       return ctx.steps;
     case "CURRENT_USER":
       return ctx.currentUser;
+    case "ROW":
+      return ctx.row;
   }
 }
 
 // FlowStep/InputMapping의 "$"로 시작하는 값을 평가한다. "$"로 시작하지 않으면 리터럴로 그대로
 // 돌려준다(Backend FlowExpression.isExpressionLike와 동일 규칙).
-export function resolveExpression(raw: string, ctx: FlowContext): unknown {
+export function resolveExpression(raw: string | null | undefined, ctx: FlowContext): unknown {
+  if (typeof raw !== "string") {
+    throw new Error("Flow 표현식 또는 리터럴 값이 비어있습니다.");
+  }
   if (!isExpressionLike(raw)) {
     return raw;
   }
@@ -134,6 +148,9 @@ function buildBindingRequest(binding: ApiBinding, ctx: FlowContext): BindingRequ
   const request: BindingRequest = { path: {}, query: {}, body: {}, headers: {} };
   for (const mapping of binding.inputMappings) {
     const value = resolveExpression(mapping.from, ctx);
+    if (value === undefined || value === null) {
+      throw new Error(`${mapping.target} 입력값을 해석하지 못했습니다.`);
+    }
     switch (mapping.targetKind) {
       case "PATH":
         request.path[mapping.target] = String(value);
@@ -154,7 +171,12 @@ function buildBindingRequest(binding: ApiBinding, ctx: FlowContext): BindingRequ
 
 function applyOutputMappings(binding: ApiBinding, response: unknown, ctx: FlowContext): void {
   for (const mapping of binding.outputMappings) {
-    ctx.context[mapping.to] = readByPath(response, mapping.from.split("."));
+    const value = readByPath(response, mapping.from.split("."));
+    // 같은 context key에 data.id/result.id/payload.id/id 후보를 순서대로 매핑할 수 있다.
+    // 존재하지 않는 후보(undefined)는 앞에서 성공적으로 찾은 값을 덮어쓰면 안 된다.
+    if (value !== undefined) {
+      ctx.context[mapping.to] = value;
+    }
   }
 }
 
@@ -214,7 +236,7 @@ async function executePoll(
   bindings: ApiBinding[],
   ctx: FlowContext,
   deps: FlowExecutorDeps
-): Promise<void> {
+): Promise<StepOutcome> {
   const binding = findBinding(bindings, step.bindingRef!);
   const sleep = deps.sleep ?? defaultSleep;
   const now = deps.now ?? Date.now;
@@ -226,13 +248,17 @@ async function executePoll(
   for (;;) {
     if (deps.signal?.aborted) {
       deps.onPollStatusChange?.(step.id, "CANCELLED");
-      return;
+      return "cancelled";
     }
 
     let response: unknown;
     try {
       response = await deps.callBinding(binding, buildBindingRequest(binding, ctx));
     } catch (error) {
+      if (deps.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        deps.onPollStatusChange?.(step.id, "CANCELLED");
+        return "cancelled";
+      }
       deps.onPollStatusChange?.(step.id, "FAILURE");
       throw new FlowExecutionError(step.id, error);
     }
@@ -242,15 +268,19 @@ async function executePoll(
       ctx.steps[step.id] = { response };
       deps.onPollStatusChange?.(step.id, "SUCCESS");
       await refreshRelatedBindings(binding, bindings, ctx, deps);
-      return;
+      return "continue";
     }
 
     if (now() >= deadline) {
       deps.onPollStatusChange?.(step.id, "TIMEOUT");
-      return;
+      return "timeout";
     }
 
     await sleep(step.intervalMs!);
+    if (deps.signal?.aborted) {
+      deps.onPollStatusChange?.(step.id, "CANCELLED");
+      return "cancelled";
+    }
   }
 }
 
@@ -259,7 +289,7 @@ async function executeStep(
   bindings: ApiBinding[],
   ctx: FlowContext,
   deps: FlowExecutorDeps
-): Promise<"continue" | "stop"> {
+): Promise<StepOutcome> {
   switch (step.type) {
     case "API_CALL":
     case "REFRESH_BINDING": {
@@ -267,6 +297,7 @@ async function executeStep(
       try {
         await callAndApply(binding, ctx, deps, step.id);
       } catch (error) {
+        if (deps.signal?.aborted) return "cancelled";
         throw new FlowExecutionError(step.id, error);
       }
       return "continue";
@@ -278,11 +309,10 @@ async function executeStep(
       deps.navigate?.(step.pageId!, resolveMap(step.parameters, ctx));
       return "continue";
     case "POLL":
-      await executePoll(step, bindings, ctx, deps);
-      return "continue";
+      return executePoll(step, bindings, ctx, deps);
     case "WAIT":
       await (deps.sleep ?? defaultSleep)(step.timeoutSeconds! * 1000);
-      return "continue";
+      return deps.signal?.aborted ? "cancelled" : "continue";
     case "CONDITION":
       // 모델에 step 간 분기 링크가 없어(Backend FlowBlueprintValidator 주석과 동일 전제) false면
       // 나머지 step을 건너뛰는 "가드"로만 쓴다.
@@ -308,14 +338,15 @@ export async function executeFlow(
   bindings: ApiBinding[],
   ctx: FlowContext,
   deps: FlowExecutorDeps
-): Promise<void> {
+): Promise<FlowExecutionResult> {
   for (const step of flow.steps) {
     if (deps.signal?.aborted) {
-      return;
+      return { status: "CANCELLED", context: ctx };
     }
     const outcome = await executeStep(step, bindings, ctx, deps);
-    if (outcome === "stop") {
-      return;
-    }
+    if (outcome === "cancelled") return { status: "CANCELLED", context: ctx };
+    if (outcome === "timeout") return { status: "TIMEOUT", context: ctx };
+    if (outcome === "stop") return { status: "STOPPED", context: ctx };
   }
+  return { status: "SUCCESS", context: ctx };
 }

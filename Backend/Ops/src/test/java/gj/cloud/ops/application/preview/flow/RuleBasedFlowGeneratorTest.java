@@ -7,8 +7,10 @@ import gj.cloud.ops.application.preview.analysis.CapabilityType;
 import gj.cloud.ops.application.preview.analysis.RiskLevel;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
 import gj.cloud.ops.application.preview.binding.ApiBindingValidator;
+import gj.cloud.ops.application.preview.planning.model.NavigationRule;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PageType;
+import gj.cloud.ops.application.preview.planning.model.RouteParameter;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -51,6 +53,40 @@ class RuleBasedFlowGeneratorTest {
     }
 
     @Test
+    void createFlowUsesExplicitNavigationToIndependentDetailPage() {
+        Capability create = capability("vm.create", "vms", CapabilityType.CREATE, "/vms", "POST",
+                List.of("name"), CapabilityKind.MUTATION, null, List.of());
+        Capability detail = capability("vm.detail", "vms", CapabilityType.DETAIL, "/vms/{vmId}", "GET",
+                List.of(), CapabilityKind.QUERY, null, List.of());
+        NavigationRule createSuccess = new NavigationRule("vm-list", "create.success",
+                NavigationRule.NavigationType.OPEN_PAGE, "vm-detail", Map.of("vmId", "$row.id"));
+        PagePlan listPage = new PagePlan("vm-list", "VM 목록", "/vm-list", PageType.RESOURCE_LIST,
+                "resource-list-layout", List.of(create.id()), List.of(), List.of(), List.of(createSuccess),
+                Map.of("quickActions", false), "HIGH", "테스트", List.of());
+        PagePlan detailPage = new PagePlan("vm-detail", "VM 상세", "/vm-detail/:vmId",
+                PageType.RESOURCE_DETAIL, "resource-detail-layout", List.of(detail.id()),
+                List.of(new RouteParameter("vmId", "navigation")), List.of(), List.of(),
+                Map.of("quickActions", false), "HIGH", "테스트", List.of());
+
+        RuleBasedFlowGenerator.Result result = generator.generate(
+                List.of(listPage, detailPage), List.of(create, detail));
+
+        assertThat(result.flows()).hasSize(1);
+        FlowBlueprint flow = result.flows().get(0);
+        assertThat(flow.steps()).extracting(FlowStep::type)
+                .containsExactly(FlowStepType.API_CALL, FlowStepType.NAVIGATE);
+        assertThat(flow.steps().get(1).pageId()).isEqualTo("vm-detail");
+        assertThat(flow.steps().get(1).parameters()).containsEntry("vmId", "$context.createdId");
+        ApiBinding createBinding = result.bindings().stream()
+                .filter(binding -> binding.capabilityId().equals(create.id())).findFirst().orElseThrow();
+        assertThat(createBinding.outputMappings())
+                .extracting(ApiBinding.OutputMapping::from)
+                .containsExactly("data.id", "result.id", "payload.id", "id");
+        assertThat(FlowBlueprintValidator.validate(flow, Set.of("vm-list", "vm-detail"))).isEmpty();
+        assertThat(ApiBindingValidator.validate(result.bindings(), List.of(create, detail))).isEmpty();
+    }
+
+    @Test
     void createWithoutDetailOnPageProducesNoFlow() {
         Capability create = capability("vm.create", "vms", CapabilityType.CREATE, "/vms", "POST",
                 List.of("name"), CapabilityKind.MUTATION, null, List.of());
@@ -86,6 +122,30 @@ class RuleBasedFlowGeneratorTest {
                         && m.from().equals("$route.selected"));
 
         assertThat(FlowBlueprintValidator.validate(flow, Set.of("vm-page"))).isEmpty();
+        assertThat(ApiBindingValidator.validate(result.bindings(), List.of(detail, start))).isEmpty();
+    }
+
+    @Test
+    void commandOnIndependentDetailUsesDeclaredRouteParameter() {
+        Capability detail = capability("vm.detail", "vms", CapabilityType.DETAIL, "/vms/{vmId}", "GET",
+                List.of(), CapabilityKind.QUERY, null, List.of());
+        Capability start = capability("vm.start", "vms", null, "/vms/{vmId}/start", "POST",
+                List.of(), CapabilityKind.COMMAND, "start", List.of(detail.id()));
+        PagePlan page = new PagePlan("vm-detail", "VM 상세", "/vm-detail/:id", PageType.RESOURCE_DETAIL,
+                "resource-detail-layout", List.of(detail.id(), start.id()),
+                List.of(new RouteParameter("id", "navigation")), List.of(), List.of(),
+                Map.of("quickActions", true), "HIGH", "테스트", List.of());
+
+        RuleBasedFlowGenerator.Result result = generator.generate(List.of(page), List.of(detail, start));
+
+        ApiBinding commandBinding = result.bindings().stream()
+                .filter(binding -> binding.capabilityId().equals(start.id())).findFirst().orElseThrow();
+        ApiBinding refreshBinding = result.bindings().stream()
+                .filter(binding -> binding.capabilityId().equals(detail.id())).findFirst().orElseThrow();
+        assertThat(commandBinding.inputMappings())
+                .anyMatch(mapping -> mapping.target().equals("vmId") && mapping.from().equals("$route.id"));
+        assertThat(refreshBinding.inputMappings())
+                .anyMatch(mapping -> mapping.target().equals("vmId") && mapping.from().equals("$route.id"));
         assertThat(ApiBindingValidator.validate(result.bindings(), List.of(detail, start))).isEmpty();
     }
 

@@ -25,6 +25,11 @@ export function ProductShell({
   children: ReactNode;
 }) {
   const activePage = pages.find((page) => page.id === activePageId) ?? pages[0];
+  // 독립 상세 페이지는 목록/카드에서 진입할 대상이지, route parameter 없이 직접 누르는
+  // 최상위 내비게이션 항목이 아니다. 상세 페이지만 존재하는 비정상/테스트 입력에서는
+  // 내비게이션이 완전히 사라지지 않도록 전체 페이지로 폴백한다.
+  const primaryPages = pages.filter((page) => page.skeleton !== "RESOURCE_DETAIL");
+  const navigationPages = primaryPages.length > 0 ? primaryPages : pages;
   const totalCapabilities = pageCapabilityCount(pages);
 
   if (purpose === "ADMIN") {
@@ -37,7 +42,7 @@ export function ProductShell({
               <p className="mt-1 text-xs text-muted-soft">운영 및 리소스 관리</p>
             </div>
             <nav className="space-y-1">
-              {pages.map((page) => (
+              {navigationPages.map((page) => (
                 <button
                   key={page.id}
                   type="button"
@@ -95,7 +100,7 @@ export function ProductShell({
             </span>
           </div>
           <nav className="mt-5 flex gap-5 overflow-x-auto">
-            {pages.map((page) => (
+            {navigationPages.map((page) => (
               <button
                 key={page.id}
                 type="button"
@@ -138,7 +143,7 @@ export function ProductShell({
       </div>
       <div className="border-b border-line-strong bg-black/20 px-3 py-2">
         <nav className="flex gap-1 overflow-x-auto">
-          {pages.map((page) => (
+          {navigationPages.map((page) => (
             <button
               key={page.id}
               type="button"

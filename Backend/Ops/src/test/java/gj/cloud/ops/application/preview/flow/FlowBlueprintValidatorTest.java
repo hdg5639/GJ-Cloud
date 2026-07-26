@@ -105,6 +105,17 @@ class FlowBlueprintValidatorTest {
     }
 
     @Test
+    void pollIntervalMsAboveMaximumIsAnError() {
+        FlowStep poll = new FlowStep("poll", FlowStepType.POLL, "binding", null, null, null, null,
+                List.of(new FlowStep.PollCondition("status", "DONE", null)),
+                FlowExecutionPolicy.MAX_INTERVAL_MS + 1, 60, null, null);
+        FlowBlueprint flow = new FlowBlueprint("flow-1", null, List.of(poll));
+
+        assertThat(FlowBlueprintValidator.validate(flow, KNOWN_PAGE_IDS))
+                .anyMatch(e -> e.contains("intervalMs가 최대값"));
+    }
+
+    @Test
     void pollIntervalMsMissingIsAnError() {
         FlowStep poll = new FlowStep("poll", FlowStepType.POLL, "binding", null, null, null, null,
                 List.of(new FlowStep.PollCondition("status", "DONE", null)), null, 60, null, null);
@@ -136,6 +147,32 @@ class FlowBlueprintValidatorTest {
 
         assertThat(FlowBlueprintValidator.validate(new FlowBlueprint("f1", null, List.of(step)), KNOWN_PAGE_IDS))
                 .anyMatch(e -> e.contains("허용되지 않는 표현식"));
+    }
+
+    @Test
+    void missingStepTypeIsReportedWithoutThrowing() {
+        FlowStep step = new FlowStep("unknown", null, null, null, null, null, null,
+                null, null, null, null, null);
+
+        assertThat(FlowBlueprintValidator.validate(new FlowBlueprint("f1", null, List.of(step)), KNOWN_PAGE_IDS))
+                .anyMatch(e -> e.contains("step.type이 비어있음"));
+    }
+
+    @Test
+    void nullPollConditionAndNullExpressionValuesAreReportedWithoutThrowing() {
+        java.util.Map<String, String> values = new java.util.LinkedHashMap<>();
+        values.put("vmId", null);
+        FlowStep setContext = new FlowStep("ctx", FlowStepType.SET_CONTEXT, null, null, values,
+                null, null, null, null, null, null, null);
+        FlowStep poll = new FlowStep("poll", FlowStepType.POLL, "binding", null, null, null, null,
+                java.util.Arrays.asList((FlowStep.PollCondition) null),
+                FlowExecutionPolicy.MIN_INTERVAL_MS, 60, null, null);
+
+        List<String> errors = FlowBlueprintValidator.validate(
+                new FlowBlueprint("f1", null, List.of(setContext, poll)), KNOWN_PAGE_IDS);
+
+        assertThat(errors).anyMatch(e -> e.contains("values.vmId 값이 null"));
+        assertThat(errors).anyMatch(e -> e.contains("null until 조건"));
     }
 
     @Test

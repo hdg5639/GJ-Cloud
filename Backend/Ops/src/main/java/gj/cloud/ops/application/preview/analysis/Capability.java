@@ -50,6 +50,12 @@ public record Capability(
         // COMMAND 외 kind는 항상 빈 리스트.
         List<String> dependencies
 ) {
+    public Capability {
+        evidence = evidence == null ? List.of() : List.copyOf(evidence);
+        fields = fields == null ? List.of() : List.copyOf(fields);
+        dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
+    }
+
     public static String idOf(String resourceName, CapabilityType type) {
         return resourceName + "." + type.name().toLowerCase();
     }
