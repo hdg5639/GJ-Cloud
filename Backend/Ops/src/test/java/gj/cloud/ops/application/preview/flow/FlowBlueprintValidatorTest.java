@@ -22,15 +22,15 @@ class FlowBlueprintValidatorTest {
                 new FlowBlueprint.FlowTrigger("vm-list", "create-vm"),
                 List.of(
                         new FlowStep("submit-vm", FlowStepType.API_CALL, "vm-create-binding",
-                                Map.of("body", "$form"), null, null, null, null, null, null, null),
+                                Map.of("body", "$form"), null, null, null, null, null, null, null, null),
                         new FlowStep("save-vm-id", FlowStepType.SET_CONTEXT, null, null,
-                                Map.of("vmId", "$steps.submit-vm.response.data.id"), null, null, null, null, null, null),
+                                Map.of("vmId", "$steps.submit-vm.response.data.id"), null, null, null, null, null, null, null),
                         new FlowStep("track-creation", FlowStepType.POLL, "vm-detail-binding", null, null, null,
                                 Map.of("vmId", "$context.vmId"),
                                 List.of(new FlowStep.PollCondition("data.status", "RUNNING", null)),
-                                180, null, null),
+                                3000, 180, null, null),
                         new FlowStep("open-detail", FlowStepType.NAVIGATE, null, null, null, "vm-detail",
-                                Map.of("vmId", "$context.vmId"), null, null, null, null)
+                                Map.of("vmId", "$context.vmId"), null, null, null, null, null)
                 )
         );
 
@@ -43,7 +43,7 @@ class FlowBlueprintValidatorTest {
                 "flow-1",
                 new FlowBlueprint.FlowTrigger("unknown-page", "action"),
                 List.of(new FlowStep("nav", FlowStepType.NAVIGATE, null, null, null, "also-unknown",
-                        null, null, null, null, null))
+                        null, null, null, null, null, null))
         );
 
         List<String> errors = FlowBlueprintValidator.validate(flow, KNOWN_PAGE_IDS);
@@ -55,8 +55,8 @@ class FlowBlueprintValidatorTest {
     @Test
     void duplicateStepIdsAreAnError() {
         FlowBlueprint flow = new FlowBlueprint("flow-1", null, List.of(
-                new FlowStep("dup", FlowStepType.SHOW_SUCCESS, null, null, null, null, null, null, null, null, "ok"),
-                new FlowStep("dup", FlowStepType.SHOW_SUCCESS, null, null, null, null, null, null, null, null, "ok")
+                new FlowStep("dup", FlowStepType.SHOW_SUCCESS, null, null, null, null, null, null, null, null, null, "ok"),
+                new FlowStep("dup", FlowStepType.SHOW_SUCCESS, null, null, null, null, null, null, null, null, null, "ok")
         ));
 
         assertThat(FlowBlueprintValidator.validate(flow, KNOWN_PAGE_IDS))
@@ -66,11 +66,11 @@ class FlowBlueprintValidatorTest {
     @Test
     void missingRequiredFieldsPerStepTypeAreErrors() {
         FlowBlueprint flow = new FlowBlueprint("flow-1", null, List.of(
-                new FlowStep("call", FlowStepType.API_CALL, null, null, null, null, null, null, null, null, null),
-                new FlowStep("ctx", FlowStepType.SET_CONTEXT, null, null, null, null, null, null, null, null, null),
-                new FlowStep("cond", FlowStepType.CONDITION, null, null, null, null, null, null, null, null, null),
-                new FlowStep("wait", FlowStepType.WAIT, null, null, null, null, null, null, null, null, null),
-                new FlowStep("success", FlowStepType.SHOW_SUCCESS, null, null, null, null, null, null, null, null, null)
+                new FlowStep("call", FlowStepType.API_CALL, null, null, null, null, null, null, null, null, null, null),
+                new FlowStep("ctx", FlowStepType.SET_CONTEXT, null, null, null, null, null, null, null, null, null, null),
+                new FlowStep("cond", FlowStepType.CONDITION, null, null, null, null, null, null, null, null, null, null),
+                new FlowStep("wait", FlowStepType.WAIT, null, null, null, null, null, null, null, null, null, null),
+                new FlowStep("success", FlowStepType.SHOW_SUCCESS, null, null, null, null, null, null, null, null, null, null)
         ));
 
         List<String> errors = FlowBlueprintValidator.validate(flow, KNOWN_PAGE_IDS);
@@ -86,7 +86,7 @@ class FlowBlueprintValidatorTest {
     void pollTimeoutExceedingPolicyMaxIsAnError() {
         FlowStep poll = new FlowStep("poll", FlowStepType.POLL, "binding", null, null, null, null,
                 List.of(new FlowStep.PollCondition("status", "DONE", null)),
-                FlowExecutionPolicy.MAX_TIMEOUT_SECONDS + 1, null, null);
+                FlowExecutionPolicy.MIN_INTERVAL_MS, FlowExecutionPolicy.MAX_TIMEOUT_SECONDS + 1, null, null);
         FlowBlueprint flow = new FlowBlueprint("flow-1", null, List.of(poll));
 
         assertThat(FlowBlueprintValidator.validate(flow, KNOWN_PAGE_IDS))
@@ -94,11 +94,34 @@ class FlowBlueprintValidatorTest {
     }
 
     @Test
+    void pollIntervalMsBelowMinimumIsAnError() {
+        FlowStep poll = new FlowStep("poll", FlowStepType.POLL, "binding", null, null, null, null,
+                List.of(new FlowStep.PollCondition("status", "DONE", null)),
+                FlowExecutionPolicy.MIN_INTERVAL_MS - 1, 60, null, null);
+        FlowBlueprint flow = new FlowBlueprint("flow-1", null, List.of(poll));
+
+        assertThat(FlowBlueprintValidator.validate(flow, KNOWN_PAGE_IDS))
+                .anyMatch(e -> e.contains("intervalMs가 최소값"));
+    }
+
+    @Test
+    void pollIntervalMsMissingIsAnError() {
+        FlowStep poll = new FlowStep("poll", FlowStepType.POLL, "binding", null, null, null, null,
+                List.of(new FlowStep.PollCondition("status", "DONE", null)), null, 60, null, null);
+        FlowBlueprint flow = new FlowBlueprint("flow-1", null, List.of(poll));
+
+        assertThat(FlowBlueprintValidator.validate(flow, KNOWN_PAGE_IDS))
+                .anyMatch(e -> e.contains("intervalMs가 없거나 0 이하"));
+    }
+
+    @Test
     void pollConditionMustHaveExactlyOneOfEqualsOrIn() {
         FlowStep neither = new FlowStep("poll1", FlowStepType.POLL, "binding", null, null, null, null,
-                List.of(new FlowStep.PollCondition("status", null, null)), 60, null, null);
+                List.of(new FlowStep.PollCondition("status", null, null)),
+                FlowExecutionPolicy.MIN_INTERVAL_MS, 60, null, null);
         FlowStep both = new FlowStep("poll2", FlowStepType.POLL, "binding", null, null, null, null,
-                List.of(new FlowStep.PollCondition("status", "DONE", List.of("DONE", "FAILED"))), 60, null, null);
+                List.of(new FlowStep.PollCondition("status", "DONE", List.of("DONE", "FAILED"))),
+                FlowExecutionPolicy.MIN_INTERVAL_MS, 60, null, null);
 
         assertThat(FlowBlueprintValidator.validate(new FlowBlueprint("f1", null, List.of(neither)), KNOWN_PAGE_IDS))
                 .anyMatch(e -> e.contains("equalsValue/in 중 정확히 하나만"));
@@ -109,7 +132,7 @@ class FlowBlueprintValidatorTest {
     @Test
     void disallowedExpressionSyntaxInStepFieldsIsAnError() {
         FlowStep step = new FlowStep("call", FlowStepType.API_CALL, "binding",
-                Map.of("body", "$form.name.toUpperCase()"), null, null, null, null, null, null, null);
+                Map.of("body", "$form.name.toUpperCase()"), null, null, null, null, null, null, null, null);
 
         assertThat(FlowBlueprintValidator.validate(new FlowBlueprint("f1", null, List.of(step)), KNOWN_PAGE_IDS))
                 .anyMatch(e -> e.contains("허용되지 않는 표현식"));
@@ -118,7 +141,7 @@ class FlowBlueprintValidatorTest {
     @Test
     void deferredStepTypesAreExplicitlyRejected() {
         FlowStep step = new FlowStep("stream", FlowStepType.EVENT_STREAM, null, null, null, null, null,
-                null, null, null, null);
+                null, null, null, null, null);
 
         assertThat(FlowBlueprintValidator.validate(new FlowBlueprint("f1", null, List.of(step)), KNOWN_PAGE_IDS))
                 .anyMatch(e -> e.contains("아직 지원하지 않는 step 타입"));
@@ -128,7 +151,7 @@ class FlowBlueprintValidatorTest {
     void stepCountExceedingPolicyMaxIsAnError() {
         List<FlowStep> steps = IntStream.rangeClosed(1, FlowExecutionPolicy.MAX_STEPS + 1)
                 .mapToObj(i -> new FlowStep("s" + i, FlowStepType.SHOW_SUCCESS, null, null, null, null, null,
-                        null, null, null, "ok"))
+                        null, null, null, null, "ok"))
                 .toList();
 
         assertThat(FlowBlueprintValidator.validate(new FlowBlueprint("f1", null, steps), KNOWN_PAGE_IDS))

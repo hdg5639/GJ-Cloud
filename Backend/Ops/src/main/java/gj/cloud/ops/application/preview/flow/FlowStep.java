@@ -8,7 +8,7 @@ import java.util.Map;
 // API_CALL/REFRESH_BINDING → bindingRef(+API_CALL은 input)
 // SET_CONTEXT → values
 // NAVIGATE → pageId, parameters
-// POLL → bindingRef, parameters, until, timeoutSeconds
+// POLL → bindingRef, parameters, until, intervalMs, timeoutSeconds
 // WAIT → timeoutSeconds
 // CONDITION → condition
 // SHOW_SUCCESS/SHOW_ERROR → message
@@ -26,6 +26,8 @@ public record FlowStep(
         Map<String, String> parameters,
         // 하나라도 만족하면 종료(OR 의미).
         List<PollCondition> until,
+        // POLL 전용, §9 예시의 "intervalMs". FlowExecutionPolicy.MIN_INTERVAL_MS 미만은 거부.
+        Integer intervalMs,
         Integer timeoutSeconds,
         // boolean으로 평가될 FlowExpression.
         String condition,

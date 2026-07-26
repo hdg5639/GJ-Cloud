@@ -63,6 +63,7 @@ public final class FlowBlueprintValidator {
                     }
                 }
                 validateTimeoutSeconds(errors, step);
+                validateIntervalMs(errors, step);
             }
             case WAIT -> validateTimeoutSeconds(errors, step);
             case CONDITION -> requireNonBlank(errors, step.id(), "condition", step.condition());
@@ -80,6 +81,21 @@ public final class FlowBlueprintValidator {
         } else if (step.timeoutSeconds() > FlowExecutionPolicy.MAX_TIMEOUT_SECONDS) {
             errors.add(step.id() + "(" + step.type() + "): timeoutSeconds가 상한("
                     + FlowExecutionPolicy.MAX_TIMEOUT_SECONDS + "초) 초과");
+        }
+    }
+
+    // MAX_POLL_COUNT를 별도 산식(timeoutSeconds÷intervalMs)으로 다시 검증하지 않는다 — 이 메서드가
+    // intervalMs≥MIN_INTERVAL_MS를, validateTimeoutSeconds가 timeoutSeconds≤MAX_TIMEOUT_SECONDS를
+    // 이미 강제하고 두 상수가 정확히 MAX_POLL_COUNT로 나누어떨어지게 맞춰져 있어(FlowExecutionPolicy
+    // 주석 참고) 두 검증을 통과하면 poll count는 항상 상한 이하다 — 도달 불가능한 코드를 추가하지 않음.
+    private static void validateIntervalMs(List<String> errors, FlowStep step) {
+        Integer intervalMs = step.intervalMs();
+        if (intervalMs == null || intervalMs <= 0) {
+            errors.add(step.id() + "(POLL): intervalMs가 없거나 0 이하");
+            return;
+        }
+        if (intervalMs < FlowExecutionPolicy.MIN_INTERVAL_MS) {
+            errors.add(step.id() + "(POLL): intervalMs가 최소값(" + FlowExecutionPolicy.MIN_INTERVAL_MS + "ms) 미만");
         }
     }
 
