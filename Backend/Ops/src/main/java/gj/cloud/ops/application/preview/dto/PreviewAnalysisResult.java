@@ -6,6 +6,7 @@ import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
 
 import java.util.List;
 
@@ -19,6 +20,11 @@ public record PreviewAnalysisResult(
         List<String> apiServerUrls,
         List<Capability> capabilities,
         List<PageDraft> pages,
+        // Workflow Composition Phase 2 Change Request WP-1 — PageDraft에서 결정론적으로 파생한 풍부한
+        // 페이지 모델(route/pageType/features 등). PageDraft는 여전히 실제 Block 리졸브·컴파일·배포
+        // 경로의 정본이고(폴백 유지), pagePlans는 다음 작업(Navigation/FlowBlueprint)이 소비할 자리를
+        // 미리 마련해둔 것 — 지금은 어떤 소비자도 없다.
+        List<PagePlan> pagePlans,
         List<UnresolvedField> unresolved,
         List<String> warnings,
         List<String> evidenceRefs,

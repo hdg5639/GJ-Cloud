@@ -20,6 +20,8 @@ import gj.cloud.ops.application.preview.analysis.SecuritySchemeEvidence;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
 import gj.cloud.ops.application.preview.planning.RuleBasedPagePlanGenerator;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -105,9 +107,10 @@ public class PreviewAnalysisService {
                 : GenerationStatus.NEEDS_INPUT;
 
         AuthStrategy authStrategy = authStrategyDetector.detect(evidence.securitySchemes());
+        List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
 
         return new PreviewAnalysisResult(
-                status, evidence.serverUrls(), capabilities, pages, unresolved, warnings, evidenceRefs, authStrategy,
-                generationMode);
+                status, evidence.serverUrls(), capabilities, pages, pagePlans, unresolved, warnings, evidenceRefs,
+                authStrategy, generationMode);
     }
 }

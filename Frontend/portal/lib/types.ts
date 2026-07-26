@@ -509,11 +509,58 @@ export interface PreviewPageDraft {
 // FALLBACK_CRUD를 SERVICE_AWARE인 것처럼 보여주면 안 된다.
 export type PreviewGenerationMode = "SERVICE_AWARE" | "RULE_BASED" | "FALLBACK_CRUD";
 
+// Workflow Composition Phase 2 Change Request §5/WP-1 — PreviewPageDraft(4필드)를 대체할 풍부한 페이지
+// 모델. 지금은 백엔드 PagePlanMapper가 결정론적으로 파생만 하고 어떤 화면도 아직 이 데이터를 쓰지
+// 않는다(Navigation/FlowBlueprint가 실제로 소비하게 될 다음 작업들을 위해 타입만 미리 맞춰둠).
+export type PreviewPageType =
+  | "AUTH"
+  | "DASHBOARD"
+  | "RESOURCE_LIST"
+  | "RESOURCE_OVERVIEW"
+  | "RESOURCE_DETAIL"
+  | "LIST_DETAIL"
+  | "WORKFLOW"
+  | "SETTINGS"
+  | "ACTIVITY"
+  | "FILE_MANAGER"
+  | "ORGANIZATION";
+
+// source는 문서 예시가 "navigation" 하나뿐이라 닫힌 유니언 대신 string으로 둔다(백엔드와 동일).
+export interface PreviewRouteParameter {
+  name: string;
+  source: string;
+}
+
+export interface PreviewNavigationRule {
+  sourcePageId: string;
+  trigger: string;
+  type: "OPEN_PAGE" | "OPEN_OVERLAY" | "GO_BACK" | "REPLACE_ROUTE";
+  targetPageId: string;
+  parameters: Record<string, string>;
+}
+
+export interface PreviewPagePlan {
+  id: string;
+  title: string;
+  route: string;
+  pageType: PreviewPageType;
+  layoutRef: string | null;
+  capabilityIds: string[];
+  routeParameters: PreviewRouteParameter[];
+  queryParameters: string[];
+  navigationRules: PreviewNavigationRule[];
+  features: Record<string, boolean>;
+  confidence: string;
+  reason: string;
+  unsupportedCapabilityWarnings: string[];
+}
+
 export interface PreviewAnalysisResult {
   status: GenerationStatus;
   apiServerUrls: string[];
   capabilities: PreviewCapability[];
   pages: PreviewPageDraft[];
+  pagePlans: PreviewPagePlan[];
   unresolved: UnresolvedField[];
   warnings: string[];
   evidenceRefs: string[];
@@ -556,9 +603,11 @@ export interface PagePlanProposalResult {
   aiSucceeded: boolean;
 }
 
-// errors가 비어있지 않으면(all-or-nothing 실패) pages는 요청으로 보낸 pages 그대로다.
+// errors가 비어있지 않으면(all-or-nothing 실패) pages는 요청으로 보낸 pages 그대로다. pagePlans도
+// 이 pages와 동일한 기준으로 파생된다(Workflow Composition Phase 2 WP-1).
 export interface PreviewPlanApplyResponse {
   pages: PreviewPageDraft[];
+  pagePlans: PreviewPagePlan[];
   decisions: string[];
   errors: string[];
   generationMode: PreviewGenerationMode;

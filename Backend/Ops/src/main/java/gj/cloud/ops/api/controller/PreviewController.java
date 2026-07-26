@@ -14,6 +14,8 @@ import gj.cloud.ops.application.preview.dto.PreviewPlanApplyResponse;
 import gj.cloud.ops.application.preview.dto.PreviewPlanRequest;
 import gj.cloud.ops.application.preview.dto.PreviewReviewRequest;
 import gj.cloud.ops.application.preview.planning.PagePlanApplyResult;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import gj.cloud.ops.application.preview.service.PreviewAnalysisService;
 import gj.cloud.ops.application.preview.service.PreviewBlueprintService;
 import gj.cloud.ops.global.response.ApiResponse;
@@ -87,6 +89,7 @@ public class PreviewController {
     public ApiResponse<PreviewPlanApplyResponse> applyPlan(@Valid @RequestBody PreviewPlanApplyRequest request) {
         PagePlanApplyResult result = aiPagePlanner.applySelected(request.pages(), request.capabilities(), request.operations());
         GenerationMode generationMode = result.errors().isEmpty() ? GenerationMode.SERVICE_AWARE : GenerationMode.RULE_BASED;
-        return ApiResponse.ok(new PreviewPlanApplyResponse(result.pages(), result.decisions(), result.errors(), generationMode));
+        List<PagePlan> pagePlans = PagePlanMapper.from(result.pages(), request.capabilities());
+        return ApiResponse.ok(new PreviewPlanApplyResponse(result.pages(), pagePlans, result.decisions(), result.errors(), generationMode));
     }
 }
