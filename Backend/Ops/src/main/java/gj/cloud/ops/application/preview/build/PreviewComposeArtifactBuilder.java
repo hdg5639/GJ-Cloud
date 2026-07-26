@@ -1853,6 +1853,11 @@ public class PreviewComposeArtifactBuilder {
             function DashboardView({ capabilities, authToken }: { capabilities: Capability[]; authToken: string | null }) {
               const [counts, setCounts] = useState<Record<string, DashboardCountState>>({});
 
+              // 부모(PageRenderer)가 capabilities 배열을 매 렌더마다 새로 만들어서, 배열 참조를 deps에
+              // 넣으면 로드→apiCallListener→로그 setState→리렌더→새 배열→effect 재발화로 무한 요청이
+              // 된다. 배열 참조 대신 안정적인 capability id 키에만 의존한다.
+              const capabilityKey = capabilities.map((capability) => capability.id).join(",");
+
               useEffect(() => {
                 let cancelled = false;
                 capabilities.forEach((capability) => {
@@ -1879,7 +1884,7 @@ public class PreviewComposeArtifactBuilder {
                 return () => {
                   cancelled = true;
                 };
-              }, [capabilities, authToken]);
+              }, [capabilityKey, authToken]);
 
               if (capabilities.length === 0) {
                 return <p className="error">이 페이지에 표시할 목록 capability가 없습니다.</p>;
@@ -1935,6 +1940,10 @@ public class PreviewComposeArtifactBuilder {
             }) {
               const [feeds, setFeeds] = useState<Record<string, FeedState>>({});
 
+              // capabilities 배열은 부모가 매 렌더마다 새로 만든다 — 배열 참조를 deps에 넣으면 무한
+              // 요청이 되므로 안정적인 capability id 키에만 의존한다(DashboardView와 동일).
+              const capabilityKey = capabilities.map((capability) => capability.id).join(",");
+
               useEffect(() => {
                 let cancelled = false;
                 capabilities.forEach((capability) => {
@@ -1955,7 +1964,7 @@ public class PreviewComposeArtifactBuilder {
                 return () => {
                   cancelled = true;
                 };
-              }, [capabilities, authToken]);
+              }, [capabilityKey, authToken]);
 
               if (capabilities.length === 0) {
                 return <p className="error">이 페이지에 표시할 목록 capability가 없습니다.</p>;
