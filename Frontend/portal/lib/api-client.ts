@@ -48,7 +48,9 @@ import type {
   PreviewAuthStrategy,
   PreviewCapability,
   PreviewPageDraft,
-  PreviewPlanResponse,
+  PagePlanOperation,
+  PagePlanProposalResult,
+  PreviewPlanApplyResponse,
   PageReviewFinding,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
@@ -783,7 +785,9 @@ export const api = {
           body: JSON.stringify(body),
           accessToken,
         }),
-      plan: (
+      // Plan Review UI(Increment 5 2부) — AI가 제안한 오퍼레이션을 적용하지 않고 개별 검증된 상태로
+      // 그대로 돌려준다. 사용자가 검토한 뒤 planApply로 원하는 것만 적용한다.
+      planPropose: (
         accessToken: string,
         body: {
           serviceDescription?: string;
@@ -792,7 +796,20 @@ export const api = {
           pages: PreviewPageDraft[];
         }
       ) =>
-        request<PreviewPlanResponse>("ops", "/ops/preview/plan", {
+        request<PagePlanProposalResult>("ops", "/ops/preview/plan/propose", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      planApply: (
+        accessToken: string,
+        body: {
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          operations: PagePlanOperation[];
+        }
+      ) =>
+        request<PreviewPlanApplyResponse>("ops", "/ops/preview/plan/apply", {
           method: "POST",
           body: JSON.stringify(body),
           accessToken,

@@ -28,13 +28,14 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-// GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md Package B(Increment 3) — AiPageReviewer와
-// 달리 이 AI 호출은 실제로 페이지 구성에 반영된다. 다만 GamjaBox_2.0_Key_Features.md §9 "AI 출력도
-// 구조화된 패치로 제한함" 원칙 그대로, AI는 고정된 operation 3종(RENAME_PAGE/MERGE_PAGES/
-// MOVE_CAPABILITY)만 제안하고 PagePlanValidator가 검증한 것만 적용한다(§5.3 "Blueprint compiler
-// remains deterministic"). AiSpecGeneratorClient(배포 스펙 생성기)의 "검증 실패 시 교정 프롬프트로
-// 재시도, 그래도 실패하면 안전하게 폴백" 패턴을 그대로 가져오되, ambiguity 점수·모델 에스컬레이션·
-// 생성 캐시는 이번 증분엔 과해서 뺐다(AiPageReviewer 수준의 단순함 유지).
+// GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md Package B(Increment 3, 이후 Increment 5
+// 2부에서 propose/apply로 분리) — AiPageReviewer와 달리 이 AI 호출은 실제로 페이지 구성에 반영될 수
+// 있다. 다만 GamjaBox_2.0_Key_Features.md §9 "AI 출력도 구조화된 패치로 제한함" 원칙 그대로, AI는
+// 고정된 operation 3종(RENAME_PAGE/MERGE_PAGES/MOVE_CAPABILITY)만 제안하고 PagePlanValidator가
+// 검증한 것만 적용한다(§5.3 "Blueprint compiler remains deterministic"). Plan Review UI(Increment 5
+// 2부) 도입 후에는 "전체가 깨지면 전부 버리고 1회 재교정"이 아니라, 오퍼레이션마다 개별 검증 결과를
+// 사용자에게 보여주고 사용자가 고른 서브셋만 적용한다 — 그래서 AI 응답 자체를 교정 재시도하는 로직은
+// 없앴다(사용자가 무효한 항목을 직접 걸러내므로 더 이상 필요 없음).
 @Slf4j
 @Component
 public class AiPagePlanner {
@@ -84,7 +85,10 @@ public class AiPagePlanner {
         this.blockResolver = blockResolver;
     }
 
-    public PagePlanResult plan(
+    // Plan Review UI(Increment 5 2부) — AI가 제안한 오퍼레이션을 적용하지 않고, 오퍼레이션마다 원본
+    // 후보 페이지 기준으로 개별 검증한 valid/validationError만 매겨 돌려준다. 사용자가 화면에서 고른
+    // 서브셋은 applySelected로 실제 적용한다.
+    public PagePlanProposalResult propose(
             String requesterUserId, String serviceDescription, Purpose purpose,
             List<Capability> capabilities, List<PageDraft> candidatePages
     ) {
@@ -98,34 +102,39 @@ public class AiPagePlanner {
             AiCallResult call = callModel(input);
             totalInputTokens += call.inputTokens();
             totalOutputTokens += call.outputTokens();
-            PagePlanApplyResult applied = validateAndApply(call.proposal(), capabilities, candidatePages);
 
-            if (!applied.errors().isEmpty()) {
-                String correctionPrompt = input
-                        + "\n\nPrevious response:\n" + objectMapper.writeValueAsString(call.proposal())
-                        + "\n\nValidation errors:\n- " + String.join("\n- ", applied.errors())
-                        + "\n\nRe-output the full operations list, fixing only the operations related to the "
-                        + "errors above. Keep the schema unchanged.";
-                call = callModel(correctionPrompt);
-                totalInputTokens += call.inputTokens();
-                totalOutputTokens += call.outputTokens();
-                applied = validateAndApply(call.proposal(), capabilities, candidatePages);
-            }
-
-            if (!applied.errors().isEmpty()) {
-                log.warn("Auto Preview AI 페이지 계획 검증 실패(후보 페이지로 대체됨): {}", applied.errors());
-                return new PagePlanResult(candidatePages, List.of(), false);
+            List<PagePlanOperationView> views = new ArrayList<>();
+            List<PagePlanOperation> operations = call.proposal().operations();
+            for (int i = 0; i < operations.size(); i++) {
+                views.add(toView(String.valueOf(i), operations.get(i), capabilities, candidatePages));
             }
 
             succeeded = true;
-            return new PagePlanResult(applied.pages(), applied.decisions(), true);
+            return new PagePlanProposalResult(views, true);
         } catch (Exception e) {
-            log.warn("Auto Preview AI 페이지 계획 실패(후보 페이지로 대체됨): {}", e.getMessage());
-            return new PagePlanResult(candidatePages, List.of(), false);
+            log.warn("Auto Preview AI 페이지 계획 제안 실패: {}", e.getMessage());
+            return new PagePlanProposalResult(List.of(), false);
         } finally {
             logRepository.save(AiPreviewGenerationLogEntity.create(
                     requesterUserId, AiCallKind.PLANNING, model, totalInputTokens, totalOutputTokens, succeeded));
         }
+    }
+
+    // 사용자가 review 화면에서 고른 서브셋을 실제로 적용한다 — AI를 다시 부르지 않고 validateAndApply만
+    // 태우므로 순수 결정론적이다.
+    public PagePlanApplyResult applySelected(
+            List<PageDraft> candidatePages, List<Capability> capabilities, List<PagePlanOperation> operations
+    ) {
+        return validateAndApply(new PagePlanProposal(operations), capabilities, candidatePages);
+    }
+
+    private PagePlanOperationView toView(String id, PagePlanOperation op, List<Capability> capabilities,
+                                          List<PageDraft> candidatePages) {
+        PagePlanApplyResult applied = validateAndApply(new PagePlanProposal(List.of(op)), capabilities, candidatePages);
+        boolean valid = applied.errors().isEmpty();
+        String validationError = valid ? null : String.join("; ", applied.errors());
+        return new PagePlanOperationView(id, op.type(), op.pageId(), op.otherPageId(), op.newTitle(),
+                op.capabilityId(), op.destinationPageId(), op.reason(), valid, validationError);
     }
 
     // PagePlanValidator(구조 검증) 통과 후, 결과 페이지가 실제로 Block/Compatibility 관점에서도 문제

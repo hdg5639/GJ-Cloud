@@ -4,7 +4,14 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { PreviewAnalysisResult, PageReviewFinding, PreviewCapability, PreviewPageDraft } from "@/lib/types";
+import type {
+  PreviewAnalysisResult,
+  PageReviewFinding,
+  PreviewCapability,
+  PreviewPageDraft,
+  PagePlanOperation,
+  PagePlanOperationView,
+} from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import { PageLoader } from "@/components/ui/loader";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -82,8 +89,14 @@ export default function PreviewWizardPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [reviewFindings, setReviewFindings] = useState<PageReviewFinding[] | null>(null);
-  const [planning, setPlanning] = useState(false);
-  const [planDecisions, setPlanDecisions] = useState<string[] | null>(null);
+  // Plan Review UI(Increment 5 2부) — proposing 중엔 AI 호출, proposedOperations는 아직 적용 안 된
+  // 제안 목록(체크박스 검토용), selectedOperationIds는 사용자가 체크한 것, applyingPlan/planApplyErrors는
+  // 선택한 서브셋을 실제로 적용하는 단계.
+  const [proposing, setProposing] = useState(false);
+  const [proposedOperations, setProposedOperations] = useState<PagePlanOperationView[] | null>(null);
+  const [selectedOperationIds, setSelectedOperationIds] = useState<Set<string>>(new Set());
+  const [applyingPlan, setApplyingPlan] = useState(false);
+  const [planApplyErrors, setPlanApplyErrors] = useState<string[] | null>(null);
   const [previewPageId, setPreviewPageId] = useState<string | null>(null);
   // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않도록,
   // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인 등록
@@ -121,7 +134,9 @@ export default function PreviewWizardPage() {
     setAnalysisError(null);
     setResult(null);
     setReviewFindings(null);
-    setPlanDecisions(null);
+    setProposedOperations(null);
+    setSelectedOperationIds(new Set());
+    setPlanApplyErrors(null);
     try {
       const data = await api.ops.preview.analyze(accessToken, {
         apiDocsUrl: apiDocsUrl.trim(),
@@ -164,27 +179,102 @@ export default function PreviewWizardPage() {
     }
   }
 
-  // Direction Recovery Change Request Increment 3 — handleReview와 달리 이 응답은 실제로 pages를
-  // 대체한다(코멘트만 반환하는 게 아님). 실패해도 서버가 항상 유효한 pages를 돌려주므로 여기서
-  // catch할 예외는 네트워크 오류 정도뿐 — 그 경우는 기존 result를 그대로 둔다.
-  async function handlePlan() {
+  // Plan Review UI(Increment 5 2부) — handleReview(코멘트만)와 달리 AI가 페이지를 실제로 바꿀 수
+  // 있는 오퍼레이션을 제안하지만, 여기서는 아무것도 적용하지 않는다. 유효한(valid) 오퍼레이션은
+  // 기본으로 체크해두고, 사용자가 체크박스를 조정한 뒤 handleApplyPlan으로 넘어간다.
+  async function handleProposePlan() {
     if (!accessToken || !result) return;
-    setPlanning(true);
+    setProposing(true);
+    setPlanApplyErrors(null);
     try {
-      const planned = await api.ops.preview.plan(accessToken, {
+      const proposal = await api.ops.preview.planPropose(accessToken, {
         serviceDescription: serviceDescription.trim() || undefined,
         purpose,
         capabilities: result.capabilities,
         pages: result.pages,
       });
-      setResult((prev) => (prev ? { ...prev, pages: planned.pages, generationMode: planned.generationMode } : prev));
-      refreshBlocks(result.capabilities, planned.pages, purpose);
-      setPreviewPageId(planned.pages[0]?.id ?? null);
-      setPlanDecisions(planned.decisions);
+      setProposedOperations(proposal.operations);
+      setSelectedOperationIds(new Set(proposal.operations.filter((op) => op.valid).map((op) => op.id)));
     } catch {
-      setPlanDecisions([]);
+      setProposedOperations([]);
+      setSelectedOperationIds(new Set());
     } finally {
-      setPlanning(false);
+      setProposing(false);
+    }
+  }
+
+  function toggleOperationSelected(id: string) {
+    setSelectedOperationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  // 사용자가 체크한 서브셋만 실제로 적용한다. 실패(all-or-nothing)하면 체크박스는 그대로 두고 에러를
+  // 보여줘 사용자가 선택을 조정해 재시도할 수 있게 한다 — 성공하면 review 목록을 닫는다.
+  async function handleApplyPlan() {
+    if (!accessToken || !result || !proposedOperations) return;
+    const selectedOps: PagePlanOperation[] = proposedOperations
+      .filter((op) => selectedOperationIds.has(op.id))
+      .map((op) => ({
+        type: op.type,
+        pageId: op.pageId,
+        otherPageId: op.otherPageId,
+        newTitle: op.newTitle,
+        capabilityId: op.capabilityId,
+        destinationPageId: op.destinationPageId,
+        reason: op.reason,
+      }));
+    if (selectedOps.length === 0) return;
+    setApplyingPlan(true);
+    setPlanApplyErrors(null);
+    try {
+      const applied = await api.ops.preview.planApply(accessToken, {
+        capabilities: result.capabilities,
+        pages: result.pages,
+        operations: selectedOps,
+      });
+      if (applied.errors.length > 0) {
+        setPlanApplyErrors(applied.errors);
+        return;
+      }
+      setResult({ ...result, pages: applied.pages, generationMode: applied.generationMode });
+      refreshBlocks(result.capabilities, applied.pages, purpose);
+      setPreviewPageId(applied.pages[0]?.id ?? null);
+      setProposedOperations(null);
+      setSelectedOperationIds(new Set());
+    } catch (err) {
+      setPlanApplyErrors([err instanceof Error ? err.message : "적용에 실패했습니다."]);
+    } finally {
+      setApplyingPlan(false);
+    }
+  }
+
+  // 오퍼레이션의 pageId/capabilityId를 사람이 읽는 제목/이름으로 치환해 요약 문장을 만든다.
+  function describeOperation(op: PagePlanOperationView): string {
+    const pageTitle = (id: string | null) => result?.pages.find((p) => p.id === id)?.title ?? id ?? "";
+    switch (op.type) {
+      case "RENAME_PAGE":
+        return `"${pageTitle(op.pageId)}" → "${op.newTitle}"로 이름 변경`;
+      case "MERGE_PAGES":
+        return `"${pageTitle(op.otherPageId)}" 페이지를 "${pageTitle(op.pageId)}" 페이지로 병합`;
+      case "MOVE_CAPABILITY": {
+        const capability = op.capabilityId ? findCapability(op.capabilityId) : undefined;
+        const label = capability
+          ? capability.type
+            ? (CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type)
+            : (capability.action ?? capability.kind)
+          : op.capabilityId;
+        const resourceName = capability?.resourceName ?? "";
+        return `${resourceName} ${label ?? ""} 기능을 "${pageTitle(op.destinationPageId)}" 페이지로 이동`;
+      }
+      default:
+        return op.reason ?? "";
     }
   }
 
@@ -500,20 +590,55 @@ export default function PreviewWizardPage() {
             </div>
 
             <div className="mt-3">
-              <Button type="button" onClick={handlePlan} disabled={planning || !serviceDescription.trim()}>
-                {planning ? "AI로 재구성 중..." : "AI로 서비스에 맞게 페이지 재구성"}
+              <Button type="button" onClick={handleProposePlan} disabled={proposing || !serviceDescription.trim()}>
+                {proposing ? "AI가 제안 생성 중..." : "AI로 서비스에 맞게 페이지 재구성 제안받기"}
               </Button>
               {!serviceDescription.trim() && (
                 <p className="mt-1 text-[11px] text-muted-soft">서비스 설명을 입력해야 사용할 수 있습니다.</p>
               )}
-              {planDecisions && (
-                <div className="mt-3 space-y-1 rounded-md border border-line bg-white/[0.03] p-3 text-xs">
-                  {planDecisions.length === 0 ? (
-                    <p className="text-muted-soft">
-                      제안할 재구성이 없거나 검증에 실패해 기존 페이지 구성을 그대로 유지했습니다.
-                    </p>
+              {proposedOperations && (
+                <div className="mt-3 space-y-2 rounded-md border border-line bg-white/[0.03] p-3 text-xs">
+                  {proposedOperations.length === 0 ? (
+                    <p className="text-muted-soft">AI가 개선할 점을 찾지 못했습니다.</p>
                   ) : (
-                    planDecisions.map((decision, i) => <p key={i}>· {decision}</p>)
+                    <>
+                      {proposedOperations.map((op) => (
+                        <label
+                          key={op.id}
+                          className={`flex items-start gap-2 rounded-md border p-2 ${
+                            op.valid ? "border-line-strong" : "border-danger-soft opacity-60"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={selectedOperationIds.has(op.id)}
+                            disabled={!op.valid}
+                            onChange={() => toggleOperationSelected(op.id)}
+                          />
+                          <span>
+                            <span className="block font-bold text-foreground">{describeOperation(op)}</span>
+                            {op.reason && <span className="block text-muted">{op.reason}</span>}
+                            {!op.valid && <span className="block text-danger">적용 불가: {op.validationError}</span>}
+                          </span>
+                        </label>
+                      ))}
+                      {planApplyErrors && planApplyErrors.length > 0 && (
+                        <div className="rounded-md border border-danger-soft bg-danger/10 p-2 text-danger">
+                          {planApplyErrors.map((e, i) => (
+                            <p key={i}>· {e}</p>
+                          ))}
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={handleApplyPlan}
+                        disabled={applyingPlan || selectedOperationIds.size === 0}
+                      >
+                        {applyingPlan ? "적용 중..." : `선택한 ${selectedOperationIds.size}개 적용`}
+                      </Button>
+                    </>
                   )}
                 </div>
               )}
