@@ -19,6 +19,7 @@ import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.SecuritySchemeEvidence;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
+import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.RuleBasedPagePlanGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
@@ -39,6 +40,7 @@ public class PreviewAnalysisService {
     private final CapabilityExtractor capabilityExtractor;
     private final PageDraftGenerator pageDraftGenerator;
     private final RuleBasedPagePlanGenerator ruleBasedPagePlanGenerator;
+    private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
     private final AuthStrategyDetector authStrategyDetector;
     private final PreviewBlockResolver blockResolver;
 
@@ -109,8 +111,15 @@ public class PreviewAnalysisService {
         AuthStrategy authStrategy = authStrategyDetector.detect(evidence.securitySchemes());
         List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
 
+        RuleBasedFlowGenerator.ValidatedResult flowResult = ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
+        if (!flowResult.errors().isEmpty()) {
+            // §16 안전 폴백과 동일 원칙 — pages/capabilities는 이 실패와 무관하게 여전히 유효하므로
+            // 전체 분석 자체를 실패시키지 않고, flows/bindings만 비운 채 사유를 warnings로 남긴다.
+            warnings.add("생성된 workflow가 검증에 실패해 제외되었습니다: " + String.join("; ", flowResult.errors()));
+        }
+
         return new PreviewAnalysisResult(
-                status, evidence.serverUrls(), capabilities, pages, pagePlans, unresolved, warnings, evidenceRefs,
-                authStrategy, generationMode);
+                status, evidence.serverUrls(), capabilities, pages, pagePlans, flowResult.result().flows(),
+                flowResult.result().bindings(), unresolved, warnings, evidenceRefs, authStrategy, generationMode);
     }
 }

@@ -13,6 +13,7 @@ import gj.cloud.ops.application.preview.dto.PreviewPlanApplyRequest;
 import gj.cloud.ops.application.preview.dto.PreviewPlanApplyResponse;
 import gj.cloud.ops.application.preview.dto.PreviewPlanRequest;
 import gj.cloud.ops.application.preview.dto.PreviewReviewRequest;
+import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.PagePlanApplyResult;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
@@ -45,6 +46,7 @@ public class PreviewController {
     private final PreviewBlueprintService previewBlueprintService;
     private final AiPageReviewer aiPageReviewer;
     private final AiPagePlanner aiPagePlanner;
+    private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
 
     @Operation(summary = "OpenAPI 문서 분석", description = "OpenAPI 3.x 문서를 결정론적으로 분석해 capability와 페이지 초안을 반환합니다. 배포는 수행하지 않습니다.")
     @PostMapping("/analyze")
@@ -90,6 +92,9 @@ public class PreviewController {
         PagePlanApplyResult result = aiPagePlanner.applySelected(request.pages(), request.capabilities(), request.operations());
         GenerationMode generationMode = result.errors().isEmpty() ? GenerationMode.SERVICE_AWARE : GenerationMode.RULE_BASED;
         List<PagePlan> pagePlans = PagePlanMapper.from(result.pages(), request.capabilities());
-        return ApiResponse.ok(new PreviewPlanApplyResponse(result.pages(), pagePlans, result.decisions(), result.errors(), generationMode));
+        RuleBasedFlowGenerator.ValidatedResult flowResult =
+                ruleBasedFlowGenerator.generateValidated(pagePlans, request.capabilities());
+        return ApiResponse.ok(new PreviewPlanApplyResponse(result.pages(), pagePlans, flowResult.result().flows(),
+                flowResult.result().bindings(), result.decisions(), result.errors(), generationMode));
     }
 }

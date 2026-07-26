@@ -284,7 +284,14 @@ export default function PreviewWizardPage() {
         setPlanApplyErrors(applied.errors);
         return;
       }
-      setResult({ ...result, pages: applied.pages, pagePlans: applied.pagePlans, generationMode: applied.generationMode });
+      setResult({
+        ...result,
+        pages: applied.pages,
+        pagePlans: applied.pagePlans,
+        flows: applied.flows,
+        bindings: applied.bindings,
+        generationMode: applied.generationMode,
+      });
       refreshBlocks(result.capabilities, applied.pages, purpose);
       setPreviewPageId(applied.pages[0]?.id ?? null);
       setProposedOperations(null);

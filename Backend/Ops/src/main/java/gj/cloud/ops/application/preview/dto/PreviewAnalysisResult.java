@@ -6,6 +6,8 @@ import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.binding.ApiBinding;
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 
 import java.util.List;
@@ -25,6 +27,11 @@ public record PreviewAnalysisResult(
         // 경로의 정본이고(폴백 유지), pagePlans는 다음 작업(Navigation/FlowBlueprint)이 소비할 자리를
         // 미리 마련해둔 것 — 지금은 어떤 소비자도 없다.
         List<PagePlan> pagePlans,
+        // Workflow Composition Phase 2 §22 7번(수직 슬라이스)으로 가는 첫 조각 — RuleBasedFlowGenerator가
+        // pagePlans로부터 결정론적으로 만든 것 중 FlowBlueprintValidator/ApiBindingValidator를 통과한
+        // 항목만 담는다(검증 실패분은 조용히 드랍되고 warnings에 사유가 남는다, §16 안전 폴백과 동일 원칙).
+        List<FlowBlueprint> flows,
+        List<ApiBinding> bindings,
         List<UnresolvedField> unresolved,
         List<String> warnings,
         List<String> evidenceRefs,

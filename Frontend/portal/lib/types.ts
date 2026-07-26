@@ -555,12 +555,89 @@ export interface PreviewPagePlan {
   unsupportedCapabilityWarnings: string[];
 }
 
+// Workflow Composition Phase 2 Change Request §6(FlowBlueprint)/§8(ApiBinding)/§9(Polling) — Backend
+// gj.cloud.ops.application.preview.flow.*/binding.ApiBinding의 TS 미러. RuleBasedFlowGenerator가
+// 이 값들을 처음 실제로 만들어내면서(그 전까지는 이 모델을 만드는 생성기가 없어 네트워크로 전송되는
+// 형태 자체가 없었다) 여기서 처음 정본으로 정의한다 — components/preview-runtime/flow/types.ts는
+// 이 타입들을 재수출만 한다(다른 Preview* 타입과 같은 관례, components/preview-runtime/types.ts 참고).
+export type PreviewFlowStepType =
+  | "API_CALL"
+  | "SET_CONTEXT"
+  | "NAVIGATE"
+  | "POLL"
+  | "WAIT"
+  | "CONDITION"
+  | "SHOW_SUCCESS"
+  | "SHOW_ERROR"
+  | "REFRESH_BINDING"
+  | "EVENT_STREAM"
+  | "UPLOAD"
+  | "DOWNLOAD"
+  | "PARALLEL";
+
+export interface PreviewPollCondition {
+  path: string;
+  equalsValue: string | null;
+  in: string[] | null;
+}
+
+export interface PreviewFlowStep {
+  id: string;
+  type: PreviewFlowStepType;
+  bindingRef: string | null;
+  input: Record<string, string> | null;
+  values: Record<string, string> | null;
+  pageId: string | null;
+  parameters: Record<string, string> | null;
+  until: PreviewPollCondition[] | null;
+  intervalMs: number | null;
+  timeoutSeconds: number | null;
+  condition: string | null;
+  message: string | null;
+}
+
+export interface PreviewFlowTrigger {
+  pageId: string | null;
+  actionId: string | null;
+}
+
+export interface PreviewFlowBlueprint {
+  id: string;
+  trigger: PreviewFlowTrigger | null;
+  steps: PreviewFlowStep[];
+}
+
+export type PreviewInputTarget = "PATH" | "QUERY" | "BODY" | "HEADER";
+
+export interface PreviewInputMapping {
+  target: string;
+  targetKind: PreviewInputTarget;
+  from: string;
+}
+
+export interface PreviewOutputMapping {
+  from: string;
+  to: string;
+}
+
+export interface PreviewApiBinding {
+  id: string;
+  capabilityId: string;
+  inputMappings: PreviewInputMapping[];
+  outputMappings: PreviewOutputMapping[];
+  refreshBindingIds: string[];
+}
+
 export interface PreviewAnalysisResult {
   status: GenerationStatus;
   apiServerUrls: string[];
   capabilities: PreviewCapability[];
   pages: PreviewPageDraft[];
   pagePlans: PreviewPagePlan[];
+  // RuleBasedFlowGenerator가 pagePlans로부터 만든 것 중 검증을 통과한 항목만 담긴다(실패분은
+  // 서버가 조용히 드랍하고 warnings에 사유를 남긴다).
+  flows: PreviewFlowBlueprint[];
+  bindings: PreviewApiBinding[];
   unresolved: UnresolvedField[];
   warnings: string[];
   evidenceRefs: string[];
@@ -608,6 +685,8 @@ export interface PagePlanProposalResult {
 export interface PreviewPlanApplyResponse {
   pages: PreviewPageDraft[];
   pagePlans: PreviewPagePlan[];
+  flows: PreviewFlowBlueprint[];
+  bindings: PreviewApiBinding[];
   decisions: string[];
   errors: string[];
   generationMode: PreviewGenerationMode;
