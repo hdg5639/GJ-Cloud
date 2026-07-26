@@ -11,6 +11,8 @@ import type {
   PreviewPageDraft,
   PagePlanOperation,
   PagePlanOperationView,
+  PreviewFlowStep,
+  PreviewApiBinding,
 } from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import { PageLoader } from "@/components/ui/loader";
@@ -66,6 +68,38 @@ const RISK_LABEL: Record<string, { label: string; className: string }> = {
   IRREVERSIBLE: { label: "복구불가", className: "bg-danger/15 text-danger" },
   EXTERNAL_SIDE_EFFECT: { label: "외부영향", className: "bg-danger/15 text-danger" },
 };
+
+// Workflow Composition Phase 2 Change Request §19 WP-7 "Plan and flow review UI" — RuleBasedFlowGenerator가
+// 만든 workflow(§22 7번)를 사용자가 배포 전에 확인할 수 있게 단계 하나하나를 사람이 읽는 문장으로
+// 요약한다. 아직 AI가 flow를 만들지 않아(WP-4 없음) 편집·승인 UI는 아니고 읽기 전용 요약이다.
+function describeFlowStep(step: PreviewFlowStep, bindings: PreviewApiBinding[]): string {
+  switch (step.type) {
+    case "API_CALL":
+    case "REFRESH_BINDING": {
+      const binding = bindings.find((b) => b.id === step.bindingRef);
+      const label = step.type === "API_CALL" ? "API 호출" : "새로고침";
+      if (!binding) return `${label}: ${step.bindingRef}`;
+      const mappings = binding.outputMappings.map((m) => `${m.from} → ${m.to}`).join(", ");
+      return mappings ? `${label}: ${binding.capabilityId} (응답 매핑: ${mappings})` : `${label}: ${binding.capabilityId}`;
+    }
+    case "SET_CONTEXT":
+      return `값 저장: ${Object.entries(step.values ?? {}).map(([k, v]) => `${k}=${v}`).join(", ")}`;
+    case "NAVIGATE":
+      return `이동: ${Object.entries(step.parameters ?? {}).map(([k, v]) => `${k}=${v}`).join(", ") || step.pageId}`;
+    case "POLL":
+      return `상태 추적: ${step.intervalMs}ms 간격, 최대 ${step.timeoutSeconds}초`;
+    case "WAIT":
+      return `대기: ${step.timeoutSeconds}초`;
+    case "CONDITION":
+      return `조건: ${step.condition}`;
+    case "SHOW_SUCCESS":
+      return `성공 메시지: ${step.message}`;
+    case "SHOW_ERROR":
+      return `실패 메시지: ${step.message}`;
+    default:
+      return step.type;
+  }
+}
 
 const ACCESS_TOKEN_PATH_FIELD = "auth.login.accessTokenPath";
 const AUTH_LOGIN_FIELD = "auth.login";
@@ -606,6 +640,33 @@ export default function PreviewWizardPage() {
                       );
                     })}
                   </div>
+                  {(() => {
+                    const pagePlan = result.pagePlans.find((p) => p.id === page.id);
+                    const pageFlows = result.flows.filter((f) => f.trigger?.pageId === page.id);
+                    if (!pagePlan && pageFlows.length === 0) return null;
+                    return (
+                      <div className="mt-2 border-t border-line-strong pt-2 text-[11px] text-muted-soft">
+                        {pagePlan && (
+                          <p>
+                            경로: <span className="font-mono">{pagePlan.route}</span>
+                            {pagePlan.confidence && ` · 신뢰도: ${pagePlan.confidence}`}
+                          </p>
+                        )}
+                        {pageFlows.map((flow) => (
+                          <div key={flow.id} className="mt-1.5">
+                            <p className="font-bold text-muted">
+                              워크플로우: {flow.trigger?.actionId ?? flow.id}
+                            </p>
+                            <ol className="ml-3 list-decimal space-y-0.5">
+                              {flow.steps.map((step) => (
+                                <li key={step.id}>{describeFlowStep(step, result.bindings)}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
