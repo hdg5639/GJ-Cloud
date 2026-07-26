@@ -48,7 +48,10 @@ export function ChildResourceList({
     return () => {
       cancelled = true;
     };
-  }, [config, listCapability, parentId, refreshKey, localRefreshKey]);
+    // config 객체 전체를 넣으면 부모가 매 렌더마다 새 config를 만들 때(onApiCall 로그 갱신 등)
+    // effect가 무한 재발화한다 — 실제 데이터 소스인 apiBaseUrl/authToken만 의존한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.apiBaseUrl, config.authToken, listCapability, parentId, refreshKey, localRefreshKey]);
 
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 

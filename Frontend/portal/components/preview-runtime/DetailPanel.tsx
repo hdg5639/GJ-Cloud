@@ -50,7 +50,10 @@ export function DetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [capability, config, id, refreshKey]);
+    // config 객체 전체를 넣으면 부모가 매 렌더마다 새 config를 만들 때(onApiCall 로그 갱신 등)
+    // effect가 무한 재발화한다 — 실제 데이터 소스인 apiBaseUrl/authToken만 의존한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capability, config.apiBaseUrl, config.authToken, id, refreshKey]);
 
   if (loading) {
     return <PageLoader label="불러오는 중" />;
