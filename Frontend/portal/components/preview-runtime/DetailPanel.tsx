@@ -9,10 +9,15 @@ export function DetailPanel({
   capability,
   config,
   id,
+  refreshKey,
 }: {
   capability: PreviewCapability;
   config: PreviewRuntimeConfig;
   id: string;
+  // Workflow Composition Phase 2 Change Request §9 "refresh related list or detail bindings after
+  // success" — 생성/수정/삭제/커맨드 성공 후 목록(ResourceTable 등)만 refreshKey로 다시 불러오고
+  // 이 패널은 그대로였다. 같은 refreshKey를 받아 상세도 같이 다시 불러온다.
+  refreshKey?: number;
 }) {
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +50,7 @@ export function DetailPanel({
     return () => {
       cancelled = true;
     };
-  }, [capability, config, id]);
+  }, [capability, config, id, refreshKey]);
 
   if (loading) {
     return <PageLoader label="불러오는 중" />;

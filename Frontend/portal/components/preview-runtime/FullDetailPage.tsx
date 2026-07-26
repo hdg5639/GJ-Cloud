@@ -12,10 +12,13 @@ export function FullDetailPage({
   capability,
   config,
   id,
+  refreshKey,
 }: {
   capability: PreviewCapability;
   config: PreviewRuntimeConfig;
   id: string;
+  // DetailPanel과 동일 — §9 "refresh related list or detail bindings after success".
+  refreshKey?: number;
 }) {
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +50,7 @@ export function FullDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [capability, config, id]);
+  }, [capability, config, id, refreshKey]);
 
   if (loading) {
     return <PageLoader label="불러오는 중" />;

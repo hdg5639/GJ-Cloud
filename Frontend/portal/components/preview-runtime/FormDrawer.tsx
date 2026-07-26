@@ -18,6 +18,7 @@ export function FormDrawer({
   config,
   initialValues,
   onSuccess,
+  onSubmitOverride,
 }: {
   open: boolean;
   onClose: () => void;
@@ -25,6 +26,9 @@ export function FormDrawer({
   config: PreviewRuntimeConfig;
   initialValues?: Record<string, unknown>;
   onSuccess: () => void;
+  // CreateEditModal과 동일 — FlowBlueprint가 배정된 CREATE 액션이면 이 드로어는 폼 값만 넘기고
+  // 실제 API 호출/후속 단계는 호출 측이 FlowExecutor로 실행한다.
+  onSubmitOverride?: (values: Record<string, string>) => Promise<void>;
 }) {
   const fields = capability.fields;
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -38,9 +42,13 @@ export function FormDrawer({
     setError(null);
     setLoading(true);
     try {
-      const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
-      await callCapability(config, capability, { body: values, pathParams });
-      onSuccess();
+      if (onSubmitOverride) {
+        await onSubmitOverride(values);
+      } else {
+        const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
+        await callCapability(config, capability, { body: values, pathParams });
+        onSuccess();
+      }
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장에 실패했습니다");

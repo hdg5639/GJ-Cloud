@@ -25,6 +25,9 @@ import {
 } from "./blueprint";
 import type { Block } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
+import { createFlowContext, executeFlow } from "./flow/flowExecutor";
+import { createCapabilityBindingCaller } from "./flow/runtime";
+import type { ApiBinding, FlowBlueprint } from "./flow/types";
 
 // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
 // 1개" — showCreate/editTarget/deleteTargetId를 독립된 상태 3개로 관리하면 이론상 여러 개가 동시에
@@ -50,6 +53,8 @@ export function PreviewPageRenderer({
   config,
   selectedRow,
   onSelectRow,
+  flows = [],
+  bindings = [],
 }: {
   page: PreviewPage;
   capabilities: PreviewCapability[];
@@ -57,6 +62,10 @@ export function PreviewPageRenderer({
   config: PreviewRuntimeConfig;
   selectedRow: Record<string, unknown> | null;
   onSelectRow: (row: Record<string, unknown> | null) => void;
+  // Workflow Composition Phase 2 Change Request §22 7번 — RuleBasedFlowGenerator가 만든 workflow.
+  // 아직 CREATE 패턴만 실제로 실행한다(§14 WP-8의 첫 배선, FlowExecutor를 처음 실사용).
+  flows?: FlowBlueprint[];
+  bindings?: ApiBinding[];
 }) {
   const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
   const [refreshKey, setRefreshKey] = useState(0);
@@ -103,6 +112,27 @@ export function PreviewPageRenderer({
 
   function refresh() {
     setRefreshKey((key) => key + 1);
+  }
+
+  // §14 WP-8 "FlowExecutor를 실제로 배선" — 이 페이지의 CREATE 액션에 RuleBasedFlowGenerator가 만든
+  // flow가 있으면(trigger.pageId===이 페이지, trigger.actionId===create.id) CreateEditModal/FormDrawer가
+  // 직접 API를 부르지 않고 폼 값만 넘겨, 여기서 flow 전체(API_CALL→NAVIGATE)를 실행한다. NAVIGATE는
+  // 지금 생성기가 항상 자기 자신(같은 페이지) + selected 파라미터로만 만들어서 onSelectRow 호출로
+  // 충분하다 — 다른 페이지로 이동하는 NAVIGATE는 아직 생성되지 않아 처리하지 않는다(알려진 범위).
+  const createFlow = create
+    ? flows.find((flow) => flow.trigger?.pageId === page.id && flow.trigger?.actionId === create.id)
+    : undefined;
+
+  async function runCreateFlow(flow: FlowBlueprint, formValues: Record<string, string>) {
+    const ctx = createFlowContext({ form: formValues });
+    await executeFlow(flow, bindings, ctx, {
+      callBinding: createCapabilityBindingCaller(capabilities, config),
+      navigate: (_pageId, parameters) => {
+        const selected = parameters.selected != null ? String(parameters.selected) : null;
+        onSelectRow(selected ? { id: selected } : null);
+      },
+    });
+    refresh();
   }
 
   // 두 레이아웃(side-detail-panel/full-detail-page)이 공유하는 수정/삭제 버튼 — 선택된 row를 파라미터로
@@ -156,7 +186,7 @@ export function PreviewPageRenderer({
               />
             </div>
           )}
-          <FullDetailPage capability={detail} config={config} id={rowId(selectedRow)} />
+          <FullDetailPage capability={detail} config={config} id={rowId(selectedRow)} refreshKey={refreshKey} />
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -194,7 +224,7 @@ export function PreviewPageRenderer({
                   />
                 </div>
               )}
-              {detail && <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} />}
+              {detail && <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} refreshKey={refreshKey} />}
             </div>
           )}
         </div>
@@ -207,6 +237,7 @@ export function PreviewPageRenderer({
           capability={create}
           config={config}
           onSuccess={refresh}
+          onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
         />
       ) : (
         <CreateEditModal
@@ -215,6 +246,7 @@ export function PreviewPageRenderer({
           capability={create}
           config={config}
           onSuccess={refresh}
+          onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
         />
       ))}
 

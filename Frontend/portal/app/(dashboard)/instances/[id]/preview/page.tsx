@@ -733,6 +733,8 @@ export default function PreviewWizardPage() {
                       blocks={pageBlocks[previewPageId] ?? []}
                       selectedRow={effectiveSelectedRow}
                       onSelectRow={selectRow}
+                      flows={result.flows}
+                      bindings={result.bindings}
                       config={{
                         apiBaseUrl: apiBaseUrl.trim(),
                         authToken: previewAuthToken,
