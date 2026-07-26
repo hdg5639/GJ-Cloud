@@ -38,6 +38,10 @@ export function RecentActivityDashboard({
 }) {
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({});
 
+  // 부모가 capabilities 배열을 매 렌더마다 새로 만들어, 배열 참조를 deps에 넣으면 로드→onApiCall→
+  // 리렌더→새 배열→재발화로 무한 요청이 된다. 안정적인 capability id 키에만 의존한다.
+  const capabilityKey = capabilities.map((capability) => capability.id).join(",");
+
   useEffect(() => {
     let cancelled = false;
     capabilities.forEach((capability) => {
@@ -59,7 +63,7 @@ export function RecentActivityDashboard({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [capabilities, config.apiBaseUrl, config.authToken]);
+  }, [capabilityKey, config.apiBaseUrl, config.authToken]);
 
   if (capabilities.length === 0) {
     return <p className="text-sm text-danger">이 페이지에 표시할 목록 capability가 없습니다.</p>;

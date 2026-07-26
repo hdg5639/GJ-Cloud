@@ -21,6 +21,11 @@ export function DashboardView({
 }) {
   const [counts, setCounts] = useState<Record<string, CountState>>({});
 
+  // 부모(PreviewPageRenderer)가 capabilities 배열을 매 렌더마다 새로 만들기 때문에, 배열 자체를
+  // effect deps에 넣으면 로드 성공→onApiCall→로그 setState→리렌더→새 배열→effect 재발화로
+  // 무한 요청이 된다. 배열 참조 대신 안정적인 capability id 키에만 의존한다.
+  const capabilityKey = capabilities.map((capability) => capability.id).join(",");
+
   useEffect(() => {
     let cancelled = false;
     capabilities.forEach((capability) => {
@@ -48,7 +53,7 @@ export function DashboardView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [capabilities, config.apiBaseUrl, config.authToken]);
+  }, [capabilityKey, config.apiBaseUrl, config.authToken]);
 
   if (capabilities.length === 0) {
     return <p className="text-sm text-danger">이 페이지에 표시할 목록 capability가 없습니다.</p>;
