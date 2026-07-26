@@ -13,6 +13,9 @@ import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
+import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -35,6 +38,7 @@ public class PreviewComposeArtifactBuilder {
 
     private final ObjectMapper objectMapper;
     private final PreviewBlockResolver blockResolver;
+    private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
 
     public ComposeArtifact build(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, AuthStrategy authStrategy,
@@ -50,6 +54,10 @@ public class PreviewComposeArtifactBuilder {
                 file("Dockerfile", DOCKERFILE),
                 file("src/main.tsx", MAIN_TSX),
                 file("src/index.css", INDEX_CSS),
+                // Workflow Composition Phase 2 Change Request §14 WP-8 — FlowBlueprint 모델+실행기를
+                // App.tsx 안에 인라인하면 단일 문자열 상수가 JVM 상수 풀의 UTF8 항목 크기 제한
+                // (65535바이트)을 넘어 컴파일이 깨진다(실제로 겪음) — 별도 파일로 분리한 이유.
+                file("src/flow.ts", FLOW_TS),
                 file("src/App.tsx", appTsx)
         );
 
@@ -78,12 +86,19 @@ public class PreviewComposeArtifactBuilder {
             Purpose purpose
     ) {
         Map<String, List<Block>> pageBlocks = BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose);
+        // Workflow Composition Phase 2 Change Request §22 7번 — analyze()/PreviewDeployController의
+        // 스냅샷 계산과 같은 방식으로 다시 만든다(중복 계산이지만 pageBlocks도 이미 이 메서드와
+        // PreviewDeployController 양쪽에서 각각 계산되던 기존 패턴과 동일 — 결정론적이라 문제없음).
+        List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
+        RuleBasedFlowGenerator.ValidatedResult flowResult = ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
         return APP_TSX_TEMPLATE
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
                 .replace("__CAPABILITIES_JSON__", toJson(capabilities))
                 .replace("__PAGES_JSON__", toJson(pages))
                 .replace("__AUTH_STRATEGY_JSON__", toJson(authStrategy))
-                .replace("__PAGE_BLOCKS_JSON__", toJson(pageBlocks));
+                .replace("__PAGE_BLOCKS_JSON__", toJson(pageBlocks))
+                .replace("__FLOWS_JSON__", toJson(flowResult.result().flows()))
+                .replace("__BINDINGS_JSON__", toJson(flowResult.result().bindings()));
     }
 
     private String toJson(Object value) {
@@ -199,6 +214,385 @@ public class PreviewComposeArtifactBuilder {
             );
             """;
 
+    // Workflow Composition Phase 2 Change Request §6(FlowBlueprint)/§8(ApiBinding)/§14(FlowExecutor) —
+    // Frontend components/preview-runtime/flow/{types,expression,flowExecutor}.ts와 동일한 로직을
+    // 이식한 것. App.tsx가 이 파일에서 executeFlow/createFlowContext/타입을 import한다(App.tsx 자체
+    // 인라인은 JVM 상수 풀 UTF8 항목 크기 제한 때문에 불가능했음, build() 주석 참고).
+    private static final String FLOW_TS = """
+            type FlowStepType =
+              | "API_CALL" | "SET_CONTEXT" | "NAVIGATE" | "POLL" | "WAIT" | "CONDITION"
+              | "SHOW_SUCCESS" | "SHOW_ERROR" | "REFRESH_BINDING"
+              | "EVENT_STREAM" | "UPLOAD" | "DOWNLOAD" | "PARALLEL";
+
+            export interface PollCondition {
+              path: string;
+              equalsValue: string | null;
+              in: string[] | null;
+            }
+
+            export interface FlowStep {
+              id: string;
+              type: FlowStepType;
+              bindingRef: string | null;
+              input: Record<string, string> | null;
+              values: Record<string, string> | null;
+              pageId: string | null;
+              parameters: Record<string, string> | null;
+              until: PollCondition[] | null;
+              intervalMs: number | null;
+              timeoutSeconds: number | null;
+              condition: string | null;
+              message: string | null;
+            }
+
+            export interface FlowTrigger {
+              pageId: string | null;
+              actionId: string | null;
+            }
+
+            export interface FlowBlueprint {
+              id: string;
+              trigger: FlowTrigger | null;
+              steps: FlowStep[];
+            }
+
+            type InputTarget = "PATH" | "QUERY" | "BODY" | "HEADER";
+
+            export interface InputMapping {
+              target: string;
+              targetKind: InputTarget;
+              from: string;
+            }
+
+            export interface OutputMapping {
+              from: string;
+              to: string;
+            }
+
+            export interface ApiBinding {
+              id: string;
+              capabilityId: string;
+              inputMappings: InputMapping[];
+              outputMappings: OutputMapping[];
+              refreshBindingIds: string[];
+            }
+
+            // §6/§17 "Arbitrary JavaScript expressions must not be supported" — 화이트리스트 정규식
+            // 하나로 스코프(form/route/context/steps/currentUser) + 점경로 세그먼트만 허용한다.
+            type FlowExpressionScope = "FORM" | "ROUTE" | "CONTEXT" | "STEPS" | "CURRENT_USER";
+
+            interface FlowExpression {
+              raw: string;
+              scope: FlowExpressionScope;
+              path: string[];
+            }
+
+            const FLOW_EXPRESSION_PATTERN = /^\\$(form|route|context|steps|currentUser)((?:\\.[A-Za-z0-9_-]+)*)$/;
+
+            const FLOW_EXPRESSION_SCOPE_BY_TOKEN: Record<string, FlowExpressionScope> = {
+              form: "FORM",
+              route: "ROUTE",
+              context: "CONTEXT",
+              steps: "STEPS",
+              currentUser: "CURRENT_USER",
+            };
+
+            function isFlowExpressionLike(value: string | null | undefined): value is string {
+              return typeof value === "string" && value.startsWith("$");
+            }
+
+            function parseFlowExpression(raw: string): FlowExpression | null {
+              const match = FLOW_EXPRESSION_PATTERN.exec(raw);
+              if (!match) {
+                return null;
+              }
+              const scope = FLOW_EXPRESSION_SCOPE_BY_TOKEN[match[1]];
+              const rest = match[2];
+              const path = rest.length === 0 ? [] : rest.slice(1).split(".");
+              return { raw, scope, path };
+            }
+
+            export interface FlowContext {
+              form: Record<string, unknown>;
+              route: Record<string, unknown>;
+              context: Record<string, unknown>;
+              steps: Record<string, { response: unknown }>;
+              currentUser: Record<string, unknown> | null;
+            }
+
+            export function createFlowContext(seed: Partial<FlowContext> = {}): FlowContext {
+              return {
+                form: seed.form ?? {},
+                route: seed.route ?? {},
+                context: seed.context ?? {},
+                steps: seed.steps ?? {},
+                currentUser: seed.currentUser ?? null,
+              };
+            }
+
+            export interface BindingRequest {
+              path: Record<string, string>;
+              query: Record<string, string>;
+              body: Record<string, unknown>;
+              headers: Record<string, string>;
+            }
+
+            export interface FlowExecutorDeps {
+              callBinding: (binding: ApiBinding, request: BindingRequest) => Promise<unknown>;
+              navigate?: (pageId: string, parameters: Record<string, unknown>) => void;
+              onMessage?: (kind: "SUCCESS" | "ERROR", message: string) => void;
+              onRefreshBindingError?: (bindingId: string, error: unknown) => void;
+              signal?: AbortSignal;
+              now?: () => number;
+              sleep?: (ms: number) => Promise<void>;
+            }
+
+            const defaultFlowSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+            export class FlowExecutionError extends Error {
+              readonly stepId: string;
+              readonly cause: unknown;
+
+              constructor(stepId: string, cause: unknown) {
+                super(`step "${stepId}" 실행 실패: ${cause instanceof Error ? cause.message : String(cause)}`);
+                this.stepId = stepId;
+                this.cause = cause;
+              }
+            }
+
+            function findFlowBinding(bindings: ApiBinding[], id: string): ApiBinding {
+              const binding = bindings.find((b) => b.id === id);
+              if (!binding) {
+                throw new Error(`알 수 없는 bindingRef: ${id}`);
+              }
+              return binding;
+            }
+
+            function readByFlowPath(root: unknown, path: string[]): unknown {
+              let current = root;
+              for (const segment of path) {
+                if (current === null || typeof current !== "object") {
+                  return undefined;
+                }
+                current = (current as Record<string, unknown>)[segment];
+              }
+              return current;
+            }
+
+            function resolveFlowExpressionScopeRoot(ctx: FlowContext, expr: FlowExpression): unknown {
+              switch (expr.scope) {
+                case "FORM":
+                  return ctx.form;
+                case "ROUTE":
+                  return ctx.route;
+                case "CONTEXT":
+                  return ctx.context;
+                case "STEPS":
+                  return ctx.steps;
+                case "CURRENT_USER":
+                  return ctx.currentUser;
+              }
+            }
+
+            function resolveFlowValue(raw: string, ctx: FlowContext): unknown {
+              if (!isFlowExpressionLike(raw)) {
+                return raw;
+              }
+              const expr = parseFlowExpression(raw);
+              if (!expr) {
+                throw new Error(`허용되지 않는 표현식: ${raw}`);
+              }
+              return readByFlowPath(resolveFlowExpressionScopeRoot(ctx, expr), expr.path);
+            }
+
+            function resolveFlowMap(map: Record<string, string> | null, ctx: FlowContext): Record<string, unknown> {
+              if (!map) {
+                return {};
+              }
+              const result: Record<string, unknown> = {};
+              for (const [key, value] of Object.entries(map)) {
+                result[key] = resolveFlowValue(value, ctx);
+              }
+              return result;
+            }
+
+            // ApiBinding.inputMappings가 요청 조립의 정본이다 — FlowStep.input/parameters는 안 쓴다
+            // (라이브 프리뷰 flowExecutor.ts와 동일한 알려진 단순화).
+            function buildFlowBindingRequest(binding: ApiBinding, ctx: FlowContext): BindingRequest {
+              const request: BindingRequest = { path: {}, query: {}, body: {}, headers: {} };
+              for (const mapping of binding.inputMappings) {
+                const value = resolveFlowValue(mapping.from, ctx);
+                switch (mapping.targetKind) {
+                  case "PATH":
+                    request.path[mapping.target] = String(value);
+                    break;
+                  case "QUERY":
+                    request.query[mapping.target] = String(value);
+                    break;
+                  case "HEADER":
+                    request.headers[mapping.target] = String(value);
+                    break;
+                  case "BODY":
+                    request.body[mapping.target] = value;
+                    break;
+                }
+              }
+              return request;
+            }
+
+            function applyFlowOutputMappings(binding: ApiBinding, response: unknown, ctx: FlowContext): void {
+              for (const mapping of binding.outputMappings) {
+                ctx.context[mapping.to] = readByFlowPath(response, mapping.from.split("."));
+              }
+            }
+
+            async function callFlowBindingAndApply(
+              binding: ApiBinding,
+              ctx: FlowContext,
+              deps: FlowExecutorDeps,
+              recordStepId?: string
+            ): Promise<unknown> {
+              const request = buildFlowBindingRequest(binding, ctx);
+              const response = await deps.callBinding(binding, request);
+              applyFlowOutputMappings(binding, response, ctx);
+              if (recordStepId) {
+                ctx.steps[recordStepId] = { response };
+              }
+              return response;
+            }
+
+            async function refreshRelatedFlowBindings(
+              binding: ApiBinding,
+              bindings: ApiBinding[],
+              ctx: FlowContext,
+              deps: FlowExecutorDeps
+            ): Promise<void> {
+              for (const refreshId of binding.refreshBindingIds) {
+                try {
+                  const target = findFlowBinding(bindings, refreshId);
+                  await callFlowBindingAndApply(target, ctx, deps);
+                } catch (error) {
+                  deps.onRefreshBindingError?.(refreshId, error);
+                }
+              }
+            }
+
+            function matchesFlowCondition(condition: PollCondition, response: unknown): boolean {
+              const value = readByFlowPath(response, condition.path.split("."));
+              if (condition.equalsValue !== null) {
+                return String(value) === condition.equalsValue;
+              }
+              if (condition.in) {
+                return condition.in.includes(String(value));
+              }
+              return false;
+            }
+
+            function matchesFlowUntil(until: PollCondition[], response: unknown): boolean {
+              return until.some((condition) => matchesFlowCondition(condition, response));
+            }
+
+            async function executeFlowPoll(
+              step: FlowStep,
+              bindings: ApiBinding[],
+              ctx: FlowContext,
+              deps: FlowExecutorDeps
+            ): Promise<void> {
+              const binding = findFlowBinding(bindings, step.bindingRef!);
+              const sleep = deps.sleep ?? defaultFlowSleep;
+              const now = deps.now ?? Date.now;
+              const deadline = now() + step.timeoutSeconds! * 1000;
+
+              for (;;) {
+                if (deps.signal?.aborted) {
+                  return;
+                }
+
+                let response: unknown;
+                try {
+                  response = await deps.callBinding(binding, buildFlowBindingRequest(binding, ctx));
+                } catch (error) {
+                  throw new FlowExecutionError(step.id, error);
+                }
+
+                if (matchesFlowUntil(step.until!, response)) {
+                  applyFlowOutputMappings(binding, response, ctx);
+                  ctx.steps[step.id] = { response };
+                  await refreshRelatedFlowBindings(binding, bindings, ctx, deps);
+                  return;
+                }
+
+                if (now() >= deadline) {
+                  return;
+                }
+
+                await sleep(step.intervalMs!);
+              }
+            }
+
+            async function executeFlowStep(
+              step: FlowStep,
+              bindings: ApiBinding[],
+              ctx: FlowContext,
+              deps: FlowExecutorDeps
+            ): Promise<"continue" | "stop"> {
+              switch (step.type) {
+                case "API_CALL":
+                case "REFRESH_BINDING": {
+                  const binding = findFlowBinding(bindings, step.bindingRef!);
+                  try {
+                    await callFlowBindingAndApply(binding, ctx, deps, step.id);
+                  } catch (error) {
+                    throw new FlowExecutionError(step.id, error);
+                  }
+                  return "continue";
+                }
+                case "SET_CONTEXT":
+                  Object.assign(ctx.context, resolveFlowMap(step.values, ctx));
+                  return "continue";
+                case "NAVIGATE":
+                  deps.navigate?.(step.pageId!, resolveFlowMap(step.parameters, ctx));
+                  return "continue";
+                case "POLL":
+                  await executeFlowPoll(step, bindings, ctx, deps);
+                  return "continue";
+                case "WAIT":
+                  await (deps.sleep ?? defaultFlowSleep)(step.timeoutSeconds! * 1000);
+                  return "continue";
+                case "CONDITION":
+                  return resolveFlowValue(step.condition!, ctx) ? "continue" : "stop";
+                case "SHOW_SUCCESS":
+                  deps.onMessage?.("SUCCESS", step.message!);
+                  return "continue";
+                case "SHOW_ERROR":
+                  deps.onMessage?.("ERROR", step.message!);
+                  return "continue";
+                case "EVENT_STREAM":
+                case "UPLOAD":
+                case "DOWNLOAD":
+                case "PARALLEL":
+                  throw new FlowExecutionError(step.id, new Error(`아직 지원하지 않는 step 타입: ${step.type}`));
+              }
+            }
+
+            export async function executeFlow(
+              flow: FlowBlueprint,
+              bindings: ApiBinding[],
+              ctx: FlowContext,
+              deps: FlowExecutorDeps
+            ): Promise<void> {
+              for (const step of flow.steps) {
+                if (deps.signal?.aborted) {
+                  return;
+                }
+                const outcome = await executeFlowStep(step, bindings, ctx, deps);
+                if (outcome === "stop") {
+                  return;
+                }
+              }
+            }
+            """;
+
     private static final String INDEX_CSS = """
             :root {
               font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -247,6 +641,13 @@ public class PreviewComposeArtifactBuilder {
     // 이미 검증됨.
     private static final String APP_TSX_TEMPLATE = """
             import { useEffect, useRef, useState, type FormEvent } from "react";
+            import {
+              createFlowContext,
+              executeFlow,
+              type ApiBinding,
+              type BindingRequest,
+              type FlowBlueprint,
+            } from "./flow";
 
             type CapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
             type PageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
@@ -334,6 +735,8 @@ public class PreviewComposeArtifactBuilder {
             const AUTH_STRATEGY: AuthStrategy = __AUTH_STRATEGY_JSON__;
             // 페이지 ID별 Block 목록 — PreviewBlockResolver가 서버에서 미리 계산해 심어둔다.
             const PAGE_BLOCKS: Record<string, Block[]> = __PAGE_BLOCKS_JSON__;
+            const FLOWS: FlowBlueprint[] = __FLOWS_JSON__;
+            const BINDINGS: ApiBinding[] = __BINDINGS_JSON__;
 
             // DetailPanel/CreateEditModal/DeleteConfirmModal은 실제 경로 파라미터 이름을 모른 채 항상
             // { id: ... } 하나만 넘긴다. 이름 그대로 "{id}"를 찾아 치환하면 capability.path가
@@ -655,6 +1058,24 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            // §14 WP-8 "BindingRuntime" — 라이브 프리뷰 flow/runtime.ts의 createCapabilityBindingCaller와
+            // 동일 — request.path는 값 하나만(사실상 하나만 있다고 가정) "id"로 넘긴다(buildUrl이 경로
+            // 파라미터 이름과 무관하게 "경로의 마지막 {...}"만 치환하는 것과 짝을 이룸).
+            function createCapabilityBindingCaller(authToken: string | null) {
+              return async function callBinding(binding: ApiBinding, request: BindingRequest): Promise<unknown> {
+                const capability = findCapabilityById(binding.capabilityId);
+                if (!capability) {
+                  throw new Error(`알 수 없는 capabilityId: ${binding.capabilityId}`);
+                }
+                const pathValue = Object.values(request.path)[0];
+                return callCapability(capability, authToken, {
+                  pathParams: pathValue !== undefined ? { id: pathValue } : {},
+                  query: request.query,
+                  body: Object.keys(request.body).length > 0 ? request.body : undefined,
+                });
+              };
+            }
+
             function LoginForm({ capability, onLogin }: { capability: Capability; onLogin: (token: string) => void }) {
               const fields = capability.fields.length > 0 ? capability.fields : ["email", "password"];
               const [values, setValues] = useState<Record<string, string>>({});
@@ -878,7 +1299,16 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
-            function DetailPanel({ capability, authToken, id }: { capability: Capability; authToken: string | null; id: string }) {
+            function DetailPanel({
+              capability, authToken, id, refreshKey,
+            }: {
+              capability: Capability;
+              authToken: string | null;
+              id: string;
+              // Workflow Composition Phase 2 Change Request §9 "refresh related list or detail bindings
+              // after success" — 생성/수정/삭제/커맨드 성공 후에도 이미 열린 상세가 갱신 안 되던 결함.
+              refreshKey?: number;
+            }) {
               const [data, setData] = useState<Record<string, unknown> | null>(null);
               const [loading, setLoading] = useState(true);
               const [error, setError] = useState<string | null>(null);
@@ -901,7 +1331,7 @@ public class PreviewComposeArtifactBuilder {
                 return () => {
                   cancelled = true;
                 };
-              }, [capability, authToken, id]);
+              }, [capability, authToken, id, refreshKey]);
 
               if (loading) {
                 return <p className="muted">불러오는 중...</p>;
@@ -931,7 +1361,14 @@ public class PreviewComposeArtifactBuilder {
             // Direction Recovery Change Request §9.2 "full-detail-page" — DetailPanel과 데이터
             // 요구조건(DETAIL capability)은 동일하고, 좁은 사이드 칼럼 대신 필드를 카드형 그리드로
             // 넓게 펼쳐 보여준다.
-            function FullDetailPage({ capability, authToken, id }: { capability: Capability; authToken: string | null; id: string }) {
+            function FullDetailPage({
+              capability, authToken, id, refreshKey,
+            }: {
+              capability: Capability;
+              authToken: string | null;
+              id: string;
+              refreshKey?: number;
+            }) {
               const [data, setData] = useState<Record<string, unknown> | null>(null);
               const [loading, setLoading] = useState(true);
               const [error, setError] = useState<string | null>(null);
@@ -954,7 +1391,7 @@ public class PreviewComposeArtifactBuilder {
                 return () => {
                   cancelled = true;
                 };
-              }, [capability, authToken, id]);
+              }, [capability, authToken, id, refreshKey]);
 
               if (loading) {
                 return <p className="muted">불러오는 중...</p>;
@@ -981,13 +1418,16 @@ public class PreviewComposeArtifactBuilder {
             }
 
             function CreateEditModal({
-              capability, authToken, initialValues, onClose, onSuccess,
+              capability, authToken, initialValues, onClose, onSuccess, onSubmitOverride,
             }: {
               capability: Capability;
               authToken: string | null;
               initialValues?: Record<string, unknown>;
               onClose: () => void;
               onSuccess: () => void;
+              // 이 페이지의 CREATE 액션에 FlowBlueprint가 배정돼 있으면 이 모달은 API를 직접 안 부르고
+              // 폼 값만 넘긴다 — 호출 측(PageRenderer)이 executeFlow로 전체 flow를 실행한다.
+              onSubmitOverride?: (values: Record<string, string>) => Promise<void>;
             }) {
               const fields = capability.fields;
               const [values, setValues] = useState<Record<string, string>>(() =>
@@ -1001,9 +1441,13 @@ public class PreviewComposeArtifactBuilder {
                 setError(null);
                 setLoading(true);
                 try {
-                  const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
-                  await callCapability(capability, authToken, { body: values, pathParams });
-                  onSuccess();
+                  if (onSubmitOverride) {
+                    await onSubmitOverride(values);
+                  } else {
+                    const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
+                    await callCapability(capability, authToken, { body: values, pathParams });
+                    onSuccess();
+                  }
                   onClose();
                 } catch (err) {
                   setError(err instanceof Error ? err.message : "저장에 실패했습니다");
@@ -1047,13 +1491,15 @@ public class PreviewComposeArtifactBuilder {
             // 동작·props는 동일하고, 화면 오른쪽에서 열리는 패널로 보여준다. PRODUCT_LIKE 목적일 때
             // 고른다(§3 "Cards, detail pages, drawers, and guided creation flows").
             function FormDrawer({
-              capability, authToken, initialValues, onClose, onSuccess,
+              capability, authToken, initialValues, onClose, onSuccess, onSubmitOverride,
             }: {
               capability: Capability;
               authToken: string | null;
               initialValues?: Record<string, unknown>;
               onClose: () => void;
               onSuccess: () => void;
+              // CreateEditModal과 동일 — FlowBlueprint가 배정된 CREATE 액션이면 폼 값만 넘긴다.
+              onSubmitOverride?: (values: Record<string, string>) => Promise<void>;
             }) {
               const fields = capability.fields;
               const [values, setValues] = useState<Record<string, string>>(() =>
@@ -1067,9 +1513,13 @@ public class PreviewComposeArtifactBuilder {
                 setError(null);
                 setLoading(true);
                 try {
-                  const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
-                  await callCapability(capability, authToken, { body: values, pathParams });
-                  onSuccess();
+                  if (onSubmitOverride) {
+                    await onSubmitOverride(values);
+                  } else {
+                    const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
+                    await callCapability(capability, authToken, { body: values, pathParams });
+                    onSuccess();
+                  }
                   onClose();
                 } catch (err) {
                   setError(err instanceof Error ? err.message : "저장에 실패했습니다");
@@ -1477,6 +1927,28 @@ public class PreviewComposeArtifactBuilder {
                 setRefreshKey((key) => key + 1);
               }
 
+              // §14 WP-8 "FlowExecutor를 실제로 배선" — 이 페이지의 CREATE 액션에 RuleBasedFlowGenerator가
+              // 만든 flow가 있으면 CreateEditModal/FormDrawer가 직접 API를 안 부르고 폼 값만 넘겨, 여기서
+              // flow 전체(API_CALL→NAVIGATE)를 실행한다. NAVIGATE는 지금 생성기가 항상 자기 자신(같은
+              // 페이지)+selected 파라미터로만 만들어서 selectRow 호출로 충분하다(다른 페이지로 이동하는
+              // NAVIGATE는 아직 생성되지 않아 처리하지 않음 — 라이브 프리뷰 PreviewPageRenderer.tsx와 동일한
+              // 알려진 범위).
+              const createFlow = create
+                ? FLOWS.find((flow) => flow.trigger?.pageId === page.id && flow.trigger?.actionId === create.id)
+                : undefined;
+
+              async function runCreateFlow(flow: FlowBlueprint, formValues: Record<string, string>) {
+                const ctx = createFlowContext({ form: formValues });
+                await executeFlow(flow, BINDINGS, ctx, {
+                  callBinding: createCapabilityBindingCaller(authToken),
+                  navigate: (_pageId, parameters) => {
+                    const selected = parameters.selected != null ? String(parameters.selected) : null;
+                    selectRow(selected ? { id: selected } : null);
+                  },
+                });
+                refresh();
+              }
+
               // 두 레이아웃(side-detail-panel/full-detail-page)이 공유하는 수정/삭제 버튼.
               function renderHeaderActions(row: Record<string, unknown>) {
                 return (
@@ -1515,7 +1987,7 @@ public class PreviewComposeArtifactBuilder {
                           />
                         </div>
                       )}
-                      <FullDetailPage capability={detail} authToken={authToken} id={rowId(selectedRow)} />
+                      <FullDetailPage capability={detail} authToken={authToken} id={rowId(selectedRow)} refreshKey={refreshKey} />
                     </div>
                   ) : (
                     <div className="grid-2">
@@ -1552,16 +2024,28 @@ public class PreviewComposeArtifactBuilder {
                               />
                             </div>
                           )}
-                          {detail && <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} />}
+                          {detail && <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} refreshKey={refreshKey} />}
                         </div>
                       )}
                     </div>
                   )}
                   {create && overlay.kind === "CREATE" && (
                     createBlock?.componentId === "form-drawer" ? (
-                      <FormDrawer capability={create} authToken={authToken} onClose={() => setOverlay({ kind: "NONE" })} onSuccess={refresh} />
+                      <FormDrawer
+                        capability={create}
+                        authToken={authToken}
+                        onClose={() => setOverlay({ kind: "NONE" })}
+                        onSuccess={refresh}
+                        onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
+                      />
                     ) : (
-                      <CreateEditModal capability={create} authToken={authToken} onClose={() => setOverlay({ kind: "NONE" })} onSuccess={refresh} />
+                      <CreateEditModal
+                        capability={create}
+                        authToken={authToken}
+                        onClose={() => setOverlay({ kind: "NONE" })}
+                        onSuccess={refresh}
+                        onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
+                      />
                     )
                   )}
                   {update && overlay.kind === "UPDATE" && (

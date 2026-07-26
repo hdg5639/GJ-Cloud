@@ -14,6 +14,7 @@ import gj.cloud.ops.application.preview.analysis.PageSkeletonType;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.RiskLevel;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
+import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import org.junit.jupiter.api.Test;
 
@@ -33,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PreviewComposeArtifactBuilderTest {
 
     private final PreviewComposeArtifactBuilder builder =
-            new PreviewComposeArtifactBuilder(new ObjectMapper(), new PreviewBlockResolver());
+            new PreviewComposeArtifactBuilder(new ObjectMapper(), new PreviewBlockResolver(), new RuleBasedFlowGenerator());
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -55,12 +56,16 @@ class PreviewComposeArtifactBuilderTest {
 
         assertThat(files.keySet()).containsExactlyInAnyOrder(
                 "package.json", "tsconfig.json", "vite.config.ts", "index.html",
-                "Dockerfile", "src/main.tsx", "src/index.css", "src/App.tsx");
+                "Dockerfile", "src/main.tsx", "src/index.css", "src/flow.ts", "src/App.tsx");
 
         String appTsx = files.get("src/App.tsx");
         assertThat(appTsx).doesNotContain(
                 "__API_BASE_URL_JSON__", "__CAPABILITIES_JSON__", "__PAGES_JSON__",
-                "__AUTH_STRATEGY_JSON__", "__PAGE_BLOCKS_JSON__");
+                "__AUTH_STRATEGY_JSON__", "__PAGE_BLOCKS_JSON__", "__FLOWS_JSON__", "__BINDINGS_JSON__");
+        // App.tsx가 실행기를 직접 인라인하지 않고 분리된 파일에서 import하는지(위 주석의 JVM 상수 풀
+        // 제한 회피 이유가 실제로 지켜지는지) 확인.
+        assertThat(appTsx).contains("from \"./flow\"");
+        assertThat(files.get("src/flow.ts")).contains("export async function executeFlow(");
         assertThat(appTsx).contains("https://api.example.com");
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");
@@ -114,6 +119,24 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).doesNotContain("\"componentId\":\"delete-confirm-modal\"");
         // ADMIN은 list 계열은 그대로 resource-table을 유지해야 한다(PRODUCT_LIKE 전용 규칙과 섞이지 않는지 확인).
         assertThat(appTsx).contains("\"componentId\":\"resource-table\"");
+    }
+
+    // §22 7번 — sampleCapabilities()의 vms 리소스는 CREATE+DETAIL을 모두 갖고 있어
+    // RuleBasedFlowGenerator가 실제로 create-flow를 만들어야 한다. 이 flow가 App.tsx의 FLOWS
+    // 전역에 실제로 임베딩되고, PageRenderer가 onSubmitOverride로 배선하는지까지 확인한다.
+    @Test
+    void generatedCreateFlowIsEmbeddedAndWiredIntoPageRenderer() {
+        ComposeArtifact artifact = builder.build(
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
+                Purpose.API_TEST);
+
+        Map<String, String> files = artifact.uploadedFiles().stream()
+                .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
+        String appTsx = files.get("src/App.tsx");
+
+        assertThat(appTsx).contains("\"vms-page-create-flow\"");
+        assertThat(appTsx).contains("\"vms.create-binding\"");
+        assertThat(appTsx).contains("onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}");
     }
 
     private void assertThatIsValidJson(String json) {
