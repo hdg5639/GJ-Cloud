@@ -59,10 +59,42 @@ class RuleBasedPagePlanGeneratorTest {
                 .anyMatch(p -> p.skeleton() == PageSkeletonType.DASHBOARD);
     }
 
+    @Test
+    void resourceWithDetailButNoListBecomesResourceDetailPage() {
+        // 실제 겪음(memme API의 boards): GET 목록 없이 상세만 있는 리소스. RESOURCE_LIST로 만들면
+        // page.main 목록 Block이 0개라 배포 slot 검증에서 깨지므로 RESOURCE_DETAIL이어야 한다.
+        List<Capability> capabilities = List.of(
+                capability("boards.detail", "boards", CapabilityType.DETAIL));
+
+        List<PageDraft> pages = generator.generate(capabilities, Purpose.ADMIN);
+
+        assertThat(pages).filteredOn(p -> p.id().equals("boards-page"))
+                .singleElement()
+                .satisfies(p -> assertThat(p.skeleton()).isEqualTo(PageSkeletonType.RESOURCE_DETAIL));
+    }
+
+    @Test
+    void resourceWithNeitherListNorDetailIsSkipped() {
+        // 업로드/변환처럼 CREATE만 있는 리소스는 유효한 MVP 페이지를 만들 수 없어 건너뛴다.
+        List<Capability> capabilities = List.of(
+                listCapability("vms"),
+                capability("video.create", "video", CapabilityType.CREATE));
+
+        List<PageDraft> pages = generator.generate(capabilities, Purpose.ADMIN);
+
+        assertThat(pages).noneMatch(p -> p.id().equals("video-page"));
+        assertThat(pages).anyMatch(p -> p.id().equals("vms-page"));
+    }
+
     private Capability listCapability(String resourceName) {
-        return new Capability(resourceName + ".list", resourceName, CapabilityType.LIST, null,
-                "/" + resourceName, "GET", false, false, false, "HIGH", List.of(), List.of(), null, null,
+        return capability(resourceName + ".list", resourceName, CapabilityType.LIST);
+    }
+
+    private Capability capability(String id, String resourceName, CapabilityType type) {
+        return new Capability(id, resourceName, type, null,
+                "/" + resourceName, type == CapabilityType.CREATE ? "POST" : "GET",
+                false, false, false, "HIGH", List.of(), List.of(), null, null,
                 RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,
-                CapabilityKind.QUERY, null, List.of());
+                type == CapabilityType.CREATE ? CapabilityKind.MUTATION : CapabilityKind.QUERY, null, List.of());
     }
 }

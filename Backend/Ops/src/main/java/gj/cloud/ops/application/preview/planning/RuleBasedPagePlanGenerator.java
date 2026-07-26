@@ -39,7 +39,21 @@ public class RuleBasedPagePlanGenerator {
 
             boolean hasList = hasType(resourceCapabilities, CapabilityType.LIST);
             boolean hasDetail = hasType(resourceCapabilities, CapabilityType.DETAIL);
-            PageSkeletonType skeleton = hasList && hasDetail ? PageSkeletonType.LIST_DETAIL : PageSkeletonType.RESOURCE_LIST;
+            // 스켈레톤은 page.main(RESOURCE_LIST)/page.primary(RESOURCE_DETAIL) Slot을 EXACTLY_ONE으로
+            // 채울 수 있어야 유효하다. LIST 없이 RESOURCE_LIST로 만들면 목록 Block이 0개라 배포
+            // compatibility 검증에서 깨진다(실제로 겪음: GET 목록이 없는 리소스). LIST가 없고 DETAIL만
+            // 있으면 RESOURCE_DETAIL로, 둘 다 없으면(업로드/변환 등 CREATE·COMMAND만) 유효한 페이지를
+            // 만들 수 없어 건너뛴다. (PageDraftGenerator와 동일 규칙 — 두 생성기가 같은 계약을 지켜야 함.)
+            PageSkeletonType skeleton;
+            if (hasList && hasDetail) {
+                skeleton = PageSkeletonType.LIST_DETAIL;
+            } else if (hasList) {
+                skeleton = PageSkeletonType.RESOURCE_LIST;
+            } else if (hasDetail) {
+                skeleton = PageSkeletonType.RESOURCE_DETAIL;
+            } else {
+                continue;
+            }
 
             pages.add(new PageDraft(resourceName + "-page", titleize(resourceName), skeleton, capabilityIds));
 
