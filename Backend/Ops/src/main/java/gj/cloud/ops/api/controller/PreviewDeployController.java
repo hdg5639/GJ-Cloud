@@ -15,6 +15,9 @@ import gj.cloud.ops.application.preview.analysis.RegistryStatus;
 import gj.cloud.ops.application.preview.build.PreviewComposeArtifactBuilder;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.dto.PreviewDeployRequest;
+import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import gj.cloud.ops.application.preview.service.PreviewBlueprintService;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
@@ -55,6 +58,7 @@ public class PreviewDeployController {
 
     private final PreviewComposeArtifactBuilder previewComposeArtifactBuilder;
     private final PreviewBlueprintService previewBlueprintService;
+    private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
     private final DeploymentTargetService deploymentTargetService;
     private final DeploymentExecutor deploymentExecutor;
     private final VmServiceClient vmServiceClient;
@@ -96,9 +100,12 @@ public class PreviewDeployController {
         RegistryStatus status = hasErrorFinding(body.pages(), pageBlocks, body.capabilities())
                 ? RegistryStatus.DRAFT
                 : RegistryStatus.VALIDATED;
+        List<PagePlan> pagePlans = PagePlanMapper.from(body.pages(), body.capabilities());
+        RuleBasedFlowGenerator.ValidatedResult flowResult =
+                ruleBasedFlowGenerator.generateValidated(pagePlans, body.capabilities());
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
                 body.apiBaseUrl(), body.capabilities(), body.pages(), body.authStrategy(), pageBlocks, status,
-                body.purpose());
+                body.purpose(), pagePlans, flowResult.result().flows(), flowResult.result().bindings());
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
 
         return ApiResponse.ok(DeploymentResponse.from(deployment));

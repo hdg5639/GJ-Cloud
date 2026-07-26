@@ -224,7 +224,7 @@ class DeploymentExecutorTest {
                 List.of(new Block("login", "login-form", "page.content", List.of("auth.login"), null)));
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
                 "https://api.example.com", List.of(login), List.of(page), AuthStrategy.bearer(), pageBlocks,
-                RegistryStatus.VALIDATED, Purpose.PRODUCT_LIKE);
+                RegistryStatus.VALIDATED, Purpose.PRODUCT_LIKE, List.of(), List.of(), List.of());
 
         DeploymentEntity updated = deploymentExecutor.attachPreviewBlueprint(target, snapshot);
 

@@ -5,6 +5,9 @@ import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.RegistryStatus;
+import gj.cloud.ops.application.preview.binding.ApiBinding;
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
 
 import java.util.List;
 import java.util.Map;
@@ -24,6 +27,15 @@ public record PreviewBlueprintSnapshot(
         RegistryStatus status,
         // Direction Recovery Change Request Increment 4 — pageBlocks의 componentId가 이미
         // BlueprintCompiler로 이 목적에 맞게 컴파일된 결과라, 어떤 목적으로 컴파일됐는지도 함께 남긴다.
-        PreviewAnalyzeRequest.Purpose purpose
+        PreviewAnalyzeRequest.Purpose purpose,
+        // Workflow Composition Phase 2 Change Request WP-6 — AC-9 "Deterministic compilation"을
+        // 나중에 감사할 수 있도록 배포 시점에 실제로 쓰인 PagePlan/FlowBlueprint/ApiBinding을 함께
+        // 저장한다. 배포 요청(PreviewDeployRequest)이 이 값을 직접 보내지 않고, pages/capabilities로부터
+        // PreviewDeployController가 analyze()와 동일한 방식(PagePlanMapper+RuleBasedFlowGenerator)으로
+        // 다시 계산해서 채운다 — 아직 배포된 정적 아티팩트가 flows를 실제로 실행하지는 않는다(WP-8의
+        // 다음 조각, PreviewComposeArtifactBuilder에 FlowExecutor를 미러링하는 작업으로 명시적으로 미룸).
+        List<PagePlan> pagePlans,
+        List<FlowBlueprint> flows,
+        List<ApiBinding> bindings
 ) {
 }
