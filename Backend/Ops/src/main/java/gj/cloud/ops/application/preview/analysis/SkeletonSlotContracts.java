@@ -20,12 +20,14 @@ public final class SkeletonSlotContracts {
                     "page.main", Cardinality.EXACTLY_ONE,
                     "page.aside", Cardinality.ZERO_OR_ONE,
                     "page.overlay", Cardinality.ZERO_OR_MORE,
-                    "page.actions", Cardinality.ZERO_OR_ONE),
+                    "page.actions", Cardinality.ZERO_OR_ONE,
+                    "page.secondary", Cardinality.ZERO_OR_MORE),
             PageSkeletonType.LIST_DETAIL, Map.of(
                     "page.main", Cardinality.EXACTLY_ONE,
                     "page.aside", Cardinality.ZERO_OR_ONE,
                     "page.overlay", Cardinality.ZERO_OR_MORE,
-                    "page.actions", Cardinality.ZERO_OR_ONE)
+                    "page.actions", Cardinality.ZERO_OR_ONE,
+                    "page.secondary", Cardinality.ZERO_OR_MORE)
     );
 
     private SkeletonSlotContracts() {

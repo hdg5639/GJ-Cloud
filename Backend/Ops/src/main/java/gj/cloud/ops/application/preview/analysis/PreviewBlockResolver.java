@@ -48,14 +48,18 @@ public class PreviewBlockResolver {
     }
 
     private List<Block> resolveDefault(PageDraft page, List<Capability> capabilities) {
-        Capability list = findByType(page, capabilities, CapabilityType.LIST);
-        if (list == null) {
+        List<Capability> listCapabilities = page.capabilityIds().stream()
+                .map(id -> findById(capabilities, id))
+                .filter(c -> c != null && c.type() == CapabilityType.LIST)
+                .toList();
+        if (listCapabilities.isEmpty()) {
             return List.of();
         }
-        Capability detail = findByType(page, capabilities, CapabilityType.DETAIL);
-        Capability create = findByType(page, capabilities, CapabilityType.CREATE);
-        Capability update = findByType(page, capabilities, CapabilityType.UPDATE);
-        Capability delete = findByType(page, capabilities, CapabilityType.DELETE);
+        Capability list = listCapabilities.get(0);
+        Capability detail = findByTypeForResource(page, capabilities, CapabilityType.DETAIL, list.resourceName());
+        Capability create = findByTypeForResource(page, capabilities, CapabilityType.CREATE, list.resourceName());
+        Capability update = findByTypeForResource(page, capabilities, CapabilityType.UPDATE, list.resourceName());
+        Capability delete = findByTypeForResource(page, capabilities, CapabilityType.DELETE, list.resourceName());
 
         List<Block> blocks = new ArrayList<>();
         blocks.add(new Block("list", "resource-table", "page.main", List.of(list.id()), null));
@@ -83,7 +87,39 @@ public class PreviewBlockResolver {
         if (!commandIds.isEmpty()) {
             blocks.add(new Block("actions", "quick-action-button-group", "page.actions", commandIds, null));
         }
+
+        // AC-6 — 주 LIST 경로 아래에 중첩된 추가 LIST(/parents/{id}/children)가 같은 페이지에
+        // 배치돼 있으면 부모 상세의 secondary section으로 조립한다. 단순 MERGE_PAGES로 합쳐진
+        // 무관한 리소스는 경로 prefix가 맞지 않아 child로 오인하지 않는다.
+        for (Capability childList : listCapabilities.stream().skip(1).toList()) {
+            if (!isNestedUnder(list, childList)) {
+                continue;
+            }
+            List<String> childCapabilityIds = new ArrayList<>();
+            childCapabilityIds.add(childList.id());
+            page.capabilityIds().stream()
+                    .map(id -> findById(capabilities, id))
+                    .filter(c -> c != null && c.type() == CapabilityType.CREATE)
+                    .filter(c -> c.resourceName().equals(childList.resourceName()))
+                    .filter(c -> isNestedUnder(list, c))
+                    .findFirst()
+                    .ifPresent(c -> childCapabilityIds.add(c.id()));
+            blocks.add(new Block("child-" + sanitizeInstanceId(childList.resourceName()),
+                    "child-resource-list", "page.secondary", childCapabilityIds, null));
+        }
         return blocks;
+    }
+
+
+    private boolean isNestedUnder(Capability parentList, Capability candidate) {
+        String parentPath = parentList.path().endsWith("/")
+                ? parentList.path().substring(0, parentList.path().length() - 1)
+                : parentList.path();
+        return candidate.path().startsWith(parentPath + "/{");
+    }
+
+    private String sanitizeInstanceId(String value) {
+        return value.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
     }
 
     // PreviewPageRenderer.tsx의 findCapabilityByType과 동일한 규칙 — page.capabilityIds 순서대로
@@ -92,6 +128,17 @@ public class PreviewBlockResolver {
         for (String id : page.capabilityIds()) {
             Capability capability = findById(capabilities, id);
             if (capability != null && capability.type() == type) {
+                return capability;
+            }
+        }
+        return null;
+    }
+
+    private Capability findByTypeForResource(PageDraft page, List<Capability> capabilities,
+                                                     CapabilityType type, String resourceName) {
+        for (String id : page.capabilityIds()) {
+            Capability capability = findById(capabilities, id);
+            if (capability != null && capability.type() == type && capability.resourceName().equals(resourceName)) {
                 return capability;
             }
         }

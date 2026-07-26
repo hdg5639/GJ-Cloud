@@ -13,7 +13,8 @@ import { DashboardView } from "./DashboardView";
 import { RecentActivityDashboard } from "./RecentActivityDashboard";
 import { QuickActionButtonGroup } from "./QuickActionButtonGroup";
 import { FullDetailPage } from "./FullDetailPage";
-import { rowId } from "./api";
+import { ChildResourceList } from "./ChildResourceList";
+import { callCapability, rowId } from "./api";
 import { findCapabilityById } from "./utils";
 import {
   findCapabilityForBlock,
@@ -105,6 +106,7 @@ export function PreviewPageRenderer({
   const commandCapabilities = (commandBlock?.capabilityIds ?? [])
     .map((id) => findCapabilityById(capabilities, id))
     .filter((c): c is PreviewCapability => c !== undefined);
+  const childBlocks = blocks.filter((block) => block.componentId === "child-resource-list");
 
   if (!list) {
     return <p className="text-sm text-danger">이 페이지에 목록 capability가 없습니다.</p>;
@@ -133,6 +135,52 @@ export function PreviewPageRenderer({
       },
     });
     refresh();
+  }
+
+  // COMMAND capability도 RuleBasedFlowGenerator가 만든 flow를 실제로 실행한다. 이전에는 flow가
+  // 응답에 존재해도 QuickActionButtonGroup이 callCapability를 직접 호출해 refreshBindingIds가
+  // 무시됐다. 선택 행 ID를 $route.selected로 주입하고, flow가 없을 때만 컴포넌트의 직접 호출로
+  // 폴백한다.
+  async function runCommandFlow(capability: PreviewCapability, targetId: string) {
+    const flow = flows.find((candidate) =>
+      candidate.trigger?.pageId === page.id && candidate.trigger?.actionId === capability.id
+    );
+    if (!flow) {
+      await callCapability(config, capability, { pathParams: { id: targetId } });
+      return;
+    }
+    const ctx = createFlowContext({ route: { selected: targetId } });
+    await executeFlow(flow, bindings, ctx, {
+      callBinding: createCapabilityBindingCaller(capabilities, config),
+      navigate: (_pageId, parameters) => {
+        const selected = parameters.selected != null ? String(parameters.selected) : null;
+        if (selected) {
+          onSelectRow({ id: selected });
+        }
+      },
+    });
+  }
+
+  function renderChildResources(parentId: string) {
+    if (!parentId || childBlocks.length === 0) return null;
+    return childBlocks.map((block) => {
+      const childCapabilities = block.capabilityIds
+        .map((id) => findCapabilityById(capabilities, id))
+        .filter((capability): capability is PreviewCapability => capability !== undefined);
+      const childList = childCapabilities.find((capability) => capability.type === "LIST");
+      const childCreate = childCapabilities.find((capability) => capability.type === "CREATE");
+      if (!childList) return null;
+      return (
+        <ChildResourceList
+          key={block.instanceId}
+          listCapability={childList}
+          createCapability={childCreate}
+          config={config}
+          parentId={parentId}
+          refreshKey={refreshKey}
+        />
+      );
+    });
   }
 
   // 두 레이아웃(side-detail-panel/full-detail-page)이 공유하는 수정/삭제 버튼 — 선택된 row를 파라미터로
@@ -183,10 +231,12 @@ export function PreviewPageRenderer({
                 config={config}
                 targetId={rowId(selectedRow)}
                 onSuccess={refresh}
+                onExecute={(capability) => runCommandFlow(capability, rowId(selectedRow))}
               />
             </div>
           )}
           <FullDetailPage capability={detail} config={config} id={rowId(selectedRow)} refreshKey={refreshKey} />
+          {renderChildResources(rowId(selectedRow))}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -221,10 +271,12 @@ export function PreviewPageRenderer({
                     config={config}
                     targetId={rowId(selectedRow)}
                     onSuccess={refresh}
+                    onExecute={(capability) => runCommandFlow(capability, rowId(selectedRow))}
                   />
                 </div>
               )}
               {detail && <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} refreshKey={refreshKey} />}
+              {renderChildResources(rowId(selectedRow))}
             </div>
           )}
         </div>

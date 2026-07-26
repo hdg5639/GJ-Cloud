@@ -17,7 +17,8 @@ export type ComponentId =
   | "dashboard-view"
   | "recent-activity-dashboard"
   | "quick-action-button-group"
-  | "full-detail-page";
+  | "full-detail-page"
+  | "child-resource-list";
 
 // 계열(같은 Slot·Capability 요구조건을 공유하는 Variant 묶음)마다 기본 componentId를 키로, 특정
 // purpose가 선호하는 Variant를 값으로 둔다. Direction Recovery Change Request §10.3
@@ -41,7 +42,7 @@ const VARIANT_BY_PURPOSE: Partial<Record<ComponentId, Partial<Record<Purpose, Co
 const SLOT_OVERRIDE: Partial<Record<ComponentId, SlotId>> = { "full-detail-page": "page.main" };
 const REPLACES_OVERRIDE: Partial<Record<ComponentId, string>> = { "full-detail-page": "list" };
 
-export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay" | "page.actions";
+export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay" | "page.actions" | "page.secondary";
 
 export interface Block {
   instanceId: string;
@@ -90,10 +91,13 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
   if (!list) {
     return [];
   }
-  const detail = findCapabilityByType(capabilities, page, "DETAIL");
-  const create = findCapabilityByType(capabilities, page, "CREATE");
-  const update = findCapabilityByType(capabilities, page, "UPDATE");
-  const del = findCapabilityByType(capabilities, page, "DELETE");
+  const pageCapabilities = page.capabilityIds
+    .map((id) => findCapabilityById(capabilities, id))
+    .filter((capability): capability is PreviewCapability => capability !== undefined);
+  const detail = pageCapabilities.find((capability) => capability.type === "DETAIL" && capability.resourceName === list.resourceName);
+  const create = pageCapabilities.find((capability) => capability.type === "CREATE" && capability.resourceName === list.resourceName);
+  const update = pageCapabilities.find((capability) => capability.type === "UPDATE" && capability.resourceName === list.resourceName);
+  const del = pageCapabilities.find((capability) => capability.type === "DELETE" && capability.resourceName === list.resourceName);
 
   const blocks: Block[] = [
     { instanceId: "list", componentId: "resource-table", slot: "page.main", capabilityIds: [list.id], mode: null, replaces: null },
@@ -152,6 +156,30 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       componentId: "quick-action-button-group",
       slot: "page.actions",
       capabilityIds: commandIds,
+      mode: null,
+      replaces: null,
+    });
+  }
+
+  const listCapabilities = page.capabilityIds
+    .map((id) => findCapabilityById(capabilities, id))
+    .filter((capability): capability is PreviewCapability => capability?.type === "LIST");
+  const parentPath = list.path.replace(/\/$/, "");
+  for (const childList of listCapabilities.slice(1)) {
+    if (!childList.path.startsWith(`${parentPath}/{`)) continue;
+    const childCreate = page.capabilityIds
+      .map((id) => findCapabilityById(capabilities, id))
+      .find(
+        (capability) =>
+          capability?.type === "CREATE" &&
+          capability.resourceName === childList.resourceName &&
+          capability.path.startsWith(`${parentPath}/{`)
+      );
+    blocks.push({
+      instanceId: `child-${childList.resourceName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      componentId: "child-resource-list",
+      slot: "page.secondary",
+      capabilityIds: [childList.id, ...(childCreate ? [childCreate.id] : [])],
       mode: null,
       replaces: null,
     });

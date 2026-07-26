@@ -91,11 +91,12 @@ public class PreviewComposeArtifactBuilder {
         // PreviewDeployController 양쪽에서 각각 계산되던 기존 패턴과 동일 — 결정론적이라 문제없음).
         List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
         RuleBasedFlowGenerator.ValidatedResult flowResult = ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
-        return APP_TSX_TEMPLATE
+        return appTsxTemplate()
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
                 .replace("__CAPABILITIES_JSON__", toJson(capabilities))
                 .replace("__PAGES_JSON__", toJson(pages))
                 .replace("__AUTH_STRATEGY_JSON__", toJson(authStrategy))
+                .replace("__PURPOSE_JSON__", toJson(purpose != null ? purpose.name() : null))
                 .replace("__PAGE_BLOCKS_JSON__", toJson(pageBlocks))
                 .replace("__FLOWS_JSON__", toJson(flowResult.result().flows()))
                 .replace("__BINDINGS_JSON__", toJson(flowResult.result().bindings()));
@@ -601,7 +602,25 @@ public class PreviewComposeArtifactBuilder {
             }
             * { box-sizing: border-box; }
             body { margin: 0; }
-            .container { max-width: 960px; margin: 0 auto; padding: 32px; }
+            .container { max-width: 1120px; margin: 0 auto; padding: 32px; }
+            .shell { overflow: hidden; border: 1px solid #262b26; border-radius: 14px; background: #14171a; }
+            .shell-main { min-width: 0; flex: 1; padding: 20px; }
+            .shell-header { padding: 18px 20px 0; border-bottom: 1px solid #262b26; background: linear-gradient(90deg, rgba(34,197,94,0.08), transparent); }
+            .shell-brand { display: flex; align-items: center; gap: 10px; }
+            .shell-logo { width: 30px; height: 30px; border-radius: 9px; background: #22c55e; color: #07130a; display: grid; place-items: center; font-weight: 900; }
+            .shell-product-nav { display: flex; gap: 20px; overflow-x: auto; margin-top: 18px; }
+            .shell-product-nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 0 0 12px; background: transparent; color: #9ca3af; white-space: nowrap; font-weight: 800; }
+            .shell-product-nav button.active { color: #e5e7eb; border-bottom-color: #22c55e; }
+            .shell-admin { display: flex; min-height: 540px; }
+            .shell-sidebar { width: 210px; flex: none; border-right: 1px solid #262b26; padding: 14px; background: rgba(0,0,0,0.12); }
+            .shell-sidebar button { width: 100%; display: block; border: 0; background: transparent; color: #9ca3af; text-align: left; padding: 9px 10px; margin-bottom: 4px; }
+            .shell-sidebar button.active { background: rgba(34,197,94,0.10); color: #22c55e; }
+            .shell-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #262b26; }
+            .shell-badge { border: 1px solid #333; border-radius: 999px; padding: 4px 9px; color: #9ca3af; font-size: 10px; font-weight: 700; }
+            .shell-api-head { display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #262b26; background: #0d1012; }
+            .shell-api-nav { display: flex; gap: 4px; overflow-x: auto; padding: 8px 12px; border-bottom: 1px solid #262b26; background: rgba(0,0,0,0.18); }
+            .shell-api-nav button { border: 0; padding: 6px 9px; background: transparent; color: #9ca3af; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+            .shell-api-nav button.active { background: rgba(34,197,94,0.12); color: #22c55e; }
             .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
             .tab { padding: 6px 14px; border-radius: 6px; border: 1px solid #333; background: transparent; color: #aaa; cursor: pointer; font-size: 13px; font-weight: 700; }
             .tab.active { border-color: #22c55e; color: #22c55e; background: rgba(34,197,94,0.1); }
@@ -624,7 +643,12 @@ public class PreviewComposeArtifactBuilder {
             .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: flex-end; z-index: 50; }
             .drawer { width: 420px; max-width: 100%; height: 100%; overflow-y: auto; background: #14171a; padding: 20px; border-left: 1px solid #262b26; }
             .grid-2 { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
-            @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+            @media (max-width: 720px) {
+              .grid-2 { grid-template-columns: 1fr; }
+              .shell-admin { display: block; }
+              .shell-sidebar { width: 100%; border-right: 0; border-bottom: 1px solid #262b26; display: flex; gap: 4px; overflow-x: auto; }
+              .shell-sidebar button { width: auto; white-space: nowrap; }
+            }
             .log-entry { border: 1px solid #262b26; border-radius: 8px; margin-bottom: 6px; background: rgba(255,255,255,0.02); }
             .log-entry summary { cursor: pointer; list-style: none; padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; }
             .log-entry summary::-webkit-details-marker { display: none; }
@@ -639,8 +663,10 @@ public class PreviewComposeArtifactBuilder {
     // Schema/Registry/Slot 시스템 없이 5개 고정 패턴만 조립하는 Phase C 렌더러를 순수 React(플레인
     // CSS, 포털 전용 컴포넌트/Tailwind 의존 없음)로 그대로 이식한 것 — 동작은 Phase C에서 브라우저로
     // 이미 검증됨.
-    private static final String APP_TSX_TEMPLATE = """
-            import { useEffect, useRef, useState, type FormEvent } from "react";
+    // App.tsx가 JVM CONSTANT_Utf8 65,535 byte 한도를 넘지 않도록 두 상수로 나누고 런타임에 결합한다.
+    // 컴파일 타임 문자열 덧셈은 다시 하나의 거대 상수로 folding될 수 있어 StringBuilder를 사용한다.
+    private static final String APP_TSX_TEMPLATE_PART_1 = """
+            import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
             import {
               createFlowContext,
               executeFlow,
@@ -651,6 +677,7 @@ public class PreviewComposeArtifactBuilder {
 
             type CapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
             type PageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
+            type Purpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
             type RiskLevel = "SAFE" | "STATE_CHANGING" | "DESTRUCTIVE" | "IRREVERSIBLE" | "EXTERNAL_SIDE_EFFECT";
             type AutomationPolicy =
               | "AUTO_SAFE" | "USER_INITIATED" | "EXPLICIT_CONFIRMATION" | "TYPED_CONFIRMATION" | "DISABLED_IN_AUTO_TEST";
@@ -703,7 +730,8 @@ public class PreviewComposeArtifactBuilder {
             type ComponentId =
               | "login-form" | "resource-table" | "resource-card-grid" | "detail-panel" | "create-edit-modal"
               | "form-drawer" | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view"
-              | "recent-activity-dashboard" | "quick-action-button-group" | "full-detail-page";
+              | "recent-activity-dashboard" | "quick-action-button-group" | "full-detail-page"
+              | "child-resource-list";
             interface Block {
               instanceId: string;
               componentId: ComponentId;
@@ -733,6 +761,7 @@ public class PreviewComposeArtifactBuilder {
             // 있다(Capability별로 다르지 않음). Bearer만 가정하던 기존 방식은 API Key 인증 API에서 항상
             // 401/403이 났다.
             const AUTH_STRATEGY: AuthStrategy = __AUTH_STRATEGY_JSON__;
+            const PURPOSE: Purpose | null = __PURPOSE_JSON__;
             // 페이지 ID별 Block 목록 — PreviewBlockResolver가 서버에서 미리 계산해 심어둔다.
             const PAGE_BLOCKS: Record<string, Block[]> = __PAGE_BLOCKS_JSON__;
             const FLOWS: FlowBlueprint[] = __FLOWS_JSON__;
@@ -1416,9 +1445,11 @@ public class PreviewComposeArtifactBuilder {
                 </div>
               );
             }
+            """;
 
+    private static final String APP_TSX_TEMPLATE_PART_2 = """
             function CreateEditModal({
-              capability, authToken, initialValues, onClose, onSuccess, onSubmitOverride,
+              capability, authToken, initialValues, onClose, onSuccess, onSubmitOverride, pathParamId,
             }: {
               capability: Capability;
               authToken: string | null;
@@ -1428,6 +1459,7 @@ public class PreviewComposeArtifactBuilder {
               // 이 페이지의 CREATE 액션에 FlowBlueprint가 배정돼 있으면 이 모달은 API를 직접 안 부르고
               // 폼 값만 넘긴다 — 호출 측(PageRenderer)이 executeFlow로 전체 flow를 실행한다.
               onSubmitOverride?: (values: Record<string, string>) => Promise<void>;
+              pathParamId?: string;
             }) {
               const fields = capability.fields;
               const [values, setValues] = useState<Record<string, string>>(() =>
@@ -1444,7 +1476,8 @@ public class PreviewComposeArtifactBuilder {
                   if (onSubmitOverride) {
                     await onSubmitOverride(values);
                   } else {
-                    const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
+                    const resolvedPathId = pathParamId ?? (initialValues ? rowId(initialValues) : "");
+                    const pathParams: Record<string, string> = resolvedPathId ? { id: resolvedPathId } : {};
                     await callCapability(capability, authToken, { body: values, pathParams });
                     onSuccess();
                   }
@@ -1491,7 +1524,7 @@ public class PreviewComposeArtifactBuilder {
             // 동작·props는 동일하고, 화면 오른쪽에서 열리는 패널로 보여준다. PRODUCT_LIKE 목적일 때
             // 고른다(§3 "Cards, detail pages, drawers, and guided creation flows").
             function FormDrawer({
-              capability, authToken, initialValues, onClose, onSuccess, onSubmitOverride,
+              capability, authToken, initialValues, onClose, onSuccess, onSubmitOverride, pathParamId,
             }: {
               capability: Capability;
               authToken: string | null;
@@ -1500,6 +1533,7 @@ public class PreviewComposeArtifactBuilder {
               onSuccess: () => void;
               // CreateEditModal과 동일 — FlowBlueprint가 배정된 CREATE 액션이면 폼 값만 넘긴다.
               onSubmitOverride?: (values: Record<string, string>) => Promise<void>;
+              pathParamId?: string;
             }) {
               const fields = capability.fields;
               const [values, setValues] = useState<Record<string, string>>(() =>
@@ -1516,7 +1550,8 @@ public class PreviewComposeArtifactBuilder {
                   if (onSubmitOverride) {
                     await onSubmitOverride(values);
                   } else {
-                    const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
+                    const resolvedPathId = pathParamId ?? (initialValues ? rowId(initialValues) : "");
+                    const pathParams: Record<string, string> = resolvedPathId ? { id: resolvedPathId } : {};
                     await callCapability(capability, authToken, { body: values, pathParams });
                     onSuccess();
                   }
@@ -1556,6 +1591,82 @@ public class PreviewComposeArtifactBuilder {
                     </form>
                   </div>
                 </div>
+              );
+            }
+
+            function ChildResourceList({
+              listCapability, createCapability, authToken, parentId, refreshKey,
+            }: {
+              listCapability: Capability;
+              createCapability?: Capability;
+              authToken: string | null;
+              parentId: string;
+              refreshKey?: number;
+            }) {
+              const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+              const [loading, setLoading] = useState(true);
+              const [error, setError] = useState<string | null>(null);
+              const [createOpen, setCreateOpen] = useState(false);
+              const [localRefreshKey, setLocalRefreshKey] = useState(0);
+
+              useEffect(() => {
+                let cancelled = false;
+                Promise.resolve().then(async () => {
+                  if (cancelled || !parentId) return;
+                  setLoading(true);
+                  setError(null);
+                  try {
+                    const result = await callCapability(listCapability, authToken, { pathParams: { id: parentId } });
+                    if (!cancelled) setRows(extractArray(result, listCapability.collectionPath));
+                  } catch (err) {
+                    if (!cancelled) setError(err instanceof Error ? err.message : "하위 리소스를 불러오지 못했습니다");
+                  } finally {
+                    if (!cancelled) setLoading(false);
+                  }
+                });
+                return () => { cancelled = true; };
+              }, [listCapability, authToken, parentId, refreshKey, localRefreshKey]);
+
+              const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+              return (
+                <section className="panel" style={{ marginTop: 16, padding: 16, background: "rgba(0,0,0,0.10)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                    <div>
+                      <span className="muted" style={{ textTransform: "uppercase", letterSpacing: 1.1 }}>Related resources</span>
+                      <h3 style={{ margin: "3px 0 0", fontSize: 14 }}>{listCapability.resourceName}</h3>
+                    </div>
+                    {createCapability && (
+                      <button className="plain" onClick={() => setCreateOpen(true)}>+ 추가</button>
+                    )}
+                  </div>
+                  {loading ? (
+                    <p className="muted">하위 리소스 불러오는 중...</p>
+                  ) : error ? (
+                    <p className="error">{error}</p>
+                  ) : rows.length === 0 ? (
+                    <p className="muted" style={{ textAlign: "center", padding: 16 }}>연결된 항목이 없습니다</p>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table>
+                        <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+                        <tbody>
+                          {rows.map((row, index) => (
+                            <tr key={index}>{columns.map((column) => <td key={column}>{formatCellValue(row[column])}</td>)}</tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {createCapability && createOpen && (
+                    <CreateEditModal
+                      capability={createCapability}
+                      authToken={authToken}
+                      pathParamId={parentId}
+                      onClose={() => setCreateOpen(false)}
+                      onSuccess={() => setLocalRefreshKey((key) => key + 1)}
+                    />
+                  )}
+                </section>
               );
             }
 
@@ -1667,12 +1778,13 @@ public class PreviewComposeArtifactBuilder {
             // (vm.start 등)의 첫 Variant. AutomationPolicy가 항상 USER_INITIATED로 고정 배정되므로
             // TypedConfirmModal과 달리 확인 없이 클릭하면 바로 실행한다.
             function QuickActionButtonGroup({
-              capabilities, authToken, targetId, onSuccess,
+              capabilities, authToken, targetId, onSuccess, onExecute,
             }: {
               capabilities: Capability[];
               authToken: string | null;
               targetId: string;
               onSuccess?: () => void;
+              onExecute?: (capability: Capability) => Promise<void>;
             }) {
               const [pendingId, setPendingId] = useState<string | null>(null);
               const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1681,7 +1793,11 @@ public class PreviewComposeArtifactBuilder {
                 setErrors((prev) => ({ ...prev, [capability.id]: "" }));
                 setPendingId(capability.id);
                 try {
-                  await callCapability(capability, authToken, { pathParams: { id: targetId } });
+                  if (onExecute) {
+                    await onExecute(capability);
+                  } else {
+                    await callCapability(capability, authToken, { pathParams: { id: targetId } });
+                  }
                   onSuccess?.();
                 } catch (err) {
                   setErrors((prev) => ({
@@ -1918,6 +2034,7 @@ public class PreviewComposeArtifactBuilder {
               const commandCapabilities = (commandBlock?.capabilityIds ?? [])
                 .map((id) => findCapabilityById(id))
                 .filter((c): c is Capability => c !== undefined);
+              const childBlocks = blocks.filter((block) => block.componentId === "child-resource-list");
 
               if (!list) {
                 return <p className="error">이 페이지에 목록 capability가 없습니다.</p>;
@@ -1947,6 +2064,51 @@ public class PreviewComposeArtifactBuilder {
                   },
                 });
                 refresh();
+              }
+
+              async function runCommandFlow(capability: Capability, targetId: string) {
+                const flow = FLOWS.find((candidate) =>
+                  candidate.trigger?.pageId === page.id && candidate.trigger?.actionId === capability.id
+                );
+                if (!flow) {
+                  await callCapability(capability, authToken, { pathParams: { id: targetId } });
+                  return;
+                }
+                const ctx = createFlowContext({ route: { selected: targetId } });
+                await executeFlow(flow, BINDINGS, ctx, {
+                  callBinding: createCapabilityBindingCaller(authToken),
+                  navigate: (_pageId, parameters) => {
+                    const selected = parameters.selected != null ? String(parameters.selected) : null;
+                    if (selected) {
+                      selectRow({ id: selected });
+                    }
+                  },
+                  onRefreshBindingError: (bindingId, error) => {
+                    console.warn(`command 후 refresh binding 실패: ${bindingId}`, error);
+                  },
+                });
+              }
+
+              function renderChildResources(parentId: string) {
+                if (!parentId || childBlocks.length === 0) return null;
+                return childBlocks.map((block) => {
+                  const childCapabilities = block.capabilityIds
+                    .map((id) => findCapabilityById(id))
+                    .filter((capability): capability is Capability => capability !== undefined);
+                  const childList = childCapabilities.find((capability) => capability.type === "LIST");
+                  const childCreate = childCapabilities.find((capability) => capability.type === "CREATE");
+                  if (!childList) return null;
+                  return (
+                    <ChildResourceList
+                      key={block.instanceId}
+                      listCapability={childList}
+                      createCapability={childCreate}
+                      authToken={authToken}
+                      parentId={parentId}
+                      refreshKey={refreshKey}
+                    />
+                  );
+                });
               }
 
               // 두 레이아웃(side-detail-panel/full-detail-page)이 공유하는 수정/삭제 버튼.
@@ -1984,10 +2146,12 @@ public class PreviewComposeArtifactBuilder {
                             authToken={authToken}
                             targetId={rowId(selectedRow)}
                             onSuccess={refresh}
+                            onExecute={(capability) => runCommandFlow(capability, rowId(selectedRow))}
                           />
                         </div>
                       )}
                       <FullDetailPage capability={detail} authToken={authToken} id={rowId(selectedRow)} refreshKey={refreshKey} />
+                      {renderChildResources(rowId(selectedRow))}
                     </div>
                   ) : (
                     <div className="grid-2">
@@ -2021,10 +2185,12 @@ public class PreviewComposeArtifactBuilder {
                                 authToken={authToken}
                                 targetId={rowId(selectedRow)}
                                 onSuccess={refresh}
+                                onExecute={(capability) => runCommandFlow(capability, rowId(selectedRow))}
                               />
                             </div>
                           )}
                           {detail && <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} refreshKey={refreshKey} />}
+                          {renderChildResources(rowId(selectedRow))}
                         </div>
                       )}
                     </div>
@@ -2130,6 +2296,103 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            function ProductShell({
+              pages, activePage, onSelectPage, children,
+            }: {
+              pages: PageDraft[];
+              activePage: PageDraft;
+              onSelectPage: (pageId: string) => void;
+              children: ReactNode;
+            }) {
+              const totalCapabilities = new Set(pages.flatMap((page) => page.capabilityIds)).size;
+
+              if (PURPOSE === "ADMIN") {
+                return (
+                  <div className="shell shell-admin">
+                    <aside className="shell-sidebar">
+                      <div style={{ padding: "4px 10px 14px" }}>
+                        <strong style={{ color: "#22c55e", fontSize: 11, letterSpacing: 1.4 }}>ADMIN CONSOLE</strong>
+                        <p className="muted" style={{ margin: "4px 0 0" }}>운영 및 리소스 관리</p>
+                      </div>
+                      {pages.map((page) => (
+                        <button key={page.id} className={activePage.id === page.id ? "active" : ""} onClick={() => onSelectPage(page.id)}>
+                          <strong style={{ display: "block", fontSize: 12 }}>{page.title}</strong>
+                          <span style={{ fontSize: 10 }}>{page.capabilityIds.length} capabilities</span>
+                        </button>
+                      ))}
+                    </aside>
+                    <main className="shell-main">
+                      <div className="shell-toolbar">
+                        <div>
+                          <span className="muted" style={{ textTransform: "uppercase", letterSpacing: 1.2 }}>Administration</span>
+                          <h2 style={{ margin: "4px 0 0", fontSize: 18 }}>{activePage.title}</h2>
+                        </div>
+                        <span className="shell-badge">{activePage.capabilityIds.length} operations · ADMIN</span>
+                      </div>
+                      {children}
+                    </main>
+                  </div>
+                );
+              }
+
+              if (PURPOSE === "PRODUCT_LIKE") {
+                return (
+                  <div className="shell">
+                    <header className="shell-header">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 12 }}>
+                        <div className="shell-brand">
+                          <div className="shell-logo">G</div>
+                          <div>
+                            <strong>Service Preview</strong>
+                            <p className="muted" style={{ margin: "2px 0 0" }}>실제 사용자 흐름을 위한 동작형 프론트</p>
+                          </div>
+                        </div>
+                        <span className="shell-badge">{pages.length} pages · {totalCapabilities} capabilities</span>
+                      </div>
+                      <nav className="shell-product-nav">
+                        {pages.map((page) => (
+                          <button key={page.id} className={activePage.id === page.id ? "active" : ""} onClick={() => onSelectPage(page.id)}>
+                            {page.title}
+                          </button>
+                        ))}
+                      </nav>
+                    </header>
+                    <main className="shell-main">
+                      <span style={{ color: "#22c55e", fontSize: 10, fontWeight: 800, letterSpacing: 1.2 }}>CURRENT PAGE</span>
+                      <h2 style={{ margin: "5px 0 16px", fontSize: 22 }}>{activePage.title}</h2>
+                      {children}
+                    </main>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="shell">
+                  <div className="shell-api-head">
+                    <div>
+                      <strong style={{ color: "#22c55e", fontFamily: "ui-monospace, monospace", fontSize: 12 }}>API Test Console</strong>
+                      <p className="muted" style={{ margin: "3px 0 0" }}>OpenAPI operations · request/response inspection</p>
+                    </div>
+                    <span className="shell-badge">PAGES {pages.length} · OPS {totalCapabilities}</span>
+                  </div>
+                  <nav className="shell-api-nav">
+                    {pages.map((page) => (
+                      <button key={page.id} className={activePage.id === page.id ? "active" : ""} onClick={() => onSelectPage(page.id)}>
+                        /{page.id}
+                      </button>
+                    ))}
+                  </nav>
+                  <main className="shell-main">
+                    <div className="muted" style={{ display: "flex", justifyContent: "space-between", fontFamily: "ui-monospace, monospace", marginBottom: 12 }}>
+                      <span>PAGE: {activePage.title}</span>
+                      <span>{activePage.capabilityIds.length} operations</span>
+                    </div>
+                    {children}
+                  </main>
+                </div>
+              );
+            }
+
             export default function App() {
               const [authToken, setAuthToken] = useState<string | null>(null);
               const [activePageId, setActivePageId] = useQueryParam("page");
@@ -2147,25 +2410,14 @@ public class PreviewComposeArtifactBuilder {
                 <div className="container">
                   <h1>GamjaBox Auto Preview</h1>
                   <p className="muted">이 화면은 OpenAPI 문서를 분석해 자동 생성되었습니다.</p>
-                  <div className="tabs">
-                    {PAGES.map((page) => (
-                      <button
-                        key={page.id}
-                        className={`tab ${activePage.id === page.id ? "active" : ""}`}
-                        onClick={() => setActivePageId(page.id)}
-                      >
-                        {page.title}
-                      </button>
-                    ))}
-                  </div>
                   {authToken && (
                     <p className="muted" style={{ color: "#22c55e" }}>
                       로그인됨
                     </p>
                   )}
-                  <div className="panel">
+                  <ProductShell pages={PAGES} activePage={activePage} onSelectPage={setActivePageId}>
                     <PageRenderer page={activePage} authToken={authToken} onLogin={setAuthToken} />
-                  </div>
+                  </ProductShell>
                   <div className="panel" style={{ marginTop: 16 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <strong style={{ fontSize: 13 }}>요청·응답 확인</strong>
@@ -2181,4 +2433,11 @@ public class PreviewComposeArtifactBuilder {
               );
             }
             """;
+
+    private static String appTsxTemplate() {
+        return new StringBuilder(APP_TSX_TEMPLATE_PART_1.length() + APP_TSX_TEMPLATE_PART_2.length())
+                .append(APP_TSX_TEMPLATE_PART_1)
+                .append(APP_TSX_TEMPLATE_PART_2)
+                .toString();
+    }
 }

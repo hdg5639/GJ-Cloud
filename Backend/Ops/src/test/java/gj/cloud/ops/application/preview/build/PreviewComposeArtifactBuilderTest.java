@@ -61,7 +61,7 @@ class PreviewComposeArtifactBuilderTest {
         String appTsx = files.get("src/App.tsx");
         assertThat(appTsx).doesNotContain(
                 "__API_BASE_URL_JSON__", "__CAPABILITIES_JSON__", "__PAGES_JSON__",
-                "__AUTH_STRATEGY_JSON__", "__PAGE_BLOCKS_JSON__", "__FLOWS_JSON__", "__BINDINGS_JSON__");
+                "__AUTH_STRATEGY_JSON__", "__PURPOSE_JSON__", "__PAGE_BLOCKS_JSON__", "__FLOWS_JSON__", "__BINDINGS_JSON__");
         // App.tsx가 실행기를 직접 인라인하지 않고 분리된 파일에서 import하는지(위 주석의 JVM 상수 풀
         // 제한 회피 이유가 실제로 지켜지는지) 확인.
         assertThat(appTsx).contains("from \"./flow\"");
@@ -101,6 +101,8 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).contains("\"componentId\":\"form-drawer\"");
         assertThat(appTsx).contains("function FormDrawer(");
         assertThat(appTsx).doesNotContain("\"componentId\":\"create-edit-modal\"");
+        assertThat(appTsx).contains("const PURPOSE: Purpose | null = \"PRODUCT_LIKE\"");
+        assertThat(appTsx).contains("Service Preview").contains("shell-product-nav");
     }
 
     // purpose=ADMIN이면 destructive 계열도 typed-confirm-modal로 컴파일되는지 확인한다.
@@ -119,6 +121,8 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).doesNotContain("\"componentId\":\"delete-confirm-modal\"");
         // ADMIN은 list 계열은 그대로 resource-table을 유지해야 한다(PRODUCT_LIKE 전용 규칙과 섞이지 않는지 확인).
         assertThat(appTsx).contains("\"componentId\":\"resource-table\"");
+        assertThat(appTsx).contains("const PURPOSE: Purpose | null = \"ADMIN\"");
+        assertThat(appTsx).contains("ADMIN CONSOLE").contains("shell-sidebar");
     }
 
     // §22 7번 — sampleCapabilities()의 vms 리소스는 CREATE+DETAIL을 모두 갖고 있어
@@ -137,6 +141,23 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).contains("\"vms-page-create-flow\"");
         assertThat(appTsx).contains("\"vms.create-binding\"");
         assertThat(appTsx).contains("onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}");
+    }
+
+    @Test
+    void commandFlowAndChildResourceComponentAreEmbeddedAndWired() {
+        ComposeArtifact artifact = builder.build(
+                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
+                Purpose.PRODUCT_LIKE);
+
+        Map<String, String> files = artifact.uploadedFiles().stream()
+                .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
+        String appTsx = files.get("src/App.tsx");
+
+        assertThat(appTsx).contains("\"vms-page-start-flow\"");
+        assertThat(appTsx).contains("runCommandFlow(capability, rowId(selectedRow))");
+        assertThat(appTsx).contains("\"componentId\":\"child-resource-list\"");
+        assertThat(appTsx).contains("function ChildResourceList(");
+        assertThat(appTsx).contains("pathParamId={parentId}");
     }
 
     private void assertThatIsValidJson(String json) {
@@ -189,6 +210,18 @@ class PreviewComposeArtifactBuilderTest {
                         false, false, false, "HIGH", List.of(), List.of(), null, null,
                         RiskLevel.DESTRUCTIVE, AutomationPolicy.EXPLICIT_CONFIRMATION, null, null,
                         CapabilityKind.MUTATION, null, List.of()),
+                new Capability("vms.start", "vms", null, "startVm", "/vms/{vmId}/start", "POST",
+                        false, false, false, "HIGH", List.of(), List.of(), null, null,
+                        RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
+                        CapabilityKind.COMMAND, "start", List.of("vms.detail")),
+                new Capability("ports.list", "ports", CapabilityType.LIST, "listPorts", "/vms/{vmId}/ports", "GET",
+                        false, false, false, "HIGH", List.of(), List.of(), null, null,
+                        RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, "data", null,
+                        CapabilityKind.QUERY, null, List.of()),
+                new Capability("ports.create", "ports", CapabilityType.CREATE, "createPort", "/vms/{vmId}/ports", "POST",
+                        false, false, false, "HIGH", List.of(), List.of("port", "protocol"), null, null,
+                        RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
+                        CapabilityKind.MUTATION, null, List.of()),
                 new Capability("tags.list", "tags", CapabilityType.LIST, "listTags", "/tags", "GET",
                         false, false, false, "HIGH", List.of(), List.of(), null, null,
                         RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,
@@ -201,7 +234,8 @@ class PreviewComposeArtifactBuilderTest {
                 new PageDraft("dashboard", "대시보드", PageSkeletonType.DASHBOARD, List.of("vms.list", "tags.list")),
                 new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of("auth.login")),
                 new PageDraft("vms-page", "Vms", PageSkeletonType.LIST_DETAIL,
-                        List.of("vms.list", "vms.detail", "vms.create", "vms.delete")),
+                        List.of("vms.list", "vms.detail", "vms.create", "vms.delete", "vms.start",
+                                "ports.list", "ports.create")),
                 new PageDraft("tags-page", "Tags", PageSkeletonType.RESOURCE_LIST, List.of("tags.list"))
         );
     }

@@ -29,8 +29,12 @@ class ComponentContractComplianceTest {
         Capability delete = capability("vms.delete", "vms", CapabilityType.DELETE);
         Capability tagsList = capability("tags.list", "tags", CapabilityType.LIST);
         Capability start = commandCapability("vms.start", "vms", "start");
+        Capability portsList = capabilityWithPath("ports.list", "ports", CapabilityType.LIST,
+                "/vms/{vmId}/ports", "GET");
+        Capability portsCreate = capabilityWithPath("ports.create", "ports", CapabilityType.CREATE,
+                "/vms/{vmId}/ports", "POST");
         List<Capability> allCapabilities =
-                List.of(login, list, detail, create, update, delete, tagsList, start);
+                List.of(login, list, detail, create, update, delete, tagsList, start, portsList, portsCreate);
 
         List<PageDraft> pages = List.of(
                 new PageDraft("dashboard", "대시보드", PageSkeletonType.DASHBOARD,
@@ -38,7 +42,8 @@ class ComponentContractComplianceTest {
                 new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE,
                         List.of("auth.login")),
                 new PageDraft("vms-page", "Vms", PageSkeletonType.LIST_DETAIL,
-                        List.of("vms.list", "vms.detail", "vms.create", "vms.update", "vms.delete", "vms.start"))
+                        List.of("vms.list", "vms.detail", "vms.create", "vms.update", "vms.delete", "vms.start",
+                                "ports.list", "ports.create"))
         );
 
         for (PageDraft page : pages) {
@@ -83,6 +88,15 @@ class ComponentContractComplianceTest {
                         .contains(capability.type());
             }
         }
+    }
+
+    private Capability capabilityWithPath(String id, String resourceName, CapabilityType type,
+                                                  String path, String method) {
+        return new Capability(id, resourceName, type, null, path, method,
+                false, false, false, "HIGH", List.of(), List.of(), null, null,
+                type == CapabilityType.CREATE ? RiskLevel.STATE_CHANGING : RiskLevel.SAFE,
+                type == CapabilityType.CREATE ? AutomationPolicy.USER_INITIATED : AutomationPolicy.AUTO_SAFE,
+                null, null, kindOf(type), null, List.of());
     }
 
     private Capability commandCapability(String id, String resourceName, String action) {

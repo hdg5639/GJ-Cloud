@@ -111,6 +111,43 @@ class PreviewBlockResolverTest {
         assertThat(blocks).noneMatch(b -> b.componentId().equals("quick-action-button-group"));
     }
 
+    @Test
+    void nestedListAndCreateCapabilitiesProduceChildResourceBlock() {
+        Capability vmsList = capabilityWithPath("vms.list", "vms", CapabilityType.LIST, "/vms", "GET");
+        Capability vmsDetail = capabilityWithPath("vms.detail", "vms", CapabilityType.DETAIL, "/vms/{vmId}", "GET");
+        Capability portsList = capabilityWithPath("ports.list", "ports", CapabilityType.LIST,
+                "/vms/{vmId}/ports", "GET");
+        Capability portsCreate = capabilityWithPath("ports.create", "ports", CapabilityType.CREATE,
+                "/vms/{vmId}/ports", "POST");
+        PageDraft page = new PageDraft("vms-page", "Vms", PageSkeletonType.LIST_DETAIL,
+                List.of("vms.list", "vms.detail", "ports.list", "ports.create"));
+
+        List<Block> blocks = resolver.resolve(page, List.of(vmsList, vmsDetail, portsList, portsCreate));
+
+        assertThat(blocks).contains(new Block("child-ports", "child-resource-list", "page.secondary",
+                List.of("ports.list", "ports.create"), null));
+    }
+
+    @Test
+    void unrelatedMergedListIsNotTreatedAsChildResource() {
+        Capability vmsList = capabilityWithPath("vms.list", "vms", CapabilityType.LIST, "/vms", "GET");
+        Capability tagsList = capabilityWithPath("tags.list", "tags", CapabilityType.LIST, "/tags", "GET");
+        PageDraft page = new PageDraft("merged-page", "Merged", PageSkeletonType.RESOURCE_LIST,
+                List.of("vms.list", "tags.list"));
+
+        List<Block> blocks = resolver.resolve(page, List.of(vmsList, tagsList));
+
+        assertThat(blocks).noneMatch(block -> block.componentId().equals("child-resource-list"));
+    }
+
+    private Capability capabilityWithPath(String id, String resourceName, CapabilityType type, String path, String method) {
+        return new Capability(id, resourceName, type, null, path, method,
+                false, false, false, "HIGH", List.of(), List.of(), null, null,
+                type == CapabilityType.CREATE ? RiskLevel.STATE_CHANGING : RiskLevel.SAFE,
+                type == CapabilityType.CREATE ? AutomationPolicy.USER_INITIATED : AutomationPolicy.AUTO_SAFE,
+                null, null, kindOf(type), null, List.of());
+    }
+
     private Capability commandCapability(String id, String resourceName, String action) {
         return new Capability(id, resourceName, null, null, "/" + resourceName + "/{id}/" + action, "POST",
                 false, false, false, "HIGH", List.of(), List.of(), null, null,

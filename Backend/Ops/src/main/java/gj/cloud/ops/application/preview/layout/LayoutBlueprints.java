@@ -27,12 +27,14 @@ public final class LayoutBlueprints {
                     new LayoutSlot("page.main", Cardinality.EXACTLY_ONE),
                     new LayoutSlot("page.aside", Cardinality.ZERO_OR_ONE),
                     new LayoutSlot("page.overlay", Cardinality.ZERO_OR_MORE),
-                    new LayoutSlot("page.actions", Cardinality.ZERO_OR_ONE))),
+                    new LayoutSlot("page.actions", Cardinality.ZERO_OR_ONE),
+                    new LayoutSlot("page.secondary", Cardinality.ZERO_OR_MORE))),
             "list-detail-layout", new LayoutBlueprint("list-detail-layout", "1", List.of(
                     new LayoutSlot("page.main", Cardinality.EXACTLY_ONE),
                     new LayoutSlot("page.aside", Cardinality.ZERO_OR_ONE),
                     new LayoutSlot("page.overlay", Cardinality.ZERO_OR_MORE),
-                    new LayoutSlot("page.actions", Cardinality.ZERO_OR_ONE))),
+                    new LayoutSlot("page.actions", Cardinality.ZERO_OR_ONE),
+                    new LayoutSlot("page.secondary", Cardinality.ZERO_OR_MORE))),
             // §10 예시 JSON 그대로.
             "resource-detail-layout", new LayoutBlueprint("resource-detail-layout", "1", List.of(
                     new LayoutSlot("page.header", Cardinality.EXACTLY_ONE),
