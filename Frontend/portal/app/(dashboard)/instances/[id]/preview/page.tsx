@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { PreviewAnalysisResult, PageReviewFinding, PreviewCapability } from "@/lib/types";
+import type { PreviewAnalysisResult, PageReviewFinding, PreviewCapability, PreviewPageDraft } from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import { PageLoader } from "@/components/ui/loader";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
 import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
 import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
+import type { Block } from "@/components/preview-runtime/blueprint";
 
 type Purpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
 
@@ -84,6 +85,10 @@ export default function PreviewWizardPage() {
   const [planning, setPlanning] = useState(false);
   const [planDecisions, setPlanDecisions] = useState<string[] | null>(null);
   const [previewPageId, setPreviewPageId] = useState<string | null>(null);
+  // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않도록,
+  // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인 등록
+  // 직후) POST /ops/preview/blocks로 다시 계산받은 결과를 여기 저장해 PreviewPageRenderer에 그대로 넘긴다.
+  const [pageBlocks, setPageBlocks] = useState<Record<string, Block[]>>({});
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
   const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
   const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
@@ -96,6 +101,19 @@ export default function PreviewWizardPage() {
   const [targetName, setTargetName] = useState("");
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
+
+  // Direction Recovery Change Request §13.1 — capability/페이지가 바뀔 때마다 이 함수로 Block을
+  // 다시 계산받는다. 실패해도 조용히 무시한다(마지막으로 받은 pageBlocks가 그대로 남을 뿐, 분석·검수·
+  // 배포 자체를 막지 않음 — AI 검수/재구성이 실패를 안전하게 무시하는 것과 같은 원칙).
+  async function refreshBlocks(capabilities: PreviewCapability[], pages: PreviewPageDraft[], forPurpose: Purpose) {
+    if (!accessToken) return;
+    try {
+      const data = await api.ops.preview.blocks(accessToken, { capabilities, pages, purpose: forPurpose });
+      setPageBlocks(data.pageBlocks);
+    } catch {
+      // 무시 — 위 주석 참고.
+    }
+  }
 
   async function handleAnalyze() {
     if (!accessToken || !apiDocsUrl.trim()) return;
@@ -111,6 +129,7 @@ export default function PreviewWizardPage() {
         purpose,
       });
       setResult(data);
+      refreshBlocks(data.capabilities, data.pages, purpose);
       setApiBaseUrl(data.apiServerUrls[0] ?? "");
       setPreviewPageId(data.pages[0]?.id ?? null);
       setPreviewAuthToken(null);
@@ -159,6 +178,7 @@ export default function PreviewWizardPage() {
         pages: result.pages,
       });
       setResult((prev) => (prev ? { ...prev, pages: planned.pages, generationMode: planned.generationMode } : prev));
+      refreshBlocks(result.capabilities, planned.pages, purpose);
       setPreviewPageId(planned.pages[0]?.id ?? null);
       setPlanDecisions(planned.decisions);
     } catch {
@@ -196,17 +216,16 @@ export default function PreviewWizardPage() {
   // 서버 호출 없이 이후 단계(라이브 프리뷰 로그인, 배포)에 곧바로 반영된다.
   function handleSetAccessTokenPath() {
     const path = accessTokenPathInput.trim();
-    if (!path) return;
-    setResult((prev) => {
-      if (!prev) return prev;
-      const unresolved = prev.unresolved.filter((f) => f.field !== ACCESS_TOKEN_PATH_FIELD);
-      return {
-        ...prev,
-        capabilities: prev.capabilities.map((c) => (c.type === "LOGIN" ? { ...c, accessTokenPath: path } : c)),
-        unresolved,
-        status: unresolved.length === 0 && prev.status === "NEEDS_INPUT" ? "READY" : prev.status,
-      };
+    if (!path || !result) return;
+    const unresolved = result.unresolved.filter((f) => f.field !== ACCESS_TOKEN_PATH_FIELD);
+    const capabilities = result.capabilities.map((c) => (c.type === "LOGIN" ? { ...c, accessTokenPath: path } : c));
+    setResult({
+      ...result,
+      capabilities,
+      unresolved,
+      status: unresolved.length === 0 && result.status === "NEEDS_INPUT" ? "READY" : result.status,
     });
+    refreshBlocks(capabilities, result.pages, purpose);
   }
 
   // 자동 탐지가 실패했을 때(AUTH_LOGIN_NOT_FOUND) 사용자가 로그인 API를 직접 등록한다. 서버가 모르는
@@ -214,62 +233,60 @@ export default function PreviewWizardPage() {
   // access token 위치까지 같이 입력하면 뒤이은 accessTokenPath 보완 단계를 또 거치지 않아도 된다.
   function handleSetManualLogin() {
     const path = manualLoginPath.trim();
-    if (!path) return;
+    if (!path || !result) return;
     const usernameField = manualLoginUsernameField.trim() || "email";
     const passwordField = manualLoginPasswordField.trim() || "password";
     const accessTokenPath = manualLoginAccessTokenPath.trim() || null;
 
-    setResult((prev) => {
-      if (!prev) return prev;
-      const loginCapability: PreviewCapability = {
-        id: "auth.login",
-        resourceName: "auth",
-        type: "LOGIN",
-        operationId: null,
-        path,
-        method: "POST",
-        hasSearch: false,
-        hasSort: false,
-        hasPagination: false,
-        confidence: "LOW",
-        evidence: ["사용자가 직접 지정함"],
-        fields: [usernameField, passwordField],
-        accessTokenPath,
-        searchParam: null,
-        risk: "SAFE",
-        automationPolicy: "AUTO_SAFE",
-        collectionPath: null,
-        totalCountPath: null,
-        kind: "AUTH",
-        action: null,
-        dependencies: [],
-      };
-      const capabilities = [...prev.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
-      const hasAuthPage = prev.pages.some((p) => p.skeleton === "AUTH_PAGE");
-      const pages = hasAuthPage
-        ? prev.pages
-        : [{ id: "auth-login-manual", title: "로그인", skeleton: "AUTH_PAGE" as const, capabilityIds: ["auth.login"] }, ...prev.pages];
+    const loginCapability: PreviewCapability = {
+      id: "auth.login",
+      resourceName: "auth",
+      type: "LOGIN",
+      operationId: null,
+      path,
+      method: "POST",
+      hasSearch: false,
+      hasSort: false,
+      hasPagination: false,
+      confidence: "LOW",
+      evidence: ["사용자가 직접 지정함"],
+      fields: [usernameField, passwordField],
+      accessTokenPath,
+      searchParam: null,
+      risk: "SAFE",
+      automationPolicy: "AUTO_SAFE",
+      collectionPath: null,
+      totalCountPath: null,
+      kind: "AUTH",
+      action: null,
+      dependencies: [],
+    };
+    const capabilities = [...result.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
+    const hasAuthPage = result.pages.some((p) => p.skeleton === "AUTH_PAGE");
+    const pages = hasAuthPage
+      ? result.pages
+      : [{ id: "auth-login-manual", title: "로그인", skeleton: "AUTH_PAGE" as const, capabilityIds: ["auth.login"] }, ...result.pages];
 
-      let unresolved = prev.unresolved.filter((f) => f.field !== AUTH_LOGIN_FIELD);
-      if (!accessTokenPath) {
-        unresolved = [
-          ...unresolved,
-          {
-            field: ACCESS_TOKEN_PATH_FIELD,
-            code: "ACCESS_TOKEN_PATH_UNKNOWN",
-            reason: "로그인 응답에서 access token 위치를 확인하지 못했습니다. 아래에서 직접 지정해주세요.",
-          },
-        ];
-      }
-      return {
-        ...prev,
-        capabilities,
-        pages,
-        unresolved,
-        status: unresolved.length === 0 && prev.status === "NEEDS_INPUT" ? "READY" : prev.status,
-      };
+    let unresolved = result.unresolved.filter((f) => f.field !== AUTH_LOGIN_FIELD);
+    if (!accessTokenPath) {
+      unresolved = [
+        ...unresolved,
+        {
+          field: ACCESS_TOKEN_PATH_FIELD,
+          code: "ACCESS_TOKEN_PATH_UNKNOWN",
+          reason: "로그인 응답에서 access token 위치를 확인하지 못했습니다. 아래에서 직접 지정해주세요.",
+        },
+      ];
+    }
+    setResult({
+      ...result,
+      capabilities,
+      pages,
+      unresolved,
+      status: unresolved.length === 0 && result.status === "NEEDS_INPUT" ? "READY" : result.status,
     });
     setPreviewPageId((prevId) => prevId ?? "auth-login-manual");
+    refreshBlocks(capabilities, pages, purpose);
   }
 
   if (!accessToken) return <PageLoader />;
@@ -538,6 +555,7 @@ export default function PreviewWizardPage() {
                     <PreviewPageRenderer
                       page={result.pages.find((p) => p.id === previewPageId)!}
                       capabilities={result.capabilities}
+                      blocks={pageBlocks[previewPageId] ?? []}
                       config={{
                         apiBaseUrl: apiBaseUrl.trim(),
                         authToken: previewAuthToken,

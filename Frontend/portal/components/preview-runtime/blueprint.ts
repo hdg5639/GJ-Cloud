@@ -55,9 +55,11 @@ export interface Block {
   replaces: string | null;
 }
 
-// Backend/Ops의 PreviewBlockResolver와 동일한 규칙 — 지금 렌더러에 하드코딩돼 있던 것을 그대로 데이터로
-// 옮긴 것뿐, 동작은 바꾸지 않는다. RESOURCE_LIST와 LIST_DETAIL은 렌더링 규칙이 같아(PageDraftGenerator가
-// 타이틀 고를 때만 구분) 같은 분기로 처리한다.
+// Backend/Ops의 PreviewBlockResolver와 동일한 규칙. Direction Recovery Change Request §13.1 — 마법사
+// 라이브 프리뷰(PreviewPageRenderer)는 이 함수를 더 이상 호출하지 않는다(POST /ops/preview/blocks가
+// 계산한 Block을 그대로 받아씀). 여기 남아있는 이유는 app/preview-demo(백엔드 없이 목데이터로 렌더러만
+// 확인하는 프론트 전용 샌드박스, 프로덕션 라우트 아님)가 여전히 이 함수로 로컬 Block을 만들기 때문 —
+// Backend 로직이 바뀌면 이 함수도 반드시 같이 맞춰야 한다(샌드박스가 실제와 어긋나지 않도록).
 export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability[]): Block[] {
   if (page.skeleton === "AUTH_PAGE") {
     const login = findCapabilityByType(capabilities, page, "LOGIN");
@@ -158,7 +160,8 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
 }
 
 // Backend BlueprintCompiler.compile(...)과 동일한 규칙 — resolveBlocks가 만든 기본 Block 목록에서
-// 각 Block을 purpose가 선호하는 Variant로 교체한다(계열이 하나도 안 걸리면 그대로 둠).
+// 각 Block을 purpose가 선호하는 Variant로 교체한다(계열이 하나도 안 걸리면 그대로 둠). resolveBlocks와
+// 마찬가지로 실제 서비스 경로에서는 안 쓰이고 app/preview-demo 샌드박스 전용으로만 남아있다.
 export function compileBlocks(blocks: Block[], purpose: Purpose | null): Block[] {
   if (!purpose) {
     return blocks;

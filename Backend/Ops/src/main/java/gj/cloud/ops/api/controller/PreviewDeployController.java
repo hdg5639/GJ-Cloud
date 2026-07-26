@@ -11,12 +11,11 @@ import gj.cloud.ops.application.preview.analysis.CompatibilityFinding;
 import gj.cloud.ops.application.preview.analysis.CompatibilitySeverity;
 import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
-import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.RegistryStatus;
-import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
 import gj.cloud.ops.application.preview.build.PreviewComposeArtifactBuilder;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.dto.PreviewDeployRequest;
+import gj.cloud.ops.application.preview.service.PreviewBlueprintService;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
 import gj.cloud.ops.domain.deployment.entity.DeploymentTargetEntity;
@@ -55,7 +54,7 @@ public class PreviewDeployController {
     private static final String PERMISSION_DEPLOY = "DEPLOY";
 
     private final PreviewComposeArtifactBuilder previewComposeArtifactBuilder;
-    private final PreviewBlockResolver previewBlockResolver;
+    private final PreviewBlueprintService previewBlueprintService;
     private final DeploymentTargetService deploymentTargetService;
     private final DeploymentExecutor deploymentExecutor;
     private final VmServiceClient vmServiceClient;
@@ -92,8 +91,8 @@ public class PreviewDeployController {
         DeploymentEntity deployment = deploymentExecutor.enqueueForTarget(
                 bearerToken, vmId.toString(), target, repoConfig, artifact);
 
-        Map<String, List<Block>> pageBlocks = BlueprintCompiler.compile(
-                previewBlockResolver.resolveAll(body.pages(), body.capabilities()), body.purpose());
+        Map<String, List<Block>> pageBlocks =
+                previewBlueprintService.compilePageBlocks(body.pages(), body.capabilities(), body.purpose());
         RegistryStatus status = hasErrorFinding(body.pages(), pageBlocks, body.capabilities())
                 ? RegistryStatus.DRAFT
                 : RegistryStatus.VALIDATED;

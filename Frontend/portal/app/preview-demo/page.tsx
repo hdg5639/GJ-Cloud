@@ -2,11 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
+import { compileBlocks, resolveBlocks } from "@/components/preview-runtime/blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "@/components/preview-runtime/types";
 
 // Auto Preview Phase C 검증용 페이지 — 손으로 작성한 샘플 Blueprint(capabilities/pages)를 실제 API
 // 없이(fetch를 목데이터로 대체) 렌더러가 올바르게 조립하는지 확인한다. 프로덕션 기능이 아니며
 // 사이드바 등 어디에서도 링크되지 않는다. Phase D/E에서 실제 분석 결과 + 배포로 대체될 예정.
+//
+// Direction Recovery Change Request §13.1 — 실제 마법사(app/(dashboard)/instances/[id]/preview)는
+// 이제 POST /ops/preview/blocks가 계산한 Block을 그대로 쓰지만, 이 페이지는 백엔드가 없는 순수
+// 프론트 샌드박스라 그 엔드포인트를 호출할 수 없다. 예외적으로 blueprint.ts의 resolveBlocks/
+// compileBlocks를 여기서 직접 호출해 Block을 만든다.
 
 const CAPABILITIES: PreviewCapability[] = [
   {
@@ -105,6 +111,7 @@ export default function PreviewDemoPage() {
     authStrategy: { type: "BEARER", headerName: "Authorization", prefix: "Bearer ", queryParamName: null },
     purpose: "PRODUCT_LIKE",
   };
+  const blocks = compileBlocks(resolveBlocks(activePage, CAPABILITIES), config.purpose);
 
   return (
     <div className="mx-auto max-w-4xl p-8">
@@ -129,7 +136,7 @@ export default function PreviewDemoPage() {
       {authToken && <p className="mb-3 text-xs text-brand-strong">로그인됨 (token: {authToken})</p>}
 
       <div className="rounded-panel border border-line bg-panel p-5">
-        <PreviewPageRenderer page={activePage} capabilities={CAPABILITIES} config={config} />
+        <PreviewPageRenderer page={activePage} capabilities={CAPABILITIES} blocks={blocks} config={config} />
       </div>
     </div>
   );

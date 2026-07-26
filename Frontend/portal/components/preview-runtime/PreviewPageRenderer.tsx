@@ -16,15 +16,14 @@ import { FullDetailPage } from "./FullDetailPage";
 import { rowId } from "./api";
 import { findCapabilityById } from "./utils";
 import {
-  compileBlocks,
   findCapabilityForBlock,
   findCreateEditBlock,
   findDashboardBlock,
   findDeleteBlock,
   findDetailBlock,
   findListBlock,
-  resolveBlocks,
 } from "./blueprint";
+import type { Block } from "./blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "./types";
 
 // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성 Instance
@@ -37,23 +36,24 @@ type OverlayState =
   | { kind: "UPDATE"; row: Record<string, unknown> }
   | { kind: "DELETE"; id: string };
 
-// GamjaBox_2.0_Key_Features.md 3·7절 — 관련 API를 페이지 하나로 묶어서 보여준다. Blueprint
-// Schema/Registry/Slot 시스템 없이, resolveBlocks가 스켈레톤 종류(AUTH_PAGE/RESOURCE_LIST/
-// LIST_DETAIL/DASHBOARD)별로 만들어주는 Block 목록을 순회해 고정된 패턴 컴포넌트만 조립한다.
+// GamjaBox_2.0_Key_Features.md 3·7절 — 관련 API를 페이지 하나로 묶어서 보여준다. Direction Recovery
+// Change Request §13.1 — 이 컴포넌트는 어떤 Block이 존재해야 하는지(조립 규칙)를 스스로 판단하지
+// 않는다. Block은 백엔드(PreviewBlockResolver+BlueprintCompiler)가 이미 계산해 `blocks` prop으로
+// 넘어오고, 여기서는 그 Block마다 어떤 React 컴포넌트로 그릴지만 결정한다.
 export function PreviewPageRenderer({
   page,
   capabilities,
+  blocks,
   config,
 }: {
   page: PreviewPage;
   capabilities: PreviewCapability[];
+  blocks: Block[];
   config: PreviewRuntimeConfig;
 }) {
   const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
   const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const blocks = compileBlocks(resolveBlocks(page, capabilities), config.purpose);
 
   if (page.skeleton === "AUTH_PAGE") {
     const login = findCapabilityForBlock(blocks, capabilities, "login-form");

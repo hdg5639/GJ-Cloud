@@ -51,6 +51,7 @@ import type {
   PreviewPlanResponse,
   PageReviewFinding,
 } from "./types";
+import type { Block } from "@/components/preview-runtime/blueprint";
 
 const API_BASE = {
   auth: process.env.NEXT_PUBLIC_AUTH_API!,
@@ -792,6 +793,22 @@ export const api = {
         }
       ) =>
         request<PreviewPlanResponse>("ops", "/ops/preview/plan", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않고,
+      // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인
+      // 등록 같은 로컬 편집 직후) 이 엔드포인트로 Block을 다시 받는다.
+      blocks: (
+        accessToken: string,
+        body: {
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+        }
+      ) =>
+        request<{ pageBlocks: Record<string, Block[]> }>("ops", "/ops/preview/blocks", {
           method: "POST",
           body: JSON.stringify(body),
           accessToken,
