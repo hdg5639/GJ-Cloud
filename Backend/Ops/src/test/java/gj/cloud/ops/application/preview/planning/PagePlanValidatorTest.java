@@ -156,6 +156,75 @@ class PagePlanValidatorTest {
         assertThat(result.pages().get(0).title()).isEqualTo("Vms");
     }
 
+    @Test
+    void addsPageThenMovesCapabilityOntoItInTheSameProposal() {
+        Capability create = capability("vms.create", "vms", CapabilityType.CREATE);
+        PageDraft vmsPage = new PageDraft("vms-page", "Vms", PageSkeletonType.RESOURCE_LIST, List.of(create.id()));
+        PagePlanProposal proposal = new PagePlanProposal(List.of(
+                new PagePlanOperation(PagePlanOperationType.ADD_PAGE, "settings-page", null, "설정", null, null, "분리"),
+                new PagePlanOperation(PagePlanOperationType.MOVE_CAPABILITY, null, null, null, create.id(), "settings-page", null)));
+
+        PagePlanApplyResult result = PagePlanValidator.apply(List.of(vmsPage), List.of(create), proposal);
+
+        assertThat(result.errors()).isEmpty();
+        PageDraft settingsPage = findPage(result.pages(), "settings-page");
+        assertThat(settingsPage.title()).isEqualTo("설정");
+        assertThat(settingsPage.capabilityIds()).containsExactly(create.id());
+        assertThat(findPage(result.pages(), "vms-page").capabilityIds()).doesNotContain(create.id());
+    }
+
+    @Test
+    void rejectsAddPageWithAlreadyUsedId() {
+        Capability list = listCapability("vms");
+        PageDraft vmsPage = new PageDraft("vms-page", "Vms", PageSkeletonType.RESOURCE_LIST, List.of(list.id()));
+        PagePlanProposal proposal = new PagePlanProposal(List.of(
+                new PagePlanOperation(PagePlanOperationType.ADD_PAGE, "vms-page", null, "중복", null, null, null)));
+
+        PagePlanApplyResult result = PagePlanValidator.apply(List.of(vmsPage), List.of(list), proposal);
+
+        assertThat(result.errors()).isNotEmpty();
+    }
+
+    @Test
+    void removesEmptyPageAfterMovingItsOnlyCapabilityAway() {
+        Capability create = capability("vms.create", "vms", CapabilityType.CREATE);
+        Capability list = listCapability("vms");
+        PageDraft settingsPage = new PageDraft("settings-page", "설정", PageSkeletonType.RESOURCE_LIST, List.of(create.id()));
+        PageDraft vmsPage = new PageDraft("vms-page", "Vms", PageSkeletonType.RESOURCE_LIST, List.of(list.id()));
+        PagePlanProposal proposal = new PagePlanProposal(List.of(
+                new PagePlanOperation(PagePlanOperationType.MOVE_CAPABILITY, null, null, null, create.id(), "vms-page", null),
+                new PagePlanOperation(PagePlanOperationType.REMOVE_PAGE, "settings-page", null, null, null, null, "빈 페이지 정리")));
+
+        PagePlanApplyResult result = PagePlanValidator.apply(List.of(settingsPage, vmsPage), List.of(create, list), proposal);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.pages()).extracting(PageDraft::id).containsExactly("vms-page");
+    }
+
+    @Test
+    void rejectsRemovingPageThatStillHasCapabilities() {
+        Capability create = capability("vms.create", "vms", CapabilityType.CREATE);
+        PageDraft page = new PageDraft("vms-page", "Vms", PageSkeletonType.RESOURCE_LIST, List.of(create.id()));
+        PagePlanProposal proposal = new PagePlanProposal(List.of(
+                new PagePlanOperation(PagePlanOperationType.REMOVE_PAGE, "vms-page", null, null, null, null, null)));
+
+        PagePlanApplyResult result = PagePlanValidator.apply(List.of(page), List.of(create), proposal);
+
+        assertThat(result.errors()).isNotEmpty();
+    }
+
+    @Test
+    void rejectsRemovingDashboard() {
+        Capability list = listCapability("vms");
+        PageDraft dashboard = new PageDraft("dashboard", "대시보드", PageSkeletonType.DASHBOARD, List.of());
+        PagePlanProposal proposal = new PagePlanProposal(List.of(
+                new PagePlanOperation(PagePlanOperationType.REMOVE_PAGE, "dashboard", null, null, null, null, null)));
+
+        PagePlanApplyResult result = PagePlanValidator.apply(List.of(dashboard), List.of(list), proposal);
+
+        assertThat(result.errors()).isNotEmpty();
+    }
+
     private PageDraft findPage(List<PageDraft> pages, String id) {
         return pages.stream().filter(p -> p.id().equals(id)).findFirst().orElseThrow();
     }

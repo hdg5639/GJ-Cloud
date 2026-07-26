@@ -655,7 +655,7 @@ export interface PageReviewFinding {
 // Direction Recovery Change Request Increment 5(2부) "Plan Review UI" — AiPageReviewer(코멘트만)와
 // 달리 AiPagePlanner의 제안은 사용자가 검토해 실제로 pages를 바꿀 수 있다. propose(AI 호출, 아무것도
 // 적용 안 함) / apply(사용자가 고른 서브셋만 결정론적으로 적용) 두 단계로 나뉜다.
-export type PagePlanOperationType = "RENAME_PAGE" | "MERGE_PAGES" | "MOVE_CAPABILITY";
+export type PagePlanOperationType = "RENAME_PAGE" | "MERGE_PAGES" | "MOVE_CAPABILITY" | "ADD_PAGE" | "REMOVE_PAGE";
 
 // /plan/apply 요청에 보낼 원본 오퍼레이션 — 타입마다 실제로 쓰는 필드가 다르고 그 외는 항상 null.
 export interface PagePlanOperation {

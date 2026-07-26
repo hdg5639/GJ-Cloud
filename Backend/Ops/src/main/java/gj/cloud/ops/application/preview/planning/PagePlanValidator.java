@@ -41,6 +41,8 @@ public final class PagePlanValidator {
                 case RENAME_PAGE -> applyRename(op, pagesById, errors, decisions);
                 case MERGE_PAGES -> applyMerge(op, pagesById, capabilityById, errors, decisions);
                 case MOVE_CAPABILITY -> applyMoveCapability(op, pagesById, validCapabilityIds, errors, decisions);
+                case ADD_PAGE -> applyAddPage(op, pagesById, errors, decisions);
+                case REMOVE_PAGE -> applyRemovePage(op, pagesById, errors, decisions);
             }
         }
 
@@ -135,6 +137,48 @@ public final class PagePlanValidator {
                     refreshedDestination.skeleton(), updated));
         }
         decisions.add(reasonOrDefault(op, op.capabilityId() + "를 \"" + destination.title() + "\" 페이지로 이동"));
+    }
+
+    // ADD_PAGE는 빈 페이지(RESOURCE_LIST, capabilityIds=[])만 만든다 — 뒤이은 MOVE_CAPABILITY
+    // operation들이 채운다(같은 proposal 안에서 순서대로 적용되므로 pagesById에 방금 추가한 페이지를
+    // 바로 참조할 수 있다). SPLIT_PAGE를 별도로 안 만든 이유가 이 조합 가능성 때문(enum 주석 참고).
+    private static void applyAddPage(PagePlanOperation op, Map<String, PageDraft> pagesById,
+                                      List<String> errors, List<String> decisions) {
+        if (op.pageId() == null || op.pageId().isBlank()) {
+            errors.add("ADD_PAGE: pageId가 비어있음");
+            return;
+        }
+        if (pagesById.containsKey(op.pageId())) {
+            errors.add("ADD_PAGE: 이미 존재하는 pageId(" + op.pageId() + ")");
+            return;
+        }
+        if (op.newTitle() == null || op.newTitle().isBlank()) {
+            errors.add("ADD_PAGE: 제목이 비어있음(" + op.pageId() + ")");
+            return;
+        }
+        pagesById.put(op.pageId(), new PageDraft(op.pageId(), op.newTitle(), PageSkeletonType.RESOURCE_LIST, List.of()));
+        decisions.add(reasonOrDefault(op, "\"" + op.newTitle() + "\" 페이지 신설"));
+    }
+
+    // capability가 남아있는 페이지는 삭제를 거부한다 — 먼저 MOVE_CAPABILITY로 비워야 한다(암묵적으로
+    // capability를 버리지 않기 위한 안전장치, §17 "필수 오퍼레이션은 자동으로 사라지면 안 된다"와 동일 정신).
+    private static void applyRemovePage(PagePlanOperation op, Map<String, PageDraft> pagesById,
+                                         List<String> errors, List<String> decisions) {
+        PageDraft page = pagesById.get(op.pageId());
+        if (page == null) {
+            errors.add("REMOVE_PAGE: 존재하지 않는 pageId(" + op.pageId() + ")");
+            return;
+        }
+        if (isProtected(page)) {
+            errors.add("REMOVE_PAGE: " + page.skeleton() + " 페이지(" + op.pageId() + ")는 삭제할 수 없음");
+            return;
+        }
+        if (!page.capabilityIds().isEmpty()) {
+            errors.add("REMOVE_PAGE: capability가 남아있는 페이지(" + op.pageId() + ")는 삭제할 수 없음 — 먼저 MOVE_CAPABILITY로 비울 것");
+            return;
+        }
+        pagesById.remove(op.pageId());
+        decisions.add(reasonOrDefault(op, "\"" + page.title() + "\" 페이지 삭제"));
     }
 
     // 로그인 흐름(AUTH_PAGE)과 대시보드의 LIST-only 불변식(DASHBOARD)은 이번 증분에서 건드리지 않는다.

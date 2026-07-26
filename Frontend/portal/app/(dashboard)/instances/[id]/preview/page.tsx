@@ -355,6 +355,10 @@ export default function PreviewWizardPage() {
         const resourceName = capability?.resourceName ?? "";
         return `${resourceName} ${label ?? ""} 기능을 "${pageTitle(op.destinationPageId)}" 페이지로 이동`;
       }
+      case "ADD_PAGE":
+        return `"${op.newTitle}" 페이지 신설`;
+      case "REMOVE_PAGE":
+        return `"${pageTitle(op.pageId)}" 페이지 삭제`;
       default:
         return op.reason ?? "";
     }

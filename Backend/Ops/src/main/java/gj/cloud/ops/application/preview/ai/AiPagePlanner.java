@@ -52,11 +52,22 @@ public class AiPagePlanner {
               otherPageId (the page to remove — its capabilities move onto pageId).
             - MOVE_CAPABILITY: move a single capability from whatever page it is currently on to a different \
               page. Requires capabilityId and destinationPageId.
+            - ADD_PAGE: create a new, initially empty page. Requires pageId (a new id, not already used) and \
+              newTitle. An ADD_PAGE operation is useless on its own — always follow it with one or more \
+              MOVE_CAPABILITY operations (later in the same operations list) that move capabilities onto the \
+              new pageId. Use this when splitting one overloaded page into a clearer set of pages the described \
+              user would actually navigate between.
+            - REMOVE_PAGE: delete a page. Requires pageId. The page must have no capabilities left on it, so \
+              REMOVE_PAGE only makes sense after MOVE_CAPABILITY operations (earlier in the same operations \
+              list) have moved everything off of it.
 
-            Never invent a pageId or capabilityId that is not present in the input. Never target, merge, or move \
-            a capability into/out of a page whose skeleton is AUTH_PAGE or DASHBOARD — those are structurally \
-            protected and any such operation will be rejected outright. If nothing meaningfully improves the \
-            candidate plan, return an empty operations list — do not propose changes just to have something to say.
+            Operations in the list are applied in order, and each one can depend on an earlier one in the same \
+            list (for example: ADD_PAGE for "settings-page", then MOVE_CAPABILITY moving a capability onto \
+            "settings-page"). Never invent a pageId or capabilityId that is not present in the input or created \
+            by an earlier ADD_PAGE in the same list. Never target, merge, move, add, or remove a capability \
+            into/out of a page whose skeleton is AUTH_PAGE or DASHBOARD — those are structurally protected and \
+            any such operation will be rejected outright. If nothing meaningfully improves the candidate plan, \
+            return an empty operations list — do not propose changes just to have something to say.
 
             Every operation must include a short `reason` field explaining why, grounded in the service \
             description. Leave fields that don't apply to the operation's type as null.
@@ -103,10 +114,26 @@ public class AiPagePlanner {
             totalInputTokens += call.inputTokens();
             totalOutputTokens += call.outputTokens();
 
+            // ADD_PAGE 다음에 그 페이지를 대상으로 하는 MOVE_CAPABILITY가 오는 것처럼, 뒤 오퍼레이션이
+            // 앞 오퍼레이션의 결과에 의존하는 조합이 있다 — 매번 원본 candidatePages로만 검증하면
+            // ADD_PAGE로 막 만든 페이지를 MOVE_CAPABILITY가 "존재하지 않는 destinationPageId"로 오판해
+            // 유효한 조합인데도 체크박스가 비활성화된다. 앞서 유효했던 오퍼레이션까지 누적 적용한
+            // 상태를 기준으로 다음 오퍼레이션을 검증해 이 조합이 실제로는 유효함을 보여준다(부분
+            // 선택 시의 상호작용까지는 여전히 propose 단계에서 안 잡아낸다 — applySelected의
+            // all-or-nothing 검증이 최종 안전망, 기존 원칙 그대로).
             List<PagePlanOperationView> views = new ArrayList<>();
+            List<PageDraft> workingPages = candidatePages;
             List<PagePlanOperation> operations = call.proposal().operations();
             for (int i = 0; i < operations.size(); i++) {
-                views.add(toView(String.valueOf(i), operations.get(i), capabilities, candidatePages));
+                PagePlanOperation op = operations.get(i);
+                PagePlanApplyResult applied = validateAndApply(new PagePlanProposal(List.of(op)), capabilities, workingPages);
+                boolean valid = applied.errors().isEmpty();
+                String validationError = valid ? null : String.join("; ", applied.errors());
+                views.add(new PagePlanOperationView(String.valueOf(i), op.type(), op.pageId(), op.otherPageId(),
+                        op.newTitle(), op.capabilityId(), op.destinationPageId(), op.reason(), valid, validationError));
+                if (valid) {
+                    workingPages = applied.pages();
+                }
             }
 
             succeeded = true;
@@ -126,15 +153,6 @@ public class AiPagePlanner {
             List<PageDraft> candidatePages, List<Capability> capabilities, List<PagePlanOperation> operations
     ) {
         return validateAndApply(new PagePlanProposal(operations), capabilities, candidatePages);
-    }
-
-    private PagePlanOperationView toView(String id, PagePlanOperation op, List<Capability> capabilities,
-                                          List<PageDraft> candidatePages) {
-        PagePlanApplyResult applied = validateAndApply(new PagePlanProposal(List.of(op)), capabilities, candidatePages);
-        boolean valid = applied.errors().isEmpty();
-        String validationError = valid ? null : String.join("; ", applied.errors());
-        return new PagePlanOperationView(id, op.type(), op.pageId(), op.otherPageId(), op.newTitle(),
-                op.capabilityId(), op.destinationPageId(), op.reason(), valid, validationError);
     }
 
     // PagePlanValidator(구조 검증) 통과 후, 결과 페이지가 실제로 Block/Compatibility 관점에서도 문제
