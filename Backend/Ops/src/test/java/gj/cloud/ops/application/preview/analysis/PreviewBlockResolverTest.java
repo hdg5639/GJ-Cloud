@@ -80,7 +80,9 @@ class PreviewBlockResolverTest {
         List<Block> blocks = resolver.resolve(page, List.of(detail, start, portsList, portsCreate));
 
         assertThat(blocks).containsExactly(
-                new Block("detail", "detail-panel", "page.primary", List.of(detail.id()), null),
+                // 독립 상세 페이지는 page.primary 슬롯에 full-detail-page를 쓴다 — detail-panel은
+                // ComponentContracts상 page.aside 전용이라 page.primary에 놓으면 슬롯 계약 위반이다.
+                new Block("detail", "full-detail-page", "page.primary", List.of(detail.id()), null),
                 new Block("actions", "quick-action-button-group", "page.actions", List.of(start.id()), null),
                 new Block("child-ports", "child-resource-list", "page.secondary",
                         List.of(portsList.id(), portsCreate.id()), null));

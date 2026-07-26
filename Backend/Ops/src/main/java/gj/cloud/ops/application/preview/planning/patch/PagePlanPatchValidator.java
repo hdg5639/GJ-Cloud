@@ -822,9 +822,10 @@ public final class PagePlanPatchValidator {
         PageType inferred = inferPageType(capabilityIds, page.pageType(), capabilityMap(capabilities));
         PagePlan typed = page;
         if (inferred != page.pageType()) {
-            String layout = isLayoutCompatible(inferred, page.layoutRef())
-                    ? page.layoutRef() : defaultLayout(inferred);
-            typed = copyPageForType(page, inferred, layout);
+            // 타입이 재추론으로 바뀌면 새 역할에 맞는 기본 레이아웃으로 스냅한다. 이전 타입의
+            // 레이아웃(예: list-detail-layout)이 새 타입과 "호환"으로 판정되더라도 그대로 두면
+            // 분리된 목록 페이지가 계속 상세용 레이아웃을 쓰게 되어 부적절하다.
+            typed = copyPageForType(page, inferred, defaultLayout(inferred));
         }
         return copyPage(typed, null, null, null, capabilityIds, null, null);
     }
