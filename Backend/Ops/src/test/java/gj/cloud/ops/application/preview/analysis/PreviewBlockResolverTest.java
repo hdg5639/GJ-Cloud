@@ -86,6 +86,38 @@ class PreviewBlockResolverTest {
         assertThat(blocks).isEmpty();
     }
 
+    @Test
+    void defaultSkeletonWithCommandCapabilityAddsActionButtonGroupBlock() {
+        Capability list = capability("vms.list", "vms", CapabilityType.LIST);
+        Capability start = commandCapability("vms.start", "vms", "start");
+        Capability stop = commandCapability("vms.stop", "vms", "stop");
+        PageDraft page = new PageDraft("vms-page", "Vms", PageSkeletonType.RESOURCE_LIST,
+                List.of("vms.list", "vms.start", "vms.stop"));
+
+        List<Block> blocks = resolver.resolve(page, List.of(list, start, stop));
+
+        assertThat(blocks).containsExactly(
+                new Block("list", "resource-table", "page.main", List.of("vms.list"), null),
+                new Block("actions", "quick-action-button-group", "page.actions", List.of("vms.start", "vms.stop"), null));
+    }
+
+    @Test
+    void defaultSkeletonWithoutCommandCapabilityProducesNoActionsBlock() {
+        Capability list = capability("posts.list", "posts", CapabilityType.LIST);
+        PageDraft page = new PageDraft("posts-page", "Posts", PageSkeletonType.RESOURCE_LIST, List.of("posts.list"));
+
+        List<Block> blocks = resolver.resolve(page, List.of(list));
+
+        assertThat(blocks).noneMatch(b -> b.componentId().equals("quick-action-button-group"));
+    }
+
+    private Capability commandCapability(String id, String resourceName, String action) {
+        return new Capability(id, resourceName, null, null, "/" + resourceName + "/{id}/" + action, "POST",
+                false, false, false, "HIGH", List.of(), List.of(), null, null,
+                RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
+                CapabilityKind.COMMAND, action, List.of());
+    }
+
     private Capability capability(String id, String resourceName, CapabilityType type) {
         return new Capability(id, resourceName, type, null, "/" + resourceName, "GET",
                 false, false, false, "HIGH", List.of(), List.of(), null, null,

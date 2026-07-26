@@ -71,6 +71,18 @@ public class PreviewBlockResolver {
         if (delete != null) {
             blocks.add(new Block("delete", "delete-confirm-modal", "page.overlay", List.of(delete.id()), null));
         }
+
+        // Direction Recovery Change Request §22 완료 기준 — COMMAND capability(vm.start 등)를 discard하지
+        // 않고 page.actions Block으로 노출한다. 리소스 하나에 여러 개(start/stop/restart) 있을 수 있어
+        // dashboard-view처럼 한 Block에 전부 담는다.
+        List<String> commandIds = page.capabilityIds().stream()
+                .map(id -> findById(capabilities, id))
+                .filter(c -> c != null && c.kind() == CapabilityKind.COMMAND)
+                .map(Capability::id)
+                .toList();
+        if (!commandIds.isEmpty()) {
+            blocks.add(new Block("actions", "quick-action-button-group", "page.actions", commandIds, null));
+        }
         return blocks;
     }
 

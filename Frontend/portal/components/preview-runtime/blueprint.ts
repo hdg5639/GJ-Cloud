@@ -14,7 +14,8 @@ export type ComponentId =
   | "form-drawer"
   | "delete-confirm-modal"
   | "typed-confirm-modal"
-  | "dashboard-view";
+  | "dashboard-view"
+  | "quick-action-button-group";
 
 // 계열(같은 Slot·Capability 요구조건을 공유하는 Variant 묶음)마다 기본 componentId를 키로, 특정
 // purpose가 선호하는 Variant를 값으로 둔다. Direction Recovery Change Request §10.3
@@ -28,7 +29,7 @@ const VARIANT_BY_PURPOSE: Partial<Record<ComponentId, Partial<Record<Purpose, Co
   "create-edit-modal": { PRODUCT_LIKE: "form-drawer" },
 };
 
-export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay";
+export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay" | "page.actions";
 
 export interface Block {
   instanceId: string;
@@ -96,6 +97,17 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
   }
   if (del) {
     blocks.push({ instanceId: "delete", componentId: "delete-confirm-modal", slot: "page.overlay", capabilityIds: [del.id], mode: null });
+  }
+
+  // Backend PreviewBlockResolver.resolveDefault와 동일한 규칙 — COMMAND capability(vm.start 등)를
+  // discard하지 않고 page.actions Block으로 노출한다. 리소스 하나에 여러 개 있을 수 있어 한 Block에
+  // 전부 담는다(dashboard-view와 동일 패턴).
+  const commandIds = page.capabilityIds
+    .map((id) => findCapabilityById(capabilities, id))
+    .filter((c): c is PreviewCapability => c?.kind === "COMMAND")
+    .map((c) => c.id);
+  if (commandIds.length > 0) {
+    blocks.push({ instanceId: "actions", componentId: "quick-action-button-group", slot: "page.actions", capabilityIds: commandIds, mode: null });
   }
   return blocks;
 }

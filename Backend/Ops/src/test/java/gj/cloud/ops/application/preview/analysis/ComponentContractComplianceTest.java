@@ -24,8 +24,9 @@ class ComponentContractComplianceTest {
         Capability update = capability("vms.update", "vms", CapabilityType.UPDATE);
         Capability delete = capability("vms.delete", "vms", CapabilityType.DELETE);
         Capability tagsList = capability("tags.list", "tags", CapabilityType.LIST);
+        Capability start = commandCapability("vms.start", "vms", "start");
         List<Capability> allCapabilities =
-                List.of(login, list, detail, create, update, delete, tagsList);
+                List.of(login, list, detail, create, update, delete, tagsList, start);
 
         List<PageDraft> pages = List.of(
                 new PageDraft("dashboard", "대시보드", PageSkeletonType.DASHBOARD,
@@ -33,7 +34,7 @@ class ComponentContractComplianceTest {
                 new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE,
                         List.of("auth.login")),
                 new PageDraft("vms-page", "Vms", PageSkeletonType.LIST_DETAIL,
-                        List.of("vms.list", "vms.detail", "vms.create", "vms.update", "vms.delete"))
+                        List.of("vms.list", "vms.detail", "vms.create", "vms.update", "vms.delete", "vms.start"))
         );
 
         for (PageDraft page : pages) {
@@ -64,15 +65,27 @@ class ComponentContractComplianceTest {
         }
 
         for (String capabilityId : block.capabilityIds()) {
-            CapabilityType type = allCapabilities.stream()
+            Capability capability = allCapabilities.stream()
                     .filter(c -> c.id().equals(capabilityId))
                     .findFirst()
-                    .orElseThrow()
-                    .type();
-            assertThat(contract.acceptedCapabilityTypes())
-                    .withFailMessage("%s는 %s 타입을 받지 않음", block.componentId(), type)
-                    .contains(type);
+                    .orElseThrow();
+            if (capability.kind() == CapabilityKind.COMMAND) {
+                assertThat(contract.acceptedCapabilityKinds())
+                        .withFailMessage("%s는 COMMAND kind를 받지 않음", block.componentId())
+                        .contains(CapabilityKind.COMMAND);
+            } else {
+                assertThat(contract.acceptedCapabilityTypes())
+                        .withFailMessage("%s는 %s 타입을 받지 않음", block.componentId(), capability.type())
+                        .contains(capability.type());
+            }
         }
+    }
+
+    private Capability commandCapability(String id, String resourceName, String action) {
+        return new Capability(id, resourceName, null, null, "/" + resourceName + "/{id}/" + action, "POST",
+                false, false, false, "HIGH", List.of(), List.of(), null, null,
+                RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
+                CapabilityKind.COMMAND, action, List.of());
     }
 
     private Capability capability(String id, String resourceName, CapabilityType type) {

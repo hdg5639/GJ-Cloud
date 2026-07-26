@@ -441,8 +441,7 @@ export type PreviewAutomationPolicy =
   | "TYPED_CONFIRMATION"
   | "DISABLED_IN_AUTO_TEST";
 // GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md §7.1 — capability의 진짜 정체성.
-// 이번 증분에서는 렌더링에 아직 쓰이지 않는다(Variant Registry/Compiler가 생기는 다음 증분에서
-// COMMAND capability를 실제로 그린다).
+// kind=COMMAND는 blueprint.ts의 resolveBlocks가 quick-action-button-group Block으로 그린다.
 export type PreviewCapabilityKind =
   | "QUERY"
   | "MUTATION"

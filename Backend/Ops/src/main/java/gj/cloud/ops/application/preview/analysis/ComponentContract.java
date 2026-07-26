@@ -19,6 +19,9 @@ public record ComponentContract(
         List<String> requiredStates,
         List<String> acceptedSurfaces,
         boolean acceptsHtml,
-        boolean handlesSecrets
+        boolean handlesSecrets,
+        // COMMAND capability는 type()이 항상 null이라 acceptedCapabilityTypes로 표현할 수 없다 —
+        // kind 기반으로 받아들이는 capability를 여기 따로 선언한다. 기존 9개 Contract는 빈 리스트.
+        List<CapabilityKind> acceptedCapabilityKinds
 ) {
 }

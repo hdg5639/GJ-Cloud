@@ -34,9 +34,9 @@ public final class CompatibilityValidator {
             }
             for (String capabilityId : block.capabilityIds()) {
                 findById(capabilities, capabilityId)
-                        .filter(c -> !contract.acceptedCapabilityTypes().contains(c.type()))
+                        .filter(c -> !accepts(contract, c))
                         .ifPresent(c -> findings.add(new CompatibilityFinding(CompatibilitySeverity.ERROR,
-                                block.componentId() + "는 " + c.type() + " 타입을 받지 않음")));
+                                block.componentId() + "는 " + (c.type() != null ? c.type() : c.kind()) + " 타입을 받지 않음")));
             }
 
             if (block.componentId().equals("login-form")) {
@@ -51,6 +51,15 @@ public final class CompatibilityValidator {
             }
         }
         return findings;
+    }
+
+    // COMMAND capability는 type()이 항상 null이라 acceptedCapabilityTypes로 표현할 수 없다 —
+    // kind 기반 Contract(acceptedCapabilityKinds)로 받아들이는지 대신 확인한다.
+    private static boolean accepts(ComponentContract contract, Capability capability) {
+        if (capability.kind() == CapabilityKind.COMMAND) {
+            return contract.acceptedCapabilityKinds().contains(CapabilityKind.COMMAND);
+        }
+        return contract.acceptedCapabilityTypes().contains(capability.type());
     }
 
     // PreviewComposeArtifactBuilder 템플릿/Frontend api.ts의 isPasswordLikeField와 동일한 규칙.

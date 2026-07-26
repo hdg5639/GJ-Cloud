@@ -56,6 +56,18 @@ class CompatibilityValidatorTest {
     }
 
     @Test
+    void commandCapabilityOnDefaultPageHasNoFindings() {
+        Capability list = capability("vms.list", "vms", CapabilityType.LIST);
+        Capability start = commandCapability("vms.start", "vms", "start");
+        List<Capability> capabilities = List.of(list, start);
+        PageDraft page = new PageDraft("vms-page", "Vms", PageSkeletonType.RESOURCE_LIST,
+                List.of("vms.list", "vms.start"));
+        List<Block> blocks = resolver.resolve(page, capabilities);
+
+        assertThat(CompatibilityValidator.validate(page, blocks, capabilities)).isEmpty();
+    }
+
+    @Test
     void slotContractViolationIsFlaggedAsError() {
         Capability login = loginCapability(List.of("email", "password"));
         PageDraft page = new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, List.of(login.id()));
@@ -78,6 +90,13 @@ class CompatibilityValidatorTest {
                 false, false, false, "HIGH", List.of(), List.of(), null, null,
                 RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,
                 kindOf(type), null, List.of());
+    }
+
+    private Capability commandCapability(String id, String resourceName, String action) {
+        return new Capability(id, resourceName, null, null, "/" + resourceName + "/{id}/" + action, "POST",
+                false, false, false, "HIGH", List.of(), List.of(), null, null,
+                RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
+                CapabilityKind.COMMAND, action, List.of());
     }
 
     private CapabilityKind kindOf(CapabilityType type) {

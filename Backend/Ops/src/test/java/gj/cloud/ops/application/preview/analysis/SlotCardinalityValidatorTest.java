@@ -61,6 +61,16 @@ class SlotCardinalityValidatorTest {
     }
 
     @Test
+    void actionsSlotAcceptsCommandButtonGroupBlock() {
+        List<Block> blocks = List.of(
+                new Block("list", "resource-table", "page.main", List.of("vms.list"), null),
+                new Block("actions", "quick-action-button-group", "page.actions", List.of("vms.start"), null)
+        );
+
+        assertThat(SlotCardinalityValidator.validate(PageSkeletonType.LIST_DETAIL, blocks)).isEmpty();
+    }
+
+    @Test
     void zeroOrOneAndZeroOrMoreSlotsAllowAbsence() {
         List<Block> blocks = List.of(
                 new Block("list", "resource-table", "page.main", List.of("vms.list"), null)

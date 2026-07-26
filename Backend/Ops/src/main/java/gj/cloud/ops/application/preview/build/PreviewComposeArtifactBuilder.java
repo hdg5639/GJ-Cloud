@@ -276,8 +276,7 @@ public class PreviewComposeArtifactBuilder {
               automationPolicy: AutomationPolicy;
               collectionPath: string | null;
               totalCountPath: string | null;
-              // Direction Recovery Change Request §7.1 — 이번 증분에서는 렌더링에 아직 쓰이지 않는다
-              // (Variant Registry/Compiler가 생기는 다음 증분에서 COMMAND capability를 실제로 그린다).
+              // Direction Recovery Change Request §7.1 — kind=COMMAND는 QuickActionButtonGroup이 그린다.
               kind: CapabilityKind;
               action: string | null;
               dependencies: string[];
@@ -302,7 +301,8 @@ public class PreviewComposeArtifactBuilder {
             // page.skeleton을 직접 switch하는 대신 이 목록을 순회해 조립한다.
             type ComponentId =
               | "login-form" | "resource-table" | "resource-card-grid" | "detail-panel" | "create-edit-modal"
-              | "form-drawer" | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view";
+              | "form-drawer" | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view"
+              | "quick-action-button-group";
             interface Block {
               instanceId: string;
               componentId: ComponentId;
@@ -1112,6 +1112,54 @@ public class PreviewComposeArtifactBuilder {
               );
             }
 
+            // Direction Recovery Change Request §9.6 "quick-action-button-group" — command 계열
+            // (vm.start 등)의 첫 Variant. AutomationPolicy가 항상 USER_INITIATED로 고정 배정되므로
+            // TypedConfirmModal과 달리 확인 없이 클릭하면 바로 실행한다.
+            function QuickActionButtonGroup({
+              capabilities, authToken, targetId, onSuccess,
+            }: {
+              capabilities: Capability[];
+              authToken: string | null;
+              targetId: string;
+              onSuccess?: () => void;
+            }) {
+              const [pendingId, setPendingId] = useState<string | null>(null);
+              const [errors, setErrors] = useState<Record<string, string>>({});
+
+              async function handleClick(capability: Capability) {
+                setErrors((prev) => ({ ...prev, [capability.id]: "" }));
+                setPendingId(capability.id);
+                try {
+                  await callCapability(capability, authToken, { pathParams: { id: targetId } });
+                  onSuccess?.();
+                } catch (err) {
+                  setErrors((prev) => ({
+                    ...prev,
+                    [capability.id]: err instanceof Error ? err.message : "요청에 실패했습니다",
+                  }));
+                } finally {
+                  setPendingId(null);
+                }
+              }
+
+              if (capabilities.length === 0) {
+                return null;
+              }
+
+              return (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {capabilities.map((capability) => (
+                    <div key={capability.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <button className="plain" disabled={pendingId !== null} onClick={() => handleClick(capability)}>
+                        {pendingId === capability.id ? "처리 중..." : (capability.action ?? capability.id)}
+                      </button>
+                      {errors[capability.id] && <p className="error" style={{ fontSize: 11 }}>{errors[capability.id]}</p>}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+
             interface DashboardCountState {
               loading: boolean;
               value: number | null;
@@ -1205,6 +1253,10 @@ public class PreviewComposeArtifactBuilder {
               const update = updateBlock ? findCapabilityById(updateBlock.capabilityIds[0]) : undefined;
               const deleteBlock = findDeleteBlock(blocks);
               const del = deleteBlock ? findCapabilityById(deleteBlock.capabilityIds[0]) : undefined;
+              const commandBlock = blocks.find((b) => b.componentId === "quick-action-button-group");
+              const commandCapabilities = (commandBlock?.capabilityIds ?? [])
+                .map((id) => findCapabilityById(id))
+                .filter((c): c is Capability => c !== undefined);
 
               if (!list) {
                 return <p className="error">이 페이지에 목록 capability가 없습니다.</p>;
@@ -1221,7 +1273,7 @@ public class PreviewComposeArtifactBuilder {
                       capability={list}
                       authToken={authToken}
                       refreshKey={refreshKey}
-                      onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+                      onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
                       onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
                     />
                   ) : (
@@ -1229,11 +1281,11 @@ public class PreviewComposeArtifactBuilder {
                       capability={list}
                       authToken={authToken}
                       refreshKey={refreshKey}
-                      onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+                      onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
                       onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
                     />
                   )}
-                  {selectedRow && detail && (
+                  {selectedRow && (detail || commandCapabilities.length > 0) && (
                     <div className="panel">
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
                         <strong>상세</strong>
@@ -1250,7 +1302,17 @@ public class PreviewComposeArtifactBuilder {
                           )}
                         </div>
                       </div>
-                      <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} />
+                      {commandCapabilities.length > 0 && (
+                        <div style={{ marginBottom: 12 }}>
+                          <QuickActionButtonGroup
+                            capabilities={commandCapabilities}
+                            authToken={authToken}
+                            targetId={rowId(selectedRow)}
+                            onSuccess={refresh}
+                          />
+                        </div>
+                      )}
+                      {detail && <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} />}
                     </div>
                   )}
                   {create && overlay.kind === "CREATE" && (

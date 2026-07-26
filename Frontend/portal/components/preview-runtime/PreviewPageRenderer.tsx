@@ -10,6 +10,7 @@ import { FormDrawer } from "./FormDrawer";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { TypedConfirmModal } from "./TypedConfirmModal";
 import { DashboardView } from "./DashboardView";
+import { QuickActionButtonGroup } from "./QuickActionButtonGroup";
 import { rowId } from "./api";
 import { findCapabilityById } from "./utils";
 import { compileBlocks, findCapabilityForBlock, findCreateEditBlock, findDeleteBlock, findListBlock, resolveBlocks } from "./blueprint";
@@ -68,6 +69,10 @@ export function PreviewPageRenderer({
   const update = updateBlock ? findCapabilityById(capabilities, updateBlock.capabilityIds[0]) : undefined;
   const deleteBlock = findDeleteBlock(blocks);
   const del = deleteBlock ? findCapabilityById(capabilities, deleteBlock.capabilityIds[0]) : undefined;
+  const commandBlock = blocks.find((b) => b.componentId === "quick-action-button-group");
+  const commandCapabilities = (commandBlock?.capabilityIds ?? [])
+    .map((id) => findCapabilityById(capabilities, id))
+    .filter((c): c is PreviewCapability => c !== undefined);
 
   if (!list) {
     return <p className="text-sm text-danger">이 페이지에 목록 capability가 없습니다.</p>;
@@ -84,7 +89,7 @@ export function PreviewPageRenderer({
           capability={list}
           config={config}
           refreshKey={refreshKey}
-          onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
           onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
         />
       ) : (
@@ -92,12 +97,12 @@ export function PreviewPageRenderer({
           capability={list}
           config={config}
           refreshKey={refreshKey}
-          onRowClick={detail || update || del ? (row) => setSelectedRow(row) : undefined}
+          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
           onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
         />
       )}
 
-      {selectedRow && detail && (
+      {selectedRow && (detail || commandCapabilities.length > 0) && (
         <div className="rounded-panel border border-line bg-panel p-4">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold">상세</h3>
@@ -122,7 +127,17 @@ export function PreviewPageRenderer({
               )}
             </div>
           </div>
-          <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} />
+          {commandCapabilities.length > 0 && (
+            <div className="mb-3">
+              <QuickActionButtonGroup
+                capabilities={commandCapabilities}
+                config={config}
+                targetId={rowId(selectedRow)}
+                onSuccess={refresh}
+              />
+            </div>
+          )}
+          {detail && <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} />}
         </div>
       )}
 
