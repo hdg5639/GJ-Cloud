@@ -19,6 +19,7 @@ import { PageLoader } from "@/components/ui/loader";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
+import { ProductShell } from "@/components/preview-runtime/ProductShell";
 import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
 import { rowId } from "@/components/preview-runtime/api";
 import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
@@ -775,21 +776,7 @@ export default function PreviewWizardPage() {
               />
             </Field>
             {result.pages.length > 0 && (
-              <>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {result.pages.map((page) => (
-                    <button
-                      key={page.id}
-                      type="button"
-                      onClick={() => setPreviewPageId(page.id)}
-                      className={`rounded-md border px-3 py-1.5 text-xs font-bold ${
-                        previewPageId === page.id ? "border-brand bg-soft text-brand-strong" : "border-line-strong text-muted"
-                      }`}
-                    >
-                      {page.title}
-                    </button>
-                  ))}
-                </div>
+              <ProductShell purpose={purpose} pages={result.pages} activePageId={previewPageId} onSelectPage={setPreviewPageId}>
                 {previewPageId && apiBaseUrl.trim() && (
                   <div className="rounded-md border border-line-strong bg-white/[0.02] p-4">
                     <PreviewPageRenderer
@@ -811,7 +798,7 @@ export default function PreviewWizardPage() {
                     />
                   </div>
                 )}
-              </>
+              </ProductShell>
             )}
           </section>
 
