@@ -37,7 +37,25 @@ public class PageDraftGenerator {
 
             boolean hasList = hasType(resourceCapabilities, CapabilityType.LIST);
             boolean hasDetail = hasType(resourceCapabilities, CapabilityType.DETAIL);
-            PageSkeletonType skeleton = hasList && hasDetail ? PageSkeletonType.LIST_DETAIL : PageSkeletonType.RESOURCE_LIST;
+            // 스켈레톤은 page.main(RESOURCE_LIST)/page.primary(RESOURCE_DETAIL) Slot을 EXACTLY_ONE으로
+            // 채울 수 있어야 유효하다. LIST 없이 RESOURCE_LIST로 만들면 목록 Block이 0개라 배포
+            // compatibility 검증에서 깨진다(실제로 겪음: GET 목록이 없는 리소스). 그래서 LIST가 없고
+            // DETAIL만 있으면 RESOURCE_DETAIL로 만든다.
+            PageSkeletonType skeleton;
+            if (hasList && hasDetail) {
+                skeleton = PageSkeletonType.LIST_DETAIL;
+            } else if (hasList) {
+                skeleton = PageSkeletonType.RESOURCE_LIST;
+            } else if (hasDetail) {
+                skeleton = PageSkeletonType.RESOURCE_DETAIL;
+            } else {
+                // LIST도 DETAIL도 없는 리소스(예: 업로드/변환처럼 CREATE·COMMAND만 있는 엔드포인트
+                // 묶음)는 page.main/page.primary를 채울 컴포넌트가 없어 MVP 페이지 형태로 표현할 수
+                // 없다 — 깨진 페이지로 배포 전체를 막지 않도록 독립 페이지를 만들지 않고 건너뛴다.
+                // (근본적으로는 resourceNameOf가 경로 마지막 세그먼트만 봐서 "video.create"처럼
+                // 액션을 가짜 리소스로 묶는 탓이 큼 — 리소스 그룹핑 개선은 별도 작업.)
+                continue;
+            }
 
             pages.add(new PageDraft(resourceName + "-page", titleize(resourceName), skeleton, capabilityIds));
 

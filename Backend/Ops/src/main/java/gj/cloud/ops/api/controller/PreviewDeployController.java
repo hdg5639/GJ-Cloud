@@ -50,7 +50,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Tag(name = "Preview", description = "Auto Preview — 생성된 소스를 VM에 배포")
 @RestController
@@ -82,11 +84,27 @@ public class PreviewDeployController {
         List<PagePlan> pagePlans = body.pagePlans() == null || body.pagePlans().isEmpty()
                 ? PagePlanMapper.from(body.pages(), body.capabilities())
                 : body.pagePlans();
+
+        // LIST/DETAIL이 없어 유효한 페이지를 만들 수 없는 리소스(PageDraftGenerator가 건너뜀)의
+        // capability는 어떤 pagePlan에도 배치되지 않는다. validateFinal이 orphan capability를 거부하므로,
+        // 실제로 페이지에 배치된 capability만 배포 대상으로 남긴다 — 렌더 불가한 엔드포인트(업로드/변환 등
+        // CREATE·COMMAND만 있는 것) 때문에 배포 전체가 막히지 않도록 안전하게 부분집합만 배포한다(AC-10).
+        Set<String> assignedCapabilityIds = pagePlans.stream()
+                .flatMap(plan -> plan.capabilityIds().stream())
+                .collect(Collectors.toSet());
+        List<Capability> capabilities = body.capabilities().stream()
+                .filter(capability -> assignedCapabilityIds.contains(capability.id()))
+                .toList();
+        if (capabilities.size() < body.capabilities().size()) {
+            log.warn("Auto Preview 배포: 유효한 페이지에 배치되지 않은 capability {}개를 제외함",
+                    body.capabilities().size() - capabilities.size());
+        }
+
         List<FlowBlueprint> flows;
         List<ApiBinding> bindings;
         if (body.flows() == null || body.bindings() == null) {
             RuleBasedFlowGenerator.ValidatedResult generated =
-                    ruleBasedFlowGenerator.generateValidated(pagePlans, body.capabilities());
+                    ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
             flows = generated.result().flows();
             bindings = generated.result().bindings();
         } else {
@@ -95,7 +113,7 @@ public class PreviewDeployController {
         }
 
         PlanPatchState state = new PlanPatchState(pagePlans, flows, bindings);
-        List<String> blueprintErrors = PagePlanPatchValidator.validateFinal(state, body.capabilities());
+        List<String> blueprintErrors = PagePlanPatchValidator.validateFinal(state, capabilities);
         if (!blueprintErrors.isEmpty()) {
             log.warn("Auto Preview 배포 Blueprint 검증 실패: {}", String.join("; ", blueprintErrors));
             throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
@@ -103,13 +121,13 @@ public class PreviewDeployController {
 
         List<PageDraft> effectivePages = PagePlanMapper.toDrafts(pagePlans);
         Map<String, List<Block>> pageBlocks =
-                previewBlueprintService.compilePagePlanBlocks(pagePlans, body.capabilities(), body.purpose());
-        if (hasErrorFinding(effectivePages, pageBlocks, body.capabilities())) {
+                previewBlueprintService.compilePagePlanBlocks(pagePlans, capabilities, body.purpose());
+        if (hasErrorFinding(effectivePages, pageBlocks, capabilities)) {
             throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
         }
 
         ComposeArtifact artifact = previewComposeArtifactBuilder.build(
-                body.apiBaseUrl(), body.capabilities(), effectivePages, flows, bindings,
+                body.apiBaseUrl(), capabilities, effectivePages, flows, bindings,
                 body.authStrategy(), body.purpose());
 
         DeploymentTargetEntity target = deploymentTargetService.create(
@@ -133,7 +151,7 @@ public class PreviewDeployController {
         GenerationMode generationMode = body.generationMode() == null
                 ? GenerationMode.RULE_BASED : body.generationMode();
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
-                body.apiBaseUrl(), body.capabilities(), effectivePages, body.authStrategy(), pageBlocks,
+                body.apiBaseUrl(), capabilities, effectivePages, body.authStrategy(), pageBlocks,
                 RegistryStatus.VALIDATED, body.purpose(), pagePlans, flows, bindings, generationMode,
                 BlueprintCompiler.VERSION, ComponentRegistry.VERSION);
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);

@@ -57,6 +57,38 @@ class PageDraftGeneratorTest {
         assertThat(pages).noneMatch(p -> p.skeleton() == PageSkeletonType.DASHBOARD);
     }
 
+    @Test
+    void resourceWithDetailButNoListBecomesResourceDetailPage() {
+        // 실제 겪음: GET 목록 없이 GET /boards/{id}(상세)만 있는 리소스. RESOURCE_LIST로 만들면
+        // page.main 목록 Block이 0개라 배포 compatibility 검증에서 깨진다 — RESOURCE_DETAIL이어야 한다.
+        List<Capability> capabilities = List.of(
+                capability("boards.detail", "boards", CapabilityType.DETAIL),
+                capability("boards.update", "boards", CapabilityType.UPDATE),
+                capability("boards.delete", "boards", CapabilityType.DELETE),
+                capability("boards.create", "boards", CapabilityType.CREATE)
+        );
+
+        List<PageDraft> pages = generator.generate(capabilities);
+
+        PageDraft boardsPage = findPage(pages, "boards-page");
+        assertThat(boardsPage.skeleton()).isEqualTo(PageSkeletonType.RESOURCE_DETAIL);
+    }
+
+    @Test
+    void resourceWithNeitherListNorDetailIsSkipped() {
+        // 업로드/변환처럼 CREATE·COMMAND만 있는 리소스는 page.main/page.primary를 채울 컴포넌트가
+        // 없어 유효한 MVP 페이지를 만들 수 없다 — 깨진 페이지로 배포를 막지 않도록 건너뛴다.
+        List<Capability> capabilities = List.of(
+                capability("vms.list", "vms", CapabilityType.LIST),
+                capability("video.create", "video", CapabilityType.CREATE)
+        );
+
+        List<PageDraft> pages = generator.generate(capabilities);
+
+        assertThat(pages).noneMatch(p -> p.id().equals("video-page"));
+        assertThat(pages).anyMatch(p -> p.id().equals("vms-page"));
+    }
+
     private PageDraft findPage(List<PageDraft> pages, String id) {
         return pages.stream().filter(p -> p.id().equals(id)).findFirst().orElseThrow();
     }
