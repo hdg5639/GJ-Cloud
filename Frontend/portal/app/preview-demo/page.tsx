@@ -96,6 +96,7 @@ function installMockFetch(): () => void {
 export default function PreviewDemoPage() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [activePage, setActivePage] = useState(PAGES[0]);
+  const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
   const installed = useRef(false);
 
   useEffect(() => {
@@ -123,7 +124,10 @@ export default function PreviewDemoPage() {
           <button
             key={page.id}
             type="button"
-            onClick={() => setActivePage(page)}
+            onClick={() => {
+              setActivePage(page);
+              setSelectedRow(null);
+            }}
             className={`rounded-md border px-3 py-1.5 text-xs font-bold ${
               activePage.id === page.id ? "border-brand bg-soft text-brand-strong" : "border-line-strong text-muted"
             }`}
@@ -136,7 +140,14 @@ export default function PreviewDemoPage() {
       {authToken && <p className="mb-3 text-xs text-brand-strong">로그인됨 (token: {authToken})</p>}
 
       <div className="rounded-panel border border-line bg-panel p-5">
-        <PreviewPageRenderer page={activePage} capabilities={CAPABILITIES} blocks={blocks} config={config} />
+        <PreviewPageRenderer
+          page={activePage}
+          capabilities={CAPABILITIES}
+          blocks={blocks}
+          config={config}
+          selectedRow={selectedRow}
+          onSelectRow={setSelectedRow}
+        />
       </div>
     </div>
   );

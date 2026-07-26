@@ -246,7 +246,7 @@ public class PreviewComposeArtifactBuilder {
     // CSS, 포털 전용 컴포넌트/Tailwind 의존 없음)로 그대로 이식한 것 — 동작은 Phase C에서 브라우저로
     // 이미 검증됨.
     private static final String APP_TSX_TEMPLATE = """
-            import { useEffect, useState, type FormEvent } from "react";
+            import { useEffect, useRef, useState, type FormEvent } from "react";
 
             type CapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
             type PageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
@@ -574,6 +574,39 @@ public class PreviewComposeArtifactBuilder {
             function rowId(row: Record<string, unknown>): string {
               const candidate = row.id ?? row.ID ?? row.Id ?? row.uuid;
               return candidate != null ? String(candidate) : "";
+            }
+
+            // Workflow Composition Phase 2 Change Request §7 "Navigation Requirements" — 배포된
+            // 아티팩트에는 라우터 라이브러리가 없어(§13.2 "No arbitrary npm installation") 순수
+            // History API로 선택 상태를 URL 쿼리파라미터에 반영한다. pushState는 popstate 이벤트를
+            // 스스로 발생시키지 않으므로, App과 PageRenderer처럼 서로 다른 컴포넌트의 useQueryParam
+            // 인스턴스끼리 동기화되도록 직접 popstate를 dispatch한다.
+            function useQueryParam(key: string): [string | null, (value: string | null) => void] {
+              const [value, setValue] = useState<string | null>(() =>
+                new URLSearchParams(window.location.search).get(key)
+              );
+
+              useEffect(() => {
+                function sync() {
+                  setValue(new URLSearchParams(window.location.search).get(key));
+                }
+                window.addEventListener("popstate", sync);
+                return () => window.removeEventListener("popstate", sync);
+              }, [key]);
+
+              function update(next: string | null) {
+                const params = new URLSearchParams(window.location.search);
+                if (next) {
+                  params.set(key, next);
+                } else {
+                  params.delete(key);
+                }
+                const query = params.toString();
+                window.history.pushState({}, "", query ? `?${query}` : window.location.pathname);
+                window.dispatchEvent(new PopStateEvent("popstate"));
+              }
+
+              return [value, update];
             }
 
             function findCapabilityById(id: string): Capability | undefined {
@@ -1372,9 +1405,31 @@ public class PreviewComposeArtifactBuilder {
             }
 
             function PageRenderer({ page, authToken, onLogin }: { page: PageDraft; authToken: string | null; onLogin: (token: string) => void }) {
-              const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
+              const [selectedId, setSelectedId] = useQueryParam("selected");
+              const [selectedRowObject, setSelectedRowObject] = useState<Record<string, unknown> | null>(null);
+              const selectedRow = selectedId
+                ? selectedRowObject && rowId(selectedRowObject) === selectedId
+                  ? selectedRowObject
+                  : { id: selectedId }
+                : null;
               const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
               const [refreshKey, setRefreshKey] = useState(0);
+
+              // §7 — 페이지가 실제로 바뀔 때만(최초 마운트 제외) 선택 상태를 지운다. 최초 마운트에서
+              // 지워버리면 새로고침 직후 URL의 selected가 곧바로 사라져 AC-2("새로고침 생존")를 깬다.
+              const previousPageIdRef = useRef<string | undefined>(undefined);
+              useEffect(() => {
+                if (previousPageIdRef.current !== undefined && previousPageIdRef.current !== page.id) {
+                  setSelectedId(null);
+                  setSelectedRowObject(null);
+                }
+                previousPageIdRef.current = page.id;
+              }, [page.id]);
+
+              function selectRow(row: Record<string, unknown> | null) {
+                setSelectedRowObject(row);
+                setSelectedId(row ? rowId(row) : null);
+              }
 
               const blocks = PAGE_BLOCKS[page.id] ?? [];
 
@@ -1445,7 +1500,7 @@ public class PreviewComposeArtifactBuilder {
                   {selectedRow && detail && isFullDetailPage ? (
                     <div className="panel">
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                        <button className="plain" onClick={() => setSelectedRow(null)}>
+                        <button className="plain" onClick={() => selectRow(null)}>
                           ← 목록으로
                         </button>
                         {renderHeaderActions(selectedRow)}
@@ -1469,7 +1524,7 @@ public class PreviewComposeArtifactBuilder {
                           capability={list}
                           authToken={authToken}
                           refreshKey={refreshKey}
-                          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+                          onRowClick={detail || update || del || commandBlock ? (row) => selectRow(row) : undefined}
                           onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
                         />
                       ) : (
@@ -1477,7 +1532,7 @@ public class PreviewComposeArtifactBuilder {
                           capability={list}
                           authToken={authToken}
                           refreshKey={refreshKey}
-                          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+                          onRowClick={detail || update || del || commandBlock ? (row) => selectRow(row) : undefined}
                           onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
                         />
                       )}
@@ -1535,7 +1590,7 @@ public class PreviewComposeArtifactBuilder {
                       targetId={overlay.id}
                       onClose={() => setOverlay({ kind: "NONE" })}
                       onSuccess={() => {
-                        setSelectedRow(null);
+                        selectRow(null);
                         setOverlay({ kind: "NONE" });
                         refresh();
                       }}
@@ -1548,7 +1603,7 @@ public class PreviewComposeArtifactBuilder {
                       targetId={overlay.id}
                       onClose={() => setOverlay({ kind: "NONE" })}
                       onSuccess={() => {
-                        setSelectedRow(null);
+                        selectRow(null);
                         setOverlay({ kind: "NONE" });
                         refresh();
                       }}
@@ -1593,7 +1648,8 @@ public class PreviewComposeArtifactBuilder {
 
             export default function App() {
               const [authToken, setAuthToken] = useState<string | null>(null);
-              const [activePage, setActivePage] = useState<PageDraft>(PAGES[0]);
+              const [activePageId, setActivePageId] = useQueryParam("page");
+              const activePage = PAGES.find((p) => p.id === activePageId) ?? PAGES[0];
               const [apiLog, setApiLog] = useState<ApiCallLogEntry[]>([]);
 
               useEffect(() => {
@@ -1612,7 +1668,7 @@ public class PreviewComposeArtifactBuilder {
                       <button
                         key={page.id}
                         className={`tab ${activePage.id === page.id ? "active" : ""}`}
-                        onClick={() => setActivePage(page)}
+                        onClick={() => setActivePageId(page.id)}
                       >
                         {page.title}
                       </button>

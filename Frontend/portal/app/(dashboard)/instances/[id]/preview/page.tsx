@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type {
@@ -18,6 +18,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
 import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
+import { rowId } from "@/components/preview-runtime/api";
 import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -72,6 +73,8 @@ const AUTH_LOGIN_FIELD = "auth.login";
 export default function PreviewWizardPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const vmId = params.id as string;
   const { accessToken } = useAuth();
 
@@ -97,7 +100,44 @@ export default function PreviewWizardPage() {
   const [selectedOperationIds, setSelectedOperationIds] = useState<Set<string>>(new Set());
   const [applyingPlan, setApplyingPlan] = useState(false);
   const [planApplyErrors, setPlanApplyErrors] = useState<string[] | null>(null);
-  const [previewPageId, setPreviewPageId] = useState<string | null>(null);
+  // Workflow Composition Phase 2 Change Request §7 "Navigation Requirements" — "selected-row state
+  // must not be the only detail-navigation mechanism". previewPageId/선택된 행을 URL 쿼리파라미터
+  // (?page=&selected=)에 반영해 새로고침 생존·브라우저 뒤로/앞으로가기·직접 URL 진입을 실제로
+  // 만족시킨다. 클릭으로 얻은 전체 row 객체는 "수정" 폼 prefill에 필요해 로컬 state로도 들고 있되,
+  // "선택됐는지 여부"의 소스 오브 트루스는 항상 URL이다 — 뒤로가기로 URL에서 selected가 사라지면
+  // 로컬에 옛 row 객체가 남아있어도 즉시 선택 해제로 취급해야 하기 때문(아래 effectiveSelectedRow).
+  const previewPageId = searchParams.get("page");
+  const selectedIdFromUrl = searchParams.get("selected");
+  const [selectedRow, setSelectedRowState] = useState<Record<string, unknown> | null>(null);
+  const effectiveSelectedRow = selectedIdFromUrl
+    ? selectedRow && rowId(selectedRow) === selectedIdFromUrl
+      ? selectedRow
+      : { id: selectedIdFromUrl }
+    : null;
+
+  function updateQuery(next: { page?: string | null; selected?: string | null }) {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if ("page" in next) {
+      if (next.page) nextParams.set("page", next.page);
+      else nextParams.delete("page");
+    }
+    if ("selected" in next) {
+      if (next.selected) nextParams.set("selected", next.selected);
+      else nextParams.delete("selected");
+    }
+    router.push(`${pathname}?${nextParams.toString()}`);
+  }
+
+  function setPreviewPageId(id: string | null) {
+    setSelectedRowState(null);
+    updateQuery({ page: id, selected: null });
+  }
+
+  function selectRow(row: Record<string, unknown> | null) {
+    setSelectedRowState(row);
+    updateQuery({ selected: row ? rowId(row) : null });
+  }
+
   // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않도록,
   // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인 등록
   // 직후) POST /ops/preview/blocks로 다시 계산받은 결과를 여기 저장해 PreviewPageRenderer에 그대로 넘긴다.
@@ -134,6 +174,7 @@ export default function PreviewWizardPage() {
     setAnalysisError(null);
     setResult(null);
     setReviewFindings(null);
+    setSelectedRowState(null);
     setProposedOperations(null);
     setSelectedOperationIds(new Set());
     setPlanApplyErrors(null);
@@ -375,7 +416,9 @@ export default function PreviewWizardPage() {
       unresolved,
       status: unresolved.length === 0 && result.status === "NEEDS_INPUT" ? "READY" : result.status,
     });
-    setPreviewPageId((prevId) => prevId ?? "auth-login-manual");
+    if (!previewPageId) {
+      setPreviewPageId("auth-login-manual");
+    }
     refreshBlocks(capabilities, pages, purpose);
   }
 
@@ -681,6 +724,8 @@ export default function PreviewWizardPage() {
                       page={result.pages.find((p) => p.id === previewPageId)!}
                       capabilities={result.capabilities}
                       blocks={pageBlocks[previewPageId] ?? []}
+                      selectedRow={effectiveSelectedRow}
+                      onSelectRow={selectRow}
                       config={{
                         apiBaseUrl: apiBaseUrl.trim(),
                         authToken: previewAuthToken,

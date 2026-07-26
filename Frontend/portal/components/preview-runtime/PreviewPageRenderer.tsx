@@ -40,18 +40,24 @@ type OverlayState =
 // Change Request §13.1 — 이 컴포넌트는 어떤 Block이 존재해야 하는지(조립 규칙)를 스스로 판단하지
 // 않는다. Block은 백엔드(PreviewBlockResolver+BlueprintCompiler)가 이미 계산해 `blocks` prop으로
 // 넘어오고, 여기서는 그 Block마다 어떤 React 컴포넌트로 그릴지만 결정한다.
+// Workflow Composition Phase 2 Change Request §7 "Navigation Requirements" — 상세 선택 상태를
+// 이 컴포넌트가 스스로 들고 있지 않고(controlled) 호출 측(마법사)이 URL 쿼리파라미터와 동기화해
+// 넘겨준다. 그래야 새로고침·브라우저 뒤로/앞으로가기·직접 URL 진입이 실제로 동작한다.
 export function PreviewPageRenderer({
   page,
   capabilities,
   blocks,
   config,
+  selectedRow,
+  onSelectRow,
 }: {
   page: PreviewPage;
   capabilities: PreviewCapability[];
   blocks: Block[];
   config: PreviewRuntimeConfig;
+  selectedRow: Record<string, unknown> | null;
+  onSelectRow: (row: Record<string, unknown> | null) => void;
 }) {
-  const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
   const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -134,7 +140,7 @@ export function PreviewPageRenderer({
             <button
               type="button"
               className="text-xs font-bold text-brand-strong"
-              onClick={() => setSelectedRow(null)}
+              onClick={() => onSelectRow(null)}
             >
               ← 목록으로
             </button>
@@ -159,7 +165,7 @@ export function PreviewPageRenderer({
               capability={list}
               config={config}
               refreshKey={refreshKey}
-              onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+              onRowClick={detail || update || del || commandBlock ? (row) => onSelectRow(row) : undefined}
               onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
             />
           ) : (
@@ -167,7 +173,7 @@ export function PreviewPageRenderer({
               capability={list}
               config={config}
               refreshKey={refreshKey}
-              onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+              onRowClick={detail || update || del || commandBlock ? (row) => onSelectRow(row) : undefined}
               onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
             />
           )}
@@ -240,7 +246,7 @@ export function PreviewPageRenderer({
           config={config}
           targetId={overlay.kind === "DELETE" ? overlay.id : ""}
           onSuccess={() => {
-            setSelectedRow(null);
+            onSelectRow(null);
             setOverlay({ kind: "NONE" });
             refresh();
           }}
@@ -254,7 +260,7 @@ export function PreviewPageRenderer({
             config={config}
             targetId={overlay.kind === "DELETE" ? overlay.id : ""}
             onSuccess={() => {
-              setSelectedRow(null);
+              onSelectRow(null);
               setOverlay({ kind: "NONE" });
               refresh();
             }}
