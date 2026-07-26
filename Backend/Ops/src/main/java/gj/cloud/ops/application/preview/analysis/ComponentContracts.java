@@ -34,6 +34,15 @@ public final class ComponentContracts {
                     List.of(CapabilityType.DETAIL), false,
                     List.of("LOADING", "ERROR", "SUCCESS"),
                     List.of("page.aside"), false, false, List.of())),
+            // Direction Recovery Change Request §9.2 — detail-panel과 같은 계열(detail)의 두 번째
+            // Variant. Capability 요구조건은 동일하지만, 목록 대신 전체 폭을 차지해야 해서 실제 Slot이
+            // page.aside가 아니라 page.main이다(BlueprintCompiler.SLOT_OVERRIDE가 이 componentId로
+            // 바꿀 때 Block.slot도 함께 교체 — Block.replaces="list"로 목록 자리를 대신함).
+            Map.entry("full-detail-page", new ComponentContract(
+                    "full-detail-page", "PATTERN",
+                    List.of(CapabilityType.DETAIL), false,
+                    List.of("LOADING", "ERROR", "SUCCESS"),
+                    List.of("page.main"), false, false, List.of())),
             Map.entry("create-edit-modal", new ComponentContract(
                     "create-edit-modal", "PATTERN",
                     List.of(CapabilityType.CREATE, CapabilityType.UPDATE), false,

@@ -23,8 +23,18 @@ public final class BlueprintCompiler {
             // Change Request §3 "Product-like purpose — ... drawers and guided creation flows".
             "create-edit-modal", Map.of(Purpose.PRODUCT_LIKE, "form-drawer"),
             // §9.5 dashboard 계열 두 번째 Variant — PRODUCT_LIKE는 개수 카드보다 최근 항목 피드를 선호.
-            "dashboard-view", Map.of(Purpose.PRODUCT_LIKE, "recent-activity-dashboard")
+            "dashboard-view", Map.of(Purpose.PRODUCT_LIKE, "recent-activity-dashboard"),
+            // §9.2 detail 계열 두 번째 Variant — PRODUCT_LIKE는 사이드 패널보다 전체 페이지 상세를 선호.
+            "detail-panel", Map.of(Purpose.PRODUCT_LIKE, "full-detail-page")
     );
+
+    // detail 계열만 예외적으로 Slot 자체가 바뀐다 — 선택된 리소스의 상세를 사이드 칼럼이 아니라 전체
+    // 폭으로 보여주려면 목록(Block "list")이 차지하던 자리(page.main)를 대신 차지해야 한다. 이 변화가
+    // 필요한 Variant만 여기 등록하고(나머지 계열은 등록 안 해 Slot 불변), REPLACES_OVERRIDE로 그
+    // Block이 "list" 자리를 대신한다는 것을 함께 표시해 SlotCardinalityValidator가 page.main의
+    // EXACTLY_ONE Cardinality를 위반됐다고 오판하지 않게 한다.
+    private static final Map<String, String> SLOT_OVERRIDE = Map.of("full-detail-page", "page.main");
+    private static final Map<String, String> REPLACES_OVERRIDE = Map.of("full-detail-page", "list");
 
     public static Map<String, List<Block>> compile(Map<String, List<Block>> pageBlocks, Purpose purpose) {
         if (purpose == null) {
@@ -47,7 +57,9 @@ public final class BlueprintCompiler {
         if (preferredComponentId == null) {
             return block;
         }
-        return new Block(block.instanceId(), preferredComponentId, block.slot(), block.capabilityIds(), block.mode());
+        String slot = SLOT_OVERRIDE.getOrDefault(preferredComponentId, block.slot());
+        String replaces = REPLACES_OVERRIDE.get(preferredComponentId);
+        return new Block(block.instanceId(), preferredComponentId, slot, block.capabilityIds(), block.mode(), replaces);
     }
 
     private BlueprintCompiler() {

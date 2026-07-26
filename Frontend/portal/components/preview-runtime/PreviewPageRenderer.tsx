@@ -12,6 +12,7 @@ import { TypedConfirmModal } from "./TypedConfirmModal";
 import { DashboardView } from "./DashboardView";
 import { RecentActivityDashboard } from "./RecentActivityDashboard";
 import { QuickActionButtonGroup } from "./QuickActionButtonGroup";
+import { FullDetailPage } from "./FullDetailPage";
 import { rowId } from "./api";
 import { findCapabilityById } from "./utils";
 import {
@@ -20,6 +21,7 @@ import {
   findCreateEditBlock,
   findDashboardBlock,
   findDeleteBlock,
+  findDetailBlock,
   findListBlock,
   resolveBlocks,
 } from "./blueprint";
@@ -75,7 +77,9 @@ export function PreviewPageRenderer({
 
   const listBlock = findListBlock(blocks);
   const list = listBlock ? findCapabilityById(capabilities, listBlock.capabilityIds[0]) : undefined;
-  const detail = findCapabilityForBlock(blocks, capabilities, "detail-panel");
+  const detailBlock = findDetailBlock(blocks);
+  const detail = detailBlock ? findCapabilityById(capabilities, detailBlock.capabilityIds[0]) : undefined;
+  const isFullDetailPage = detailBlock?.componentId === "full-detail-page";
   const createBlock = findCreateEditBlock(blocks, "CREATE");
   const create = createBlock ? findCapabilityById(capabilities, createBlock.capabilityIds[0]) : undefined;
   const updateBlock = findCreateEditBlock(blocks, "UPDATE");
@@ -95,50 +99,46 @@ export function PreviewPageRenderer({
     setRefreshKey((key) => key + 1);
   }
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-      {listBlock?.componentId === "resource-card-grid" ? (
-        <ResourceCardGrid
-          capability={list}
-          config={config}
-          refreshKey={refreshKey}
-          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
-          onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-        />
-      ) : (
-        <ResourceTable
-          capability={list}
-          config={config}
-          refreshKey={refreshKey}
-          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
-          onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-        />
-      )}
+  // 두 레이아웃(side-detail-panel/full-detail-page)이 공유하는 수정/삭제 버튼 — 선택된 row를 파라미터로
+  // 명시적으로 받아, 클로저로 selectedRow(| null 타입)를 그대로 참조할 때 생기는 null 체크 문제를 피한다.
+  function renderHeaderActions(row: Record<string, unknown>) {
+    return (
+      <div className="flex gap-3">
+        {update && (
+          <button
+            type="button"
+            className="text-xs font-bold text-brand-strong"
+            onClick={() => setOverlay({ kind: "UPDATE", row })}
+          >
+            수정
+          </button>
+        )}
+        {del && (
+          <button
+            type="button"
+            className="text-xs font-bold text-danger"
+            onClick={() => setOverlay({ kind: "DELETE", id: rowId(row) })}
+          >
+            삭제
+          </button>
+        )}
+      </div>
+    );
+  }
 
-      {selectedRow && (detail || commandCapabilities.length > 0) && (
+  return (
+    <div className="flex flex-col gap-4">
+      {selectedRow && detail && isFullDetailPage ? (
         <div className="rounded-panel border border-line bg-panel p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-bold">상세</h3>
-            <div className="flex gap-3">
-              {update && (
-                <button
-                  type="button"
-                  className="text-xs font-bold text-brand-strong"
-                  onClick={() => setOverlay({ kind: "UPDATE", row: selectedRow })}
-                >
-                  수정
-                </button>
-              )}
-              {del && (
-                <button
-                  type="button"
-                  className="text-xs font-bold text-danger"
-                  onClick={() => setOverlay({ kind: "DELETE", id: rowId(selectedRow) })}
-                >
-                  삭제
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              className="text-xs font-bold text-brand-strong"
+              onClick={() => setSelectedRow(null)}
+            >
+              ← 목록으로
+            </button>
+            {renderHeaderActions(selectedRow)}
           </div>
           {commandCapabilities.length > 0 && (
             <div className="mb-3">
@@ -150,7 +150,47 @@ export function PreviewPageRenderer({
               />
             </div>
           )}
-          {detail && <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} />}
+          <FullDetailPage capability={detail} config={config} id={rowId(selectedRow)} />
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+          {listBlock?.componentId === "resource-card-grid" ? (
+            <ResourceCardGrid
+              capability={list}
+              config={config}
+              refreshKey={refreshKey}
+              onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+              onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+            />
+          ) : (
+            <ResourceTable
+              capability={list}
+              config={config}
+              refreshKey={refreshKey}
+              onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+              onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+            />
+          )}
+
+          {selectedRow && (detail || commandCapabilities.length > 0) && (
+            <div className="rounded-panel border border-line bg-panel p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-bold">상세</h3>
+                {renderHeaderActions(selectedRow)}
+              </div>
+              {commandCapabilities.length > 0 && (
+                <div className="mb-3">
+                  <QuickActionButtonGroup
+                    capabilities={commandCapabilities}
+                    config={config}
+                    targetId={rowId(selectedRow)}
+                    onSuccess={refresh}
+                  />
+                </div>
+              )}
+              {detail && <DetailPanel capability={detail} config={config} id={rowId(selectedRow)} />}
+            </div>
+          )}
         </div>
       )}
 

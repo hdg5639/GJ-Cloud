@@ -14,15 +14,44 @@ class BlueprintCompilerTest {
     @Test
     void productLikeSwapsResourceTableToResourceCardGrid() {
         Map<String, List<Block>> pageBlocks = Map.of(
+                "vms-page", List.of(new Block("list", "resource-table", "page.main", List.of("vms.list"), null)));
+
+        Map<String, List<Block>> compiled = BlueprintCompiler.compile(pageBlocks, Purpose.PRODUCT_LIKE);
+
+        assertThat(compiled.get("vms-page").get(0).componentId()).isEqualTo("resource-card-grid");
+    }
+
+    @Test
+    void productLikeSwapsDetailPanelToFullDetailPageAndMovesToPageMainReplacingList() {
+        Map<String, List<Block>> pageBlocks = Map.of(
                 "vms-page", List.of(
                         new Block("list", "resource-table", "page.main", List.of("vms.list"), null),
                         new Block("detail", "detail-panel", "page.aside", List.of("vms.detail"), null)));
 
         Map<String, List<Block>> compiled = BlueprintCompiler.compile(pageBlocks, Purpose.PRODUCT_LIKE);
 
-        List<Block> compiledBlocks = compiled.get("vms-page");
-        assertThat(compiledBlocks.get(0).componentId()).isEqualTo("resource-card-grid");
-        assertThat(compiledBlocks.get(1).componentId()).isEqualTo("detail-panel");
+        Block detailBlock = compiled.get("vms-page").stream()
+                .filter(b -> b.instanceId().equals("detail"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(detailBlock.componentId()).isEqualTo("full-detail-page");
+        assertThat(detailBlock.slot()).isEqualTo("page.main");
+        assertThat(detailBlock.replaces()).isEqualTo("list");
+    }
+
+    @Test
+    void otherPurposesLeaveDetailPanelUnchanged() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "vms-page", List.of(new Block("detail", "detail-panel", "page.aside", List.of("vms.detail"), null)));
+
+        for (Purpose purpose : List.of(Purpose.API_TEST, Purpose.ADMIN)) {
+            Block compiled = BlueprintCompiler.compile(pageBlocks, purpose).get("vms-page").get(0);
+            assertThat(compiled.componentId()).isEqualTo("detail-panel");
+            assertThat(compiled.slot()).isEqualTo("page.aside");
+            assertThat(compiled.replaces()).isNull();
+        }
+        Block compiledNullPurpose = BlueprintCompiler.compile(pageBlocks, null).get("vms-page").get(0);
+        assertThat(compiledNullPurpose.componentId()).isEqualTo("detail-panel");
     }
 
     @Test

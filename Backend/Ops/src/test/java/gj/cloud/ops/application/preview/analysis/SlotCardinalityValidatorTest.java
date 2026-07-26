@@ -71,6 +71,27 @@ class SlotCardinalityValidatorTest {
     }
 
     @Test
+    void fullDetailPageReplacingListSatisfiesPageMainCardinality() {
+        List<Block> blocks = List.of(
+                new Block("list", "resource-card-grid", "page.main", List.of("vms.list"), null),
+                new Block("detail", "full-detail-page", "page.main", List.of("vms.detail"), null, "list")
+        );
+
+        assertThat(SlotCardinalityValidator.validate(PageSkeletonType.LIST_DETAIL, blocks)).isEmpty();
+    }
+
+    @Test
+    void replacesPointingToMissingBlockIsAViolation() {
+        List<Block> blocks = List.of(
+                new Block("list", "resource-table", "page.main", List.of("vms.list"), null),
+                new Block("detail", "full-detail-page", "page.main", List.of("vms.detail"), null, "missing")
+        );
+
+        assertThat(SlotCardinalityValidator.validate(PageSkeletonType.LIST_DETAIL, blocks))
+                .anyMatch(v -> v.contains("missing"));
+    }
+
+    @Test
     void zeroOrOneAndZeroOrMoreSlotsAllowAbsence() {
         List<Block> blocks = List.of(
                 new Block("list", "resource-table", "page.main", List.of("vms.list"), null)

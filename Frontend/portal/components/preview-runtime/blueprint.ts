@@ -16,7 +16,8 @@ export type ComponentId =
   | "typed-confirm-modal"
   | "dashboard-view"
   | "recent-activity-dashboard"
-  | "quick-action-button-group";
+  | "quick-action-button-group"
+  | "full-detail-page";
 
 // 계열(같은 Slot·Capability 요구조건을 공유하는 Variant 묶음)마다 기본 componentId를 키로, 특정
 // purpose가 선호하는 Variant를 값으로 둔다. Direction Recovery Change Request §10.3
@@ -30,7 +31,15 @@ const VARIANT_BY_PURPOSE: Partial<Record<ComponentId, Partial<Record<Purpose, Co
   "create-edit-modal": { PRODUCT_LIKE: "form-drawer" },
   // §9.5 dashboard 계열 두 번째 Variant — PRODUCT_LIKE는 개수 카드보다 최근 항목 피드를 선호.
   "dashboard-view": { PRODUCT_LIKE: "recent-activity-dashboard" },
+  // §9.2 detail 계열 두 번째 Variant — PRODUCT_LIKE는 사이드 패널보다 전체 페이지 상세를 선호.
+  "detail-panel": { PRODUCT_LIKE: "full-detail-page" },
 };
+
+// detail 계열만 예외적으로 Slot 자체가 바뀐다 — 선택된 리소스의 상세를 사이드 칼럼이 아니라 전체
+// 폭으로 보여주려면 목록(Block "list")이 차지하던 자리(page.main)를 대신 차지해야 한다. Backend
+// BlueprintCompiler의 SLOT_OVERRIDE/REPLACES_OVERRIDE와 반드시 동일하게 유지해야 한다.
+const SLOT_OVERRIDE: Partial<Record<ComponentId, SlotId>> = { "full-detail-page": "page.main" };
+const REPLACES_OVERRIDE: Partial<Record<ComponentId, string>> = { "full-detail-page": "list" };
 
 export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay" | "page.actions";
 
@@ -41,6 +50,9 @@ export interface Block {
   capabilityIds: string[];
   // create-edit-modal 두 인스턴스(생성/수정)를 구분하는 용도로만 쓴다. 그 외 컴포넌트는 항상 null.
   mode: "CREATE" | "UPDATE" | null;
+  // 이 Block이 활성화됐을 때(예: 행 선택) 같은 페이지의 다른 Block(주로 같은 Slot을 두고 다투는 대안)
+  // 자리를 대신 차지한다는 표시(그 Block의 instanceId). null이면 지금까지처럼 독립적으로 존재.
+  replaces: string | null;
 }
 
 // Backend/Ops의 PreviewBlockResolver와 동일한 규칙 — 지금 렌더러에 하드코딩돼 있던 것을 그대로 데이터로
@@ -52,7 +64,7 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
     if (!login) {
       return [];
     }
-    return [{ instanceId: "login", componentId: "login-form", slot: "page.content", capabilityIds: [login.id], mode: null }];
+    return [{ instanceId: "login", componentId: "login-form", slot: "page.content", capabilityIds: [login.id], mode: null, replaces: null }];
   }
 
   if (page.skeleton === "DASHBOARD") {
@@ -61,7 +73,14 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       .filter((c): c is PreviewCapability => c?.type === "LIST")
       .map((c) => c.id);
     return [
-      { instanceId: "dashboard", componentId: "dashboard-view", slot: "page.content", capabilityIds: listCapabilityIds, mode: null },
+      {
+        instanceId: "dashboard",
+        componentId: "dashboard-view",
+        slot: "page.content",
+        capabilityIds: listCapabilityIds,
+        mode: null,
+        replaces: null,
+      },
     ];
   }
 
@@ -75,10 +94,17 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
   const del = findCapabilityByType(capabilities, page, "DELETE");
 
   const blocks: Block[] = [
-    { instanceId: "list", componentId: "resource-table", slot: "page.main", capabilityIds: [list.id], mode: null },
+    { instanceId: "list", componentId: "resource-table", slot: "page.main", capabilityIds: [list.id], mode: null, replaces: null },
   ];
   if (detail) {
-    blocks.push({ instanceId: "detail", componentId: "detail-panel", slot: "page.aside", capabilityIds: [detail.id], mode: null });
+    blocks.push({
+      instanceId: "detail",
+      componentId: "detail-panel",
+      slot: "page.aside",
+      capabilityIds: [detail.id],
+      mode: null,
+      replaces: null,
+    });
   }
   if (create) {
     blocks.push({
@@ -87,6 +113,7 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       slot: "page.overlay",
       capabilityIds: [create.id],
       mode: "CREATE",
+      replaces: null,
     });
   }
   if (update) {
@@ -96,10 +123,18 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       slot: "page.overlay",
       capabilityIds: [update.id],
       mode: "UPDATE",
+      replaces: null,
     });
   }
   if (del) {
-    blocks.push({ instanceId: "delete", componentId: "delete-confirm-modal", slot: "page.overlay", capabilityIds: [del.id], mode: null });
+    blocks.push({
+      instanceId: "delete",
+      componentId: "delete-confirm-modal",
+      slot: "page.overlay",
+      capabilityIds: [del.id],
+      mode: null,
+      replaces: null,
+    });
   }
 
   // Backend PreviewBlockResolver.resolveDefault와 동일한 규칙 — COMMAND capability(vm.start 등)를
@@ -110,7 +145,14 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
     .filter((c): c is PreviewCapability => c?.kind === "COMMAND")
     .map((c) => c.id);
   if (commandIds.length > 0) {
-    blocks.push({ instanceId: "actions", componentId: "quick-action-button-group", slot: "page.actions", capabilityIds: commandIds, mode: null });
+    blocks.push({
+      instanceId: "actions",
+      componentId: "quick-action-button-group",
+      slot: "page.actions",
+      capabilityIds: commandIds,
+      mode: null,
+      replaces: null,
+    });
   }
   return blocks;
 }
@@ -123,7 +165,15 @@ export function compileBlocks(blocks: Block[], purpose: Purpose | null): Block[]
   }
   return blocks.map((block) => {
     const preferredComponentId = VARIANT_BY_PURPOSE[block.componentId]?.[purpose];
-    return preferredComponentId ? { ...block, componentId: preferredComponentId } : block;
+    if (!preferredComponentId) {
+      return block;
+    }
+    return {
+      ...block,
+      componentId: preferredComponentId,
+      slot: SLOT_OVERRIDE[preferredComponentId] ?? block.slot,
+      replaces: REPLACES_OVERRIDE[preferredComponentId] ?? null,
+    };
   });
 }
 
@@ -137,6 +187,12 @@ export function findListBlock(blocks: Block[]): Block | undefined {
 // recent-activity-dashboard 중 하나로 이미 컴파일해뒀다.
 export function findDashboardBlock(blocks: Block[]): Block | undefined {
   return blocks.find((b) => b.componentId === "dashboard-view" || b.componentId === "recent-activity-dashboard");
+}
+
+// detail 계열도 마찬가지 — compileBlocks가 purpose(PRODUCT_LIKE)에 따라 detail-panel/
+// full-detail-page 중 하나로 이미 컴파일해뒀다.
+export function findDetailBlock(blocks: Block[]): Block | undefined {
+  return blocks.find((b) => b.componentId === "detail-panel" || b.componentId === "full-detail-page");
 }
 
 // destructive 계열도 마찬가지 — compileBlocks가 purpose(ADMIN)에 따라 delete-confirm-modal/

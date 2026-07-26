@@ -302,13 +302,17 @@ public class PreviewComposeArtifactBuilder {
             type ComponentId =
               | "login-form" | "resource-table" | "resource-card-grid" | "detail-panel" | "create-edit-modal"
               | "form-drawer" | "delete-confirm-modal" | "typed-confirm-modal" | "dashboard-view"
-              | "recent-activity-dashboard" | "quick-action-button-group";
+              | "recent-activity-dashboard" | "quick-action-button-group" | "full-detail-page";
             interface Block {
               instanceId: string;
               componentId: ComponentId;
               slot: string;
               capabilityIds: string[];
               mode: "CREATE" | "UPDATE" | null;
+              // 이 Block이 활성화됐을 때 다른 Block(주로 같은 Slot을 두고 다투는 대안) 자리를 대신
+              // 차지한다는 표시(그 Block의 instanceId). null이면 독립적으로 존재. PAGE_BLOCKS는 Java
+              // Block record를 그대로 직렬화해 내려주므로 이 필드는 서버에서 이미 채워져 있다.
+              replaces: string | null;
             }
 
             // auto-preview-design/08-compatibility-rules.md §6 Slot 규칙 3 "Overlay 최대 동시 활성
@@ -604,6 +608,12 @@ public class PreviewComposeArtifactBuilder {
               return blocks.find((b) => b.componentId === "dashboard-view" || b.componentId === "recent-activity-dashboard");
             }
 
+            // detail 계열도 마찬가지 — BlueprintCompiler가 purpose(PRODUCT_LIKE)에 따라 detail-panel/
+            // full-detail-page 중 하나로 이미 컴파일해뒀다.
+            function findDetailBlock(blocks: Block[]): Block | undefined {
+              return blocks.find((b) => b.componentId === "detail-panel" || b.componentId === "full-detail-page");
+            }
+
             // create/edit 계열도 마찬가지 — BlueprintCompiler가 purpose(PRODUCT_LIKE)에 따라
             // create-edit-modal/form-drawer 중 하나로 이미 컴파일해뒀다. mode로 생성/수정 인스턴스를 구분한다.
             function findCreateEditBlock(blocks: Block[], mode: "CREATE" | "UPDATE"): Block | undefined {
@@ -879,6 +889,58 @@ public class PreviewComposeArtifactBuilder {
                     >
                       <span className="muted">{key}</span>
                       <span style={{ fontFamily: "monospace" }}>{formatCellValue(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+
+            // Direction Recovery Change Request §9.2 "full-detail-page" — DetailPanel과 데이터
+            // 요구조건(DETAIL capability)은 동일하고, 좁은 사이드 칼럼 대신 필드를 카드형 그리드로
+            // 넓게 펼쳐 보여준다.
+            function FullDetailPage({ capability, authToken, id }: { capability: Capability; authToken: string | null; id: string }) {
+              const [data, setData] = useState<Record<string, unknown> | null>(null);
+              const [loading, setLoading] = useState(true);
+              const [error, setError] = useState<string | null>(null);
+
+              useEffect(() => {
+                let cancelled = false;
+                Promise.resolve().then(async () => {
+                  if (cancelled) return;
+                  setLoading(true);
+                  setError(null);
+                  try {
+                    const result = await callCapability(capability, authToken, { pathParams: { id } });
+                    if (!cancelled) setData(result as Record<string, unknown>);
+                  } catch (err) {
+                    if (!cancelled) setError(err instanceof Error ? err.message : "상세 정보를 불러오지 못했습니다");
+                  } finally {
+                    if (!cancelled) setLoading(false);
+                  }
+                });
+                return () => {
+                  cancelled = true;
+                };
+              }, [capability, authToken, id]);
+
+              if (loading) {
+                return <p className="muted">불러오는 중...</p>;
+              }
+              if (error) {
+                return <p className="error">{error}</p>;
+              }
+              if (!data) {
+                return null;
+              }
+
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+                  {Object.entries(data).map(([key, value]) => (
+                    <div key={key} className="panel" style={{ padding: 12 }}>
+                      <p className="muted" style={{ fontSize: 11 }}>{key}</p>
+                      <p style={{ fontFamily: "monospace", fontSize: 13, marginTop: 4, wordBreak: "break-all" }}>
+                        {formatCellValue(value)}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -1338,7 +1400,9 @@ public class PreviewComposeArtifactBuilder {
 
               const listBlock = findListBlock(blocks);
               const list = listBlock ? findCapabilityById(listBlock.capabilityIds[0]) : undefined;
-              const detail = findCapabilityForBlock(blocks, "detail-panel");
+              const detailBlock = findDetailBlock(blocks);
+              const detail = detailBlock ? findCapabilityById(detailBlock.capabilityIds[0]) : undefined;
+              const isFullDetailPage = detailBlock?.componentId === "full-detail-page";
               const createBlock = findCreateEditBlock(blocks, "CREATE");
               const create = createBlock ? findCapabilityById(createBlock.capabilityIds[0]) : undefined;
               const updateBlock = findCreateEditBlock(blocks, "UPDATE");
@@ -1358,41 +1422,33 @@ public class PreviewComposeArtifactBuilder {
                 setRefreshKey((key) => key + 1);
               }
 
+              // 두 레이아웃(side-detail-panel/full-detail-page)이 공유하는 수정/삭제 버튼.
+              function renderHeaderActions(row: Record<string, unknown>) {
+                return (
+                  <div style={{ display: "flex", gap: 12 }}>
+                    {update && (
+                      <button className="plain" onClick={() => setOverlay({ kind: "UPDATE", row })}>
+                        수정
+                      </button>
+                    )}
+                    {del && (
+                      <button className="danger" onClick={() => setOverlay({ kind: "DELETE", id: rowId(row) })}>
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
               return (
-                <div className="grid-2">
-                  {listBlock?.componentId === "resource-card-grid" ? (
-                    <ResourceCardGrid
-                      capability={list}
-                      authToken={authToken}
-                      refreshKey={refreshKey}
-                      onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
-                      onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-                    />
-                  ) : (
-                    <ResourceTable
-                      capability={list}
-                      authToken={authToken}
-                      refreshKey={refreshKey}
-                      onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
-                      onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-                    />
-                  )}
-                  {selectedRow && (detail || commandCapabilities.length > 0) && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {selectedRow && detail && isFullDetailPage ? (
                     <div className="panel">
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                        <strong>상세</strong>
-                        <div style={{ display: "flex", gap: 12 }}>
-                          {update && (
-                            <button className="plain" onClick={() => setOverlay({ kind: "UPDATE", row: selectedRow })}>
-                              수정
-                            </button>
-                          )}
-                          {del && (
-                            <button className="danger" onClick={() => setOverlay({ kind: "DELETE", id: rowId(selectedRow) })}>
-                              삭제
-                            </button>
-                          )}
-                        </div>
+                        <button className="plain" onClick={() => setSelectedRow(null)}>
+                          ← 목록으로
+                        </button>
+                        {renderHeaderActions(selectedRow)}
                       </div>
                       {commandCapabilities.length > 0 && (
                         <div style={{ marginBottom: 12 }}>
@@ -1404,7 +1460,46 @@ public class PreviewComposeArtifactBuilder {
                           />
                         </div>
                       )}
-                      {detail && <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} />}
+                      <FullDetailPage capability={detail} authToken={authToken} id={rowId(selectedRow)} />
+                    </div>
+                  ) : (
+                    <div className="grid-2">
+                      {listBlock?.componentId === "resource-card-grid" ? (
+                        <ResourceCardGrid
+                          capability={list}
+                          authToken={authToken}
+                          refreshKey={refreshKey}
+                          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+                          onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                        />
+                      ) : (
+                        <ResourceTable
+                          capability={list}
+                          authToken={authToken}
+                          refreshKey={refreshKey}
+                          onRowClick={detail || update || del || commandBlock ? (row) => setSelectedRow(row) : undefined}
+                          onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                        />
+                      )}
+                      {selectedRow && (detail || commandCapabilities.length > 0) && (
+                        <div className="panel">
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                            <strong>상세</strong>
+                            {renderHeaderActions(selectedRow)}
+                          </div>
+                          {commandCapabilities.length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <QuickActionButtonGroup
+                                capabilities={commandCapabilities}
+                                authToken={authToken}
+                                targetId={rowId(selectedRow)}
+                                onSuccess={refresh}
+                              />
+                            </div>
+                          )}
+                          {detail && <DetailPanel capability={detail} authToken={authToken} id={rowId(selectedRow)} />}
+                        </div>
+                      )}
                     </div>
                   )}
                   {create && overlay.kind === "CREATE" && (
