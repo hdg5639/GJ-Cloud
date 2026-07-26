@@ -1,5 +1,7 @@
 package gj.cloud.ops.application.preview.analysis;
 
+import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
+
 import java.util.List;
 
 // auto-preview-design/02-component-contract.md 축소판. Registry가 없어 contractVersion/
@@ -22,6 +24,16 @@ public record ComponentContract(
         boolean handlesSecrets,
         // COMMAND capability는 type()이 항상 null이라 acceptedCapabilityTypes로 표현할 수 없다 —
         // kind 기반으로 받아들이는 capability를 여기 따로 선언한다. 기존 9개 Contract는 빈 리스트.
-        List<CapabilityKind> acceptedCapabilityKinds
+        List<CapabilityKind> acceptedCapabilityKinds,
+        // Workflow Composition Phase 2 Change Request §13 WP-5 "resolve required component families" —
+        // 같은 family 값을 가진 Contract들이 하나의 Variant 계열이다(같은 Slot·Capability 요구조건을
+        // 공유, 서로 갈아끼울 수 있음). null이면 계열이 없는 단독 컴포넌트(지금은 login-form/
+        // quick-action-button-group).
+        String family,
+        // 이 family 안에서 이 componentId가 선호되는 purpose 목록. BlueprintCompiler가 이 필드로
+        // Variant를 고른다(예전엔 BlueprintCompiler 안에 Map<기본componentId, Map<Purpose,대체>>로
+        // 하드코딩돼 있던 것 — Direction Recovery Change Request §10.2 "Retrieval order"가 예고한
+        // 일반화). 계열마다 정확히 하나는 빈 리스트(그 어떤 purpose에도 안 걸리는 기본값)여야 한다.
+        List<Purpose> preferredPurposes
 ) {
 }

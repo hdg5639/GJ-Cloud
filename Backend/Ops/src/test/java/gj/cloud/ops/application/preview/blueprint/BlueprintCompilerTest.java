@@ -152,6 +152,24 @@ class BlueprintCompilerTest {
                 .isEqualTo("create-edit-modal");
     }
 
+    // §13 WP-5 8단계 중 8번(generate selection reasons) — compile()이 고른 componentId를 그대로
+    // 설명해주는지 확인한다(compile() 전이 아니라 후의 Block을 넘겨야 실제로 선택된 Variant가 보고됨).
+    @Test
+    void explainReportsCompiledComponentIdAndMatchedPurpose() {
+        Map<String, List<Block>> pageBlocks = Map.of(
+                "vms-page", List.of(new Block("list", "resource-table", "page.main", List.of("vms.list"), null)));
+
+        Map<String, List<Block>> compiled = BlueprintCompiler.compile(pageBlocks, Purpose.PRODUCT_LIKE);
+        Map<String, List<BlueprintCompiler.SelectionReason>> reasons =
+                BlueprintCompiler.explain(compiled, Purpose.PRODUCT_LIKE);
+
+        BlueprintCompiler.SelectionReason reason = reasons.get("vms-page").get(0);
+        assertThat(reason.instanceId()).isEqualTo("list");
+        assertThat(reason.componentId()).isEqualTo("resource-card-grid");
+        assertThat(reason.matchedCapabilities()).containsExactly("vms.list");
+        assertThat(reason.matchedPurpose()).isEqualTo(Purpose.PRODUCT_LIKE);
+    }
+
     @Test
     void handlesMultiplePagesIndependently() {
         Map<String, List<Block>> pageBlocks = Map.of(

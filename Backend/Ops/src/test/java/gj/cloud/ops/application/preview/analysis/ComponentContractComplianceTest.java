@@ -1,8 +1,12 @@
 package gj.cloud.ops.application.preview.analysis;
 
+import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -86,6 +90,37 @@ class ComponentContractComplianceTest {
                 false, false, false, "HIGH", List.of(), List.of(), null, null,
                 RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
                 CapabilityKind.COMMAND, action, List.of());
+    }
+
+    // Workflow Composition Phase 2 Change Request §13 WP-5 — BlueprintCompiler가 family/
+    // preferredPurposes만 보고 결정론적으로 유일한 Variant를 고를 수 있으려면, family마다 정확히
+    // 하나는 "기본값"(preferredPurposes 빈 리스트)이어야 하고 같은 purpose를 두 Variant가 동시에
+    // 선호하면 안 된다(그러면 Map.values() 순회 순서에 선택이 좌우돼 결정론이 깨짐, AC-9와 직결).
+    @Test
+    void everyComponentFamilyHasExactlyOneDefaultAndNoAmbiguousPurposePreference() {
+        Map<String, List<ComponentContract>> byFamily = new LinkedHashMap<>();
+        for (ComponentContract contract : ComponentContracts.ALL.values()) {
+            if (contract.family() == null) {
+                continue;
+            }
+            byFamily.computeIfAbsent(contract.family(), f -> new ArrayList<>()).add(contract);
+        }
+
+        assertThat(byFamily).isNotEmpty();
+        for (Map.Entry<String, List<ComponentContract>> entry : byFamily.entrySet()) {
+            String family = entry.getKey();
+            List<ComponentContract> members = entry.getValue();
+
+            long defaultCount = members.stream().filter(c -> c.preferredPurposes().isEmpty()).count();
+            assertThat(defaultCount).as("family '%s'는 정확히 하나의 기본값(preferredPurposes 빈 리스트)을 가져야 함", family)
+                    .isEqualTo(1);
+
+            for (Purpose purpose : Purpose.values()) {
+                long matches = members.stream().filter(c -> c.preferredPurposes().contains(purpose)).count();
+                assertThat(matches).as("family '%s'에서 purpose %s를 선호하는 Variant는 최대 하나여야 함", family, purpose)
+                        .isLessThanOrEqualTo(1);
+            }
+        }
     }
 
     private Capability capability(String id, String resourceName, CapabilityType type) {
