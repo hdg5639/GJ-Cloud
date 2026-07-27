@@ -81,17 +81,27 @@ public class PreviewBlockResolver {
                 .toList()) {
             List<String> childCapabilityIds = new ArrayList<>();
             childCapabilityIds.add(childList.id());
-            page.capabilityIds().stream()
-                    .map(id -> findById(capabilities, id))
-                    .filter(c -> c != null && c.type() == CapabilityType.CREATE)
-                    .filter(c -> c.resourceName().equals(childList.resourceName()))
-                    .filter(c -> isNestedUnderDetail(detail, c))
-                    .findFirst()
-                    .ifPresent(c -> childCapabilityIds.add(c.id()));
+            addChildAction(childCapabilityIds, page, capabilities, childList.resourceName(),
+                    c -> isNestedUnderDetail(detail, c));
             blocks.add(new Block("child-" + sanitizeInstanceId(childList.resourceName()),
                     "child-resource-list", "page.secondary", childCapabilityIds, null));
         }
         return blocks;
+    }
+
+    // 자식 리소스 블록에 CREATE/UPDATE/DELETE capability를 함께 담는다 — 담아두면 child-resource-list가
+    // 행별 추가/수정/삭제 버튼을 그린다(없으면 목록만). 부모 경로 아래로 중첩된 것만 고른다.
+    private void addChildAction(List<String> childCapabilityIds, PageDraft page, List<Capability> capabilities,
+                                String childResourceName, java.util.function.Predicate<Capability> nested) {
+        for (CapabilityType type : List.of(CapabilityType.CREATE, CapabilityType.UPDATE, CapabilityType.DELETE)) {
+            page.capabilityIds().stream()
+                    .map(id -> findById(capabilities, id))
+                    .filter(c -> c != null && c.type() == type)
+                    .filter(c -> c.resourceName().equals(childResourceName))
+                    .filter(nested)
+                    .findFirst()
+                    .ifPresent(c -> childCapabilityIds.add(c.id()));
+        }
     }
 
     private boolean isNestedUnderDetail(Capability detail, Capability candidate) {
@@ -154,13 +164,8 @@ public class PreviewBlockResolver {
             }
             List<String> childCapabilityIds = new ArrayList<>();
             childCapabilityIds.add(childList.id());
-            page.capabilityIds().stream()
-                    .map(id -> findById(capabilities, id))
-                    .filter(c -> c != null && c.type() == CapabilityType.CREATE)
-                    .filter(c -> c.resourceName().equals(childList.resourceName()))
-                    .filter(c -> isNestedUnder(list, c))
-                    .findFirst()
-                    .ifPresent(c -> childCapabilityIds.add(c.id()));
+            addChildAction(childCapabilityIds, page, capabilities, childList.resourceName(),
+                    c -> isNestedUnder(list, c));
             blocks.add(new Block("child-" + sanitizeInstanceId(childList.resourceName()),
                     "child-resource-list", "page.secondary", childCapabilityIds, null));
         }

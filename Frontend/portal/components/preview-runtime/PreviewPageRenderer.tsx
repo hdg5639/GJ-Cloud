@@ -269,12 +269,14 @@ export function PreviewPageRenderer({
         .filter((capability): capability is PreviewCapability => capability !== undefined);
       const childList = childCapabilities.find((capability) => capability.type === "LIST");
       const childCreate = childCapabilities.find((capability) => capability.type === "CREATE");
+      const childDelete = childCapabilities.find((capability) => capability.type === "DELETE");
       if (!childList) return null;
       return (
         <ChildResourceList
           key={block.instanceId}
           listCapability={childList}
           createCapability={childCreate}
+          deleteCapability={childDelete}
           config={config}
           parentId={parentId}
           refreshKey={refreshKey}

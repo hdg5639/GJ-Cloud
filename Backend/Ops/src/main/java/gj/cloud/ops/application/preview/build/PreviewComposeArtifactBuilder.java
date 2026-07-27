@@ -1610,10 +1610,11 @@ public class PreviewComposeArtifactBuilder {
             }
 
             function ChildResourceList({
-              listCapability, createCapability, authToken, parentId, refreshKey,
+              listCapability, createCapability, deleteCapability, authToken, parentId, refreshKey,
             }: {
               listCapability: Capability;
               createCapability?: Capability;
+              deleteCapability?: Capability;
               authToken: string | null;
               parentId: string;
               refreshKey?: number;
@@ -1622,7 +1623,29 @@ public class PreviewComposeArtifactBuilder {
               const [loading, setLoading] = useState(true);
               const [error, setError] = useState<string | null>(null);
               const [createOpen, setCreateOpen] = useState(false);
+              const [deletingId, setDeletingId] = useState<string | null>(null);
               const [localRefreshKey, setLocalRefreshKey] = useState(0);
+
+              async function handleDelete(row: Record<string, unknown>) {
+                if (!deleteCapability) return;
+                const childId = rowId(row);
+                if (!window.confirm("이 항목을 삭제하시겠습니까?")) return;
+                setDeletingId(childId);
+                setError(null);
+                try {
+                  // 자식 액션 경로는 부모+자식 두 파라미터를 가진다(/machines/{machineId}/ports/{portId}) —
+                  // placeholder 이름을 뽑아 마지막(자식 자신)에 행 id, 앞쪽(부모)에 parentId를 채운다.
+                  const names = Array.from(deleteCapability.path.matchAll(/\\{([^}]+)\\}/g), (match) => match[1]);
+                  const params: Record<string, string> = {};
+                  names.forEach((name, index) => { params[name] = index === names.length - 1 ? childId : parentId; });
+                  await callCapability(deleteCapability, authToken, { pathParams: params });
+                  setLocalRefreshKey((key) => key + 1);
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "삭제하지 못했습니다");
+                } finally {
+                  setDeletingId(null);
+                }
+              }
 
               useEffect(() => {
                 let cancelled = false;
@@ -1663,10 +1686,20 @@ public class PreviewComposeArtifactBuilder {
                   ) : (
                     <div style={{ overflowX: "auto" }}>
                       <table>
-                        <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+                        <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}{deleteCapability && <th> </th>}</tr></thead>
                         <tbody>
                           {rows.map((row, index) => (
-                            <tr key={index}>{columns.map((column) => <td key={column}>{formatCellValue(row[column])}</td>)}</tr>
+                            <tr key={index}>
+                              {columns.map((column) => <td key={column}>{formatCellValue(row[column])}</td>)}
+                              {deleteCapability && (
+                                <td>
+                                  <button className="plain" style={{ color: "var(--danger, #e5484d)" }}
+                                    disabled={deletingId === rowId(row)} onClick={() => handleDelete(row)}>
+                                    {deletingId === rowId(row) ? "삭제 중..." : "삭제"}
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
                           ))}
                         </tbody>
                       </table>
@@ -2121,12 +2154,14 @@ public class PreviewComposeArtifactBuilder {
                     .filter((capability): capability is Capability => capability !== undefined);
                   const childList = childCapabilities.find((capability) => capability.type === "LIST");
                   const childCreate = childCapabilities.find((capability) => capability.type === "CREATE");
+                  const childDelete = childCapabilities.find((capability) => capability.type === "DELETE");
                   if (!childList) return null;
                   return (
                     <ChildResourceList
                       key={block.instanceId}
                       listCapability={childList}
                       createCapability={childCreate}
+                      deleteCapability={childDelete}
                       authToken={authToken}
                       parentId={parentId}
                       refreshKey={refreshKey}
