@@ -458,7 +458,13 @@ public class PreviewComposeArtifactBuilder {
 
             function applyFlowOutputMappings(binding: ApiBinding, response: unknown, ctx: FlowContext): void {
               for (const mapping of binding.outputMappings) {
-                ctx.context[mapping.to] = readByFlowPath(response, mapping.from.split("."));
+                // 같은 context key에 data.id/result.id/payload.id/id 후보를 순서대로 매핑할 수 있다.
+                // 존재하지 않는 후보(undefined)가 앞에서 찾은 값을 덮어쓰면 안 된다(예: 봉투 응답이면
+                // data.id는 값이 있지만 최상위 id는 undefined라 createdId를 지워버린다).
+                const value = readByFlowPath(response, mapping.from.split("."));
+                if (value !== undefined && value !== null) {
+                  ctx.context[mapping.to] = value;
+                }
               }
             }
 
