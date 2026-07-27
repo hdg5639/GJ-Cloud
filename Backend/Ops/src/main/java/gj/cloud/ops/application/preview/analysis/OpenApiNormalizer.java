@@ -226,9 +226,11 @@ public class OpenApiNormalizer {
         boolean responseIsArray = extractResponseIsArray(operation.path("responses"), schemas);
         List<String> responseFieldPaths = extractResponseFieldPaths(operation.path("responses"), schemas);
         List<String> arrayFieldPaths = extractArrayFieldPaths(operation.path("responses"), schemas);
+        List<ApiOperationEvidence.EnumFieldEvidence> enumFields =
+                extractEnumFieldPaths(operation.path("responses"), schemas);
 
         return new ApiOperationEvidence(path, method, operationId, summary, tags, parameters,
-                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths, arrayFieldPaths);
+                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths, arrayFieldPaths, enumFields);
     }
 
     private List<ApiParameterEvidence> extractParameters(JsonNode parametersNode) {
@@ -443,6 +445,69 @@ public class OpenApiNormalizer {
                 out.add(path);
             } else if ("object".equals(propertyType) || propertySchema.has("properties") || propertySchema.has("allOf")) {
                 collectArrayFieldPaths(propertySchema, schemas, path, depth + 1, out);
+            }
+            if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+                return;
+            }
+        }
+    }
+
+    // 응답 스키마에서 문자열 enum 필드(dot-path + 허용값)를 모은다 — CapabilityExtractor가 상태 전이
+    // 폴링(AC-4)을 만들 status 필드를 결정론적으로 찾는 데 쓴다. 배열/객체는 responseFieldPaths와 같은
+    // 봉투 언랩 규칙으로 한 단계씩 들어간다.
+    private List<ApiOperationEvidence.EnumFieldEvidence> extractEnumFieldPaths(JsonNode responses, JsonNode schemas) {
+        var codes = responses.fieldNames();
+        while (codes.hasNext()) {
+            String code = codes.next();
+            if (!code.startsWith("2")) {
+                continue;
+            }
+            JsonNode content = responses.path(code).path("content");
+            if (!content.isObject() || content.isEmpty()) {
+                continue;
+            }
+            JsonNode schema = resolveSchema(content.elements().next().path("schema"), schemas);
+            List<ApiOperationEvidence.EnumFieldEvidence> fields = new ArrayList<>();
+            collectEnumFieldPaths(schema, schemas, "", 0, fields);
+            if (!fields.isEmpty()) {
+                return fields;
+            }
+        }
+        return List.of();
+    }
+
+    private void collectEnumFieldPaths(JsonNode schema, JsonNode schemas, String prefix, int depth,
+                                       List<ApiOperationEvidence.EnumFieldEvidence> out) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH || out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+            return;
+        }
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode() || "array".equals(resolved.path("type").asText(null))) {
+            return;
+        }
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return;
+        }
+        var names = properties.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String path = prefix.isEmpty() ? name : prefix + "." + name;
+            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
+            JsonNode enumNode = propertySchema.path("enum");
+            if (enumNode.isArray() && !enumNode.isEmpty()) {
+                List<String> values = new ArrayList<>();
+                for (JsonNode value : enumNode) {
+                    if (value.isTextual()) {
+                        values.add(value.asText());
+                    }
+                }
+                if (!values.isEmpty()) {
+                    out.add(new ApiOperationEvidence.EnumFieldEvidence(path, values));
+                }
+            } else if ("object".equals(propertySchema.path("type").asText(null))
+                    || propertySchema.has("properties") || propertySchema.has("allOf")) {
+                collectEnumFieldPaths(propertySchema, schemas, path, depth + 1, out);
             }
             if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
                 return;

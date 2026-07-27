@@ -256,6 +256,40 @@ class CapabilityExtractorTest {
         return capabilities.stream().filter(c -> c.id().equals(id)).findFirst().orElseThrow();
     }
 
+    @Test
+    void detectsPollHintOnDetailWhenStatusEnumHasTransitionAndTerminalValues() {
+        List<ApiOperationEvidence> operations = List.of(
+                new ApiOperationEvidence("/machines/{id}", "GET", "getMachine", null, List.of(),
+                        List.of(), List.of(), true, false, List.of("id", "name", "status"), List.of(),
+                        List.of(new ApiOperationEvidence.EnumFieldEvidence("status",
+                                List.of("PROVISIONING", "RUNNING", "STOPPED"))))
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("machine-service", "1.0", List.of(), List.of(), operations, 0);
+
+        Capability detail = findCapability(extractor.extract(evidence), "machines.detail");
+
+        assertThat(detail.pollHint()).isNotNull();
+        assertThat(detail.pollHint().statusPath()).isEqualTo("status");
+        // 전이값(PROVISIONING)은 종료로 치지 않고, 종료 토큰과 일치하는 값만 담는다.
+        assertThat(detail.pollHint().terminalValues()).containsExactly("RUNNING", "STOPPED");
+    }
+
+    @Test
+    void leavesPollHintNullWhenStatusEnumHasNoTransientValue() {
+        // ACTIVE/INACTIVE는 둘 다 종료 상태 — 전이값이 없으니 폴링 대상이 아니다(분류형 enum).
+        List<ApiOperationEvidence> operations = List.of(
+                new ApiOperationEvidence("/machines/{id}", "GET", "getMachine", null, List.of(),
+                        List.of(), List.of(), true, false, List.of("id", "status"), List.of(),
+                        List.of(new ApiOperationEvidence.EnumFieldEvidence("status",
+                                List.of("ACTIVE", "INACTIVE"))))
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("machine-service", "1.0", List.of(), List.of(), operations, 0);
+
+        Capability detail = findCapability(extractor.extract(evidence), "machines.detail");
+
+        assertThat(detail.pollHint()).isNull();
+    }
+
     private ApiOperationEvidence operation(String method, String path, String operationId,
                                             boolean responseIsArray, List<ApiParameterEvidence> parameters) {
         return operation(method, path, operationId, responseIsArray, parameters, List.of(), List.of());

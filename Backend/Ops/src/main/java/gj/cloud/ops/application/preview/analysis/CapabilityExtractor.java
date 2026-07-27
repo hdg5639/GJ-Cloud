@@ -40,6 +40,17 @@ public class CapabilityExtractor {
     private static final Set<String> COMMAND_KEYWORDS = Set.of(
             "start", "stop", "restart", "invite", "remove", "approve", "reject", "rollback", "deploy",
             "upload", "download");
+    // AC-4 상태 전이 폴링 감지용. 상태 필드로 인정할 이름(정규화됨: 소문자, _/- 제거).
+    private static final Set<String> STATUS_FIELD_NAMES = Set.of("status", "state", "phase");
+    // "아직 진행 중"을 뜻하는 전이 상태값(정규화됨). enum에 이게 하나라도 있어야 폴링을 만든다 —
+    // 없으면 그냥 분류형 enum(예: ACTIVE/INACTIVE)이라 폴링 대상이 아니다.
+    private static final Set<String> TRANSIENT_STATUS_TOKENS = Set.of(
+            "pending", "provisioning", "creating", "processing", "inprogress", "starting", "queued",
+            "initializing", "building", "deploying", "waiting", "scheduling", "restarting", "stopping");
+    // "정착됨"을 뜻하는 종료 상태값(정규화됨) — 성공/실패 모두 포함해야 실패 시 무한 폴링을 막는다.
+    private static final Set<String> TERMINAL_STATUS_TOKENS = Set.of(
+            "running", "ready", "active", "available", "completed", "succeeded", "success", "done",
+            "failed", "error", "stopped", "terminated", "cancelled", "canceled", "healthy", "online");
 
     public List<Capability> extract(OpenApiEvidence evidence) {
         List<Capability> capabilities = new ArrayList<>();
@@ -199,13 +210,43 @@ public class CapabilityExtractor {
                 ? operation.requestBodyFields()
                 : List.of();
 
+        // DETAIL 응답에 전이형 status enum이 있으면 폴링 힌트를 붙인다 — 생성 후 상태가 종료값에
+        // 도달할 때까지 RuleBasedFlowGenerator가 bounded polling을 만든다(AC-4). 그 외 타입은 null.
+        Capability.PollHint pollHint = type == CapabilityType.DETAIL ? detectPollHint(operation) : null;
+        if (pollHint != null) {
+            evidenceLines.add("응답 status enum에서 상태 전이 폴링 대상을 추정함: " + pollHint.statusPath()
+                    + " → " + pollHint.terminalValues());
+        }
+
         RiskLevel risk = defaultRiskFor(type);
         return Optional.of(new Capability(
                 Capability.idOf(resourceName, type), resourceName, type,
                 operation.operationId(), operation.path(), operation.method(),
                 hasSearch, hasSort, hasPagination, confidence, evidenceLines, fields, null, searchParam,
                 risk, defaultAutomationPolicyFor(risk), collectionPath, totalCountPath,
-                kindFor(type), null, List.of()));
+                kindFor(type), null, List.of(), pollHint));
+    }
+
+    // DETAIL 응답 스키마의 enum 필드 중 "status"류 이름이면서, 값에 전이 상태(PROVISIONING 등)와 종료
+    // 상태(RUNNING 등)가 함께 들어 있는 것을 찾는다. 둘 다 있어야 폴링을 만든다 — 전이값이 없으면 그냥
+    // 분류형 enum이고, 종료값이 없으면 언제 멈출지 결정론적으로 알 수 없다. 종료값은 API 원본 표기 그대로
+    // 담아 런타임 poll 조건이 실제 응답값과 매칭되게 한다. OpenAPI만으로 확정 가능한 근거(선언된 enum)만
+    // 쓰고 추측하지 않는다는 분석기 원칙을 지킨다.
+    private Capability.PollHint detectPollHint(ApiOperationEvidence operation) {
+        for (ApiOperationEvidence.EnumFieldEvidence enumField : operation.enumFields()) {
+            if (!STATUS_FIELD_NAMES.contains(normalizeFieldName(leafSegment(enumField.path())))) {
+                continue;
+            }
+            boolean hasTransient = enumField.values().stream()
+                    .anyMatch(value -> TRANSIENT_STATUS_TOKENS.contains(normalizeFieldName(value)));
+            List<String> terminalValues = enumField.values().stream()
+                    .filter(value -> TERMINAL_STATUS_TOKENS.contains(normalizeFieldName(value)))
+                    .toList();
+            if (hasTransient && !terminalValues.isEmpty()) {
+                return new Capability.PollHint(enumField.path(), terminalValues);
+            }
+        }
+        return null;
     }
 
     // Direction Recovery Change Request §7.1 — CapabilityType은 편의 분류일 뿐, capability의 진짜

@@ -180,6 +180,58 @@ class RuleBasedFlowGeneratorTest {
         assertThat(ApiBindingValidator.validate(result.bindings(), List.of(detail, start, stop))).isEmpty();
     }
 
+    @Test
+    void createFlowInsertsBoundedPollWhenDetailHasStatusTransition() {
+        Capability create = capability("machines.create", "machines", CapabilityType.CREATE, "/machines", "POST",
+                List.of("name"), CapabilityKind.MUTATION, null, List.of());
+        Capability detail = new Capability("machines.detail", "machines", CapabilityType.DETAIL, null,
+                "/machines/{id}", "GET", false, false, false, "HIGH", List.of(), List.of(), null, null,
+                RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null, CapabilityKind.QUERY, null, List.of(),
+                new Capability.PollHint("status", List.of("RUNNING", "STOPPED")));
+        PagePlan page = pagePlan("machines-page", List.of(create.id(), detail.id()));
+
+        RuleBasedFlowGenerator.Result result = generator.generate(List.of(page), List.of(create, detail));
+
+        assertThat(result.flows()).hasSize(1);
+        FlowBlueprint flow = result.flows().get(0);
+        // POLL은 반드시 NAVIGATE 앞 — navigate가 flow를 abort시킬 수 있어서.
+        assertThat(flow.steps()).extracting(FlowStep::type)
+                .containsExactly(FlowStepType.API_CALL, FlowStepType.POLL, FlowStepType.NAVIGATE);
+        FlowStep poll = flow.steps().get(1);
+        assertThat(poll.until()).singleElement().satisfies(condition -> {
+            assertThat(condition.path()).isEqualTo("status");
+            assertThat(condition.equalsValue()).isNull();
+            assertThat(condition.in()).containsExactly("RUNNING", "STOPPED");
+        });
+        assertThat(poll.intervalMs()).isEqualTo(FlowExecutionPolicy.MIN_INTERVAL_MS);
+        assertThat(poll.timeoutSeconds()).isBetween(1, FlowExecutionPolicy.MAX_TIMEOUT_SECONDS);
+        // 폴링 바인딩은 생성된 리소스 id를 경로에 쓴다.
+        ApiBinding pollBinding = result.bindings().stream()
+                .filter(binding -> binding.id().equals(poll.bindingRef())).findFirst().orElseThrow();
+        assertThat(pollBinding.capabilityId()).isEqualTo("machines.detail");
+        assertThat(pollBinding.inputMappings()).singleElement().satisfies(mapping -> {
+            assertThat(mapping.target()).isEqualTo("id");
+            assertThat(mapping.targetKind()).isEqualTo(ApiBinding.InputMapping.InputTarget.PATH);
+            assertThat(mapping.from()).isEqualTo("$context.createdId");
+        });
+        assertThat(FlowBlueprintValidator.validate(flow, Set.of("machines-page"))).isEmpty();
+        assertThat(ApiBindingValidator.validate(result.bindings(), List.of(create, detail))).isEmpty();
+    }
+
+    @Test
+    void createFlowSkipsPollWhenDetailHasNoStatusTransition() {
+        Capability create = capability("vm.create", "vms", CapabilityType.CREATE, "/vms", "POST",
+                List.of("name"), CapabilityKind.MUTATION, null, List.of());
+        Capability detail = capability("vm.detail", "vms", CapabilityType.DETAIL, "/vms/{id}", "GET",
+                List.of(), CapabilityKind.QUERY, null, List.of());
+        PagePlan page = pagePlan("vm-page", List.of(create.id(), detail.id()));
+
+        RuleBasedFlowGenerator.Result result = generator.generate(List.of(page), List.of(create, detail));
+
+        assertThat(result.flows().get(0).steps()).extracting(FlowStep::type)
+                .containsExactly(FlowStepType.API_CALL, FlowStepType.NAVIGATE);
+    }
+
     private PagePlan pagePlan(String id, List<String> capabilityIds) {
         Map<String, Boolean> features = new LinkedHashMap<>();
         features.put("quickActions", false);

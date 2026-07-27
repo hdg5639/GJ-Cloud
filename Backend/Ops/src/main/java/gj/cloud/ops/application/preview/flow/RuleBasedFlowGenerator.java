@@ -22,13 +22,18 @@ import java.util.stream.Collectors;
 
 // Workflow Composition Phase 2의 결정론적 Flow 생성기. PagePlan의 create.success/row.select
 // Navigation과 COMMAND dependency를 이용해 CREATE 결과 연결·상세 이동·명령 후 refresh를 만든다.
-// AI의 ADD_FLOW/ASSIGN_FLOW와 함께 동작하지만, OpenAPI만으로 확정할 수 없는 상태 필드·완료 값은
-// 추측하지 않는다. 따라서 규칙 기반 POLL은 생성하지 않고 사용자가 승인한 Flow 또는 명시적 Binding에
-// 한해서 Runtime이 bounded polling을 실행한다.
+// AI의 ADD_FLOW/ASSIGN_FLOW와 함께 동작한다.
+// AC-4(상태 전이 폴링): DETAIL 응답의 status enum에 전이값(PROVISIONING 등)과 종료값(RUNNING 등)이
+// 함께 "선언돼 있을 때만" bounded POLL을 CREATE flow에 넣는다(CapabilityExtractor.detectPollHint가
+// 판정). 선언된 enum이라는 결정론적 근거가 있을 때만 만들고, 상태 필드/완료 값을 추측하지는 않는다는
+// 원칙은 그대로 유지한다 — 근거가 없으면 종전처럼 POLL 없이 navigate만 만든다.
 @Component
 public class RuleBasedFlowGenerator {
 
     private static final Pattern PATH_PARAM = Pattern.compile("\\{([^}]+)}");
+    // 생성 후 상태 정착까지의 폴링 총 제한(초). MIN_INTERVAL_MS(3s) 간격으로 최대 20회 —
+    // 대부분의 프로비저닝은 수십 초 내 끝나고, MAX_TIMEOUT_SECONDS(300s) 상한 안이다.
+    private static final int POLL_TIMEOUT_SECONDS = 60;
 
     public record Result(List<FlowBlueprint> flows, List<ApiBinding> bindings) {
     }
@@ -154,9 +159,41 @@ public class RuleBasedFlowGenerator {
 
         FlowStep navigateStep = new FlowStep("open-created-resource", FlowStepType.NAVIGATE, null,
                 null, null, targetPageId, parameters, null, null, null, null, null);
+
+        // AC-4 — 같은 페이지의 DETAIL capability가 전이형 status enum을 가지면(pollHint), 생성 직후
+        // 상태가 종료값에 도달할 때까지 bounded polling을 넣는다. navigate는 abort를 유발할 수 있어
+        // (렌더러가 페이지 전환 시 flow를 취소) 반드시 poll 다음에 둔다. pollHint가 없으면 종전과 동일.
+        List<FlowStep> steps = new ArrayList<>();
+        steps.add(callStep);
+        List<ApiBinding> bindings = new ArrayList<>();
+        bindings.add(createBinding);
+        if (localDetail != null && localDetail.pollHint() != null) {
+            ApiBinding pollBinding = buildPollBinding(page, localDetail);
+            bindings.add(pollBinding);
+            List<FlowStep.PollCondition> until = List.of(new FlowStep.PollCondition(
+                    localDetail.pollHint().statusPath(), null, localDetail.pollHint().terminalValues()));
+            steps.add(new FlowStep("poll-until-settled", FlowStepType.POLL, pollBinding.id(),
+                    null, null, null, null, until,
+                    FlowExecutionPolicy.MIN_INTERVAL_MS, POLL_TIMEOUT_SECONDS, null, null));
+        }
+        steps.add(navigateStep);
+
         FlowBlueprint flow = new FlowBlueprint(page.id() + "-create-flow",
-                new FlowBlueprint.FlowTrigger(page.id(), create.id()), List.of(callStep, navigateStep));
-        return Optional.of(new GeneratedFlow(flow, List.of(createBinding)));
+                new FlowBlueprint.FlowTrigger(page.id(), create.id()), steps);
+        return Optional.of(new GeneratedFlow(flow, bindings));
+    }
+
+    // 폴링 대상 DETAIL을 생성된 리소스 id로 호출하는 전용 바인딩. 경로 파라미터는 CREATE outputMapping이
+    // context에 심은 createdId를 쓴다(상세 페이지의 $route.selected와 달리, 생성 직후엔 아직 라우트가
+    // 없기 때문). refresh 바인딩("{id}-binding")과 겹치지 않게 page 스코프 id를 쓴다.
+    private ApiBinding buildPollBinding(PagePlan page, Capability detail) {
+        List<ApiBinding.InputMapping> inputMappings = new ArrayList<>();
+        Matcher matcher = PATH_PARAM.matcher(detail.path() == null ? "" : detail.path());
+        while (matcher.find()) {
+            inputMappings.add(new ApiBinding.InputMapping(matcher.group(1),
+                    ApiBinding.InputMapping.InputTarget.PATH, "$context.createdId"));
+        }
+        return new ApiBinding(page.id() + "-poll-binding", detail.id(), inputMappings, List.of(), List.of());
     }
 
     // 반환하는 GeneratedFlow.bindings()에는 커맨드 자신의 바인딩 하나만 담는다 — refresh 대상

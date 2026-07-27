@@ -202,6 +202,41 @@ class OpenApiNormalizerTest {
     }
 
     @Test
+    void extractsStringEnumFieldsFromDetailResponseForPollDetection() {
+        String doc = """
+                {
+                  "openapi": "3.0.1",
+                  "info": { "title": "machine", "version": "1.0" },
+                  "paths": {
+                    "/machines/{id}": {
+                      "get": {
+                        "operationId": "getMachine",
+                        "responses": { "200": { "content": { "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string" },
+                              "status": { "type": "string", "enum": ["PROVISIONING", "RUNNING", "STOPPED"] }
+                            }
+                          }
+                        } } } }
+                      }
+                    }
+                  }
+                }
+                """;
+        JsonNode root = normalizer.parse(doc.getBytes(StandardCharsets.UTF_8));
+        OpenApiEvidence evidence = normalizer.extract(root);
+
+        assertThat(findOperation(evidence, "GET", "/machines/{id}").enumFields())
+                .singleElement()
+                .satisfies(field -> {
+                    assertThat(field.path()).isEqualTo("status");
+                    assertThat(field.values()).containsExactly("PROVISIONING", "RUNNING", "STOPPED");
+                });
+    }
+
+    @Test
     void rejectsNonOpenApi3Documents() {
         String swagger2Doc = "{ \"swagger\": \"2.0\", \"info\": { \"title\": \"legacy\" }, \"paths\": {} }";
         JsonNode root = normalizer.parse(swagger2Doc.getBytes(StandardCharsets.UTF_8));
