@@ -803,7 +803,13 @@ public class PreviewComposeArtifactBuilder {
               query: Record<string, string> = {}
             ): string {
               let path = capability.path;
-              if (pathParams.id !== undefined) {
+              // 자식 리소스(/machines/{machineId}/ports/{portId})는 파라미터가 둘 이상이라 이름으로
+              // 치환한다. 이름 없이 { id }만 넘어오는 단일 리소스는 아래 fallback이 마지막 {...}를 채운다.
+              for (const [name, value] of Object.entries(pathParams)) {
+                if (name === "id") continue;
+                path = path.replaceAll(`{${name}}`, encodeURIComponent(value));
+              }
+              if (pathParams.id !== undefined && path.includes("{")) {
                 path = replaceLastPathPlaceholder(path, pathParams.id);
               }
               const url = new URL(API_BASE_URL.replace(/\\/$/, "") + path);
