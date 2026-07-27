@@ -23,17 +23,30 @@ public class PageDraftGenerator {
             byResource.computeIfAbsent(capability.resourceName(), k -> new ArrayList<>()).add(capability);
         }
 
+        // 중첩 자식 리소스(예: "/machines/{machineId}/ports")는 별도 페이지로 떼지 않고 부모 페이지에
+        // 접어 넣는다 — 안 그러면 자식 요청의 부모 경로 파라미터가 안 채워진다(AC-6). RuleBasedPagePlanGenerator와 동일 규칙.
+        Map<String, String> parentByChild = ChildResourceGrouping.parentByChild(byResource);
+
         List<PageDraft> pages = new ArrayList<>();
         List<String> listCapabilityIds = new ArrayList<>();
         for (Map.Entry<String, List<Capability>> entry : byResource.entrySet()) {
             String resourceName = entry.getKey();
             List<Capability> resourceCapabilities = entry.getValue();
-            List<String> capabilityIds = resourceCapabilities.stream().map(Capability::id).toList();
 
             if ("auth".equals(resourceName)) {
-                pages.add(new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE, capabilityIds));
+                pages.add(new PageDraft("auth-login", "로그인", PageSkeletonType.AUTH_PAGE,
+                        resourceCapabilities.stream().map(Capability::id).toList()));
                 continue;
             }
+
+            // 자식 리소스는 부모 페이지에 담기므로 독립 페이지를 만들지 않는다.
+            if (parentByChild.containsKey(resourceName)) {
+                continue;
+            }
+
+            // 스켈레톤은 부모 자신의 LIST/DETAIL로 판단하고, capabilityIds에는 자식 capability까지 합친다.
+            List<String> capabilityIds =
+                    ChildResourceGrouping.capabilityIdsWithChildren(resourceName, byResource, parentByChild);
 
             boolean hasList = hasType(resourceCapabilities, CapabilityType.LIST);
             boolean hasDetail = hasType(resourceCapabilities, CapabilityType.DETAIL);

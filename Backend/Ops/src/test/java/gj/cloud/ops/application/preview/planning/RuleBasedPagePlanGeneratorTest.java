@@ -86,8 +86,36 @@ class RuleBasedPagePlanGeneratorTest {
         assertThat(pages).anyMatch(p -> p.id().equals("vms-page"));
     }
 
+    @Test
+    void nestedChildResourceIsFoldedIntoParentPageNotStandalone() {
+        // 실제 겪음(machines/ports): 자식 리소스를 별도 페이지로 떼면 자식 요청의 부모 경로 파라미터
+        // (machineId)를 채울 컨텍스트가 없어 "{machineId}"가 그대로 나가 실패한다. 자식 capability는
+        // 부모(machines) 페이지에 함께 담겨야 한다(AC-6).
+        List<Capability> capabilities = List.of(
+                capabilityWithPath("machines.list", "machines", CapabilityType.LIST, "/machines"),
+                capabilityWithPath("machines.detail", "machines", CapabilityType.DETAIL, "/machines/{id}"),
+                capabilityWithPath("ports.list", "ports", CapabilityType.LIST, "/machines/{machineId}/ports"),
+                capabilityWithPath("ports.create", "ports", CapabilityType.CREATE, "/machines/{machineId}/ports"));
+
+        List<PageDraft> pages = generator.generate(capabilities, Purpose.ADMIN);
+
+        assertThat(pages).noneMatch(p -> p.id().equals("ports-page"));
+        assertThat(pages).filteredOn(p -> p.id().equals("machines-page"))
+                .singleElement()
+                .satisfies(p -> assertThat(p.capabilityIds())
+                        .contains("machines.list", "machines.detail", "ports.list", "ports.create"));
+    }
+
     private Capability listCapability(String resourceName) {
         return capability(resourceName + ".list", resourceName, CapabilityType.LIST);
+    }
+
+    private Capability capabilityWithPath(String id, String resourceName, CapabilityType type, String path) {
+        return new Capability(id, resourceName, type, null,
+                path, type == CapabilityType.CREATE ? "POST" : "GET",
+                false, false, false, "HIGH", List.of(), List.of(), null, null,
+                RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,
+                type == CapabilityType.CREATE ? CapabilityKind.MUTATION : CapabilityKind.QUERY, null, List.of());
     }
 
     private Capability capability(String id, String resourceName, CapabilityType type) {
