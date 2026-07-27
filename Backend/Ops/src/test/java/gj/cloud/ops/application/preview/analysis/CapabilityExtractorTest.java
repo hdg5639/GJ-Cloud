@@ -218,6 +218,40 @@ class CapabilityExtractorTest {
         assertThat(capabilities).noneMatch(c -> c.type() == CapabilityType.LOGIN);
     }
 
+    // 실제 겪음(machines/ports API): "/machines/{machineId}/ports"의 GET(배열)/POST가 커맨드가 아니라
+    // 자식 리소스 컬렉션의 LIST/CREATE로 분류돼야 한다. 예전엔 둘 다 action="ports" 커맨드로 오분류돼
+    // (1) RuleBasedFlowGenerator가 같은 flow id를 두 개 만들어 배포가 깨지고 (2) AC-6 자식 리소스가
+    // 만들어지지 않았다. "/machines/{id}/start"(배열 GET 없음)는 여전히 커맨드로 남아야 한다.
+    @Test
+    void nestedCollectionEndpointsAreChildCrudNotCommands() {
+        List<ApiOperationEvidence> operations = List.of(
+                operation("GET", "/machines", "listMachines", true, List.of()),
+                operation("GET", "/machines/{id}", "getMachine", false, List.of()),
+                operation("POST", "/machines/{id}/start", "startMachine", false, List.of()),
+                operation("GET", "/machines/{machineId}/ports", "listPorts", true, List.of()),
+                operation("POST", "/machines/{machineId}/ports", "createPort", false, List.of()),
+                operation("GET", "/machines/{machineId}/ports/{portId}", "getPort", false, List.of()),
+                operation("DELETE", "/machines/{machineId}/ports/{portId}", "deletePort", false, List.of())
+        );
+        OpenApiEvidence evidence = new OpenApiEvidence("machine-service", "1.0", List.of(), List.of(), operations, 0);
+
+        List<Capability> capabilities = extractor.extract(evidence);
+
+        // ports는 커맨드가 아니라 자식 리소스 CRUD로 잡혀야 한다.
+        Capability portsList = findCapability(capabilities, "ports.list");
+        assertThat(portsList.type()).isEqualTo(CapabilityType.LIST);
+        assertThat(portsList.kind()).isEqualTo(CapabilityKind.QUERY);
+        assertThat(findCapability(capabilities, "ports.create").type()).isEqualTo(CapabilityType.CREATE);
+        assertThat(findCapability(capabilities, "ports.detail").type()).isEqualTo(CapabilityType.DETAIL);
+        assertThat(findCapability(capabilities, "ports.delete").type()).isEqualTo(CapabilityType.DELETE);
+        assertThat(capabilities).noneMatch(c -> c.kind() == CapabilityKind.COMMAND && "ports".equals(c.action()));
+
+        // start는 여전히 커맨드로 남아야 한다.
+        Capability start = findCapability(capabilities, "machines.start");
+        assertThat(start.kind()).isEqualTo(CapabilityKind.COMMAND);
+        assertThat(start.action()).isEqualTo("start");
+    }
+
     private Capability findCapability(List<Capability> capabilities, String id) {
         return capabilities.stream().filter(c -> c.id().equals(id)).findFirst().orElseThrow();
     }

@@ -47,6 +47,19 @@ public class CapabilityExtractor {
         // 충돌한다(예: /upload/video·/memos/video·/memo/video가 모두 "video.create"). 배포 하드
         // 게이트가 중복 id를 거부하므로, 뽑는 즉시 유일 id로 등록해 충돌을 결정론적으로 해소한다.
         Set<String> usedIds = new HashSet<>();
+
+        // 중첩 컬렉션 경로(예: "/machines/{machineId}/ports")를 식별한다 — 그 경로에 배열을 반환하는
+        // GET이 있으면 그건 커맨드(/machines/{id}/start 같은 동사)가 아니라 자식 리소스 컬렉션이다.
+        // 이걸 구분하지 않으면 ports의 GET/POST가 둘 다 action="ports" 커맨드로 오분류돼 (1) flow id가
+        // 충돌하고 (2) AC-6 자식 리소스가 만들어지지 않는다.
+        Set<String> childCollectionPaths = new HashSet<>();
+        for (ApiOperationEvidence operation : evidence.operations()) {
+            if ("GET".equals(operation.method()) && operation.responseIsArray()
+                    && isSubActionPath(operation.path())) {
+                childCollectionPaths.add(operation.path());
+            }
+        }
+
         Optional<Capability> login = extractLoginCapability(evidence);
         login.ifPresent(capability -> capabilities.add(registerUnique(capability, usedIds)));
 
@@ -59,7 +72,7 @@ public class CapabilityExtractor {
             if (login.isPresent() && isSameOperation(operation, login.get())) {
                 continue;
             }
-            Optional<Capability> crud = extractCrudCapability(operation);
+            Optional<Capability> crud = extractCrudCapability(operation, childCollectionPaths);
             if (crud.isPresent()) {
                 capabilities.add(registerUnique(crud.get(), usedIds));
             } else {
@@ -102,11 +115,13 @@ public class CapabilityExtractor {
         return operation.method().equals(capability.method()) && operation.path().equals(capability.path());
     }
 
-    private Optional<Capability> extractCrudCapability(ApiOperationEvidence operation) {
+    private Optional<Capability> extractCrudCapability(ApiOperationEvidence operation, Set<String> childCollectionPaths) {
         // "/vms/{id}/start"처럼 파라미터 뒤에 리터럴 세그먼트가 오는 하위 액션 경로는 CRUD가 아니다 —
         // 예전엔 이 경로가 lastSegmentIsParam=false로 판정돼 "start"라는 가짜 리소스에 대한 CREATE로
         // 오분류됐다. 이런 경로는 여기서 제외하고 extractCommandCapability로 넘긴다.
-        if (isSubActionPath(operation.path())) {
+        // 단, "/machines/{id}/ports"처럼 배열 GET이 있는 중첩 컬렉션 경로는 커맨드가 아니라 자식
+        // 리소스이므로 CRUD로 계속 처리한다(GET=자식 LIST, POST=자식 CREATE, 리소스명=마지막 세그먼트).
+        if (isSubActionPath(operation.path()) && !childCollectionPaths.contains(operation.path())) {
             return Optional.empty();
         }
         String resourceName = resourceNameOf(operation.path());
