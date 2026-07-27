@@ -97,12 +97,14 @@ public final class ComponentContracts {
                     List.of("LOADING", "PARTIAL_ERROR", "SUCCESS"),
                     List.of("page.content"), false, false, List.of(),
                     "dashboard", List.of(Purpose.PRODUCT_LIKE))),
-            // Workflow Composition Phase 2 AC-6 — 부모 상세 안에서 중첩 LIST와 선택적 CREATE를
-            // 함께 처리하는 첫 child-resource 패턴. 같은 Block에 LIST+CREATE 두 capability가 들어갈 수
-            // 있으므로 allowsMultipleCapabilities=true이며 page.secondary에만 배치한다.
+            // Workflow Composition Phase 2 AC-6 — 부모 상세 안에서 중첩 LIST와 선택적 CREATE/UPDATE/
+            // DELETE를 함께 처리하는 child-resource 패턴. 같은 Block에 여러 capability(목록+행별
+            // 추가/수정/삭제)가 들어갈 수 있어 allowsMultipleCapabilities=true이며 page.secondary에만
+            // 배치한다.
             Map.entry("child-resource-list", new ComponentContract(
                     "child-resource-list", "PAGE_FEATURE",
-                    List.of(CapabilityType.LIST, CapabilityType.CREATE), true,
+                    List.of(CapabilityType.LIST, CapabilityType.CREATE,
+                            CapabilityType.UPDATE, CapabilityType.DELETE), true,
                     List.of("LOADING", "EMPTY", "ERROR", "SUCCESS", "SUBMITTING"),
                     List.of("page.secondary"), false, false, List.of(),
                     null, List.of())),
