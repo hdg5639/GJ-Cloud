@@ -1,10 +1,17 @@
 FROM eclipse-temurin:17-jdk AS builder
-WORKDIR /app
-COPY gradlew .
-COPY gradle gradle
-COPY build.gradle .
-COPY settings.gradle .
-COPY src src
+# 빌드 컨텍스트 = 리포 루트(compose.yaml의 context: .). build.gradle의 syncPreviewTemplate가
+# ${projectDir}/../../Frontend/portal 에서 포털 preview-runtime 실물을 리소스로 굽기 때문에,
+# 리포 레이아웃을 그대로 미러링(/build/Backend/Ops 기준 ../../ = /build)해서 필요한 포털 소스만 COPY한다.
+WORKDIR /build/Backend/Ops
+COPY Backend/Ops/gradlew .
+COPY Backend/Ops/gradle gradle
+COPY Backend/Ops/build.gradle .
+COPY Backend/Ops/settings.gradle .
+COPY Backend/Ops/src src
+# Auto Preview 배포 아티팩트 번들용 포털 소스(syncPreviewTemplate가 읽는 것만).
+COPY Frontend/portal/lib/types.ts /build/Frontend/portal/lib/types.ts
+COPY Frontend/portal/components/ui /build/Frontend/portal/components/ui
+COPY Frontend/portal/components/preview-runtime /build/Frontend/portal/components/preview-runtime
 RUN ./gradlew bootJar -x test --no-daemon
 
 FROM eclipse-temurin:17-jre
@@ -12,5 +19,5 @@ FROM eclipse-temurin:17-jre
 # 결정론적으로 분석하기 위해 필요 (VM으로의 SSH 배포 체크아웃과는 별개의 로컬 분석 전용 용도)
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/build/libs/*.jar app.jar
+COPY --from=builder /build/Backend/Ops/build/libs/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "/app.jar"]

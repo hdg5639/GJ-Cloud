@@ -53,18 +53,25 @@ def previewTemplateOut = layout.buildDirectory.dir("preview-template")
 tasks.register('syncPreviewTemplate', Copy) {
     description = 'Copy portal preview-runtime sources into resources for the Auto Preview deployed artifact.'
     into previewTemplateOut.map { it.dir("preview-template/src") }
-    from("${portalDir}/lib") {
-        include 'types.ts'
-        into 'lib'
-    }
-    from("${portalDir}/components/ui") {
-        include 'cn.ts', 'button.tsx', 'field.tsx', 'loader.tsx', 'modal.tsx',
-                'panel.tsx', 'table.tsx', 'wizard.tsx', 'avatar.tsx', 'badge.tsx'
-        into 'components/ui'
-    }
-    from("${portalDir}/components/preview-runtime") {
-        exclude '**/README.md', '**/*.test.ts', '**/*.test.tsx'
-        into 'components/preview-runtime'
+    // 포털 소스가 있을 때만 from을 건다. 컨텍스트에 Frontend가 없으면(예: Ops 단독 컨텍스트로 빌드) 존재하지
+    // 않는 트리를 스냅샷하다 Gradle이 /proc까지 걷다 MD5 해시에 실패하는 문제가 있어, 없으면 조용히 no-op한다.
+    // Docker 빌드는 리포 루트를 컨텍스트로 써서 아래 경로를 미러링(../../Frontend/portal)해 실제로 복사한다.
+    if (file(portalDir).exists()) {
+        from("${portalDir}/lib") {
+            include 'types.ts'
+            into 'lib'
+        }
+        from("${portalDir}/components/ui") {
+            include 'cn.ts', 'button.tsx', 'field.tsx', 'loader.tsx', 'modal.tsx',
+                    'panel.tsx', 'table.tsx', 'wizard.tsx', 'avatar.tsx', 'badge.tsx'
+            into 'components/ui'
+        }
+        from("${portalDir}/components/preview-runtime") {
+            exclude '**/README.md', '**/*.test.ts', '**/*.test.tsx'
+            into 'components/preview-runtime'
+        }
+    } else {
+        logger.warn("syncPreviewTemplate: 포털 소스({})가 없어 Auto Preview 템플릿 번들을 건너뜁니다.", portalDir)
     }
 }
 

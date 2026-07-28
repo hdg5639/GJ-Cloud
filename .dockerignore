@@ -1,0 +1,14 @@
+# 리포 루트를 컨텍스트로 쓰는 빌드(현재 ops)용 제외 목록. 대용량/재생성 산출물만 제외하고,
+# Ops Dockerfile이 COPY하는 Backend/Ops 및 Frontend/portal/{lib,components/ui,components/preview-runtime}
+# 는 제외하지 않는다.
+**/node_modules
+**/.next
+**/.gradle
+**/build
+**/out
+**/.git
+.git
+**/.DS_Store
+**/*.log
+**/.idea
+**/.vscode
