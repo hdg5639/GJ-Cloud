@@ -12,6 +12,7 @@ import {
   EntityDirectory,
   KanbanCollection,
   MediaGalleryCollection,
+  TimelineCollection,
 } from "../collections";
 import {
   CommerceOrderDetail,
@@ -99,6 +100,18 @@ const CUSTOM_RENDERERS = {
         columns={toKanbanColumns(rows)}
         onCardClick={(card) => {
           const row = rowById(rows, card.id);
+          if (row) onRowClick?.(row);
+        }}
+      />
+    ),
+  },
+  "timeline-collection": {
+    kind: "collection",
+    render: ({ rows, onRowClick }) => (
+      <TimelineCollection
+        events={toTimelineEvents(rows)}
+        onEventClick={(event) => {
+          const row = rowById(rows, event.id);
           if (row) onRowClick?.(row);
         }}
       />

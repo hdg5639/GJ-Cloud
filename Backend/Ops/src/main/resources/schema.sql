@@ -210,8 +210,18 @@ CREATE TABLE IF NOT EXISTS ai_preview_generation_log (
     succeeded           BOOLEAN      NOT NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT now(),
 
-    CONSTRAINT chk_ai_preview_generation_log_kind CHECK (kind IN ('GENERATION', 'REVIEW'))
+    CONSTRAINT chk_ai_preview_generation_log_kind CHECK (
+        kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION')
+    )
 );
+
+-- AiPagePlanner/AiPartAdvisor가 추가되기 전에 생성된 운영 테이블은 GENERATION/REVIEW만 허용한다.
+-- CREATE TABLE IF NOT EXISTS는 기존 CHECK를 갱신하지 않으므로 현재 AiCallKind 전체 목록으로 재생성한다.
+ALTER TABLE ai_preview_generation_log
+    DROP CONSTRAINT IF EXISTS chk_ai_preview_generation_log_kind;
+ALTER TABLE ai_preview_generation_log
+    ADD CONSTRAINT chk_ai_preview_generation_log_kind
+    CHECK (kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION'));
 
 CREATE INDEX IF NOT EXISTS idx_ai_preview_generation_log_requester ON ai_preview_generation_log(requester_user_id);
 
