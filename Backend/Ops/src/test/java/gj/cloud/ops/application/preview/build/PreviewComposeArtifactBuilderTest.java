@@ -184,6 +184,22 @@ class PreviewComposeArtifactBuilderTest {
         System.out.println("Generated preview project written to: " + dir);
     }
 
+    // 전면 이전(Phase B) 검증용 — 포털 실물 컴포넌트를 번들한 생성 프로젝트를 temp에 쓴다.
+    // 개별 실행 후 npm install && npx tsc --noEmit && npx vite build로 그린 확인.
+    @Test
+    void writeRealComponentProjectToTempDirForManualBuildVerification() throws IOException {
+        ComposeArtifact artifact = builder.buildWithRealComponents(
+                "https://api.example.com", sampleCapabilities(), samplePages(), List.of(), List.of(),
+                AuthStrategy.apiKeyHeader("X-API-Key"), Purpose.PRODUCT_LIKE);
+        Path dir = Files.createTempDirectory("gamjabox-preview-real-");
+        for (UploadedFile file : artifact.uploadedFiles()) {
+            Path target = dir.resolve(file.vmPath());
+            Files.createDirectories(target.getParent());
+            Files.write(target, file.content());
+        }
+        System.out.println("Real-component preview project written to: " + dir);
+    }
+
     private List<Capability> sampleCapabilities() {
         return List.of(
                 new Capability("auth.login", "auth", CapabilityType.LOGIN, "login", "/auth/login", "POST",

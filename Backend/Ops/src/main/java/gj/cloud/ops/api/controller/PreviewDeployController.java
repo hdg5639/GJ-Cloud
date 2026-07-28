@@ -126,7 +126,10 @@ public class PreviewDeployController {
             throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
         }
 
-        ComposeArtifact artifact = previewComposeArtifactBuilder.build(
+        // 전면 이전(Phase B): 포털 preview-runtime 실물을 번들하는 빌더로 생성 — 배포 앱이 라이브
+        // 프리뷰와 같은 컴포넌트(Blueprint 파츠 포함)를 쓴다. 검증(hasErrorFinding)은 기본 Block으로
+        // 수행하고 파츠 치환은 아티팩트 생성 단계에서만 적용해 배포가 막히지 않는다.
+        ComposeArtifact artifact = previewComposeArtifactBuilder.buildWithRealComponents(
                 body.apiBaseUrl(), capabilities, effectivePages, flows, bindings,
                 body.authStrategy(), body.purpose());
 
