@@ -23,12 +23,30 @@ public class PreviewBlockResolver {
     }
 
     public List<Block> resolve(PageDraft page, List<Capability> capabilities) {
-        return switch (page.skeleton()) {
+        List<Block> blocks = switch (page.skeleton()) {
             case AUTH_PAGE -> resolveAuthPage(page, capabilities);
             case DASHBOARD -> resolveDashboard(page, capabilities);
             case RESOURCE_DETAIL -> resolveResourceDetail(page, capabilities);
             case RESOURCE_LIST, LIST_DETAIL -> resolveDefault(page, capabilities);
         };
+        if (page.skeleton() == PageSkeletonType.AUTH_PAGE || blocks.isEmpty()) {
+            return blocks;
+        }
+        return withPageChrome(page, blocks);
+    }
+
+    // 레이아웃/내비게이션/피드백/테마는 데이터 Block을 대체하지 않고 페이지를 감싸는 독립 mount다.
+    // 기본 synthetic Block을 항상 넣어두면 Selector가 같은 manifest에서 자동 선택하고, 마법사도
+    // pageId/instanceId override라는 기존 메커니즘 그대로 4개 축을 선택할 수 있다.
+    private List<Block> withPageChrome(PageDraft page, List<Block> blocks) {
+        String primaryCapabilityId = page.capabilityIds().stream().findFirst().orElse(null);
+        List<String> capabilityIds = primaryCapabilityId == null ? List.of() : List.of(primaryCapabilityId);
+        List<Block> result = new ArrayList<>(blocks);
+        result.add(new Block("layout", "default-layout", "page.layout", capabilityIds, null));
+        result.add(new Block("navigation", "default-navigation", "page.navigation", capabilityIds, null));
+        result.add(new Block("feedback", "default-feedback", "page.feedback", capabilityIds, null));
+        result.add(new Block("theme", "default-theme", "page.theme", capabilityIds, null));
+        return List.copyOf(result);
     }
 
     private List<Block> resolveAuthPage(PageDraft page, List<Capability> capabilities) {
@@ -65,13 +83,13 @@ public class PreviewBlockResolver {
                 .map(Capability::id)
                 .toList();
         if (!commandIds.isEmpty()) {
-            blocks.add(new Block("actions", "quick-action-button-group", "page.actions", commandIds, null));
+            blocks.add(new Block("actions", "quick-action-button-group", "page.actions", commandIds, "COMMAND"));
         }
         if (update != null) {
             blocks.add(new Block("update", "create-edit-modal", "page.overlay", List.of(update.id()), "UPDATE"));
         }
         if (delete != null) {
-            blocks.add(new Block("delete", "delete-confirm-modal", "page.overlay", List.of(delete.id()), null));
+            blocks.add(new Block("delete", "delete-confirm-modal", "page.overlay", List.of(delete.id()), "DELETE"));
         }
 
         for (Capability childList : page.capabilityIds().stream()
@@ -140,7 +158,7 @@ public class PreviewBlockResolver {
             blocks.add(new Block("update", "create-edit-modal", "page.overlay", List.of(update.id()), "UPDATE"));
         }
         if (delete != null) {
-            blocks.add(new Block("delete", "delete-confirm-modal", "page.overlay", List.of(delete.id()), null));
+            blocks.add(new Block("delete", "delete-confirm-modal", "page.overlay", List.of(delete.id()), "DELETE"));
         }
 
         // Direction Recovery Change Request §22 완료 기준 — COMMAND capability(vm.start 등)를 discard하지
@@ -152,7 +170,7 @@ public class PreviewBlockResolver {
                 .map(Capability::id)
                 .toList();
         if (!commandIds.isEmpty()) {
-            blocks.add(new Block("actions", "quick-action-button-group", "page.actions", commandIds, null));
+            blocks.add(new Block("actions", "quick-action-button-group", "page.actions", commandIds, "COMMAND"));
         }
 
         // AC-6 — 주 LIST 경로 아래에 중첩된 추가 LIST(/parents/{id}/children)가 같은 페이지에

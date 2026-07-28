@@ -1,12 +1,18 @@
 "use client";
 
 import type { Block } from "./blueprint";
-import { baseComponentFor, componentKind, partsForKind } from "./blueprints/adapters";
+import { baseComponentFor, componentMount, partsForMount } from "./blueprints/adapters";
 
 const KIND_LABEL: Record<string, string> = {
-  collection: "목록",
-  detail: "상세",
-  dashboard: "대시보드",
+  COLLECTION: "목록",
+  DETAIL: "상세",
+  DASHBOARD: "대시보드",
+  ACTIONS: "액션",
+  OVERLAY: "모달·폼·워크플로우",
+  LAYOUT: "레이아웃",
+  NAVIGATION: "내비게이션",
+  FEEDBACK: "상태 화면",
+  THEME: "테마",
 };
 
 // 마법사 파츠 선택기 — 활성 페이지의 스왑 대상 Block(목록/상세/대시보드)마다 드롭다운을 그려
@@ -35,7 +41,7 @@ export function BlueprintPartPicker({
   aiLoading?: boolean;
   reasons?: Record<string, string>;
 }) {
-  const swappable = blocks.filter((block) => componentKind(block.componentId));
+  const swappable = blocks.filter((block) => componentMount(block.componentId));
   if (swappable.length === 0) return null;
 
   function select(instanceId: string, value: string) {
@@ -60,23 +66,23 @@ export function BlueprintPartPicker({
         </button>
       )}
       {swappable.map((block) => {
-        const kind = componentKind(block.componentId)!;
+        const mountPoint = componentMount(block.componentId)!;
         const key = `${pageId}/${block.instanceId}`;
         const value = overrides[key] ?? "";
         const reason = reasons[key];
         return (
           <label key={block.instanceId} className="flex items-center gap-1.5 text-xs" title={reason || undefined}>
-            <span className="text-muted-soft">{KIND_LABEL[kind] ?? kind}</span>
+            <span className="text-muted-soft">{KIND_LABEL[mountPoint] ?? mountPoint}</span>
             <select
               value={value}
               onChange={(event) => select(block.instanceId, event.target.value)}
               className="rounded border border-line-strong bg-panel px-2 py-1 text-xs font-semibold"
             >
               <option value="">자동</option>
-              <option value={baseComponentFor(kind, purpose)}>기본</option>
-              {partsForKind(kind).map((part) => (
+              <option value={baseComponentFor(mountPoint, purpose, block.mode, block.slot)}>기본</option>
+              {partsForMount(mountPoint, block.mode).map((part) => (
                 <option key={part.id} value={part.id}>
-                  {part.label}
+                  {part.label} · {part.kind}
                 </option>
               ))}
             </select>

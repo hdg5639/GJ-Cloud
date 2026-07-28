@@ -22,7 +22,14 @@ import {
   isCollectionPart,
   isDetailPart,
   isDashboardPart,
+  isActionPart,
+  isOverlayPart,
 } from "./blueprints/adapters";
+import {
+  BlueprintActionPart,
+  BlueprintOverlayPart,
+  BlueprintPageChrome,
+} from "./blueprints/adapters/BlueprintPartHost";
 import { callCapability, rowId } from "./api";
 import { findCapabilityById } from "./utils";
 import {
@@ -94,6 +101,7 @@ export function PreviewPageRenderer({
   const [refreshKey, setRefreshKey] = useState(0);
   const [flowRun, setFlowRun] = useState<FlowRunView | null>(null);
   const flowAbortRef = useRef<AbortController | null>(null);
+  const feedbackComponentId = blocks.find((block) => block.slot === "page.feedback")?.componentId;
 
   useEffect(() => {
     return () => flowAbortRef.current?.abort();
@@ -117,15 +125,17 @@ export function PreviewPageRenderer({
     const listCapabilities = (dashboardBlock?.capabilityIds ?? [])
       .map((id) => findCapabilityById(capabilities, id))
       .filter((capability): capability is PreviewCapability => capability !== undefined);
-    if (dashboardBlock && isDashboardPart(dashboardBlock.componentId)) {
-      return (
-        <DashboardAdapter componentId={dashboardBlock.componentId} capabilities={listCapabilities} config={config} refreshKey={refreshKey} />
-      );
-    }
-    return dashboardBlock?.componentId === "recent-activity-dashboard" ? (
+    const dashboardContent = dashboardBlock && isDashboardPart(dashboardBlock.componentId) ? (
+        <DashboardAdapter componentId={dashboardBlock.componentId} capabilities={listCapabilities} config={config} refreshKey={refreshKey} feedbackComponentId={feedbackComponentId} />
+      ) : dashboardBlock?.componentId === "recent-activity-dashboard" ? (
       <RecentActivityDashboard capabilities={listCapabilities} config={config} />
     ) : (
       <DashboardView capabilities={listCapabilities} config={config} />
+    );
+    return (
+      <BlueprintPageChrome blocks={blocks} page={page} capabilities={capabilities}>
+        {dashboardContent}
+      </BlueprintPageChrome>
     );
   }
 
@@ -142,7 +152,10 @@ export function PreviewPageRenderer({
   const update = updateBlock ? findCapabilityById(capabilities, updateBlock.capabilityIds[0]) : undefined;
   const deleteBlock = findDeleteBlock(blocks);
   const del = deleteBlock ? findCapabilityById(capabilities, deleteBlock.capabilityIds[0]) : undefined;
-  const commandBlock = blocks.find((block) => block.componentId === "quick-action-button-group");
+  const commandBlock = blocks.find((block) =>
+    block.slot === "page.actions"
+    && (block.componentId === "quick-action-button-group" || isActionPart(block.componentId))
+  );
   const commandCapabilities = (commandBlock?.capabilityIds ?? [])
     .map((id) => findCapabilityById(capabilities, id))
     .filter((capability): capability is PreviewCapability => capability !== undefined);
@@ -333,17 +346,28 @@ export function PreviewPageRenderer({
         </div>
         {commandCapabilities.length > 0 && (
           <div className="mb-3">
-            <QuickActionButtonGroup
-              capabilities={commandCapabilities}
-              config={config}
-              targetId={id}
-              onSuccess={refresh}
-              onExecute={(capability) => runCommandFlow(capability, id)}
-            />
+            {commandBlock && isActionPart(commandBlock.componentId) ? (
+              <BlueprintActionPart
+                componentId={commandBlock.componentId}
+                capabilities={commandCapabilities}
+                onExecute={async (capability) => {
+                  await runCommandFlow(capability, id);
+                  refresh();
+                }}
+              />
+            ) : (
+              <QuickActionButtonGroup
+                capabilities={commandCapabilities}
+                config={config}
+                targetId={id}
+                onSuccess={refresh}
+                onExecute={(capability) => runCommandFlow(capability, id)}
+              />
+            )}
           </div>
         )}
         {detail && (isDetailBlueprintPart && detailBlock ? (
-          <DetailBlueprintAdapter componentId={detailBlock.componentId} capability={detail} config={config} id={id} refreshKey={refreshKey} />
+          <DetailBlueprintAdapter componentId={detailBlock.componentId} capability={detail} config={config} id={id} refreshKey={refreshKey} feedbackComponentId={feedbackComponentId} />
         ) : isFullDetailPage ? (
           <FullDetailPage capability={detail} config={config} id={id} refreshKey={refreshKey} />
         ) : (
@@ -356,50 +380,63 @@ export function PreviewPageRenderer({
 
   return (
     <div className="flex flex-col gap-4">
-      {page.skeleton === "RESOURCE_DETAIL" && effectiveRow ? (
-        renderDetail(effectiveRow, true)
-      ) : selectedRow && detail && isFullDetailPage ? (
-        <div>
-          <div className="mb-3">
-            <button type="button" className="text-xs font-bold text-brand-strong" onClick={() => onSelectRow(null)}>
-              ← 목록으로
-            </button>
+      <BlueprintPageChrome blocks={blocks} page={page} capabilities={capabilities}>
+        {page.skeleton === "RESOURCE_DETAIL" && effectiveRow ? (
+          renderDetail(effectiveRow, true)
+        ) : selectedRow && detail && isFullDetailPage ? (
+          <div>
+            <div className="mb-3">
+              <button type="button" className="text-xs font-bold text-brand-strong" onClick={() => onSelectRow(null)}>
+                ← 목록으로
+              </button>
+            </div>
+            {renderDetail(selectedRow, false)}
           </div>
-          {renderDetail(selectedRow, false)}
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-          {listBlock && isCollectionPart(listBlock.componentId) ? (
-            <CollectionAdapter
-              componentId={listBlock.componentId}
-              capability={list!}
-              config={config}
-              refreshKey={refreshKey}
-              onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
-              onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-            />
-          ) : listBlock?.componentId === "resource-card-grid" ? (
-            <ResourceCardGrid
-              capability={list!}
-              config={config}
-              refreshKey={refreshKey}
-              onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
-              onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-            />
-          ) : (
-            <ResourceTable
-              capability={list!}
-              config={config}
-              refreshKey={refreshKey}
-              onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
-              onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
-            />
-          )}
-          {selectedRow && (detail || commandCapabilities.length > 0) && renderDetail(selectedRow, false)}
-        </div>
-      )}
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+            {listBlock && isCollectionPart(listBlock.componentId) ? (
+              <CollectionAdapter
+                componentId={listBlock.componentId}
+                capability={list!}
+                config={config}
+                refreshKey={refreshKey}
+                onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
+                onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                feedbackComponentId={feedbackComponentId}
+              />
+            ) : listBlock?.componentId === "resource-card-grid" ? (
+              <ResourceCardGrid
+                capability={list!}
+                config={config}
+                refreshKey={refreshKey}
+                onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
+                onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+              />
+            ) : (
+              <ResourceTable
+                capability={list!}
+                config={config}
+                refreshKey={refreshKey}
+                onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
+                onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+              />
+            )}
+            {selectedRow && (detail || commandCapabilities.length > 0) && renderDetail(selectedRow, false)}
+          </div>
+        )}
+      </BlueprintPageChrome>
 
-      {create && (createBlock?.componentId === "form-drawer" ? (
+      {create && createBlock && isOverlayPart(createBlock.componentId) ? (
+        <BlueprintOverlayPart
+          componentId={createBlock.componentId}
+          open={overlay.kind === "CREATE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
+          capability={create}
+          config={config}
+          onSuccess={refresh}
+          onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
+        />
+      ) : create && (createBlock?.componentId === "form-drawer" ? (
         <FormDrawer
           open={overlay.kind === "CREATE"}
           onClose={() => setOverlay({ kind: "NONE" })}
@@ -419,7 +456,18 @@ export function PreviewPageRenderer({
         />
       ))}
 
-      {update && (updateBlock?.componentId === "form-drawer" ? (
+      {update && updateBlock && isOverlayPart(updateBlock.componentId) ? (
+        <BlueprintOverlayPart
+          componentId={updateBlock.componentId}
+          open={overlay.kind === "UPDATE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
+          capability={update}
+          config={config}
+          initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
+          targetId={routeTargetId || undefined}
+          onSuccess={refresh}
+        />
+      ) : update && (updateBlock?.componentId === "form-drawer" ? (
         <FormDrawer
           open={overlay.kind === "UPDATE"}
           onClose={() => setOverlay({ kind: "NONE" })}
@@ -441,7 +489,21 @@ export function PreviewPageRenderer({
         />
       ))}
 
-      {del && deleteBlock?.componentId === "typed-confirm-modal" ? (
+      {del && deleteBlock && isOverlayPart(deleteBlock.componentId) ? (
+        <BlueprintOverlayPart
+          componentId={deleteBlock.componentId}
+          open={overlay.kind === "DELETE"}
+          onClose={() => setOverlay({ kind: "NONE" })}
+          capability={del}
+          config={config}
+          targetId={overlay.kind === "DELETE" ? overlay.id : ""}
+          onSuccess={() => {
+            if (page.skeleton === "RESOURCE_DETAIL") performNavigation(null, {}, "GO_BACK");
+            onSelectRow(null);
+            refresh();
+          }}
+        />
+      ) : del && deleteBlock?.componentId === "typed-confirm-modal" ? (
         <TypedConfirmModal
           open={overlay.kind === "DELETE"}
           onClose={() => setOverlay({ kind: "NONE" })}

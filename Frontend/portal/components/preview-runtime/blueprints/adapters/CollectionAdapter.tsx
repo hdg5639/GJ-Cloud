@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/field";
 import { PageLoader } from "@/components/ui/loader";
 import type { PreviewCapability, PreviewRuntimeConfig } from "../../types";
 import { renderCollectionPart } from "./registry";
+import { BlueprintFeedbackPart } from "./BlueprintPartHost";
 import { useListRows } from "./useResource";
 
 // 목록 계열 Blueprint 파츠(entity-directory/kanban-collection/commerce-product-grid)를 실제 API에
@@ -18,6 +19,7 @@ export function CollectionAdapter({
   onRowClick,
   onCreateClick,
   refreshKey,
+  feedbackComponentId,
 }: {
   componentId: string;
   capability: PreviewCapability;
@@ -25,6 +27,7 @@ export function CollectionAdapter({
   onRowClick?: (row: Record<string, unknown>) => void;
   onCreateClick?: () => void;
   refreshKey?: number;
+  feedbackComponentId?: string;
 }) {
   const [search, setSearch] = useState("");
   const { rows, loading, error } = useListRows(capability, config, refreshKey, search);
@@ -49,11 +52,11 @@ export function CollectionAdapter({
       </div>
 
       {loading ? (
-        <PageLoader label="불러오는 중" />
+        feedbackComponentId ? <BlueprintFeedbackPart componentId={feedbackComponentId} details="데이터를 불러오는 중입니다." /> : <PageLoader label="불러오는 중" />
       ) : error ? (
-        <p className="text-sm text-danger">{error}</p>
+        feedbackComponentId ? <BlueprintFeedbackPart componentId={feedbackComponentId} details={error} /> : <p className="text-sm text-danger">{error}</p>
       ) : rows.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-soft">데이터가 없습니다</p>
+        feedbackComponentId ? <BlueprintFeedbackPart componentId={feedbackComponentId} details="데이터가 없습니다." /> : <p className="py-8 text-center text-sm text-muted-soft">데이터가 없습니다</p>
       ) : (
         renderCollectionPart(componentId, { rows, onRowClick })
       )}

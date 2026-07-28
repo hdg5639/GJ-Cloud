@@ -40,7 +40,7 @@ public final class ResourceCategoryClassifier {
         NAME_HINTS.put(BlueprintCategory.SETTINGS, List.of(
                 "setting", "config", "preference", "permission", "role", "policy"));
 
-        // ── Expansion Pack 신규 도메인(megaComponentManifest 카테고리와 1:1). 위 기존 카테고리가
+        // ── Expansion Pack 신규 도메인(component-manifest.json 카테고리와 1:1). 위 기존 카테고리가
         //    선점한 범용어(invoice/payment→COMMERCE, event→OBSERVABILITY, ticket→PROJECT,
         //    employee→CRM, media/asset→CONTENT 등)는 피하고 각 도메인 고유 명사만 둔다. ──
         NAME_HINTS.put(BlueprintCategory.SECURITY, List.of(

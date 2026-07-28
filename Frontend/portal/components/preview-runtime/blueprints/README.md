@@ -1,104 +1,88 @@
 # Auto Preview Blueprint Parts Library
 
-This directory contains **Blueprint Parts** for the GamjaBox Auto Preview runtime — category-specific
-layouts/dashboards/collections/details/modals/workflows that the deterministic selection engine mounts
-in place of the base components. 포털 라이브 프리뷰와 배포 앱 양쪽에서 같은 파츠가 렌더된다.
+GamjaBox Auto Preview가 사용하는 Blueprint Parts 라이브러리다. 포털 라이브 프리뷰와 VM에
+배포되는 Vite 앱은 모두 이 디렉터리의 같은 React 구현을 사용한다.
 
-## Package scope
+## 현재 배선 상태
 
-- 8 reusable layout parts
-- 6 dashboard parts
-- 8 collection parts
-- 6 detail parts
-- 11 specialized modal parts plus a shared modal frame
-- 6 workflow wizard parts
-- 14 FlowBlueprint preset factories
-- component, layout, and flow manifests
-- optional Blueprint-specific CSS tokens
+총 **281개 파츠가 전부 Registry에 연결**되어 있다.
 
-## Directory
+| Kind | Count | Runtime mount |
+| --- | ---: | --- |
+| ACTION | 16 | `page.actions` |
+| COLLECTION | 38 | `page.main` |
+| DASHBOARD | 36 | `page.content` |
+| DETAIL | 32 | `page.main`, `page.primary` |
+| FEEDBACK | 14 | `page.feedback` |
+| FORM | 18 | `page.overlay` |
+| LAYOUT | 28 | `page.layout` |
+| MODAL | 41 | `page.overlay` |
+| NAVIGATION | 14 | `page.navigation` |
+| THEME | 16 | `page.theme` |
+| WORKFLOW | 28 | `page.overlay` |
+
+컬렉션·상세·대시보드뿐 아니라 액션, 폼, 모달, 워크플로우, 레이아웃, 내비게이션, 피드백,
+테마까지 마법사에서 선택할 수 있다. 카테고리와 purpose가 명확한 파츠는
+`BlueprintPartSelector`가 자동 선택하고, 같은 mount의 다른 파츠는 사용자가 오버라이드할 수 있다.
+피드백과 테마는 상태·브랜드 의도를 임의로 추측하지 않도록 수동 선택만 허용한다.
+
+## 단일 정본과 코드 생성
+
+파츠 계약의 유일한 정본은 다음 JSON이다.
 
 ```text
-Frontend/portal/components/preview-runtime/blueprints/
-├─ core/
-├─ layouts/
-├─ dashboards/
-├─ collections/
-├─ details/
-├─ modals/
-├─ workflows/
-├─ flows/
-├─ manifests/
-├─ styles/
-└─ index.ts
+manifests/component-manifest.json
 ```
 
-## Categories covered
+이 파일에는 `componentId`, 구현 export, kind, category, mount point, surface, purpose, mode,
+자동 선택 여부가 들어 있다. 다음 명령이 모든 구현 파일과 export를 검증하고 TypeScript Component
+Registry를 생성한다.
 
-- Administration and governance
-- Analytics and executive dashboards
-- Commerce catalog, order, and revenue
-- Content authoring and publishing
-- CRM, directory, customer, and onboarding
-- Infrastructure provisioning and resource details
-- Observability, alerts, incidents, and operations
-- Project delivery and Kanban workflows
-- Settings and permission management
-- Approval, deployment, import, transfer, and status workflows
+```bash
+cd Frontend/portal
+npm run blueprint:generate
+npm run blueprint:check
+```
 
-## Integration (현재 상태 — 선택 엔진으로 배선됨)
+생성 결과:
 
-이 파츠들은 이제 **결정론 선택 엔진**을 통해 파이프라인에 연결돼 있다(Phase A/B 완료):
+```text
+adapters/generatedPartComponents.ts
+```
 
-- 백엔드 `ResourceCategoryClassifier`가 리소스명 → `BlueprintCategory`로 분류하고,
-  `BlueprintPartSelector`가 `BlueprintCompiler.compile` 직후 Block의 componentId를 카테고리에 맞는
-  파츠로 치환한다(근거 없으면 기본 컴포넌트 유지).
-- 포털 라이브 프리뷰: `PreviewController.blocks`에서 선택기 적용 → `adapters/`가 fetch+매핑해 렌더.
-- 배포 앱: `PreviewComposeArtifactBuilder.buildWithRealComponents`가 이 preview-runtime **실물**을
-  그대로 번들(Tailwind v4). 배포와 포털이 같은 컴포넌트를 쓴다.
+Ops의 `syncBlueprintManifest`도 같은 JSON을 classpath에 복사한다. 따라서 Java
+`BlueprintPartRegistry`, TypeScript `ComponentId`, 파츠 선택기, 사용자 Picker가 별도의 목록을
+각자 유지하지 않는다.
 
-### 새 파츠 배선 = 딱 2줄
-1. **프론트** `adapters/registry.tsx`의 `BLUEPRINT_PARTS`에 `"my-part": { kind, render }` 한 줄.
-   (여기서 `ComponentId` union·`isXPart`·finder·PreviewPageRenderer dispatch가 자동 파생)
-2. **백엔드** `BlueprintPartRegistry.java`의 `ALL`에 `new BlueprintPart(...)` 한 줄.
-   (componentId 문자열이 두 곳에서 동일해야 함)
+## 신규 파츠 등록 절차
 
-자세한 절차: `files/auto-preview-design/Auto_Preview_Blueprint_Authoring_Guide.md`의 레시피 A0.
-`styles/blueprint-tokens.css`의 추가 토큰이 필요하면 그때 전역 CSS에서 import한다(기본 상태 토큰은
-이미 index.css/globals.css의 `--preview-status-*`로 제공됨).
+1. kind 디렉터리에 React 구현을 추가하고 named export 한다.
+2. `component-manifest.json`에 파츠 선언 한 건을 추가한다.
+3. `npm run blueprint:generate`를 실행한다.
+4. `npm run blueprint:check`, TypeScript 검사, Ops 테스트를 실행한다.
 
-## Guardrails preserved
+수동 Registry 분기나 Java 문자열 안의 React 재구현은 추가하지 않는다.
 
-- Parts use existing Portal UI primitives and Tailwind tokens.
-- Status presentation uses the current Preview status-token system.
-- No arbitrary HTML, JavaScript evaluation, external package, or direct network request is introduced.
-- Flow presets use the existing restricted `PreviewFlowBlueprint` and `PreviewApiBinding` structures.
-- Destructive presets require an explicit confirmation context.
-- Polling presets use bounded intervals and timeouts.
-- Components are adapter-friendly: data and actions arrive through props instead of hidden API calls.
+## Runtime 경로
 
-## Status
+```text
+component-manifest.json
+  ├─ codegen → generatedPartComponents.ts → Portal Registry/Renderer
+  └─ Gradle sync → BlueprintPartRegistry → Compiler/Selector
 
-- **Wired (rendering now)** — Phase D에서 collection/detail/dashboard kind를 category별로 확장 배선함.
-  카테고리 매칭 시 포털 프리뷰·배포 앱 양쪽에서 자동 렌더된다:
-  - 컬렉션: `entity-directory`(CRM), `kanban-collection`(PROJECT), `commerce-product-grid`(COMMERCE),
-    `alert-inbox`(OBSERVABILITY), `audit-log-table`(ADMIN), `compact-metric-table`(ANALYTICS),
-    `media-gallery-collection`(CONTENT)
-  - 상세: `infrastructure-resource-detail`(INFRASTRUCTURE), `commerce-order-detail`(COMMERCE),
-    `content-article-detail`(CONTENT), `customer-profile-detail`(CRM), `incident-detail`(OBSERVABILITY),
-    `settings-detail`(SETTINGS)
-  - 대시보드: `operations-health-dashboard`(OBSERVABILITY), `admin-governance-dashboard`(ADMIN),
-    `commerce-revenue-dashboard`(COMMERCE), `content-performance-dashboard`(CONTENT),
-    `executive-kpi-dashboard`(ANALYTICS), `project-delivery-dashboard`(PROJECT)
-- **Expansion Pack (config 팩토리 기반, 배선됨)** — `core/megaFactory.tsx`의 `create*Part(config)`로
-  만들어진 확장 팩. collection/detail/dashboard **86종**을 `adapters/megaParts.tsx`에서 배선했다(균일
-  시그니처라 개별 매퍼 없이 `records=rows` 한 줄). 신규 도메인 카테고리 20종(SECURITY/FINANCE/HR/IOT/
-  LEGAL/…)을 백엔드 `BlueprintCategory` enum + `ResourceCategoryClassifier` 힌트 + 프론트 `catalog.ts`에
-  추가해 자동선택이 걸린다. 확장 팩 파츠는 `preferredPurposes=ADMIN/PRODUCT_LIKE`라 API_TEST에선 기본
-  컴포넌트가 유지된다. (kind, category)당 첫 파츠만 자동선택되고, 같은 카테고리의 나머지는 마법사
-  드롭다운(오버라이드)으로 도달한다.
-- **Library (등록 대기)**: 모달/워크플로우 위저드 + 확장 팩의 layouts/modals/workflows/forms/actions/
-  navigation/feedback/themes **150종**은 렌더 kind가 달라(드롭인 대체가 아님) 이 selector 배선 대상이
-  아니다 — 레이아웃 선택 엔진·테마 시스템 등 별도 런타임이 생겨야 소비된다(Combined Report §29 로드맵).
-  소스로 존재하며 컴파일된다. `timeline-collection` 등 카테고리 귀속이 모호한 컬렉션도 자동선택 미등록
-  (오버라이드로는 지정 가능).
+Frontend preview-runtime 실물
+  ├─ Portal live preview
+  └─ PreviewComposeArtifactBuilder가 배포 아티팩트에 그대로 복사
+```
+
+`PreviewBlockResolver`는 데이터 Block 외에 layout/navigation/feedback/theme용 기본 Block을
+생성한다. `BlueprintPartSelector`는 kind, category, surface, purpose, mode가 모두 맞는 파츠만
+선택한다. 생성·수정·명령·삭제 overlay가 섞이지 않도록 `supportedModes`도 계약으로 검증한다.
+
+## Guardrails
+
+- 파츠는 props로 데이터와 액션을 받고 직접 임의 네트워크 요청을 만들지 않는다.
+- 알 수 없는 카테고리는 기본 컴포넌트를 유지한다.
+- 호환되지 않는 사용자 오버라이드는 자동 선택 또는 기본 컴포넌트로 폴백한다.
+- 파괴적 파츠는 `DELETE` mode에서만 선택된다.
+- 배포 앱과 포털은 동일한 Runtime 소스를 사용한다.

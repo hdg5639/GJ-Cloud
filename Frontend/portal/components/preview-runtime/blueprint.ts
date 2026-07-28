@@ -1,5 +1,11 @@
 import { findCapabilityById, findCapabilityByType } from "./utils";
-import { isCollectionPart, isDashboardPart, isDetailPart, type BlueprintPartId } from "./blueprints/adapters";
+import {
+  isCollectionPart,
+  isDashboardPart,
+  isDetailPart,
+  isOverlayPart,
+  type BlueprintPartId,
+} from "./blueprints/adapters";
 import type { PreviewCapability, PreviewPage, Purpose } from "./types";
 
 // auto-preview-design/01-blueprint-schema.md의 Block Instance 축소판 — PreviewPageRenderer가
@@ -20,9 +26,12 @@ export type ComponentId =
   | "quick-action-button-group"
   | "full-detail-page"
   | "child-resource-list"
-  // Blueprint 파츠 선택 엔진(백엔드 BlueprintPartSelector)이 카테고리에 맞춰 기본 컴포넌트를 파츠 id로
-  // 치환할 수 있다. 파츠 id 집합은 blueprints/adapters/registry.tsx 단일 레지스트리에서 파생된다
-  // (파츠 추가 시 여기 손댈 필요 없음). BlueprintPartRegistry.java(백엔드)와 componentId 문자열만 맞추면 됨.
+  | "default-layout"
+  | "default-navigation"
+  | "default-feedback"
+  | "default-theme"
+  // 파츠 id 집합은 component-manifest.json에서 생성된 Registry 타입으로부터 파생된다.
+  // 백엔드도 같은 JSON을 읽으므로 신규 파츠 추가 시 이 union이나 Java 목록을 따로 수정하지 않는다.
   | BlueprintPartId;
 
 // 계열(같은 Slot·Capability 요구조건을 공유하는 Variant 묶음)마다 기본 componentId를 키로, 특정
@@ -47,7 +56,18 @@ const VARIANT_BY_PURPOSE: Partial<Record<ComponentId, Partial<Record<Purpose, Co
 const SLOT_OVERRIDE: Partial<Record<ComponentId, SlotId>> = { "full-detail-page": "page.main" };
 const REPLACES_OVERRIDE: Partial<Record<ComponentId, string>> = { "full-detail-page": "list" };
 
-export type SlotId = "page.content" | "page.main" | "page.aside" | "page.overlay" | "page.actions" | "page.secondary";
+export type SlotId =
+  | "page.content"
+  | "page.main"
+  | "page.primary"
+  | "page.aside"
+  | "page.overlay"
+  | "page.actions"
+  | "page.secondary"
+  | "page.layout"
+  | "page.navigation"
+  | "page.feedback"
+  | "page.theme";
 
 export interface Block {
   instanceId: string;
@@ -55,10 +75,24 @@ export interface Block {
   slot: SlotId;
   capabilityIds: string[];
   // create-edit-modal 두 인스턴스(생성/수정)를 구분하는 용도로만 쓴다. 그 외 컴포넌트는 항상 null.
-  mode: "CREATE" | "UPDATE" | null;
+  mode: "CREATE" | "UPDATE" | "DELETE" | "COMMAND" | null;
   // 이 Block이 활성화됐을 때(예: 행 선택) 같은 페이지의 다른 Block(주로 같은 Slot을 두고 다투는 대안)
   // 자리를 대신 차지한다는 표시(그 Block의 instanceId). null이면 지금까지처럼 독립적으로 존재.
   replaces: string | null;
+}
+
+function withPageChrome(page: PreviewPage, blocks: Block[]): Block[] {
+  if (blocks.length === 0) {
+    return blocks;
+  }
+  const capabilityIds = page.capabilityIds.length > 0 ? [page.capabilityIds[0]] : [];
+  return [
+    ...blocks,
+    { instanceId: "layout", componentId: "default-layout", slot: "page.layout", capabilityIds, mode: null, replaces: null },
+    { instanceId: "navigation", componentId: "default-navigation", slot: "page.navigation", capabilityIds, mode: null, replaces: null },
+    { instanceId: "feedback", componentId: "default-feedback", slot: "page.feedback", capabilityIds, mode: null, replaces: null },
+    { instanceId: "theme", componentId: "default-theme", slot: "page.theme", capabilityIds, mode: null, replaces: null },
+  ];
 }
 
 // Backend/Ops의 PreviewBlockResolver와 동일한 규칙. Direction Recovery Change Request §13.1 — 마법사
@@ -80,7 +114,7 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       .map((id) => findCapabilityById(capabilities, id))
       .filter((c): c is PreviewCapability => c?.type === "LIST")
       .map((c) => c.id);
-    return [
+    return withPageChrome(page, [
       {
         instanceId: "dashboard",
         componentId: "dashboard-view",
@@ -89,7 +123,92 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
         mode: null,
         replaces: null,
       },
+    ]);
+  }
+
+  if (page.skeleton === "RESOURCE_DETAIL") {
+    const pageCapabilities = page.capabilityIds
+      .map((id) => findCapabilityById(capabilities, id))
+      .filter((capability): capability is PreviewCapability => capability !== undefined);
+    const detail = pageCapabilities.find((capability) => capability.type === "DETAIL");
+    if (!detail) return [];
+    const blocks: Block[] = [
+      {
+        instanceId: "detail",
+        componentId: "full-detail-page",
+        slot: "page.primary",
+        capabilityIds: [detail.id],
+        mode: null,
+        replaces: null,
+      },
     ];
+    const commandIds = pageCapabilities
+      .filter((capability) => capability.kind === "COMMAND")
+      .map((capability) => capability.id);
+    if (commandIds.length > 0) {
+      blocks.push({
+        instanceId: "actions",
+        componentId: "quick-action-button-group",
+        slot: "page.actions",
+        capabilityIds: commandIds,
+        mode: "COMMAND",
+        replaces: null,
+      });
+    }
+    const update = pageCapabilities.find(
+      (capability) => capability.type === "UPDATE" && capability.resourceName === detail.resourceName
+    );
+    const del = pageCapabilities.find(
+      (capability) => capability.type === "DELETE" && capability.resourceName === detail.resourceName
+    );
+    if (update) {
+      blocks.push({
+        instanceId: "update",
+        componentId: "create-edit-modal",
+        slot: "page.overlay",
+        capabilityIds: [update.id],
+        mode: "UPDATE",
+        replaces: null,
+      });
+    }
+    if (del) {
+      blocks.push({
+        instanceId: "delete",
+        componentId: "delete-confirm-modal",
+        slot: "page.overlay",
+        capabilityIds: [del.id],
+        mode: "DELETE",
+        replaces: null,
+      });
+    }
+    const lastParameter = detail.path.lastIndexOf("/{");
+    const parentPrefix = lastParameter >= 0 ? detail.path.slice(0, lastParameter) : null;
+    for (const childList of pageCapabilities.filter(
+      (capability) =>
+        capability.type === "LIST"
+        && parentPrefix !== null
+        && capability.path.startsWith(`${parentPrefix}/{`)
+        && capability.path !== detail.path
+    )) {
+      const childActions = pageCapabilities
+        .filter(
+          (capability) =>
+            ["CREATE", "UPDATE", "DELETE"].includes(capability.type ?? "")
+            && capability.resourceName === childList.resourceName
+            && parentPrefix !== null
+            && capability.path.startsWith(`${parentPrefix}/{`)
+        )
+        .map((capability) => capability.id);
+      blocks.push({
+        instanceId: `child-${childList.resourceName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`,
+        componentId: "child-resource-list",
+        slot: "page.secondary",
+        capabilityIds: [childList.id, ...childActions],
+        mode: null,
+        replaces: null,
+      });
+    }
+    return withPageChrome(page, blocks);
   }
 
   const list = findCapabilityByType(capabilities, page, "LIST");
@@ -143,7 +262,7 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       componentId: "delete-confirm-modal",
       slot: "page.overlay",
       capabilityIds: [del.id],
-      mode: null,
+      mode: "DELETE",
       replaces: null,
     });
   }
@@ -161,7 +280,7 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       componentId: "quick-action-button-group",
       slot: "page.actions",
       capabilityIds: commandIds,
-      mode: null,
+      mode: "COMMAND",
       replaces: null,
     });
   }
@@ -189,7 +308,7 @@ export function resolveBlocks(page: PreviewPage, capabilities: PreviewCapability
       replaces: null,
     });
   }
-  return blocks;
+  return withPageChrome(page, blocks);
 }
 
 // Backend BlueprintCompiler.compile(...)과 동일한 규칙 — resolveBlocks가 만든 기본 Block 목록에서
@@ -237,13 +356,19 @@ export function findDetailBlock(blocks: Block[]): Block | undefined {
 // destructive 계열도 마찬가지 — compileBlocks가 purpose(ADMIN)에 따라 delete-confirm-modal/
 // typed-confirm-modal 중 하나로 이미 컴파일해뒀다.
 export function findDeleteBlock(blocks: Block[]): Block | undefined {
-  return blocks.find((b) => b.componentId === "delete-confirm-modal" || b.componentId === "typed-confirm-modal");
+  return blocks.find((b) =>
+    b.mode === "DELETE"
+    && (b.componentId === "delete-confirm-modal" || b.componentId === "typed-confirm-modal" || isOverlayPart(b.componentId))
+  );
 }
 
 // create/edit 계열도 마찬가지 — compileBlocks가 purpose(PRODUCT_LIKE)에 따라 create-edit-modal/
 // form-drawer 중 하나로 이미 컴파일해뒀다. mode로 생성/수정 인스턴스를 구분한다.
 export function findCreateEditBlock(blocks: Block[], mode: "CREATE" | "UPDATE"): Block | undefined {
-  return blocks.find((b) => (b.componentId === "create-edit-modal" || b.componentId === "form-drawer") && b.mode === mode);
+  return blocks.find((b) =>
+    b.mode === mode
+    && (b.componentId === "create-edit-modal" || b.componentId === "form-drawer" || isOverlayPart(b.componentId))
+  );
 }
 
 // blocks에서 특정 componentId(+선택적으로 mode)를 가진 block 하나를 찾아 그 block이 가리키는 첫

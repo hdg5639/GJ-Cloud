@@ -34,7 +34,6 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
-  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({
@@ -44,6 +43,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={`${geistSans.variable} ${geistMono.variable} ${manrope.variable} h-full`}>
+      <head>
+        <link rel="manifest" href="/site.webmanifest" crossOrigin="use-credentials" />
+      </head>
       <body className="min-h-full">
         <AuthProvider>{children}</AuthProvider>
       </body>
