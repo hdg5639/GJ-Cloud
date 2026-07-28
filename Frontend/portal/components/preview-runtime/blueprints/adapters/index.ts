@@ -8,5 +8,10 @@ export {
   isDetailPart,
   isDashboardPart,
   partKind,
+  componentKind,
+  baseComponentFor,
+  partsForKind,
+  BLUEPRINT_PART_LABELS,
   type BlueprintPartId,
+  type BlueprintPartKind,
 } from "./registry";

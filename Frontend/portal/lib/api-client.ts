@@ -834,6 +834,7 @@ export const api = {
           pages: PreviewPageDraft[];
           pagePlans?: PreviewPagePlan[];
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          partOverrides?: Record<string, string>;
         }
       ) =>
         request<{ pageBlocks: Record<string, Block[]> }>("ops", "/ops/preview/blocks", {
@@ -855,6 +856,7 @@ export const api = {
           authStrategy: PreviewAuthStrategy;
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
           generationMode?: PreviewGenerationMode;
+          partOverrides?: Record<string, string>;
         }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/preview/deploy`, {

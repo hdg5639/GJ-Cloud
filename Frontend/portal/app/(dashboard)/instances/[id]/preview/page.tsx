@@ -21,6 +21,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
 import { ProductShell } from "@/components/preview-runtime/ProductShell";
+import { BlueprintPartPicker } from "@/components/preview-runtime/BlueprintPartPicker";
 import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
 import { rowId } from "@/components/preview-runtime/api";
 import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
@@ -221,6 +222,8 @@ export default function PreviewWizardPage() {
   // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인 등록
   // 직후) POST /ops/preview/blocks로 다시 계산받은 결과를 여기 저장해 PreviewPageRenderer에 그대로 넘긴다.
   const [pageBlocks, setPageBlocks] = useState<Record<string, Block[]>>({});
+  // Phase C — 사용자가 블록별로 고른 Blueprint 파츠("pageId/instanceId"→componentId). blocks/deploy에 전달.
+  const [partOverrides, setPartOverrides] = useState<Record<string, string>>({});
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
   const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
   const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
@@ -241,11 +244,14 @@ export default function PreviewWizardPage() {
     capabilities: PreviewCapability[],
     pages: PreviewPageDraft[],
     pagePlans: PreviewPagePlan[],
-    forPurpose: Purpose
+    forPurpose: Purpose,
+    overrides: Record<string, string> = partOverrides
   ) {
     if (!accessToken) return;
     try {
-      const data = await api.ops.preview.blocks(accessToken, { capabilities, pages, pagePlans, purpose: forPurpose });
+      const data = await api.ops.preview.blocks(accessToken, {
+        capabilities, pages, pagePlans, purpose: forPurpose, partOverrides: overrides,
+      });
       setPageBlocks(data.pageBlocks);
     } catch {
       // 무시 — 위 주석 참고.
@@ -459,6 +465,7 @@ export default function PreviewWizardPage() {
         authStrategy: result.authStrategy,
         purpose,
         generationMode: result.generationMode,
+        partOverrides,
       });
       router.push(`/instances/${vmId}/deployments/${deployment.id}`);
     } catch (err) {
@@ -875,6 +882,18 @@ export default function PreviewWizardPage() {
                 placeholder="https://api.example.com"
               />
             </Field>
+            {result.pages.length > 0 && previewPageId && (
+              <BlueprintPartPicker
+                blocks={pageBlocks[previewPageId] ?? []}
+                pageId={previewPageId}
+                purpose={purpose}
+                overrides={partOverrides}
+                onChange={(next) => {
+                  setPartOverrides(next);
+                  refreshBlocks(result.capabilities, result.pages, result.pagePlans, purpose, next);
+                }}
+              />
+            )}
             {result.pages.length > 0 && (
               <ProductShell purpose={purpose} pages={result.pages} activePageId={previewPageId} onSelectPage={setPreviewPageId}>
                 {previewPageId && apiBaseUrl.trim() && (
