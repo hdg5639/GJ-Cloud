@@ -4,7 +4,9 @@
 **/node_modules
 **/.next
 **/.gradle
-**/build
+# Gradle output directories only. Do not use `**/build`: Auto Preview has a real Java
+# package named `application.preview.build`, and Docker would otherwise omit its source.
+Backend/*/build
 **/out
 **/.git
 .git
