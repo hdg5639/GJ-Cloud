@@ -1,10 +1,43 @@
 import type { ReactNode } from "react";
 import { statusFieldOf } from "../../status";
 import type { BlueprintRecord } from "../core";
-import { CommerceProductGrid, EntityDirectory, KanbanCollection } from "../collections";
-import { InfrastructureResourceDetail } from "../details";
-import { OperationsHealthDashboard } from "../dashboards";
-import { rowById, toDirectoryEntries, toFields, toKanbanColumns } from "./map";
+import { BlueprintKeyValueGrid, blueprintRecordTitle } from "../core";
+import {
+  AlertInbox,
+  AuditLogTable,
+  CommerceProductGrid,
+  CompactMetricTable,
+  EntityDirectory,
+  KanbanCollection,
+  MediaGalleryCollection,
+} from "../collections";
+import {
+  CommerceOrderDetail,
+  ContentArticleDetail,
+  CustomerProfileDetail,
+  IncidentDetail,
+  InfrastructureResourceDetail,
+  SettingsDetail,
+} from "../details";
+import {
+  AdminGovernanceDashboard,
+  CommerceRevenueDashboard,
+  ContentPerformanceDashboard,
+  ExecutiveKpiDashboard,
+  OperationsHealthDashboard,
+  ProjectDeliveryDashboard,
+} from "../dashboards";
+import {
+  rowById,
+  toAlerts,
+  toDirectoryEntries,
+  toFields,
+  toKanbanColumns,
+  toMediaItems,
+  toTimelineEvents,
+} from "./map";
+
+const EMPTY_CHART = { labels: [], series: [] };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Blueprint 파츠 단일 레지스트리 (프론트 정본)
@@ -85,6 +118,117 @@ export const BLUEPRINT_PARTS = {
     kind: "dashboard",
     render: ({ rows }) => <OperationsHealthDashboard metrics={[]} services={rows} incidents={[]} />,
   },
+  // ── Phase D: category별 확장 ────────────────────────────────────────────────
+  "alert-inbox": {
+    kind: "collection",
+    render: ({ rows, onRowClick }) => (
+      <AlertInbox
+        alerts={toAlerts(rows)}
+        onOpen={(alert) => {
+          const row = rowById(rows, alert.id);
+          if (row) onRowClick?.(row);
+        }}
+      />
+    ),
+  },
+  "audit-log-table": {
+    kind: "collection",
+    render: ({ rows, onRowClick }) => <AuditLogTable entries={rows} onSelect={(entry) => onRowClick?.(entry)} />,
+  },
+  "compact-metric-table": {
+    kind: "collection",
+    render: ({ rows, onRowClick }) => <CompactMetricTable rows={rows} onSelect={(row) => onRowClick?.(row)} />,
+  },
+  "media-gallery-collection": {
+    kind: "collection",
+    render: ({ rows, onRowClick }) => (
+      <MediaGalleryCollection
+        items={toMediaItems(rows)}
+        onSelect={(item) => {
+          const row = rowById(rows, item.id);
+          if (row) onRowClick?.(row);
+        }}
+      />
+    ),
+  },
+  "commerce-order-detail": {
+    kind: "detail",
+    render: ({ record }) => (
+      <CommerceOrderDetail
+        order={record}
+        customerFields={[]}
+        items={[]}
+        paymentFields={toFields(record, [statusFieldOf(record) ?? ""])}
+        fulfillment={[]}
+        actions={[]}
+      />
+    ),
+  },
+  "content-article-detail": {
+    kind: "detail",
+    render: ({ record }) => (
+      <ContentArticleDetail article={record} metadata={toFields(record, [statusFieldOf(record) ?? ""])} actions={[]} />
+    ),
+  },
+  "customer-profile-detail": {
+    kind: "detail",
+    render: ({ record }) => (
+      <CustomerProfileDetail
+        profile={record}
+        metrics={[]}
+        fields={toFields(record, [statusFieldOf(record) ?? ""])}
+        actions={[]}
+      />
+    ),
+  },
+  "incident-detail": {
+    kind: "detail",
+    render: ({ record }) => (
+      <IncidentDetail
+        incident={record}
+        metrics={[]}
+        fields={toFields(record, [statusFieldOf(record) ?? ""])}
+        actions={[]}
+        timeline={[]}
+      />
+    ),
+  },
+  "settings-detail": {
+    kind: "detail",
+    render: ({ record }) => (
+      <SettingsDetail
+        sections={[
+          {
+            id: "details",
+            title: blueprintRecordTitle(record),
+            content: <BlueprintKeyValueGrid fields={toFields(record)} />,
+          },
+        ]}
+      />
+    ),
+  },
+  "admin-governance-dashboard": {
+    kind: "dashboard",
+    render: ({ rows }) => <AdminGovernanceDashboard metrics={[]} policyFindings={[]} privilegedAccounts={rows} />,
+  },
+  "commerce-revenue-dashboard": {
+    kind: "dashboard",
+    render: ({ rows }) => (
+      <CommerceRevenueDashboard metrics={[]} revenue={EMPTY_CHART} topProducts={rows} orders={rows} />
+    ),
+  },
+  "content-performance-dashboard": {
+    kind: "dashboard",
+    render: ({ rows }) => <ContentPerformanceDashboard metrics={[]} traffic={EMPTY_CHART} content={rows} />,
+  },
+  "executive-kpi-dashboard": {
+    kind: "dashboard",
+    render: ({ rows }) => <ExecutiveKpiDashboard metrics={[]} highlights={toTimelineEvents(rows)} />,
+  },
+  "project-delivery-dashboard": {
+    kind: "dashboard",
+    render: ({ rows }) => <ProjectDeliveryDashboard metrics={[]} milestones={rows} activity={[]} />,
+  },
 } satisfies Record<string, BlueprintPartEntry>;
 // ▲▲▲
 
@@ -106,6 +250,20 @@ export const BLUEPRINT_PART_LABELS: Record<string, string> = {
   "commerce-product-grid": "상품 그리드",
   "infrastructure-resource-detail": "인프라 상세",
   "operations-health-dashboard": "운영 상태 대시보드",
+  "alert-inbox": "경보 인박스",
+  "audit-log-table": "감사 로그 테이블",
+  "compact-metric-table": "지표 테이블",
+  "media-gallery-collection": "미디어 갤러리",
+  "commerce-order-detail": "주문 상세",
+  "content-article-detail": "콘텐츠 상세",
+  "customer-profile-detail": "고객 프로필",
+  "incident-detail": "인시던트 상세",
+  "settings-detail": "설정 상세",
+  "admin-governance-dashboard": "거버넌스 대시보드",
+  "commerce-revenue-dashboard": "매출 대시보드",
+  "content-performance-dashboard": "콘텐츠 성과 대시보드",
+  "executive-kpi-dashboard": "경영 KPI 대시보드",
+  "project-delivery-dashboard": "프로젝트 배송 대시보드",
 };
 
 // 기본 컴포넌트 id → kind(백엔드 BlueprintPartRegistry.kindOfBaseComponent와 동일). 파츠 id는 partKind로.

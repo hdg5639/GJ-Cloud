@@ -79,8 +79,17 @@ Frontend/portal/components/preview-runtime/blueprints/
 
 ## Status
 
-- **Wired (rendering now)**: 선택 엔진에 등록된 대표 세트 — `entity-directory`, `kanban-collection`,
-  `commerce-product-grid`, `infrastructure-resource-detail`, `operations-health-dashboard`.
-  포털 프리뷰와 배포 앱 양쪽에서 카테고리 매칭 시 자동 렌더된다.
-- **Library (등록 대기)**: 나머지 파츠(모달/워크플로우/추가 컬렉션·상세·대시보드)는 소스로 존재하며,
-  위 "2줄 배선"으로 등록하면 바로 살아난다(Phase D에서 category별 확장 예정).
+- **Wired (rendering now)** — Phase D에서 collection/detail/dashboard kind를 category별로 확장 배선함.
+  카테고리 매칭 시 포털 프리뷰·배포 앱 양쪽에서 자동 렌더된다:
+  - 컬렉션: `entity-directory`(CRM), `kanban-collection`(PROJECT), `commerce-product-grid`(COMMERCE),
+    `alert-inbox`(OBSERVABILITY), `audit-log-table`(ADMIN), `compact-metric-table`(ANALYTICS),
+    `media-gallery-collection`(CONTENT)
+  - 상세: `infrastructure-resource-detail`(INFRASTRUCTURE), `commerce-order-detail`(COMMERCE),
+    `content-article-detail`(CONTENT), `customer-profile-detail`(CRM), `incident-detail`(OBSERVABILITY),
+    `settings-detail`(SETTINGS)
+  - 대시보드: `operations-health-dashboard`(OBSERVABILITY), `admin-governance-dashboard`(ADMIN),
+    `commerce-revenue-dashboard`(COMMERCE), `content-performance-dashboard`(CONTENT),
+    `executive-kpi-dashboard`(ANALYTICS), `project-delivery-dashboard`(PROJECT)
+- **Library (등록 대기)**: 모달/워크플로우 위저드는 렌더 kind가 달라(드롭인 대체가 아님) 이 "2줄 배선"
+  대상이 아니다 — Flow/모달 파이프라인 쪽에서 별도로 소비된다. `timeline-collection` 등 카테고리 귀속이
+  모호한 컬렉션도 아직 자동선택에 등록하지 않았다(오버라이드로는 지정 가능).

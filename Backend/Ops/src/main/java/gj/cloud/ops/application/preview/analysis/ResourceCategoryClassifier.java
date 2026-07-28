@@ -21,6 +21,9 @@ public final class ResourceCategoryClassifier {
                 "order", "product", "cart", "checkout", "invoice", "payment", "sku", "catalog", "shipment", "coupon"));
         NAME_HINTS.put(BlueprintCategory.OBSERVABILITY, List.of(
                 "incident", "alert", "event", "log", "metric", "trace", "monitor", "healthcheck", "outage"));
+        // ANALYTICS는 OBSERVABILITY 다음 — "metric"(운영 지표)은 OBSERVABILITY로, 분석/리포트성 명사만 여기.
+        NAME_HINTS.put(BlueprintCategory.ANALYTICS, List.of(
+                "analytics", "report", "kpi", "insight", "funnel", "cohort", "statistic", "measure"));
         NAME_HINTS.put(BlueprintCategory.INFRASTRUCTURE, List.of(
                 "machine", "server", "instance", "node", "vm", "cluster", "container", "deployment", "volume",
                 "network", "host", "resource"));
@@ -28,6 +31,9 @@ public final class ResourceCategoryClassifier {
                 "task", "todo", "ticket", "issue", "project", "sprint", "board", "milestone", "epic", "story"));
         NAME_HINTS.put(BlueprintCategory.CONTENT, List.of(
                 "article", "post", "page", "content", "document", "media", "asset", "comment", "review", "story"));
+        // ADMIN은 CRM 앞 — "adminUser"처럼 CRM 범용어("user")를 품은 관리 리소스가 ADMIN으로 걸리게 한다.
+        NAME_HINTS.put(BlueprintCategory.ADMIN, List.of(
+                "admin", "audit", "governance", "tenant", "organization"));
         NAME_HINTS.put(BlueprintCategory.CRM, List.of(
                 "customer", "member", "account", "contact", "lead", "user", "person", "people", "subscriber",
                 "employee", "team"));
