@@ -163,9 +163,9 @@ public class PreviewComposeArtifactBuilder {
     private static final String TSCONFIG_JSON = """
             {
               "compilerOptions": {
-                "target": "ES2020",
+                "target": "ES2021",
                 "useDefineForClassFields": true,
-                "lib": ["ES2020", "DOM", "DOM.Iterable"],
+                "lib": ["ES2021", "DOM", "DOM.Iterable"],
                 "module": "ESNext",
                 "skipLibCheck": true,
                 "moduleResolution": "bundler",
@@ -729,6 +729,9 @@ public class PreviewComposeArtifactBuilder {
               kind: CapabilityKind;
               action: string | null;
               dependencies: string[];
+              // AC-4 폴링 힌트(DETAIL만, 그 외 null). 런타임은 flow의 PollCondition을 쓰므로 이 필드를
+              // 직접 소비하진 않지만, 서버 직렬화에 포함되므로 타입에 선언해 tsc를 통과시킨다.
+              pollHint: { statusPath: string; terminalValues: string[] } | null;
             }
 
             interface PageDraft {
@@ -1035,6 +1038,77 @@ public class PreviewComposeArtifactBuilder {
               return candidate != null ? String(candidate) : "";
             }
 
+            // 상태 배지 규칙 — 포털 status.ts와 동일 어휘/의미(둘 다 손대야 함). status/state/phase
+            // 필드 값을 색으로 구분해 목록을 대시보드처럼 보이게 한다.
+            type StatusTone = "ok" | "warn" | "idle" | "danger" | "neutral";
+            const STATUS_TONE_BY_TOKEN: Record<string, StatusTone> = {};
+            (
+              [
+                ["ok", ["running", "ready", "active", "available", "completed", "complete", "succeeded",
+                  "success", "done", "healthy", "online", "approved", "enabled", "live", "passed", "ok", "up"]],
+                ["warn", ["pending", "provisioning", "creating", "processing", "inprogress", "starting",
+                  "queued", "initializing", "building", "deploying", "waiting", "scheduling", "restarting",
+                  "stopping", "updating", "pausing", "retrying", "syncing"]],
+                ["idle", ["stopped", "inactive", "disabled", "paused", "draft", "archived", "offline",
+                  "closed", "expired", "suspended", "idle", "unknown", "down"]],
+                ["danger", ["failed", "error", "terminated", "cancelled", "canceled", "rejected", "denied",
+                  "crashed", "unhealthy", "timeout", "timedout", "deleted", "aborted", "declined"]],
+              ] as [StatusTone, string[]][]
+            ).forEach(([tone, tokens]) => tokens.forEach((token) => { STATUS_TONE_BY_TOKEN[token] = tone; }));
+
+            function normalizeStatus(value: string): string {
+              return value.toLowerCase().replace(/[_-]/g, "");
+            }
+            function isStatusKey(key: string): boolean {
+              return ["status", "state", "phase"].includes(normalizeStatus(key));
+            }
+            function statusTone(value: unknown): StatusTone {
+              if (typeof value !== "string") return "neutral";
+              return STATUS_TONE_BY_TOKEN[normalizeStatus(value)] ?? "neutral";
+            }
+            function statusFieldOf(row: Record<string, unknown>): string | null {
+              const keys = Object.keys(row);
+              for (const preferred of ["status", "state", "phase"]) {
+                const match = keys.find((key) => normalizeStatus(key) === preferred && typeof row[key] === "string");
+                if (match) return match;
+              }
+              return null;
+            }
+            function toneStyle(tone: StatusTone): { color: string; background: string; borderColor: string } {
+              switch (tone) {
+                case "ok": return { color: "#46d17f", background: "rgba(70,209,127,0.13)", borderColor: "rgba(70,209,127,0.30)" };
+                case "warn": return { color: "#f5a623", background: "rgba(245,166,35,0.14)", borderColor: "rgba(245,166,35,0.32)" };
+                case "danger": return { color: "#f2555a", background: "rgba(242,85,90,0.14)", borderColor: "rgba(242,85,90,0.32)" };
+                default: return { color: "#8b93a0", background: "rgba(139,147,160,0.14)", borderColor: "rgba(139,147,160,0.30)" };
+              }
+            }
+            function summarizeStatus(rows: Record<string, unknown>[], fieldKey: string): { value: string; tone: StatusTone; count: number }[] {
+              const order: string[] = [];
+              const counts: Record<string, number> = {};
+              for (const row of rows) {
+                const raw = row[fieldKey];
+                if (typeof raw !== "string") continue;
+                if (counts[raw] === undefined) order.push(raw);
+                counts[raw] = (counts[raw] ?? 0) + 1;
+              }
+              return order.map((value) => ({ value, tone: statusTone(value), count: counts[value] }));
+            }
+            function StatusBadge({ value }: { value: string }) {
+              const style = toneStyle(statusTone(value));
+              return (
+                <span
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999,
+                    border: "1px solid " + style.borderColor, background: style.background, color: style.color,
+                    padding: "3px 9px", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap",
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: 999, background: style.color }} />
+                  {value}
+                </span>
+              );
+            }
+
             // Workflow Composition Phase 2 Change Request §7 "Navigation Requirements" — 배포된
             // 아티팩트에는 라우터 라이브러리가 없어(§13.2 "No arbitrary npm installation") 순수
             // History API로 선택 상태를 URL 쿼리파라미터에 반영한다. pushState는 popstate 이벤트를
@@ -1251,7 +1325,11 @@ public class PreviewComposeArtifactBuilder {
                         {rows.map((row, index) => (
                           <tr key={index} onClick={() => onRowClick?.(row)} style={{ cursor: onRowClick ? "pointer" : undefined }}>
                             {columns.map((column) => (
-                              <td key={column}>{formatCellValue(row[column])}</td>
+                              <td key={column}>
+                                {isStatusKey(column) && typeof row[column] === "string"
+                                  ? <StatusBadge value={row[column] as string} />
+                                  : formatCellValue(row[column])}
+                              </td>
                             ))}
                           </tr>
                         ))}
@@ -1303,20 +1381,48 @@ public class PreviewComposeArtifactBuilder {
                 };
               }, [capability, authToken, search, refreshKey]);
 
+              const statusField = rows.length > 0 ? statusFieldOf(rows[0]) : null;
+              const summary = statusField ? summarizeStatus(rows, statusField) : [];
+
               return (
                 <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
-                    {capability.hasSearch ? (
-                      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" style={{ maxWidth: 240 }} />
-                    ) : (
-                      <span />
-                    )}
-                    {onCreateClick && (
-                      <button className="primary" onClick={onCreateClick}>
-                        + 추가
-                      </button>
-                    )}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0, textTransform: "capitalize" }}>{capability.resourceName}</h3>
+                      {rows.length > 0 && <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{rows.length}</span>}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {capability.hasSearch && (
+                        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="검색" style={{ maxWidth: 180 }} />
+                      )}
+                      {onCreateClick && (
+                        <button className="primary" onClick={onCreateClick}>
+                          + 추가
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  {summary.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                      {summary.map((group) => {
+                        const style = toneStyle(group.tone);
+                        return (
+                          <span
+                            key={group.value}
+                            style={{
+                              display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 8,
+                              border: "1px solid " + style.borderColor, background: style.background, color: style.color,
+                              padding: "4px 10px", fontSize: 12, fontWeight: 700,
+                            }}
+                          >
+                            <span style={{ width: 6, height: 6, borderRadius: 999, background: style.color }} />
+                            {group.value}
+                            <span style={{ opacity: 0.7 }}>{group.count}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                   {loading ? (
                     <p className="muted">불러오는 중...</p>
                   ) : error ? (
@@ -1326,8 +1432,11 @@ public class PreviewComposeArtifactBuilder {
                   ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
                       {rows.map((row, index) => {
-                        const entries = Object.entries(row);
-                        const [firstEntry, ...restEntries] = entries;
+                        const title = row.name ?? row.title ?? row.label ?? rowId(row);
+                        const statusValue = statusField ? row[statusField] : undefined;
+                        const detailEntries = Object.entries(row).filter(
+                          ([key]) => key !== statusField && !["name", "title", "label"].includes(key)
+                        );
                         return (
                           <div
                             key={index}
@@ -1335,17 +1444,20 @@ public class PreviewComposeArtifactBuilder {
                             className="panel"
                             style={{ cursor: onRowClick ? "pointer" : undefined }}
                           >
-                            {firstEntry && (
-                              <p style={{ fontWeight: 700, marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {formatCellValue(firstEntry[1])}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                              <p style={{ fontWeight: 800, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {formatCellValue(title)}
                               </p>
-                            )}
-                            {restEntries.slice(0, 4).map(([key, value]) => (
-                              <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
-                                <span className="muted">{key}</span>
-                                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{formatCellValue(value)}</span>
-                              </div>
-                            ))}
+                              {typeof statusValue === "string" && <StatusBadge value={statusValue} />}
+                            </div>
+                            <div style={{ marginTop: 12, display: "grid", gap: 4 }}>
+                              {detailEntries.slice(0, 4).map(([key, value]) => (
+                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
+                                  <span className="muted">{key}</span>
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{formatCellValue(value)}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         );
                       })}

@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/ui/loader";
 import { callCapability, extractArray, formatCellValue } from "./api";
+import { StatusBadge } from "./StatusBadge";
+import { isStatusKey } from "./status";
 import type { PreviewCapability, PreviewRuntimeConfig } from "./types";
 
 export function ResourceTable({
@@ -103,7 +105,13 @@ export function ResourceTable({
                 className={onRowClick ? "cursor-pointer hover:bg-white/[0.03]" : undefined}
               >
                 {columns.map((column) => (
-                  <Td key={column}>{formatCellValue(row[column])}</Td>
+                  <Td key={column}>
+                    {isStatusKey(column) && typeof row[column] === "string" ? (
+                      <StatusBadge value={row[column] as string} size="sm" />
+                    ) : (
+                      formatCellValue(row[column])
+                    )}
+                  </Td>
                 ))}
               </tr>
             ))}
