@@ -5,10 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { PageLoader } from "@/components/ui/loader";
 import type { PreviewCapability, PreviewRuntimeConfig } from "../../types";
-import { blueprintRecordId } from "../core";
-import type { BlueprintRecord } from "../core";
-import { EntityDirectory, KanbanCollection, CommerceProductGrid } from "../collections";
-import { toDirectoryEntries, toKanbanColumns } from "./map";
+import { renderCollectionPart } from "./registry";
 import { useListRows } from "./useResource";
 
 // 목록 계열 Blueprint 파츠(entity-directory/kanban-collection/commerce-product-grid)를 실제 API에
@@ -31,9 +28,6 @@ export function CollectionAdapter({
 }) {
   const [search, setSearch] = useState("");
   const { rows, loading, error } = useListRows(capability, config, refreshKey, search);
-
-  const rowById = (id: string): BlueprintRecord | undefined =>
-    rows.find((row) => blueprintRecordId(row) === id);
 
   return (
     <div>
@@ -60,24 +54,8 @@ export function CollectionAdapter({
         <p className="text-sm text-danger">{error}</p>
       ) : rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-soft">데이터가 없습니다</p>
-      ) : componentId === "kanban-collection" ? (
-        <KanbanCollection
-          columns={toKanbanColumns(rows)}
-          onCardClick={(card) => {
-            const row = rowById(card.id);
-            if (row) onRowClick?.(row);
-          }}
-        />
-      ) : componentId === "commerce-product-grid" ? (
-        <CommerceProductGrid products={rows} onSelect={(product) => onRowClick?.(product)} />
       ) : (
-        <EntityDirectory
-          entries={toDirectoryEntries(rows)}
-          onSelect={(entry) => {
-            const row = rowById(entry.id);
-            if (row) onRowClick?.(row);
-          }}
-        />
+        renderCollectionPart(componentId, { rows, onRowClick })
       )}
     </div>
   );

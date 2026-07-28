@@ -36,7 +36,11 @@ public final class BlueprintPartRegistry {
     ) {
     }
 
-    // Phase A 대표 세트 — 카테고리별로 하나씩, 3개 kind에 걸쳐. 등록 순서 = 선택 우선순위(결정론).
+    // ─────────────────────────────────────────────────────────────────────────
+    // 새 파츠 배선: 여기 ALL에 한 줄 + 프론트 blueprints/adapters/registry.tsx에 한 줄.
+    // (componentId 문자열이 두 곳에서 동일해야 함. 렌더/판별/union은 프론트 레지스트리에서 자동 파생.)
+    // 등록 순서 = 선택 우선순위(결정론). Phase A 대표 세트 — 카테고리별로 하나씩, 3개 kind에 걸쳐.
+    // ─────────────────────────────────────────────────────────────────────────
     public static final List<BlueprintPart> ALL = List.of(
             new BlueprintPart("entity-directory", PartKind.COLLECTION, BlueprintCategory.CRM,
                     Set.of("page.main"), Set.of()),

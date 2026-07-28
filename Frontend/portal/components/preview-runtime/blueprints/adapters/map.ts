@@ -10,6 +10,11 @@ import type {
 // 임의 리소스 row를 각 Blueprint 파츠가 기대하는 prop 형태로 변환한다. 도메인 하드코딩 없이
 // blueprintRecordTitle/statusFieldOf 같은 일반 규칙만 쓴다(machines·todos·customers 등 무엇이 와도 동작).
 
+// 파츠의 onSelect/onCardClick(매핑된 entry.id)을 원본 row로 되돌린다.
+export function rowById(rows: BlueprintRecord[], id: string): BlueprintRecord | undefined {
+  return rows.find((row) => blueprintRecordId(row) === id);
+}
+
 const SUBTITLE_KEYS = ["email", "description", "summary", "region", "type", "category", "owner", "role"];
 
 function pickSubtitle(row: BlueprintRecord, excludeKeys: string[]): string | undefined {
