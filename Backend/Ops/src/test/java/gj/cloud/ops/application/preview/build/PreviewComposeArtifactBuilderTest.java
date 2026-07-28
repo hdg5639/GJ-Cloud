@@ -57,6 +57,9 @@ class PreviewComposeArtifactBuilderTest {
                 "package.json", "tsconfig.json", "vite.config.ts", "index.html",
                 "Dockerfile", "src/main.tsx", "src/index.css", "src/App.tsx",
                 "src/components/preview-runtime/PreviewPageRenderer.tsx",
+                "src/components/preview-runtime/journey/JourneyRuntime.tsx",
+                "src/components/preview-runtime/journey/recipes.ts",
+                "src/components/preview-runtime/journey/validator.ts",
                 "src/components/preview-runtime/blueprints/manifests/component-manifest.json",
                 "src/components/preview-runtime/blueprints/adapters/generatedPartComponents.ts");
 
@@ -116,7 +119,7 @@ class PreviewComposeArtifactBuilderTest {
 
     // §22 7번 — sampleCapabilities()의 vms 리소스는 CREATE+DETAIL을 모두 갖고 있어
     // RuleBasedFlowGenerator가 실제로 create-flow를 만들어야 한다. 이 flow가 App.tsx의 FLOWS
-    // 전역에 실제로 임베딩되고, PageRenderer가 onSubmitOverride로 배선하는지까지 확인한다.
+    // 전역에 실제로 임베딩되고, PageRenderer의 Journey 실행 단계가 Flow로 위임하는지까지 확인한다.
     @Test
     void generatedCreateFlowIsEmbeddedAndWiredIntoPageRenderer() {
         ComposeArtifact artifact = buildArtifact(Purpose.API_TEST);
@@ -128,7 +131,9 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(appTsx).contains("\"vms-page-create-flow\"");
         assertThat(appTsx).contains("\"vms.create-binding\"");
         assertThat(files.get("src/components/preview-runtime/PreviewPageRenderer.tsx"))
-                .contains("onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}");
+                .contains("createJourneyBlueprint({ pageId: page.id, mode, capability, componentId })")
+                .contains("const flow = flows.find(")
+                .contains("form: values");
     }
 
     @Test
@@ -141,7 +146,8 @@ class PreviewComposeArtifactBuilderTest {
 
         assertThat(appTsx).contains("\"vms-page-start-flow\"");
         assertThat(files.get("src/components/preview-runtime/PreviewPageRenderer.tsx"))
-                .contains("runCommandFlow(capability, id)");
+                .contains("beginJourney(\"COMMAND\", capability")
+                .contains("onExecute={executeJourney}");
         assertThat(appTsx).contains("\"componentId\":\"child-resource-list\"");
         assertThat(files.get("src/components/preview-runtime/ChildResourceList.tsx"))
                 .contains("pathParamId={parentId}");
