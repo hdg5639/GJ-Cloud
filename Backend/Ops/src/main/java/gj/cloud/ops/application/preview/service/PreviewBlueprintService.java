@@ -23,14 +23,18 @@ public class PreviewBlueprintService {
 
     private final PreviewBlockResolver blockResolver;
 
+    // 기본(파츠 미적용) Block 컴파일 — 배포 검증/스냅샷·실제 산출물이 쓰는 정본 경로. 여기에 파츠 선택을
+    // 넣으면 배포가 아직 못 그리는 파츠 id가 CompatibilityValidator에 걸려 배포가 막힌다(실제로 겪음).
+    // 파츠 선택은 포털 라이브 프리뷰 전용이라 PreviewController.blocks에서만 selectBlueprintParts로 얹는다.
     public Map<String, List<Block>> compilePageBlocks(List<PageDraft> pages, List<Capability> capabilities,
                                                        Purpose purpose) {
-        // BlueprintCompiler(purpose Variant 스왑) 직후 결정론 파츠 선택을 얹는다 — 리소스 카테고리에 맞는
-        // Blueprint 파츠로 componentId를 갈아끼운다(근거 없으면 기본 컴포넌트 유지). Phase A: 라이브
-        // 프리뷰 경로에만 적용하고 배포(PreviewComposeArtifactBuilder)는 파츠 패키징 전까지 그대로 둔다.
-        Map<String, List<Block>> compiled = BlueprintCompiler.compile(
-                blockResolver.resolveAll(pages, capabilities), purpose);
-        return BlueprintPartSelector.select(compiled, capabilities, purpose);
+        return BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose);
+    }
+
+    // Phase A: 라이브 프리뷰에서만 카테고리 기반 Blueprint 파츠로 componentId를 치환한다(배포는 미적용).
+    public Map<String, List<Block>> selectBlueprintParts(Map<String, List<Block>> pageBlocks,
+                                                         List<Capability> capabilities, Purpose purpose) {
+        return BlueprintPartSelector.select(pageBlocks, capabilities, purpose);
     }
 
     public Map<String, List<Block>> compilePagePlanBlocks(List<PagePlan> pagePlans, List<Capability> capabilities,
