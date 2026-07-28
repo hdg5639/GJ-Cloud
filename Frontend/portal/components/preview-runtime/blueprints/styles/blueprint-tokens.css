@@ -1,0 +1,9 @@
+:root {
+  --preview-blueprint-brand: var(--brand, #9ef01a);
+  --preview-blueprint-info: #5aa8ff;
+  --preview-blueprint-violet: #a98bff;
+  --preview-blueprint-cyan: #4fd1c5;
+  --preview-blueprint-surface-raised: color-mix(in srgb, var(--panel, #151915) 94%, white 6%);
+  --preview-blueprint-surface-soft: color-mix(in srgb, var(--panel, #151915) 97%, white 3%);
+  --preview-blueprint-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+}

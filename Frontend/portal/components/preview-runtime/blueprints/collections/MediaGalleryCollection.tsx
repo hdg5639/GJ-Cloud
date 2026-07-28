@@ -1,0 +1,7 @@
+import { cn } from "@/components/ui/cn";
+import { BlueprintStatusPill } from "../core";
+import type { BlueprintMediaItem } from "../core";
+
+export function MediaGalleryCollection({ items, onSelect, selectedIds = [], className }: { items: BlueprintMediaItem[]; onSelect?: (item: BlueprintMediaItem) => void; selectedIds?: string[]; className?: string }) {
+  return <div className={cn("grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4", className)}>{items.map((item) => { const selected = selectedIds.includes(item.id); return <button key={item.id} type="button" onClick={() => onSelect?.(item)} className={cn("overflow-hidden rounded-[14px] border bg-panel text-left transition", selected ? "border-brand ring-2 ring-brand/20" : "border-line hover:border-line-strong")}><div className="aspect-[4/3] bg-white/[0.035]">{item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-3xl text-muted-soft">{item.mediaType?.startsWith("video") ? "▶" : item.mediaType?.startsWith("audio") ? "♫" : "▧"}</div>}</div><div className="p-3"><div className="flex items-start justify-between gap-2"><strong className="truncate text-sm">{item.title}</strong>{item.status && <BlueprintStatusPill value={item.status} />}</div><div className="mt-2 flex justify-between text-[10px] text-muted-soft"><span>{item.subtitle ?? item.mediaType}</span><span>{item.sizeLabel}</span></div></div></button>; })}</div>;
+}

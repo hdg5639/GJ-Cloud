@@ -1,0 +1,7 @@
+import { cn } from "@/components/ui/cn";
+import { BlueprintStatusPill } from "../core";
+import type { BlueprintTimelineEvent } from "../core";
+
+export function TimelineCollection({ events, compact = false, className, onEventClick }: { events: BlueprintTimelineEvent[]; compact?: boolean; className?: string; onEventClick?: (event: BlueprintTimelineEvent) => void }) {
+  return <ol className={cn("space-y-0", className)}>{events.map((event, index) => <li key={event.id} className="relative grid grid-cols-[24px_minmax(0,1fr)] gap-3 pb-5 last:pb-0"><div className="relative flex justify-center"><span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-brand shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_12%,transparent)]" />{index < events.length - 1 && <span className="absolute bottom-0 top-4 w-px bg-line" />}</div><button type="button" onClick={() => onEventClick?.(event)} className={cn("w-full rounded-[12px] text-left", compact ? "pb-1" : "border border-line bg-panel p-3.5")}><div className="flex items-start justify-between gap-3"><div><strong className="text-sm">{event.title}</strong>{event.actor && <span className="ml-2 text-[11px] text-muted-soft">by {event.actor}</span>}</div>{event.status && <BlueprintStatusPill value={event.status} tone={event.tone} />}</div>{event.description && <p className="mt-1 text-xs leading-5 text-muted-soft">{event.description}</p>}<p className="mt-2 text-[10px] text-muted-soft">{event.timestamp}</p></button></li>)}</ol>;
+}

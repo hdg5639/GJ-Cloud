@@ -18,7 +18,14 @@ export type ComponentId =
   | "recent-activity-dashboard"
   | "quick-action-button-group"
   | "full-detail-page"
-  | "child-resource-list";
+  | "child-resource-list"
+  // Blueprint 파츠 선택 엔진(백엔드 BlueprintPartSelector)이 카테고리에 맞춰 기본 컴포넌트를 이 id들로
+  // 치환할 수 있다. 렌더러는 blueprints/adapters로 dispatch한다. BlueprintPartRegistry.java와 동기화.
+  | "entity-directory"
+  | "kanban-collection"
+  | "commerce-product-grid"
+  | "infrastructure-resource-detail"
+  | "operations-health-dashboard";
 
 // 계열(같은 Slot·Capability 요구조건을 공유하는 Variant 묶음)마다 기본 componentId를 키로, 특정
 // purpose가 선호하는 Variant를 값으로 둔다. Direction Recovery Change Request §10.3
@@ -210,20 +217,27 @@ export function compileBlocks(blocks: Block[], purpose: Purpose | null): Block[]
 
 // list 계열은 compileBlocks가 purpose에 따라 resource-table/resource-card-grid 중 하나로 이미
 // 컴파일해뒀다 — 어느 쪽이든 찾아서 실제로 어떤 컴포넌트를 마운트할지는 호출 측이 componentId를 보고 정한다.
+const COLLECTION_PART_IDS = ["entity-directory", "kanban-collection", "commerce-product-grid"];
+const DETAIL_PART_IDS = ["infrastructure-resource-detail"];
+const DASHBOARD_PART_IDS = ["operations-health-dashboard"];
+
 export function findListBlock(blocks: Block[]): Block | undefined {
-  return blocks.find((b) => b.componentId === "resource-table" || b.componentId === "resource-card-grid");
+  return blocks.find((b) => b.componentId === "resource-table" || b.componentId === "resource-card-grid"
+    || COLLECTION_PART_IDS.includes(b.componentId));
 }
 
 // dashboard 계열도 마찬가지 — compileBlocks가 purpose(PRODUCT_LIKE)에 따라 dashboard-view/
 // recent-activity-dashboard 중 하나로 이미 컴파일해뒀다.
 export function findDashboardBlock(blocks: Block[]): Block | undefined {
-  return blocks.find((b) => b.componentId === "dashboard-view" || b.componentId === "recent-activity-dashboard");
+  return blocks.find((b) => b.componentId === "dashboard-view" || b.componentId === "recent-activity-dashboard"
+    || DASHBOARD_PART_IDS.includes(b.componentId));
 }
 
 // detail 계열도 마찬가지 — compileBlocks가 purpose(PRODUCT_LIKE)에 따라 detail-panel/
 // full-detail-page 중 하나로 이미 컴파일해뒀다.
 export function findDetailBlock(blocks: Block[]): Block | undefined {
-  return blocks.find((b) => b.componentId === "detail-panel" || b.componentId === "full-detail-page");
+  return blocks.find((b) => b.componentId === "detail-panel" || b.componentId === "full-detail-page"
+    || DETAIL_PART_IDS.includes(b.componentId));
 }
 
 // destructive 계열도 마찬가지 — compileBlocks가 purpose(ADMIN)에 따라 delete-confirm-modal/

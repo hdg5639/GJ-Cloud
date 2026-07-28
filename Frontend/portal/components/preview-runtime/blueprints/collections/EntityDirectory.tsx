@@ -1,0 +1,8 @@
+import { Avatar } from "@/components/ui/avatar";
+import { cn } from "@/components/ui/cn";
+import { BlueprintStatusPill, formatBlueprintValue } from "../core";
+import type { BlueprintDirectoryEntry } from "../core";
+
+export function EntityDirectory({ entries, onSelect, className }: { entries: BlueprintDirectoryEntry[]; onSelect?: (entry: BlueprintDirectoryEntry) => void; className?: string }) {
+  return <div className={cn("grid gap-3 md:grid-cols-2 xl:grid-cols-3", className)}>{entries.map((entry) => <button key={entry.id} type="button" onClick={() => onSelect?.(entry)} className="rounded-[14px] border border-line bg-panel p-4 text-left transition hover:border-line-strong"><div className="flex items-start gap-3"><Avatar nickname={entry.title} email={entry.subtitle} profileImageUrl={entry.avatarUrl} sizePx={42} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><strong className="block truncate text-sm">{entry.title}</strong><p className="mt-1 truncate text-xs text-muted-soft">{entry.subtitle}</p></div>{entry.status && <BlueprintStatusPill value={entry.status} />}</div>{entry.role && <p className="mt-3 text-[11px] font-bold uppercase tracking-wide text-muted">{entry.role}</p>}{entry.metadata && <div className="mt-3 grid grid-cols-2 gap-2">{entry.metadata.slice(0, 4).map((field) => <div key={field.key}><span className="block text-[10px] text-muted-soft">{field.label ?? field.key}</span><strong className="block truncate text-xs">{formatBlueprintValue(field.value)}</strong></div>)}</div>}</div></div></button>)}</div>;
+}

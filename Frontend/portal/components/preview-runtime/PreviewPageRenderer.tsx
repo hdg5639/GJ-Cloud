@@ -15,6 +15,14 @@ import { QuickActionButtonGroup } from "./QuickActionButtonGroup";
 import { FullDetailPage } from "./FullDetailPage";
 import { ChildResourceList } from "./ChildResourceList";
 import { AsyncFlowProgressModal, type FlowRunView } from "./AsyncFlowProgressModal";
+import {
+  CollectionAdapter,
+  DetailBlueprintAdapter,
+  DashboardAdapter,
+  isCollectionPart,
+  isDetailPart,
+  isDashboardPart,
+} from "./blueprints/adapters";
 import { callCapability, rowId } from "./api";
 import { findCapabilityById } from "./utils";
 import {
@@ -109,6 +117,11 @@ export function PreviewPageRenderer({
     const listCapabilities = (dashboardBlock?.capabilityIds ?? [])
       .map((id) => findCapabilityById(capabilities, id))
       .filter((capability): capability is PreviewCapability => capability !== undefined);
+    if (dashboardBlock && isDashboardPart(dashboardBlock.componentId)) {
+      return (
+        <DashboardAdapter componentId={dashboardBlock.componentId} capabilities={listCapabilities} config={config} refreshKey={refreshKey} />
+      );
+    }
     return dashboardBlock?.componentId === "recent-activity-dashboard" ? (
       <RecentActivityDashboard capabilities={listCapabilities} config={config} />
     ) : (
@@ -120,7 +133,9 @@ export function PreviewPageRenderer({
   const list = listBlock ? findCapabilityById(capabilities, listBlock.capabilityIds[0]) : undefined;
   const detailBlock = findDetailBlock(blocks);
   const detail = detailBlock ? findCapabilityById(capabilities, detailBlock.capabilityIds[0]) : undefined;
-  const isFullDetailPage = page.skeleton === "RESOURCE_DETAIL" || detailBlock?.componentId === "full-detail-page";
+  const isDetailBlueprintPart = isDetailPart(detailBlock?.componentId ?? "");
+  const isFullDetailPage = page.skeleton === "RESOURCE_DETAIL" || detailBlock?.componentId === "full-detail-page"
+    || isDetailBlueprintPart;
   const createBlock = findCreateEditBlock(blocks, "CREATE");
   const create = createBlock ? findCapabilityById(capabilities, createBlock.capabilityIds[0]) : undefined;
   const updateBlock = findCreateEditBlock(blocks, "UPDATE");
@@ -327,7 +342,9 @@ export function PreviewPageRenderer({
             />
           </div>
         )}
-        {detail && (isFullDetailPage ? (
+        {detail && (isDetailBlueprintPart && detailBlock ? (
+          <DetailBlueprintAdapter componentId={detailBlock.componentId} capability={detail} config={config} id={id} refreshKey={refreshKey} />
+        ) : isFullDetailPage ? (
           <FullDetailPage capability={detail} config={config} id={id} refreshKey={refreshKey} />
         ) : (
           <DetailPanel capability={detail} config={config} id={id} refreshKey={refreshKey} />
@@ -352,7 +369,16 @@ export function PreviewPageRenderer({
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-          {listBlock?.componentId === "resource-card-grid" ? (
+          {listBlock && isCollectionPart(listBlock.componentId) ? (
+            <CollectionAdapter
+              componentId={listBlock.componentId}
+              capability={list!}
+              config={config}
+              refreshKey={refreshKey}
+              onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
+              onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+            />
+          ) : listBlock?.componentId === "resource-card-grid" ? (
             <ResourceCardGrid
               capability={list!}
               config={config}
