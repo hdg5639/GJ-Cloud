@@ -54,6 +54,7 @@ import type {
   PreviewGenerationMode,
   PagePlanOperation,
   PagePlanProposalResult,
+  PartSuggestionResult,
   PreviewPlanApplyResponse,
   PageReviewFinding,
 } from "./types";
@@ -820,6 +821,24 @@ export const api = {
         }
       ) =>
         request<PreviewPlanApplyResponse>("ops", "/ops/preview/plan/apply", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      // AI 파츠 제안 — 스왑 가능한 Block(목록/상세/대시보드)마다 서비스 설명에 근거한 Blueprint 파츠를
+      // 추천받는다. 검증 통과분만 오므로 그대로 partOverrides("pageId/instanceId"→componentId)로 병합해
+      // refreshBlocks를 다시 부르면 된다(Phase C 오버라이드 배관 재사용).
+      suggestParts: (
+        accessToken: string,
+        body: {
+          serviceDescription?: string;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+        }
+      ) =>
+        request<PartSuggestionResult>("ops", "/ops/preview/parts/suggest", {
           method: "POST",
           body: JSON.stringify(body),
           accessToken,

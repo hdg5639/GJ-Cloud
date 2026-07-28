@@ -2,8 +2,10 @@ package gj.cloud.ops.api.controller;
 
 import gj.cloud.ops.application.preview.ai.AiPagePlanner;
 import gj.cloud.ops.application.preview.ai.AiPageReviewer;
+import gj.cloud.ops.application.preview.ai.AiPartAdvisor;
 import gj.cloud.ops.application.preview.ai.PagePlanProposalResult;
 import gj.cloud.ops.application.preview.ai.PageReviewFinding;
+import gj.cloud.ops.application.preview.ai.PartSuggestionResult;
 import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
@@ -13,6 +15,7 @@ import gj.cloud.ops.application.preview.dto.PreviewBlocksRequest;
 import gj.cloud.ops.application.preview.dto.PreviewBlocksResponse;
 import gj.cloud.ops.application.preview.dto.PreviewPlanApplyRequest;
 import gj.cloud.ops.application.preview.dto.PreviewPlanApplyResponse;
+import gj.cloud.ops.application.preview.dto.PreviewPartSuggestRequest;
 import gj.cloud.ops.application.preview.dto.PreviewPlanRequest;
 import gj.cloud.ops.application.preview.dto.PreviewReviewRequest;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
@@ -47,6 +50,7 @@ public class PreviewController {
     private final PreviewBlueprintService previewBlueprintService;
     private final AiPageReviewer aiPageReviewer;
     private final AiPagePlanner aiPagePlanner;
+    private final AiPartAdvisor aiPartAdvisor;
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
 
     @Operation(summary = "OpenAPI 문서 분석", description = "OpenAPI 3.x 문서를 결정론적으로 분석해 capability와 페이지 초안을 반환합니다. 배포는 수행하지 않습니다.")
@@ -66,6 +70,19 @@ public class PreviewController {
         blocks = previewBlueprintService.selectBlueprintParts(
                 blocks, request.capabilities(), request.purpose(), request.partOverrides());
         return ApiResponse.ok(new PreviewBlocksResponse(blocks));
+    }
+
+    @Operation(summary = "AI 기반 Blueprint 파츠 추천", description = "현재 계획을 기본 Block으로 컴파일한 뒤, 스왑 가능한 Block마다 서비스 설명에 근거해 AI가 파츠를 추천합니다. 실제 치환은 하지 않고 검증된 제안(partOverrides로 바로 쓸 수 있는 형태)만 반환합니다.")
+    @PostMapping("/parts/suggest")
+    public ApiResponse<PartSuggestionResult> suggestParts(
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody PreviewPartSuggestRequest request
+    ) {
+        var blocks = request.pagePlans() != null && !request.pagePlans().isEmpty()
+                ? previewBlueprintService.compilePagePlanBlocks(request.pagePlans(), request.capabilities(), request.purpose())
+                : previewBlueprintService.compilePageBlocks(request.pages(), request.capabilities(), request.purpose());
+        return ApiResponse.ok(aiPartAdvisor.suggest(principal.userId(), request.serviceDescription(),
+                request.purpose(), request.capabilities(), blocks));
     }
 
     @Operation(summary = "페이지 초안 AI 검수", description = "현재 capability/페이지 초안을 AI가 advisory로 검수하며 실제 계획은 수정하지 않습니다.")

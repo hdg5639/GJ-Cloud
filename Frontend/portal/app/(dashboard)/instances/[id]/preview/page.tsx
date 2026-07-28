@@ -224,6 +224,9 @@ export default function PreviewWizardPage() {
   const [pageBlocks, setPageBlocks] = useState<Record<string, Block[]>>({});
   // Phase C — 사용자가 블록별로 고른 Blueprint 파츠("pageId/instanceId"→componentId). blocks/deploy에 전달.
   const [partOverrides, setPartOverrides] = useState<Record<string, string>>({});
+  // AI 제안 — /parts/suggest가 채운 componentId를 partOverrides에 병합하고, 이유는 툴팁으로 보여준다.
+  const [suggestingParts, setSuggestingParts] = useState(false);
+  const [partReasons, setPartReasons] = useState<Record<string, string>>({});
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
   const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
   const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
@@ -255,6 +258,37 @@ export default function PreviewWizardPage() {
       setPageBlocks(data.pageBlocks);
     } catch {
       // 무시 — 위 주석 참고.
+    }
+  }
+
+  // AI 파츠 제안 — 스왑 가능한 Block별 추천 componentId를 받아 partOverrides에 병합한 뒤 blocks를 다시
+  // 받는다. 검증은 백엔드(AiPartAdvisor)가 이미 마쳐 호환되는 componentId만 오므로 그대로 얹으면 된다.
+  // 실패해도 조용히 무시한다(AI 검수/재구성과 같은 원칙).
+  async function handleSuggestParts() {
+    if (!accessToken || !result) return;
+    setSuggestingParts(true);
+    try {
+      const data = await api.ops.preview.suggestParts(accessToken, {
+        serviceDescription: serviceDescription.trim() || undefined,
+        purpose,
+        capabilities: result.capabilities,
+        pages: result.pages,
+        pagePlans: result.pagePlans,
+      });
+      const nextOverrides = { ...partOverrides };
+      const nextReasons = { ...partReasons };
+      for (const suggestion of data.suggestions) {
+        const key = `${suggestion.pageId}/${suggestion.instanceId}`;
+        nextOverrides[key] = suggestion.componentId;
+        if (suggestion.reason) nextReasons[key] = suggestion.reason;
+      }
+      setPartOverrides(nextOverrides);
+      setPartReasons(nextReasons);
+      refreshBlocks(result.capabilities, result.pages, result.pagePlans, purpose, nextOverrides);
+    } catch {
+      // 무시 — 위 주석 참고.
+    } finally {
+      setSuggestingParts(false);
     }
   }
 
@@ -892,6 +926,9 @@ export default function PreviewWizardPage() {
                   setPartOverrides(next);
                   refreshBlocks(result.capabilities, result.pages, result.pagePlans, purpose, next);
                 }}
+                onRequestAi={handleSuggestParts}
+                aiLoading={suggestingParts}
+                reasons={partReasons}
               />
             )}
             {result.pages.length > 0 && (

@@ -701,6 +701,20 @@ export interface PagePlanProposalResult {
   aiSucceeded: boolean;
 }
 
+// /parts/suggest 응답 — 스왑 가능한 Block별 검증된 파츠 추천. componentId는 그 Block과 호환되는 등록
+// 파츠 id(또는 현재 기본 컴포넌트 id)이며, {pageId}/{instanceId}를 키로 partOverrides에 그대로 병합한다.
+export interface PartSuggestion {
+  pageId: string;
+  instanceId: string;
+  componentId: string;
+  reason: string | null;
+}
+
+export interface PartSuggestionResult {
+  suggestions: PartSuggestion[];
+  aiSucceeded: boolean;
+}
+
 // errors가 비어있지 않으면(all-or-nothing 실패) pages는 요청으로 보낸 pages 그대로다. pagePlans도
 // 이 pages와 동일한 기준으로 파생된다(Workflow Composition Phase 2 WP-1).
 export interface PreviewPlanApplyResponse {
