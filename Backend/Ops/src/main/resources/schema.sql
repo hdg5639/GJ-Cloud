@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     environment_files_ciphertext TEXT,
     exposed_routes_json         TEXT,
     health_checks_json          TEXT,
+    preview_blueprint_json      TEXT,
     release_dir                 VARCHAR(500),
     context                     VARCHAR(255),
     install_path                VARCHAR(500),
@@ -130,6 +131,9 @@ ALTER TABLE deployments ADD COLUMN IF NOT EXISTS install_path VARCHAR(500);
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS deployment_target_id VARCHAR(36);
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS trigger_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL';
 ALTER TABLE deployments ADD COLUMN IF NOT EXISTS requested_revision VARCHAR(64);
+-- Auto Preview 배포 시점의 capabilities/pages/authStrategy/Block 배치를 그대로 저장하는 읽기 전용
+-- 스냅샷(auto-preview-design/01-blueprint-schema.md §14 MVP 축소판). Raw Compose/Git 배포는 항상 null.
+ALTER TABLE deployments ADD COLUMN IF NOT EXISTS preview_blueprint_json TEXT;
 
 -- 배포 내리기 상태(STOPPING/STOPPED)는 기존 운영 테이블이 만들어진 뒤 추가됐다. CREATE TABLE IF NOT
 -- EXISTS는 기존 CHECK 제약을 갱신하지 않으므로, 애플리케이션 시작 시 현재 enum 목록으로 재생성한다.

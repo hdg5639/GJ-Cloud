@@ -26,7 +26,7 @@ export function LoginForm({
     setLoading(true);
     try {
       const result = await callCapability(config, capability, { body: values });
-      const token = extractToken(result);
+      const token = extractToken(result, capability.accessTokenPath);
       if (!token) {
         setError("응답에서 토큰을 찾지 못했습니다. 위치를 확인해주세요.");
         return;

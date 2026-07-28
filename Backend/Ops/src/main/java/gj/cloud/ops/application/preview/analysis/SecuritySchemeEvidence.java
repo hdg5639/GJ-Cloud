@@ -17,7 +17,14 @@ public record SecuritySchemeEvidence(
         return "apiKey".equalsIgnoreCase(type);
     }
 
+    // apiKey는 in=header/query일 때만 실제로 요청에 실어 보내는 코드가 있다(AuthStrategy 참고).
+    // in=cookie(구식 쿠키 인증 표현)는 아직 아무 데도 구현이 없어 "지원"이라고 하면 안 된다 — 예전엔
+    // isApiKey()만 보고 전부 지원한다고 표시해서, 실제로는 요청이 실패하는데 분석 결과는 READY로
+    // 나오는 불일치가 있었다.
     public boolean isSupportedByMvp() {
-        return isBearer() || isApiKey();
+        if (isBearer()) {
+            return true;
+        }
+        return isApiKey() && ("header".equalsIgnoreCase(in) || "query".equalsIgnoreCase(in));
     }
 }

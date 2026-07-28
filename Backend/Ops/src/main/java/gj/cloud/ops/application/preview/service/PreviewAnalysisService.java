@@ -2,16 +2,27 @@ package gj.cloud.ops.application.preview.service;
 
 import gj.cloud.ops.application.deployment.ai.GenerationStatus;
 import gj.cloud.ops.application.deployment.ai.UnresolvedField;
+import gj.cloud.ops.application.preview.analysis.AuthStrategy;
+import gj.cloud.ops.application.preview.analysis.AuthStrategyDetector;
+import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.CapabilityExtractor;
 import gj.cloud.ops.application.preview.analysis.CapabilityType;
+import gj.cloud.ops.application.preview.analysis.CompatibilityFinding;
+import gj.cloud.ops.application.preview.analysis.CompatibilityValidator;
+import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.OpenApiEvidence;
 import gj.cloud.ops.application.preview.analysis.OpenApiNormalizer;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageDraftGenerator;
+import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.SecuritySchemeEvidence;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
+import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
+import gj.cloud.ops.application.preview.planning.RuleBasedPagePlanGenerator;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -28,16 +39,36 @@ public class PreviewAnalysisService {
     private final OpenApiNormalizer openApiNormalizer;
     private final CapabilityExtractor capabilityExtractor;
     private final PageDraftGenerator pageDraftGenerator;
+    private final RuleBasedPagePlanGenerator ruleBasedPagePlanGenerator;
+    private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
+    private final AuthStrategyDetector authStrategyDetector;
+    private final PreviewBlockResolver blockResolver;
 
     public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request) {
         OpenApiEvidence evidence = openApiNormalizer.normalize(request.apiDocsUrl());
         List<Capability> capabilities = capabilityExtractor.extract(evidence);
-        List<PageDraft> pages = pageDraftGenerator.generate(capabilities);
+
+        // Direction Recovery Change Request §4.1 — purpose가 실제로 페이지 구성에 반영되는지가 이
+        // 서비스의 핵심 정체성이다(project_auto_preview_product_definition). purpose가 없으면(다른
+        // API 클라이언트가 생략한 경우) 기존 PageDraftGenerator로 대체하고 FALLBACK_CRUD로 리포트한다.
+        List<PageDraft> pages;
+        GenerationMode generationMode;
+        if (request.purpose() != null) {
+            pages = ruleBasedPagePlanGenerator.generate(capabilities, request.purpose());
+            generationMode = GenerationMode.RULE_BASED;
+        } else {
+            pages = pageDraftGenerator.generate(capabilities);
+            generationMode = GenerationMode.FALLBACK_CRUD;
+        }
 
         List<UnresolvedField> unresolved = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
-        boolean hasLoginCapability = capabilities.stream().anyMatch(c -> c.type() == CapabilityType.LOGIN);
+        Capability loginCapability = capabilities.stream()
+                .filter(c -> c.type() == CapabilityType.LOGIN)
+                .findFirst()
+                .orElse(null);
+        boolean hasLoginCapability = loginCapability != null;
         boolean anySupportedScheme = evidence.securitySchemes().stream().anyMatch(SecuritySchemeEvidence::isSupportedByMvp);
         boolean anySchemePresent = !evidence.securitySchemes().isEmpty();
 
@@ -47,6 +78,9 @@ public class PreviewAnalysisService {
         } else if (anySchemePresent && !hasLoginCapability) {
             unresolved.add(new UnresolvedField("auth.login", "AUTH_LOGIN_NOT_FOUND",
                     "인증이 필요한 API로 보이지만 로그인 오퍼레이션을 확인하지 못했습니다."));
+        } else if (hasLoginCapability && loginCapability.accessTokenPath() == null) {
+            unresolved.add(new UnresolvedField("auth.login.accessTokenPath", "ACCESS_TOKEN_PATH_UNKNOWN",
+                    "로그인 응답에서 access token 위치를 확인하지 못했습니다. 아래에서 직접 지정해주세요."));
         }
 
         if (pages.isEmpty()) {
@@ -58,6 +92,13 @@ public class PreviewAnalysisService {
             warnings.add("API 개수가 많아 " + evidence.truncatedOperationCount() + "개 오퍼레이션은 분석에서 제외되었습니다.");
         }
 
+        for (PageDraft page : pages) {
+            List<Block> blocks = blockResolver.resolve(page, capabilities);
+            for (CompatibilityFinding finding : CompatibilityValidator.validate(page, blocks, capabilities)) {
+                warnings.add(finding.message());
+            }
+        }
+
         List<String> evidenceRefs = capabilities.stream()
                 .flatMap(c -> c.evidence().stream())
                 .distinct()
@@ -67,7 +108,18 @@ public class PreviewAnalysisService {
                 : unresolved.isEmpty() ? GenerationStatus.READY
                 : GenerationStatus.NEEDS_INPUT;
 
+        AuthStrategy authStrategy = authStrategyDetector.detect(evidence.securitySchemes());
+        List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
+
+        RuleBasedFlowGenerator.ValidatedResult flowResult = ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
+        if (!flowResult.errors().isEmpty()) {
+            // §16 안전 폴백과 동일 원칙 — pages/capabilities는 이 실패와 무관하게 여전히 유효하므로
+            // 전체 분석 자체를 실패시키지 않고, flows/bindings만 비운 채 사유를 warnings로 남긴다.
+            warnings.add("생성된 workflow가 검증에 실패해 제외되었습니다: " + String.join("; ", flowResult.errors()));
+        }
+
         return new PreviewAnalysisResult(
-                status, evidence.serverUrls(), capabilities, pages, unresolved, warnings, evidenceRefs);
+                status, evidence.serverUrls(), capabilities, pages, pagePlans, flowResult.result().flows(),
+                flowResult.result().bindings(), unresolved, warnings, evidenceRefs, authStrategy, generationMode);
     }
 }

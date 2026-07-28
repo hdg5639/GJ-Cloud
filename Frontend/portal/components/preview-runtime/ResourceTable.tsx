@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/ui/loader";
 import { callCapability, extractArray, formatCellValue } from "./api";
+import { StatusBadge } from "./StatusBadge";
+import { isStatusKey } from "./status";
 import type { PreviewCapability, PreviewRuntimeConfig } from "./types";
 
 export function ResourceTable({
@@ -38,12 +40,12 @@ export function ResourceTable({
       setError(null);
       const query: Record<string, string> = {};
       if (capability.hasSearch && search) {
-        query.search = search;
+        query[capability.searchParam ?? "search"] = search;
       }
       try {
         const result = await callCapability(config, capability, { query });
         if (!cancelled) {
-          setRows(extractArray(result));
+          setRows(extractArray(result, capability.collectionPath));
         }
       } catch (err) {
         if (!cancelled) {
@@ -58,7 +60,10 @@ export function ResourceTable({
     return () => {
       cancelled = true;
     };
-  }, [capability, config, search, refreshKey]);
+    // config 객체 전체를 넣으면 부모가 매 렌더마다 새 config를 만들 때(onApiCall 로그 갱신 등)
+    // effect가 무한 재발화한다 — 실제 데이터 소스인 apiBaseUrl/authToken만 의존한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capability, config.apiBaseUrl, config.authToken, search, refreshKey]);
 
   const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
@@ -100,7 +105,13 @@ export function ResourceTable({
                 className={onRowClick ? "cursor-pointer hover:bg-white/[0.03]" : undefined}
               >
                 {columns.map((column) => (
-                  <Td key={column}>{formatCellValue(row[column])}</Td>
+                  <Td key={column}>
+                    {isStatusKey(column) && typeof row[column] === "string" ? (
+                      <StatusBadge value={row[column] as string} size="sm" />
+                    ) : (
+                      formatCellValue(row[column])
+                    )}
+                  </Td>
                 ))}
               </tr>
             ))}

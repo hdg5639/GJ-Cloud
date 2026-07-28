@@ -428,12 +428,45 @@ export interface ComposeReviewFinding {
 // Auto Preview (GamjaBox_2.0_Key_Features.md 1단계) — Backend/Ops의
 // application/preview/analysis 패키지 record와 필드명을 1:1로 맞춤.
 export type PreviewCapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";
-export type PreviewPageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "LIST_DETAIL" | "DASHBOARD";
+export type PreviewPageSkeletonType = "AUTH_PAGE" | "RESOURCE_LIST" | "RESOURCE_DETAIL" | "LIST_DETAIL" | "DASHBOARD";
+// GamjaBox_2.0_Key_Features.md 2절 — BlueprintCompiler가 목적별 Component Variant를 고르는 데 쓴다.
+export type PreviewGenerationPurpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+// auto-preview-design/05-capability-taxonomy.md §5·6 — CapabilityType별 고정 기본값만 배정한다.
+// IRREVERSIBLE/EXTERNAL_SIDE_EFFECT는 OpenAPI만으로 판별 근거가 없어 규칙 기반으로는 배정하지 않는다.
+export type PreviewRiskLevel = "SAFE" | "STATE_CHANGING" | "DESTRUCTIVE" | "IRREVERSIBLE" | "EXTERNAL_SIDE_EFFECT";
+export type PreviewAutomationPolicy =
+  | "AUTO_SAFE"
+  | "USER_INITIATED"
+  | "EXPLICIT_CONFIRMATION"
+  | "TYPED_CONFIRMATION"
+  | "DISABLED_IN_AUTO_TEST";
+// GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md §7.1 — capability의 진짜 정체성.
+// kind=COMMAND는 blueprint.ts의 resolveBlocks가 quick-action-button-group Block으로 그린다.
+export type PreviewCapabilityKind =
+  | "QUERY"
+  | "MUTATION"
+  | "COMMAND"
+  | "AUTH"
+  | "METRIC"
+  | "EVENT_STREAM"
+  | "FILE_TRANSFER"
+  | "WORKFLOW";
+
+// auto-preview-design/04-api-binding-schema.md §9 — 로그인으로 받은 토큰을 나머지 모든 보호된 요청에
+// 어떻게 실어 보낼지. Capability 하나가 아니라 분석 결과 전체에 하나만 존재한다.
+export type PreviewAuthStrategyType = "NONE" | "BEARER" | "API_KEY_HEADER" | "API_KEY_QUERY";
+export interface PreviewAuthStrategy {
+  type: PreviewAuthStrategyType;
+  headerName: string | null;
+  prefix: string | null;
+  queryParamName: string | null;
+}
 
 export interface PreviewCapability {
   id: string;
   resourceName: string;
-  type: PreviewCapabilityType;
+  // kind=COMMAND일 때는 null — CRUD 6종 enum에 억지로 끼워 넣지 않는다.
+  type: PreviewCapabilityType | null;
   operationId: string | null;
   path: string;
   method: string;
@@ -443,6 +476,26 @@ export interface PreviewCapability {
   confidence: string;
   evidence: string[];
   fields: string[];
+  // LOGIN 응답에서 access token이 위치한 dot-path(예: "data.accessToken"). 분석 단계에서 이름 힌트로
+  // 못 찾으면 null이고 unresolved에 "auth.login.accessTokenPath"가 함께 온다 — 위자드에서 사용자가
+  // 직접 지정하면 이 필드를 덮어써서 review/deploy 요청에 그대로 실어 보낸다.
+  accessTokenPath: string | null;
+  // hasSearch=true일 때 실제 쿼리 파라미터 이름(예: "keyword"). "search"로 고정해서 보내면 API가 다른
+  // 이름을 쓸 때 검색이 조용히 실패하므로 렌더러는 이 값을 그대로 써야 한다.
+  searchParam: string | null;
+  risk: PreviewRiskLevel;
+  automationPolicy: PreviewAutomationPolicy;
+  // LIST 응답에서 실제 배열이 위치한 dot-path(예: "data.content"). 못 찾으면 null이고 렌더러가
+  // 기존 재귀 휴리스틱(extractArray)으로 대체한다.
+  collectionPath: string | null;
+  // 같은 응답에서 총 개수가 위치한 dot-path(예: "data.totalElements"). 못 찾으면 null이고 렌더러가
+  // 배열 길이로 대체한다(extractCount).
+  totalCountPath: string | null;
+  kind: PreviewCapabilityKind;
+  // kind=COMMAND일 때 실제 동작 이름(예: "start", "invite"). 그 외 kind는 항상 null.
+  action: string | null;
+  // 이 capability가 의미상 의존하는 다른 capability id 목록(예: vm.start → ["vm.detail"]).
+  dependencies: string[];
 }
 
 export interface PreviewPageDraft {
@@ -452,14 +505,144 @@ export interface PreviewPageDraft {
   capabilityIds: string[];
 }
 
+// Direction Recovery Change Request §17 — 이 pages가 어떻게 만들어졌는지 항상 명시적으로 리포트한다.
+// FALLBACK_CRUD를 SERVICE_AWARE인 것처럼 보여주면 안 된다.
+export type PreviewGenerationMode = "SERVICE_AWARE" | "RULE_BASED" | "FALLBACK_CRUD";
+
+// Workflow Composition Phase 2 Change Request §5/WP-1 — PreviewPageDraft(4필드)를 대체할 풍부한 페이지
+// 모델. 지금은 백엔드 PagePlanMapper가 결정론적으로 파생만 하고 어떤 화면도 아직 이 데이터를 쓰지
+// 않는다(Navigation/FlowBlueprint가 실제로 소비하게 될 다음 작업들을 위해 타입만 미리 맞춰둠).
+export type PreviewPageType =
+  | "AUTH"
+  | "DASHBOARD"
+  | "RESOURCE_LIST"
+  | "RESOURCE_OVERVIEW"
+  | "RESOURCE_DETAIL"
+  | "LIST_DETAIL"
+  | "WORKFLOW"
+  | "SETTINGS"
+  | "ACTIVITY"
+  | "FILE_MANAGER"
+  | "ORGANIZATION";
+
+// source는 문서 예시가 "navigation" 하나뿐이라 닫힌 유니언 대신 string으로 둔다(백엔드와 동일).
+export interface PreviewRouteParameter {
+  name: string;
+  source: string;
+}
+
+export interface PreviewNavigationRule {
+  sourcePageId: string;
+  trigger: string;
+  type: "OPEN_PAGE" | "OPEN_OVERLAY" | "GO_BACK" | "REPLACE_ROUTE";
+  targetPageId: string;
+  parameters: Record<string, string>;
+}
+
+export interface PreviewPagePlan {
+  id: string;
+  title: string;
+  route: string;
+  pageType: PreviewPageType;
+  layoutRef: string | null;
+  capabilityIds: string[];
+  routeParameters: PreviewRouteParameter[];
+  queryParameters: string[];
+  navigationRules: PreviewNavigationRule[];
+  features: Record<string, boolean>;
+  confidence: string;
+  reason: string;
+  unsupportedCapabilityWarnings: string[];
+}
+
+// Workflow Composition Phase 2 Change Request §6(FlowBlueprint)/§8(ApiBinding)/§9(Polling) — Backend
+// gj.cloud.ops.application.preview.flow.*/binding.ApiBinding의 TS 미러. RuleBasedFlowGenerator가
+// 이 값들을 처음 실제로 만들어내면서(그 전까지는 이 모델을 만드는 생성기가 없어 네트워크로 전송되는
+// 형태 자체가 없었다) 여기서 처음 정본으로 정의한다 — components/preview-runtime/flow/types.ts는
+// 이 타입들을 재수출만 한다(다른 Preview* 타입과 같은 관례, components/preview-runtime/types.ts 참고).
+export type PreviewFlowStepType =
+  | "API_CALL"
+  | "SET_CONTEXT"
+  | "NAVIGATE"
+  | "POLL"
+  | "WAIT"
+  | "CONDITION"
+  | "SHOW_SUCCESS"
+  | "SHOW_ERROR"
+  | "REFRESH_BINDING"
+  | "EVENT_STREAM"
+  | "UPLOAD"
+  | "DOWNLOAD"
+  | "PARALLEL";
+
+export interface PreviewPollCondition {
+  path: string;
+  equalsValue: string | null;
+  in: string[] | null;
+}
+
+export interface PreviewFlowStep {
+  id: string;
+  type: PreviewFlowStepType;
+  bindingRef: string | null;
+  input: Record<string, string> | null;
+  values: Record<string, string> | null;
+  pageId: string | null;
+  parameters: Record<string, string> | null;
+  until: PreviewPollCondition[] | null;
+  intervalMs: number | null;
+  timeoutSeconds: number | null;
+  condition: string | null;
+  message: string | null;
+}
+
+export interface PreviewFlowTrigger {
+  pageId: string | null;
+  actionId: string | null;
+}
+
+export interface PreviewFlowBlueprint {
+  id: string;
+  trigger: PreviewFlowTrigger | null;
+  steps: PreviewFlowStep[];
+}
+
+export type PreviewInputTarget = "PATH" | "QUERY" | "BODY" | "HEADER";
+
+export interface PreviewInputMapping {
+  target: string;
+  targetKind: PreviewInputTarget;
+  from: string;
+}
+
+export interface PreviewOutputMapping {
+  from: string;
+  to: string;
+}
+
+export interface PreviewApiBinding {
+  id: string;
+  capabilityId: string;
+  inputMappings: PreviewInputMapping[];
+  outputMappings: PreviewOutputMapping[];
+  refreshBindingIds: string[];
+}
+
 export interface PreviewAnalysisResult {
   status: GenerationStatus;
   apiServerUrls: string[];
   capabilities: PreviewCapability[];
   pages: PreviewPageDraft[];
+  pagePlans: PreviewPagePlan[];
+  // RuleBasedFlowGenerator가 pagePlans로부터 만든 것 중 검증을 통과한 항목만 담긴다(실패분은
+  // 서버가 조용히 드랍하고 warnings에 사유를 남긴다).
+  flows: PreviewFlowBlueprint[];
+  bindings: PreviewApiBinding[];
   unresolved: UnresolvedField[];
   warnings: string[];
   evidenceRefs: string[];
+  authStrategy: PreviewAuthStrategy;
+  generationMode: PreviewGenerationMode;
 }
 
 export interface PageReviewFinding {
@@ -467,6 +650,81 @@ export interface PageReviewFinding {
   severity: "INFO" | "WARNING" | "CRITICAL";
   message: string;
   remediation: string;
+}
+
+// Direction Recovery Change Request Increment 5(2부) "Plan Review UI" — AiPageReviewer(코멘트만)와
+// 달리 AiPagePlanner의 제안은 사용자가 검토해 실제로 pages를 바꿀 수 있다. propose(AI 호출, 아무것도
+// 적용 안 함) / apply(사용자가 고른 서브셋만 결정론적으로 적용) 두 단계로 나뉜다.
+export type PagePlanOperationType =
+  | "RENAME_PAGE"
+  | "MERGE_PAGES"
+  | "MOVE_CAPABILITY"
+  | "ADD_PAGE"
+  | "REMOVE_PAGE"
+  | "SPLIT_PAGE"
+  | "SET_PAGE_TYPE"
+  | "SET_LAYOUT"
+  | "SET_FEATURE"
+  | "ADD_NAVIGATION"
+  | "ADD_FLOW"
+  | "ASSIGN_FLOW";
+
+// /plan/apply 요청에 보낼 원본 오퍼레이션 — 타입마다 실제로 쓰는 필드가 다르고 그 외는 항상 null.
+export interface PagePlanOperation {
+  type: PagePlanOperationType;
+  pageId: string | null;
+  otherPageId: string | null;
+  newTitle: string | null;
+  capabilityId: string | null;
+  destinationPageId: string | null;
+  capabilityIds: string[] | null;
+  pageType: PreviewPageType | null;
+  layoutRef: string | null;
+  featureKey: string | null;
+  featureEnabled: boolean | null;
+  navigationRule: PreviewNavigationRule | null;
+  flow: PreviewFlowBlueprint | null;
+  flowId: string | null;
+  actionId: string | null;
+  reason: string | null;
+}
+
+// /plan/propose 응답의 오퍼레이션 — PagePlanOperation에 검토용 필드(id/valid/validationError)가 더 있다.
+export interface PagePlanOperationView extends PagePlanOperation {
+  id: string;
+  valid: boolean;
+  validationError: string | null;
+}
+
+export interface PagePlanProposalResult {
+  operations: PagePlanOperationView[];
+  aiSucceeded: boolean;
+}
+
+// /parts/suggest 응답 — 스왑 가능한 Block별 검증된 파츠 추천. componentId는 그 Block과 호환되는 등록
+// 파츠 id(또는 현재 기본 컴포넌트 id)이며, {pageId}/{instanceId}를 키로 partOverrides에 그대로 병합한다.
+export interface PartSuggestion {
+  pageId: string;
+  instanceId: string;
+  componentId: string;
+  reason: string | null;
+}
+
+export interface PartSuggestionResult {
+  suggestions: PartSuggestion[];
+  aiSucceeded: boolean;
+}
+
+// errors가 비어있지 않으면(all-or-nothing 실패) pages는 요청으로 보낸 pages 그대로다. pagePlans도
+// 이 pages와 동일한 기준으로 파생된다(Workflow Composition Phase 2 WP-1).
+export interface PreviewPlanApplyResponse {
+  pages: PreviewPageDraft[];
+  pagePlans: PreviewPagePlan[];
+  flows: PreviewFlowBlueprint[];
+  bindings: PreviewApiBinding[];
+  decisions: string[];
+  errors: string[];
+  generationMode: PreviewGenerationMode;
 }
 
 export interface DeploymentEventPayload {

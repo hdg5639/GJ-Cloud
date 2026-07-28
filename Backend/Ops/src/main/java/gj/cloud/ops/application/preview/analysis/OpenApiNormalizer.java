@@ -3,6 +3,7 @@ package gj.cloud.ops.application.preview.analysis;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +38,12 @@ import java.util.Set;
 public class OpenApiNormalizer {
 
     private static final Set<String> SUPPORTED_METHODS = Set.of("get", "post", "put", "patch", "delete");
-    private static final Set<String> ARRAY_ENVELOPE_KEYS = Set.of("content", "items", "data", "list", "results");
+    private static final Set<String> ARRAY_ENVELOPE_KEYS =
+            Set.of("content", "items", "data", "list", "results", "records", "rows", "elements", "result", "payload");
+    // 순환 $ref로 인한 무한 재귀를 막기 위한 목록 봉투 해제 최대 깊이.
+    private static final int MAX_ENVELOPE_UNWRAP_DEPTH = 4;
+    // 응답 스칼라 필드 dot-path 수집 상한 — 필드가 매우 많은 응답 스키마에서 과도한 작업을 막는다.
+    private static final int MAX_RESPONSE_FIELD_PATHS = 60;
 
     private final ObjectMapper objectMapper;
 
@@ -218,9 +224,13 @@ public class OpenApiNormalizer {
                 : globalSecurityPresent;
 
         boolean responseIsArray = extractResponseIsArray(operation.path("responses"), schemas);
+        List<String> responseFieldPaths = extractResponseFieldPaths(operation.path("responses"), schemas);
+        List<String> arrayFieldPaths = extractArrayFieldPaths(operation.path("responses"), schemas);
+        List<ApiOperationEvidence.EnumFieldEvidence> enumFields =
+                extractEnumFieldPaths(operation.path("responses"), schemas);
 
         return new ApiOperationEvidence(path, method, operationId, summary, tags, parameters,
-                requestBodyFields, requiresAuth, responseIsArray);
+                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths, arrayFieldPaths, enumFields);
     }
 
     private List<ApiParameterEvidence> extractParameters(JsonNode parametersNode) {
@@ -284,26 +294,246 @@ public class OpenApiNormalizer {
     }
 
     private boolean looksLikeArraySchema(JsonNode schema, JsonNode schemas) {
-        if (schema.isMissingNode()) {
+        return looksLikeArraySchema(schema, schemas, 0);
+    }
+
+    // API마다 목록 응답 봉투 설계가 제각각임(순수 배열 / {data:[...]} / {success,data:{content:[...],
+    // totalElements}}처럼 겹겹이 감싸는 Spring Data Page + 공통 응답 포맷 조합 등). 이름이 알려진 키를
+    // 먼저 확인해 오탐 가능성을 줄이되, 모르는 이름이어도 배열을 담은 속성이 있으면 목록으로 취급하도록
+    // 구조 기반으로 재귀 탐색한다.
+    private boolean looksLikeArraySchema(JsonNode schema, JsonNode schemas, int depth) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH) {
             return false;
         }
-        if ("array".equals(schema.path("type").asText(null))) {
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode()) {
+            return false;
+        }
+        if ("array".equals(resolved.path("type").asText(null))) {
             return true;
         }
-        // Spring Data Page 등 목록을 감싸는 응답 봉투 — properties 중 하나가 배열이면 목록으로 취급
-        JsonNode properties = schema.path("properties");
+
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return false;
+        }
+
+        for (String key : ARRAY_ENVELOPE_KEYS) {
+            if (properties.has(key) && looksLikeArraySchema(properties.path(key), schemas, depth + 1)) {
+                return true;
+            }
+        }
         var names = properties.fieldNames();
         while (names.hasNext()) {
             String name = names.next();
-            if (!ARRAY_ENVELOPE_KEYS.contains(name)) {
+            if (ARRAY_ENVELOPE_KEYS.contains(name)) {
                 continue;
             }
-            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
-            if ("array".equals(propertySchema.path("type").asText(null))) {
+            if (looksLikeArraySchema(properties.path(name), schemas, depth + 1)) {
                 return true;
             }
         }
         return false;
+    }
+
+    // 성공 응답 스키마에서 스칼라(문자열/숫자/불리언) leaf 필드의 dot-path를 모두 모은다(예: "data.accessToken").
+    // 로그인 응답에서 access token이 어디 있는지 CapabilityExtractor가 이름 힌트로 찾을 때 필요 — looksLikeArraySchema와
+    // 반대로 배열 내부는 절대 들어가지 않는다(토큰은 배열 안에 있지 않음).
+    private List<String> extractResponseFieldPaths(JsonNode responses, JsonNode schemas) {
+        var codes = responses.fieldNames();
+        while (codes.hasNext()) {
+            String code = codes.next();
+            if (!code.startsWith("2")) {
+                continue;
+            }
+            JsonNode content = responses.path(code).path("content");
+            if (!content.isObject() || content.isEmpty()) {
+                continue;
+            }
+            JsonNode schema = resolveSchema(content.elements().next().path("schema"), schemas);
+            List<String> paths = new ArrayList<>();
+            collectScalarFieldPaths(schema, schemas, "", 0, paths);
+            if (!paths.isEmpty()) {
+                return paths;
+            }
+        }
+        return List.of();
+    }
+
+    private void collectScalarFieldPaths(JsonNode schema, JsonNode schemas, String prefix, int depth, List<String> out) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH || out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+            return;
+        }
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode() || "array".equals(resolved.path("type").asText(null))) {
+            return;
+        }
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return;
+        }
+        var names = properties.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String path = prefix.isEmpty() ? name : prefix + "." + name;
+            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
+            String propertyType = propertySchema.path("type").asText(null);
+            if ("array".equals(propertyType)) {
+                // 배열은 대상 아님 — 건너뜀
+            } else if ("object".equals(propertyType) || propertySchema.has("properties") || propertySchema.has("allOf")) {
+                collectScalarFieldPaths(propertySchema, schemas, path, depth + 1, out);
+            } else {
+                out.add(path);
+            }
+            if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+                return;
+            }
+        }
+    }
+
+    // 응답 스키마에서 배열 타입 필드의 dot-path를 모두 모은다(예: "data.content") — looksLikeArraySchema와
+    // 반대로 "배열이 있는가"가 아니라 "그 배열이 어디 있는가"가 필요할 때 쓴다(CapabilityExtractor가
+    // collectionPath를 추정할 때). 최상위 자체가 배열이면(봉투 없음) 빈 경로는 넣지 않는다 — 그 경우는
+    // 런타임에서 Array.isArray로 이미 자명하게 판별되므로 굳이 persist할 필요가 없다. 배열을 찾으면 그
+    // 내부(items)까지는 더 들어가지 않는다 — 목록 위치만 필요하고 항목 내부 필드는 대상이 아니다.
+    private List<String> extractArrayFieldPaths(JsonNode responses, JsonNode schemas) {
+        var codes = responses.fieldNames();
+        while (codes.hasNext()) {
+            String code = codes.next();
+            if (!code.startsWith("2")) {
+                continue;
+            }
+            JsonNode content = responses.path(code).path("content");
+            if (!content.isObject() || content.isEmpty()) {
+                continue;
+            }
+            JsonNode schema = resolveSchema(content.elements().next().path("schema"), schemas);
+            List<String> paths = new ArrayList<>();
+            collectArrayFieldPaths(schema, schemas, "", 0, paths);
+            if (!paths.isEmpty()) {
+                return paths;
+            }
+        }
+        return List.of();
+    }
+
+    private void collectArrayFieldPaths(JsonNode schema, JsonNode schemas, String prefix, int depth, List<String> out) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH || out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+            return;
+        }
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode()) {
+            return;
+        }
+        if ("array".equals(resolved.path("type").asText(null))) {
+            if (!prefix.isEmpty()) {
+                out.add(prefix);
+            }
+            return;
+        }
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return;
+        }
+        var names = properties.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String path = prefix.isEmpty() ? name : prefix + "." + name;
+            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
+            String propertyType = propertySchema.path("type").asText(null);
+            if ("array".equals(propertyType)) {
+                out.add(path);
+            } else if ("object".equals(propertyType) || propertySchema.has("properties") || propertySchema.has("allOf")) {
+                collectArrayFieldPaths(propertySchema, schemas, path, depth + 1, out);
+            }
+            if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+                return;
+            }
+        }
+    }
+
+    // 응답 스키마에서 문자열 enum 필드(dot-path + 허용값)를 모은다 — CapabilityExtractor가 상태 전이
+    // 폴링(AC-4)을 만들 status 필드를 결정론적으로 찾는 데 쓴다. 배열/객체는 responseFieldPaths와 같은
+    // 봉투 언랩 규칙으로 한 단계씩 들어간다.
+    private List<ApiOperationEvidence.EnumFieldEvidence> extractEnumFieldPaths(JsonNode responses, JsonNode schemas) {
+        var codes = responses.fieldNames();
+        while (codes.hasNext()) {
+            String code = codes.next();
+            if (!code.startsWith("2")) {
+                continue;
+            }
+            JsonNode content = responses.path(code).path("content");
+            if (!content.isObject() || content.isEmpty()) {
+                continue;
+            }
+            JsonNode schema = resolveSchema(content.elements().next().path("schema"), schemas);
+            List<ApiOperationEvidence.EnumFieldEvidence> fields = new ArrayList<>();
+            collectEnumFieldPaths(schema, schemas, "", 0, fields);
+            if (!fields.isEmpty()) {
+                return fields;
+            }
+        }
+        return List.of();
+    }
+
+    private void collectEnumFieldPaths(JsonNode schema, JsonNode schemas, String prefix, int depth,
+                                       List<ApiOperationEvidence.EnumFieldEvidence> out) {
+        if (depth > MAX_ENVELOPE_UNWRAP_DEPTH || out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+            return;
+        }
+        JsonNode resolved = resolveSchema(schema, schemas);
+        if (resolved.isMissingNode() || "array".equals(resolved.path("type").asText(null))) {
+            return;
+        }
+        JsonNode properties = mergedProperties(resolved, schemas);
+        if (!properties.isObject() || properties.isEmpty()) {
+            return;
+        }
+        var names = properties.fieldNames();
+        while (names.hasNext()) {
+            String name = names.next();
+            String path = prefix.isEmpty() ? name : prefix + "." + name;
+            JsonNode propertySchema = resolveSchema(properties.path(name), schemas);
+            JsonNode enumNode = propertySchema.path("enum");
+            if (enumNode.isArray() && !enumNode.isEmpty()) {
+                List<String> values = new ArrayList<>();
+                for (JsonNode value : enumNode) {
+                    if (value.isTextual()) {
+                        values.add(value.asText());
+                    }
+                }
+                if (!values.isEmpty()) {
+                    out.add(new ApiOperationEvidence.EnumFieldEvidence(path, values));
+                }
+            } else if ("object".equals(propertySchema.path("type").asText(null))
+                    || propertySchema.has("properties") || propertySchema.has("allOf")) {
+                collectEnumFieldPaths(propertySchema, schemas, path, depth + 1, out);
+            }
+            if (out.size() >= MAX_RESPONSE_FIELD_PATHS) {
+                return;
+            }
+        }
+    }
+
+    // properties 직접 선언 + allOf로 합성된 속성(재귀적으로)까지 모두 합친다.
+    private JsonNode mergedProperties(JsonNode schema, JsonNode schemas) {
+        ObjectNode merged = objectMapper.createObjectNode();
+        copyProperties(schema.path("properties"), merged);
+        for (JsonNode part : arrayOrEmpty(schema.path("allOf"))) {
+            copyProperties(mergedProperties(resolveSchema(part, schemas), schemas), merged);
+        }
+        return merged;
+    }
+
+    private void copyProperties(JsonNode source, ObjectNode target) {
+        if (!source.isObject()) {
+            return;
+        }
+        var fields = source.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            target.set(entry.getKey(), entry.getValue());
+        }
     }
 
     // #/components/schemas/{Name} 형태의 로컬 $ref만 한 단계 해석. 그 외(외부 URL 등)는 원본을 그대로 반환.

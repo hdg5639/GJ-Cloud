@@ -2,8 +2,13 @@ package gj.cloud.ops.application.preview.dto;
 
 import gj.cloud.ops.application.deployment.ai.GenerationStatus;
 import gj.cloud.ops.application.deployment.ai.UnresolvedField;
+import gj.cloud.ops.application.preview.analysis.AuthStrategy;
 import gj.cloud.ops.application.preview.analysis.Capability;
+import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
+import gj.cloud.ops.application.preview.binding.ApiBinding;
+import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
 
 import java.util.List;
 
@@ -17,8 +22,21 @@ public record PreviewAnalysisResult(
         List<String> apiServerUrls,
         List<Capability> capabilities,
         List<PageDraft> pages,
+        // 실행 가능한 페이지 계획의 정본. PageDraft는 FALLBACK_CRUD 및 구버전 요청 호환용으로 유지한다.
+        List<PagePlan> pagePlans,
+        // Workflow Composition Phase 2 §22 7번(수직 슬라이스)으로 가는 첫 조각 — RuleBasedFlowGenerator가
+        // pagePlans로부터 결정론적으로 만든 것 중 FlowBlueprintValidator/ApiBindingValidator를 통과한
+        // 항목만 담는다(검증 실패분은 조용히 드랍되고 warnings에 사유가 남는다, §16 안전 폴백과 동일 원칙).
+        List<FlowBlueprint> flows,
+        List<ApiBinding> bindings,
         List<UnresolvedField> unresolved,
         List<String> warnings,
-        List<String> evidenceRefs
+        List<String> evidenceRefs,
+        // 인증된 요청에 토큰을 실제로 어떻게 실어 보낼지(§9) — LOGIN 응답으로 받은 값을 나머지 모든
+        // 보호된 요청에 동일하게 적용해야 하므로 Capability 하나가 아니라 문서 전체에 하나만 존재한다.
+        AuthStrategy authStrategy,
+        // Direction Recovery Change Request §17 — 이 pages가 어떻게 만들어졌는지 항상 명시적으로
+        // 리포트한다. FALLBACK_CRUD를 SERVICE_AWARE인 것처럼 보여주면 안 된다.
+        GenerationMode generationMode
 ) {
 }

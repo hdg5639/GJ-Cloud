@@ -83,7 +83,8 @@ public enum OpsErrorCode {
     API_DOCS_FETCH_FAILED(HttpStatus.BAD_REQUEST, "API 문서를 가져오지 못했습니다. URL을 확인해주세요."),
     API_DOCS_TOO_LARGE(HttpStatus.BAD_REQUEST, "API 문서 크기가 허용 한도를 초과했습니다."),
     API_DOCS_PARSE_FAILED(HttpStatus.BAD_REQUEST, "API 문서를 해석하지 못했습니다. OpenAPI 3.x 형식인지 확인해주세요."),
-    API_DOCS_UNSUPPORTED_VERSION(HttpStatus.BAD_REQUEST, "OpenAPI 3.x 문서만 지원합니다.");
+    API_DOCS_UNSUPPORTED_VERSION(HttpStatus.BAD_REQUEST, "OpenAPI 3.x 문서만 지원합니다."),
+    INVALID_PREVIEW_BLUEPRINT(HttpStatus.BAD_REQUEST, "Auto Preview Blueprint 검증에 실패했습니다.");
 
     private final HttpStatus status;
     private final String message;

@@ -1,0 +1,19 @@
+
+/* Mega Blueprint theme presets. Apply a theme class to the Product Blueprint root. */
+.theme-terminal-green { --preview-blueprint-brand:#6dff8b; --preview-theme-accent:#6dff8b; --preview-status-ok:#6dff8b; --preview-status-warn:#ffd166; --preview-status-danger:#ff5c72; background:#030b06; color:#d9ffe2; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+.theme-glass-aurora { --preview-blueprint-brand:#8bf5ff; --preview-theme-accent:#a78bfa; background:radial-gradient(circle at 15% 10%,rgba(34,211,238,.18),transparent 30%),radial-gradient(circle at 85% 20%,rgba(168,85,247,.16),transparent 28%),#090b15; }
+.theme-editorial-paper { --preview-blueprint-brand:#8a5a32; --preview-theme-paper:#f5efe3; --preview-theme-ink:#211d18; --preview-theme-accent:#b7793b; background:#ece4d5; color:#211d18; font-family:Georgia,serif; }
+.theme-brutalist-mono { --preview-blueprint-brand:#fff; --preview-theme-accent:#fff; background:#111; color:#fff; --radius-panel:0px; }
+.theme-enterprise-blue { --preview-blueprint-brand:#65a8ff; --preview-theme-accent:#3b82f6; --preview-status-ok:#31b77a; background:#08111f; }
+.theme-warm-commerce { --preview-blueprint-brand:#ff9a56; --preview-theme-accent:#ff7b39; --preview-status-ok:#38b57a; background:#18100b; }
+.theme-neon-cyber { --preview-blueprint-brand:#c084fc; --preview-theme-accent:#22d3ee; --preview-status-ok:#4ade80; background:#08040f; }
+.theme-soft-pastel { --preview-blueprint-brand:#a78bfa; --preview-theme-accent:#f9a8d4; --preview-status-ok:#73c69c; background:#17141e; --radius-panel:22px; }
+.theme-ocean-data { --preview-blueprint-brand:#22d3ee; --preview-theme-accent:#0ea5e9; --preview-status-ok:#2dd4bf; background:#06131a; }
+.theme-sunset-operations { --preview-blueprint-brand:#fb7185; --preview-theme-accent:#f97316; --preview-status-warn:#fbbf24; background:#160b12; }
+.theme-forest-saas { --preview-blueprint-brand:#9ef01a; --preview-theme-accent:#4ade80; --preview-status-ok:#3fbf74; background:#0b1009; }
+.theme-monochrome-pro { --preview-blueprint-brand:#f4f4f5; --preview-theme-accent:#a1a1aa; background:#0b0b0c; }
+.theme-lavender-creator { --preview-blueprint-brand:#c4b5fd; --preview-theme-accent:#e879f9; background:#120d1a; }
+.theme-crimson-security { --preview-blueprint-brand:#fb7185; --preview-theme-accent:#ef4444; --preview-status-danger:#ff5364; background:#100607; }
+.theme-sandstone-finance { --preview-blueprint-brand:#d6a66a; --preview-theme-accent:#b9854a; --preview-theme-paper:#efe2cd; background:#15110c; }
+.theme-high-contrast { --preview-blueprint-brand:#ffff00; --preview-theme-accent:#00ffff; --preview-status-ok:#00ff66; --preview-status-warn:#ffff00; --preview-status-danger:#ff3366; background:#000; color:#fff; }
+.theme-high-contrast :focus-visible { outline:3px solid var(--preview-blueprint-brand); outline-offset:3px; }

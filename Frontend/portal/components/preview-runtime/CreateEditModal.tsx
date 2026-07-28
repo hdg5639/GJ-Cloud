@@ -14,6 +14,8 @@ export function CreateEditModal({
   config,
   initialValues,
   onSuccess,
+  onSubmitOverride,
+  pathParamId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +23,13 @@ export function CreateEditModal({
   config: PreviewRuntimeConfig;
   initialValues?: Record<string, unknown>;
   onSuccess: () => void;
+  // 이 페이지의 CREATE 액션에 FlowBlueprint가 배정돼 있으면(RuleBasedFlowGenerator) API 호출 자체를
+  // 이 모달이 하지 않고 폼 값만 넘긴다 — 호출 측(PreviewPageRenderer)이 FlowExecutor로 API_CALL부터
+  // NAVIGATE까지 전체 flow를 실행한다. 없으면 기존처럼 이 모달이 직접 callCapability를 호출한다.
+  onSubmitOverride?: (values: Record<string, string>) => Promise<boolean | void>;
+  // 중첩 리소스 생성(/parents/{id}/children)처럼 생성 폼 자체에도 부모 경로 파라미터가 필요한 경우.
+  // 수정 폼의 row id보다 우선한다.
+  pathParamId?: string;
 }) {
   const fields = capability.fields;
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -34,9 +43,17 @@ export function CreateEditModal({
     setError(null);
     setLoading(true);
     try {
-      const pathParams: Record<string, string> = initialValues ? { id: rowId(initialValues) } : {};
-      await callCapability(config, capability, { body: values, pathParams });
-      onSuccess();
+      if (onSubmitOverride) {
+        const completed = await onSubmitOverride(values);
+        if (completed === false) {
+          return;
+        }
+      } else {
+        const resolvedPathId = pathParamId ?? (initialValues ? rowId(initialValues) : "");
+        const pathParams: Record<string, string> = resolvedPathId ? { id: resolvedPathId } : {};
+        await callCapability(config, capability, { body: values, pathParams });
+        onSuccess();
+      }
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장에 실패했습니다");

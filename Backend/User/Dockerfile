@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM eclipse-temurin:17-jdk AS builder
 WORKDIR /app
 COPY gradlew .
@@ -5,7 +6,9 @@ COPY gradle gradle
 COPY build.gradle .
 COPY settings.gradle .
 COPY src src
-RUN ./gradlew bootJar -x test --no-daemon
+# Gradle 홈(/root/.gradle: 배포판 + 의존성 + 빌드 캐시)을 빌드 간 재사용해 재빌드를 크게 단축한다.
+# 서비스별 캐시 id로 병렬 빌드 시 락 경합을 피한다(첫 빌드는 콜드라 여전히 느림).
+RUN --mount=type=cache,target=/root/.gradle,id=gradle-user ./gradlew bootJar -x test --no-daemon
 
 FROM eclipse-temurin:17-jre
 COPY --from=builder /app/build/libs/*.jar app.jar

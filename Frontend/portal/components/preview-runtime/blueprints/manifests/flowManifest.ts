@@ -1,0 +1,16 @@
+export const BLUEPRINT_FLOW_PRESETS = [
+  { id: "create-navigate", category: "CREATE", factory: "createNavigatePreset" },
+  { id: "create-poll-navigate", category: "CREATE", factory: "createPollNavigatePreset" },
+  { id: "command-refresh", category: "COMMAND", factory: "commandRefreshPreset" },
+  { id: "child-create-refresh", category: "CHILD_RESOURCE", factory: "childCreateRefreshPreset" },
+  { id: "approval-request", category: "APPROVAL", factory: "approvalRequestPreset" },
+  { id: "publish-schedule", category: "CONTENT", factory: "publishSchedulePreset" },
+  { id: "deployment-poll", category: "DEPLOYMENT", factory: "deploymentPollPreset" },
+  { id: "data-import", category: "DATA", factory: "dataImportPreset" },
+  { id: "status-transition", category: "STATUS", factory: "statusTransitionPreset" },
+  { id: "assign-owner", category: "OWNERSHIP", factory: "assignOwnerPreset" },
+  { id: "bulk-mutation", category: "BULK", factory: "bulkMutationPreset" },
+  { id: "delete-navigate-back", category: "DELETE", factory: "deleteNavigateBackPreset" },
+  { id: "upload-process", category: "TRANSFER", factory: "uploadProcessPreset" },
+  { id: "download-export", category: "TRANSFER", factory: "downloadExportPreset" },
+] as const;

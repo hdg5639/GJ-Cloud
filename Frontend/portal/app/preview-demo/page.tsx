@@ -2,37 +2,53 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
+import { compileBlocks, resolveBlocks } from "@/components/preview-runtime/blueprint";
 import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "@/components/preview-runtime/types";
 
 // Auto Preview Phase C 검증용 페이지 — 손으로 작성한 샘플 Blueprint(capabilities/pages)를 실제 API
 // 없이(fetch를 목데이터로 대체) 렌더러가 올바르게 조립하는지 확인한다. 프로덕션 기능이 아니며
 // 사이드바 등 어디에서도 링크되지 않는다. Phase D/E에서 실제 분석 결과 + 배포로 대체될 예정.
+//
+// Direction Recovery Change Request §13.1 — 실제 마법사(app/(dashboard)/instances/[id]/preview)는
+// 이제 POST /ops/preview/blocks가 계산한 Block을 그대로 쓰지만, 이 페이지는 백엔드가 없는 순수
+// 프론트 샌드박스라 그 엔드포인트를 호출할 수 없다. 예외적으로 blueprint.ts의 resolveBlocks/
+// compileBlocks를 여기서 직접 호출해 Block을 만든다.
 
 const CAPABILITIES: PreviewCapability[] = [
   {
     id: "auth.login", resourceName: "auth", type: "LOGIN", operationId: "login",
     path: "/auth/login", method: "POST", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: ["email", "password"],
+    confidence: "HIGH", evidence: [], fields: ["email", "password"], accessTokenPath: "data.accessToken", searchParam: null,
+    risk: "SAFE", automationPolicy: "AUTO_SAFE", collectionPath: null, totalCountPath: null,
+    kind: "AUTH", action: null, dependencies: [],
   },
   {
     id: "vms.list", resourceName: "vms", type: "LIST", operationId: "listVms",
     path: "/vms", method: "GET", hasSearch: true, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: [],
+    confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null, searchParam: "search",
+    risk: "SAFE", automationPolicy: "AUTO_SAFE", collectionPath: null, totalCountPath: null,
+    kind: "QUERY", action: null, dependencies: [],
   },
   {
     id: "vms.detail", resourceName: "vms", type: "DETAIL", operationId: "getVm",
     path: "/vms/{id}", method: "GET", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: [],
+    confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null, searchParam: null,
+    risk: "SAFE", automationPolicy: "AUTO_SAFE", collectionPath: null, totalCountPath: null,
+    kind: "QUERY", action: null, dependencies: [],
   },
   {
     id: "vms.create", resourceName: "vms", type: "CREATE", operationId: "createVm",
     path: "/vms", method: "POST", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: ["name", "planType"],
+    confidence: "HIGH", evidence: [], fields: ["name", "planType"], accessTokenPath: null, searchParam: null,
+    risk: "STATE_CHANGING", automationPolicy: "USER_INITIATED", collectionPath: null, totalCountPath: null,
+    kind: "MUTATION", action: null, dependencies: [],
   },
   {
     id: "vms.delete", resourceName: "vms", type: "DELETE", operationId: "deleteVm",
     path: "/vms/{id}", method: "DELETE", hasSearch: false, hasSort: false, hasPagination: false,
-    confidence: "HIGH", evidence: [], fields: [],
+    confidence: "HIGH", evidence: [], fields: [], accessTokenPath: null, searchParam: null,
+    risk: "DESTRUCTIVE", automationPolicy: "EXPLICIT_CONFIRMATION", collectionPath: null, totalCountPath: null,
+    kind: "MUTATION", action: null, dependencies: [],
   },
 ];
 
@@ -80,6 +96,7 @@ function installMockFetch(): () => void {
 export default function PreviewDemoPage() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [activePage, setActivePage] = useState(PAGES[0]);
+  const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
   const installed = useRef(false);
 
   useEffect(() => {
@@ -92,7 +109,10 @@ export default function PreviewDemoPage() {
     apiBaseUrl: "https://mock.example.com",
     authToken,
     onAuthTokenChange: setAuthToken,
+    authStrategy: { type: "BEARER", headerName: "Authorization", prefix: "Bearer ", queryParamName: null },
+    purpose: "PRODUCT_LIKE",
   };
+  const blocks = compileBlocks(resolveBlocks(activePage, CAPABILITIES), config.purpose);
 
   return (
     <div className="mx-auto max-w-4xl p-8">
@@ -104,7 +124,10 @@ export default function PreviewDemoPage() {
           <button
             key={page.id}
             type="button"
-            onClick={() => setActivePage(page)}
+            onClick={() => {
+              setActivePage(page);
+              setSelectedRow(null);
+            }}
             className={`rounded-md border px-3 py-1.5 text-xs font-bold ${
               activePage.id === page.id ? "border-brand bg-soft text-brand-strong" : "border-line-strong text-muted"
             }`}
@@ -117,7 +140,14 @@ export default function PreviewDemoPage() {
       {authToken && <p className="mb-3 text-xs text-brand-strong">로그인됨 (token: {authToken})</p>}
 
       <div className="rounded-panel border border-line bg-panel p-5">
-        <PreviewPageRenderer page={activePage} capabilities={CAPABILITIES} config={config} />
+        <PreviewPageRenderer
+          page={activePage}
+          capabilities={CAPABILITIES}
+          blocks={blocks}
+          config={config}
+          selectedRow={selectedRow}
+          onSelectRow={setSelectedRow}
+        />
       </div>
     </div>
   );

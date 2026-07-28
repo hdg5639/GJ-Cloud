@@ -45,10 +45,20 @@ import type {
   GithubRepositoryResponse,
   GithubInstallationCompleteResponse,
   PreviewAnalysisResult,
+  PreviewAuthStrategy,
   PreviewCapability,
   PreviewPageDraft,
+  PreviewPagePlan,
+  PreviewFlowBlueprint,
+  PreviewApiBinding,
+  PreviewGenerationMode,
+  PagePlanOperation,
+  PagePlanProposalResult,
+  PartSuggestionResult,
+  PreviewPlanApplyResponse,
   PageReviewFinding,
 } from "./types";
+import type { Block } from "@/components/preview-runtime/blueprint";
 
 const API_BASE = {
   auth: process.env.NEXT_PUBLIC_AUTH_API!,
@@ -780,10 +790,93 @@ export const api = {
           body: JSON.stringify(body),
           accessToken,
         }),
+      // Plan Review UI(Increment 5 2부) — AI가 제안한 오퍼레이션을 적용하지 않고 개별 검증된 상태로
+      // 그대로 돌려준다. 사용자가 검토한 뒤 planApply로 원하는 것만 적용한다.
+      planPropose: (
+        accessToken: string,
+        body: {
+          serviceDescription?: string;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
+        }
+      ) =>
+        request<PagePlanProposalResult>("ops", "/ops/preview/plan/propose", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      planApply: (
+        accessToken: string,
+        body: {
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
+          operations: PagePlanOperation[];
+        }
+      ) =>
+        request<PreviewPlanApplyResponse>("ops", "/ops/preview/plan/apply", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      // AI 파츠 제안 — 스왑 가능한 Block(목록/상세/대시보드)마다 서비스 설명에 근거한 Blueprint 파츠를
+      // 추천받는다. 검증 통과분만 오므로 그대로 partOverrides("pageId/instanceId"→componentId)로 병합해
+      // refreshBlocks를 다시 부르면 된다(Phase C 오버라이드 배관 재사용).
+      suggestParts: (
+        accessToken: string,
+        body: {
+          serviceDescription?: string;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+        }
+      ) =>
+        request<PartSuggestionResult>("ops", "/ops/preview/parts/suggest", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않고,
+      // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인
+      // 등록 같은 로컬 편집 직후) 이 엔드포인트로 Block을 다시 받는다.
+      blocks: (
+        accessToken: string,
+        body: {
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          partOverrides?: Record<string, string>;
+        }
+      ) =>
+        request<{ pageBlocks: Record<string, Block[]> }>("ops", "/ops/preview/blocks", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
       deploy: (
         accessToken: string,
         vmId: string,
-        body: { targetName: string; apiBaseUrl: string; capabilities: PreviewCapability[]; pages: PreviewPageDraft[] }
+        body: {
+          targetName: string;
+          apiBaseUrl: string;
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
+          authStrategy: PreviewAuthStrategy;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          generationMode?: PreviewGenerationMode;
+          partOverrides?: Record<string, string>;
+        }
       ) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/preview/deploy`, {
           method: "POST",

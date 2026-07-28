@@ -7,6 +7,7 @@ import java.util.List;
 public record Capability(
         String id,
         String resourceName,
+        // kind=COMMAND(커맨드형 오퍼레이션)일 때는 null — CRUD 6종 enum에 억지로 끼워 넣지 않는다.
         CapabilityType type,
         String operationId,
         String path,
@@ -18,9 +19,75 @@ public record Capability(
         List<String> evidence,
         // CREATE/UPDATE/LOGIN의 요청 본문 필드명(ApiOperationEvidence.requestBodyFields 그대로) —
         // Phase C 렌더러가 폼/로그인 입력칸을 실제 API 스키마에 맞춰 그릴 때 필요. LIST/DETAIL/DELETE는 항상 빈 리스트.
-        List<String> fields
+        List<String> fields,
+        // LOGIN 응답에서 access token이 위치한 dot-path(예: "data.accessToken") — 이름 힌트로 추론하지 못하면
+        // null이고 PreviewAnalysisService가 unresolved로 표시해 사용자가 직접 지정하게 한다. LOGIN 외 타입은 항상 null.
+        String accessTokenPath,
+        // hasSearch=true일 때 실제로 감지된 쿼리 파라미터 이름(예: "keyword") — 렌더러가 "search"로
+        // 하드코딩해 보내면 API가 다른 이름을 쓸 때 검색이 조용히 실패한다. LIST 외 타입/미감지 시 null.
+        String searchParam,
+        // auto-preview-design/05-capability-taxonomy.md의 위험도/자동실행 정책 축소판. CapabilityType별
+        // 고정 기본값만 매긴다(예: DELETE→DESTRUCTIVE) — IRREVERSIBLE·EXTERNAL_SIDE_EFFECT는 OpenAPI
+        // 만으로 결정론적으로 판별할 근거가 없어 규칙 기반으로는 절대 자동 배정하지 않는다.
+        RiskLevel risk,
+        // risk의 기본 매핑값을 그대로 저장한다(05번 문서 §6 표). 지금은 참고용 메타데이터일 뿐 —
+        // MVP에는 아직 이 값으로 실행을 막는 자동화 파이프라인 자체가 없다.
+        AutomationPolicy automationPolicy,
+        // auto-preview-design/04-api-binding-schema.md §7.2 — LIST 응답에서 실제 배열이 위치한
+        // dot-path(예: "data.content"). 못 찾으면 null이고 렌더러가 기존 런타임 재귀 휴리스미(extractArray)로
+        // 대체한다. LIST 외 타입은 항상 null.
+        String collectionPath,
+        // 같은 절의 totalCountPath — LIST 응답에서 총 개수가 위치한 dot-path(예: "data.totalElements").
+        // 못 찾으면 null이고 렌더러가 배열 길이로 대체한다(extractCount). LIST 외 타입은 항상 null.
+        String totalCountPath,
+        // GamjaBox_Auto_Preview_Direction_Recovery_Change_Request.md §7.1 — capability의 진짜 정체성.
+        // CRUD/LOGIN은 QUERY/MUTATION/AUTH로 역산해서 채우고, `/resource/{id}/action` 형태의 커맨드형
+        // 오퍼레이션은 COMMAND로 표현한다(이 경우 type()은 null — CRUD 6종 enum에 억지로 끼워 넣지 않음).
+        CapabilityKind kind,
+        // kind=COMMAND일 때 실제 동작 이름(예: "start", "invite"). 그 외 kind는 항상 null.
+        String action,
+        // 이 capability가 의미상 의존하는 다른 capability id 목록(예: vm.start → ["vm.detail"]).
+        // COMMAND 외 kind는 항상 빈 리스트.
+        List<String> dependencies,
+        // AC-4 상태 전이 폴링 힌트 — DETAIL 응답 status enum에서 전이값+종료값이 함께 확인될 때만
+        // 채워진다(CapabilityExtractor.detectPollHint). 감지 못 하면 null이고 폴링을 만들지 않는다.
+        // DETAIL 외 타입은 항상 null.
+        PollHint pollHint
 ) {
+    // 폴링 종료 판정에 필요한 최소 정보 — 상태 필드 dot-path와 "종료로 간주할" 값 집합(예:
+    // statusPath="status", terminalValues=["RUNNING","STOPPED","FAILED"]). 값은 API 원본 표기 그대로.
+    public record PollHint(String statusPath, List<String> terminalValues) {
+        public PollHint {
+            terminalValues = terminalValues == null ? List.of() : List.copyOf(terminalValues);
+        }
+    }
+
+    public Capability {
+        evidence = evidence == null ? List.of() : List.copyOf(evidence);
+        fields = fields == null ? List.of() : List.copyOf(fields);
+        dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
+    }
+
+    // pollHint 도입 전 호출부/테스트 호환용 — pollHint 없이 만들면 null.
+    public Capability(String id, String resourceName, CapabilityType type, String operationId, String path,
+            String method, boolean hasSearch, boolean hasSort, boolean hasPagination, String confidence,
+            List<String> evidence, List<String> fields, String accessTokenPath, String searchParam,
+            RiskLevel risk, AutomationPolicy automationPolicy, String collectionPath, String totalCountPath,
+            CapabilityKind kind, String action, List<String> dependencies) {
+        this(id, resourceName, type, operationId, path, method, hasSearch, hasSort, hasPagination, confidence,
+                evidence, fields, accessTokenPath, searchParam, risk, automationPolicy, collectionPath,
+                totalCountPath, kind, action, dependencies, null);
+    }
+
     public static String idOf(String resourceName, CapabilityType type) {
         return resourceName + "." + type.name().toLowerCase();
+    }
+
+    // 서로 다른 오퍼레이션이 같은 (resourceName, type)로 매핑돼 id가 충돌할 때(예: /upload/video와
+    // /memos/video가 둘 다 "video.create") CapabilityExtractor가 유일한 id로 바꿔주기 위한 복사 생성자.
+    public Capability withId(String newId) {
+        return new Capability(newId, resourceName, type, operationId, path, method, hasSearch, hasSort,
+                hasPagination, confidence, evidence, fields, accessTokenPath, searchParam, risk, automationPolicy,
+                collectionPath, totalCountPath, kind, action, dependencies, pollHint);
     }
 }

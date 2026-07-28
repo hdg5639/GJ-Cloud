@@ -71,6 +71,12 @@ public class DeploymentEntity {
     @Column(name = "health_checks_json", columnDefinition = "TEXT")
     private String healthChecksJson;
 
+    // Auto Preview 전용 — 배포 시점의 capabilities/pages/authStrategy/Block 배치를 그대로 저장한
+    // 읽기 전용 스냅샷(JSON). Raw Compose/Git 배포는 항상 null. 비밀값이 없어 exposedRoutesJson과
+    // 동일하게 평문 JSON으로 저장한다(auto-preview-design/01-blueprint-schema.md §14 MVP 축소판).
+    @Column(name = "preview_blueprint_json", columnDefinition = "TEXT")
+    private String previewBlueprintJson;
+
     @Column(name = "release_dir")
     private String releaseDir;
 
@@ -211,5 +217,9 @@ public class DeploymentEntity {
 
     public DeploymentEntity withRolledBack() {
         return this.toBuilder().status(DeploymentStatus.ROLLED_BACK).updatedAt(LocalDateTime.now()).build();
+    }
+
+    public DeploymentEntity withPreviewBlueprint(String previewBlueprintJson) {
+        return this.toBuilder().previewBlueprintJson(previewBlueprintJson).updatedAt(LocalDateTime.now()).build();
     }
 }

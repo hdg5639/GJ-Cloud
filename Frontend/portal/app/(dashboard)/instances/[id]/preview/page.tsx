@@ -1,15 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { PreviewAnalysisResult, PageReviewFinding, PreviewCapability } from "@/lib/types";
+import type {
+  PreviewAnalysisResult,
+  PageReviewFinding,
+  PreviewCapability,
+  PreviewPageDraft,
+  PagePlanOperation,
+  PagePlanOperationView,
+  PreviewFlowStep,
+  PreviewApiBinding,
+  PreviewPagePlan,
+} from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import { PageLoader } from "@/components/ui/loader";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
+import { ProductShell } from "@/components/preview-runtime/ProductShell";
+import { BlueprintPartPicker } from "@/components/preview-runtime/BlueprintPartPicker";
+import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
+import { rowId } from "@/components/preview-runtime/api";
+import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
+import type { Block } from "@/components/preview-runtime/blueprint";
 
 type Purpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
 
@@ -34,9 +50,68 @@ const STATUS_LABEL: Record<string, string> = {
   UNSUPPORTED: "이 문서로는 생성할 수 없습니다",
 };
 
+// Direction Recovery Change Request §17 — FALLBACK_CRUD를 목적 반영 계획인 것처럼 보여주면 안 된다.
+const GENERATION_MODE_LABEL: Record<string, string> = {
+  SERVICE_AWARE: "AI가 서비스 설명을 반영해 페이지를 구성했습니다",
+  RULE_BASED: "생성 목적에 맞춰 페이지 구성 규칙을 적용했습니다",
+  FALLBACK_CRUD: "생성 목적을 반영하지 못해 기본 API 테스트 구성으로 대체되었습니다",
+};
+
+// GamjaBox_2.0_Key_Features.md 10절 — 신뢰도를 숫자 대신 상태(✓/△/✕)로 보여준다.
+const CONFIDENCE_MARK: Record<string, { symbol: string; className: string }> = {
+  HIGH: { symbol: "✓", className: "text-brand-strong" },
+  MEDIUM: { symbol: "△", className: "text-[#e8b657]" },
+  LOW: { symbol: "✕", className: "text-danger" },
+};
+
+// auto-preview-design/05-capability-taxonomy.md §5 — SAFE는 표시하지 않고 주의가 필요한 것만 배지로 강조.
+const RISK_LABEL: Record<string, { label: string; className: string }> = {
+  STATE_CHANGING: { label: "상태변경", className: "bg-white/[0.06] text-muted" },
+  DESTRUCTIVE: { label: "파괴적", className: "bg-[#e8b657]/15 text-[#e8b657]" },
+  IRREVERSIBLE: { label: "복구불가", className: "bg-danger/15 text-danger" },
+  EXTERNAL_SIDE_EFFECT: { label: "외부영향", className: "bg-danger/15 text-danger" },
+};
+
+// Workflow Composition Phase 2 Change Request §19 WP-7 "Plan and flow review UI" — RuleBasedFlowGenerator가
+// 만든 workflow(§22 7번)를 사용자가 배포 전에 확인할 수 있게 단계 하나하나를 사람이 읽는 문장으로
+// 요약한다. 아직 AI가 flow를 만들지 않아(WP-4 없음) 편집·승인 UI는 아니고 읽기 전용 요약이다.
+function describeFlowStep(step: PreviewFlowStep, bindings: PreviewApiBinding[]): string {
+  switch (step.type) {
+    case "API_CALL":
+    case "REFRESH_BINDING": {
+      const binding = bindings.find((b) => b.id === step.bindingRef);
+      const label = step.type === "API_CALL" ? "API 호출" : "새로고침";
+      if (!binding) return `${label}: ${step.bindingRef}`;
+      const mappings = binding.outputMappings.map((m) => `${m.from} → ${m.to}`).join(", ");
+      return mappings ? `${label}: ${binding.capabilityId} (응답 매핑: ${mappings})` : `${label}: ${binding.capabilityId}`;
+    }
+    case "SET_CONTEXT":
+      return `값 저장: ${Object.entries(step.values ?? {}).map(([k, v]) => `${k}=${v}`).join(", ")}`;
+    case "NAVIGATE":
+      return `이동: ${Object.entries(step.parameters ?? {}).map(([k, v]) => `${k}=${v}`).join(", ") || step.pageId}`;
+    case "POLL":
+      return `상태 추적: ${step.intervalMs}ms 간격, 최대 ${step.timeoutSeconds}초`;
+    case "WAIT":
+      return `대기: ${step.timeoutSeconds}초`;
+    case "CONDITION":
+      return `조건: ${step.condition}`;
+    case "SHOW_SUCCESS":
+      return `성공 메시지: ${step.message}`;
+    case "SHOW_ERROR":
+      return `실패 메시지: ${step.message}`;
+    default:
+      return step.type;
+  }
+}
+
+const ACCESS_TOKEN_PATH_FIELD = "auth.login.accessTokenPath";
+const AUTH_LOGIN_FIELD = "auth.login";
+
 export default function PreviewWizardPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const vmId = params.id as string;
   const { accessToken } = useAuth();
 
@@ -54,13 +129,168 @@ export default function PreviewWizardPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [reviewFindings, setReviewFindings] = useState<PageReviewFinding[] | null>(null);
-  const [previewPageId, setPreviewPageId] = useState<string | null>(null);
+  // Plan Review UI(Increment 5 2부) — proposing 중엔 AI 호출, proposedOperations는 아직 적용 안 된
+  // 제안 목록(체크박스 검토용), selectedOperationIds는 사용자가 체크한 것, applyingPlan/planApplyErrors는
+  // 선택한 서브셋을 실제로 적용하는 단계.
+  const [proposing, setProposing] = useState(false);
+  const [proposedOperations, setProposedOperations] = useState<PagePlanOperationView[] | null>(null);
+  const [selectedOperationIds, setSelectedOperationIds] = useState<Set<string>>(new Set());
+  const [applyingPlan, setApplyingPlan] = useState(false);
+  const [planApplyErrors, setPlanApplyErrors] = useState<string[] | null>(null);
+  // Workflow Composition Phase 2 Change Request §7 "Navigation Requirements" — "selected-row state
+  // must not be the only detail-navigation mechanism". previewPageId/선택된 행을 URL 쿼리파라미터
+  // (?page=&selected=)에 반영해 새로고침 생존·브라우저 뒤로/앞으로가기·직접 URL 진입을 실제로
+  // 만족시킨다. 클릭으로 얻은 전체 row 객체는 "수정" 폼 prefill에 필요해 로컬 state로도 들고 있되,
+  // "선택됐는지 여부"의 소스 오브 트루스는 항상 URL이다 — 뒤로가기로 URL에서 selected가 사라지면
+  // 로컬에 옛 row 객체가 남아있어도 즉시 선택 해제로 취급해야 하기 때문(아래 effectiveSelectedRow).
+  const previewPageId = searchParams.get("page");
+  const selectedIdFromUrl = searchParams.get("selected");
+  const [selectedRow, setSelectedRowState] = useState<Record<string, unknown> | null>(null);
+  const effectiveSelectedRow = selectedIdFromUrl
+    ? selectedRow && rowId(selectedRow) === selectedIdFromUrl
+      ? selectedRow
+      : { id: selectedIdFromUrl }
+    : null;
+
+  const activePagePlan = result?.pagePlans.find((plan) => plan.id === previewPageId);
+  // Planner가 선언한 route parameter뿐 아니라 NavigationRule이 넘긴 안전한 query state도 Runtime에
+  // 전달한다. 최종 백엔드 검증이 target page/parameter를 검사하므로 여기서 다시 이름을 추측해
+  // 누락시키지 않는다. page 자체는 라우팅 메타데이터이므로 제외한다.
+  const activeRouteParameters = Object.fromEntries(
+    Array.from(searchParams.entries()).filter(([name]) => name !== "page")
+  );
+
+  function allRouteParameterNames(): Set<string> {
+    return new Set([
+      "selected",
+      "id",
+      ...(result?.pagePlans.flatMap((plan) => plan.routeParameters.map((parameter) => parameter.name)) ?? []),
+    ]);
+  }
+
+  function writePreviewQuery(
+    pageId: string | null,
+    parameters: Record<string, string> = {},
+    mode: "push" | "replace" = "push"
+  ) {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    for (const name of allRouteParameterNames()) nextParams.delete(name);
+    if (pageId) nextParams.set("page", pageId);
+    else nextParams.delete("page");
+    for (const [name, value] of Object.entries(parameters)) {
+      if (value) nextParams.set(name, value);
+    }
+    const query = nextParams.toString();
+    const href = query ? `${pathname}?${query}` : pathname;
+    if (mode === "replace") router.replace(href);
+    else router.push(href);
+  }
+
+  function setPreviewPageId(id: string | null) {
+    setSelectedRowState(null);
+    writePreviewQuery(id);
+  }
+
+  function selectRow(row: Record<string, unknown> | null) {
+    setSelectedRowState(row);
+    const next = new URLSearchParams(searchParams.toString());
+    if (row) next.set("selected", rowId(row));
+    else next.delete("selected");
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
+  }
+
+  function navigatePreview(
+    targetPageId: string | null,
+    parameters: Record<string, string>,
+    type: "OPEN_PAGE" | "OPEN_OVERLAY" | "GO_BACK" | "REPLACE_ROUTE"
+  ) {
+    if (type === "GO_BACK") {
+      router.back();
+      return;
+    }
+    if (type === "OPEN_OVERLAY") {
+      // 현재 MVP Runtime에는 페이지 간 overlay host가 없으므로 route state로 안전하게 폴백한다.
+      writePreviewQuery(targetPageId ?? previewPageId, parameters);
+      return;
+    }
+    setSelectedRowState(null);
+    writePreviewQuery(targetPageId, parameters, type === "REPLACE_ROUTE" ? "replace" : "push");
+  }
+
+  // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않도록,
+  // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인 등록
+  // 직후) POST /ops/preview/blocks로 다시 계산받은 결과를 여기 저장해 PreviewPageRenderer에 그대로 넘긴다.
+  const [pageBlocks, setPageBlocks] = useState<Record<string, Block[]>>({});
+  // Phase C — 사용자가 블록별로 고른 Blueprint 파츠("pageId/instanceId"→componentId). blocks/deploy에 전달.
+  const [partOverrides, setPartOverrides] = useState<Record<string, string>>({});
+  // AI 제안 — /parts/suggest가 채운 componentId를 partOverrides에 병합하고, 이유는 툴팁으로 보여준다.
+  const [suggestingParts, setSuggestingParts] = useState(false);
+  const [partReasons, setPartReasons] = useState<Record<string, string>>({});
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
+  const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
+  const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
+  const [manualLoginPath, setManualLoginPath] = useState("");
+  const [manualLoginUsernameField, setManualLoginUsernameField] = useState("email");
+  const [manualLoginPasswordField, setManualLoginPasswordField] = useState("password");
+  const [manualLoginAccessTokenPath, setManualLoginAccessTokenPath] = useState("");
 
   // 3단계 — 배포
   const [targetName, setTargetName] = useState("");
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
+
+  // Direction Recovery Change Request §13.1 — capability/페이지가 바뀔 때마다 이 함수로 Block을
+  // 다시 계산받는다. 실패해도 조용히 무시한다(마지막으로 받은 pageBlocks가 그대로 남을 뿐, 분석·검수·
+  // 배포 자체를 막지 않음 — AI 검수/재구성이 실패를 안전하게 무시하는 것과 같은 원칙).
+  async function refreshBlocks(
+    capabilities: PreviewCapability[],
+    pages: PreviewPageDraft[],
+    pagePlans: PreviewPagePlan[],
+    forPurpose: Purpose,
+    overrides: Record<string, string> = partOverrides
+  ) {
+    if (!accessToken) return;
+    try {
+      const data = await api.ops.preview.blocks(accessToken, {
+        capabilities, pages, pagePlans, purpose: forPurpose, partOverrides: overrides,
+      });
+      setPageBlocks(data.pageBlocks);
+    } catch {
+      // 무시 — 위 주석 참고.
+    }
+  }
+
+  // AI 파츠 제안 — 스왑 가능한 Block별 추천 componentId를 받아 partOverrides에 병합한 뒤 blocks를 다시
+  // 받는다. 검증은 백엔드(AiPartAdvisor)가 이미 마쳐 호환되는 componentId만 오므로 그대로 얹으면 된다.
+  // 실패해도 조용히 무시한다(AI 검수/재구성과 같은 원칙).
+  async function handleSuggestParts() {
+    if (!accessToken || !result) return;
+    setSuggestingParts(true);
+    try {
+      const data = await api.ops.preview.suggestParts(accessToken, {
+        serviceDescription: serviceDescription.trim() || undefined,
+        purpose,
+        capabilities: result.capabilities,
+        pages: result.pages,
+        pagePlans: result.pagePlans,
+      });
+      const nextOverrides = { ...partOverrides };
+      const nextReasons = { ...partReasons };
+      for (const suggestion of data.suggestions) {
+        const key = `${suggestion.pageId}/${suggestion.instanceId}`;
+        nextOverrides[key] = suggestion.componentId;
+        if (suggestion.reason) nextReasons[key] = suggestion.reason;
+      }
+      setPartOverrides(nextOverrides);
+      setPartReasons(nextReasons);
+      refreshBlocks(result.capabilities, result.pages, result.pagePlans, purpose, nextOverrides);
+    } catch {
+      // 무시 — 위 주석 참고.
+    } finally {
+      setSuggestingParts(false);
+    }
+  }
 
   async function handleAnalyze() {
     if (!accessToken || !apiDocsUrl.trim()) return;
@@ -68,6 +298,10 @@ export default function PreviewWizardPage() {
     setAnalysisError(null);
     setResult(null);
     setReviewFindings(null);
+    setSelectedRowState(null);
+    setProposedOperations(null);
+    setSelectedOperationIds(new Set());
+    setPlanApplyErrors(null);
     try {
       const data = await api.ops.preview.analyze(accessToken, {
         apiDocsUrl: apiDocsUrl.trim(),
@@ -75,9 +309,16 @@ export default function PreviewWizardPage() {
         purpose,
       });
       setResult(data);
+      refreshBlocks(data.capabilities, data.pages, data.pagePlans, purpose);
       setApiBaseUrl(data.apiServerUrls[0] ?? "");
       setPreviewPageId(data.pages[0]?.id ?? null);
       setPreviewAuthToken(null);
+      setApiCallLog([]);
+      setAccessTokenPathInput("");
+      setManualLoginPath("");
+      setManualLoginUsernameField("email");
+      setManualLoginPasswordField("password");
+      setManualLoginAccessTokenPath("");
       setStep(2);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "분석에 실패했습니다.");
@@ -103,6 +344,145 @@ export default function PreviewWizardPage() {
     }
   }
 
+  // Plan Review UI(Increment 5 2부) — handleReview(코멘트만)와 달리 AI가 페이지를 실제로 바꿀 수
+  // 있는 오퍼레이션을 제안하지만, 여기서는 아무것도 적용하지 않는다. 유효한(valid) 오퍼레이션은
+  // 기본으로 체크해두고, 사용자가 체크박스를 조정한 뒤 handleApplyPlan으로 넘어간다.
+  async function handleProposePlan() {
+    if (!accessToken || !result) return;
+    setProposing(true);
+    setPlanApplyErrors(null);
+    try {
+      const proposal = await api.ops.preview.planPropose(accessToken, {
+        serviceDescription: serviceDescription.trim() || undefined,
+        purpose,
+        capabilities: result.capabilities,
+        pages: result.pages,
+        pagePlans: result.pagePlans,
+        flows: result.flows,
+        bindings: result.bindings,
+      });
+      setProposedOperations(proposal.operations);
+      setSelectedOperationIds(new Set(proposal.operations.filter((op) => op.valid).map((op) => op.id)));
+    } catch {
+      setProposedOperations([]);
+      setSelectedOperationIds(new Set());
+    } finally {
+      setProposing(false);
+    }
+  }
+
+  function toggleOperationSelected(id: string) {
+    setSelectedOperationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  // 사용자가 체크한 서브셋만 실제로 적용한다. 실패(all-or-nothing)하면 체크박스는 그대로 두고 에러를
+  // 보여줘 사용자가 선택을 조정해 재시도할 수 있게 한다 — 성공하면 review 목록을 닫는다.
+  async function handleApplyPlan() {
+    if (!accessToken || !result || !proposedOperations) return;
+    const selectedOps: PagePlanOperation[] = proposedOperations
+      .filter((op) => selectedOperationIds.has(op.id))
+      .map((op) => ({
+        type: op.type,
+        pageId: op.pageId,
+        otherPageId: op.otherPageId,
+        newTitle: op.newTitle,
+        capabilityId: op.capabilityId,
+        destinationPageId: op.destinationPageId,
+        capabilityIds: op.capabilityIds,
+        pageType: op.pageType,
+        layoutRef: op.layoutRef,
+        featureKey: op.featureKey,
+        featureEnabled: op.featureEnabled,
+        navigationRule: op.navigationRule,
+        flow: op.flow,
+        flowId: op.flowId,
+        actionId: op.actionId,
+        reason: op.reason,
+      }));
+    if (selectedOps.length === 0) return;
+    setApplyingPlan(true);
+    setPlanApplyErrors(null);
+    try {
+      const applied = await api.ops.preview.planApply(accessToken, {
+        capabilities: result.capabilities,
+        pages: result.pages,
+        pagePlans: result.pagePlans,
+        flows: result.flows,
+        bindings: result.bindings,
+        operations: selectedOps,
+      });
+      if (applied.errors.length > 0) {
+        setPlanApplyErrors(applied.errors);
+        return;
+      }
+      setResult({
+        ...result,
+        pages: applied.pages,
+        pagePlans: applied.pagePlans,
+        flows: applied.flows,
+        bindings: applied.bindings,
+        generationMode: applied.generationMode,
+      });
+      refreshBlocks(result.capabilities, applied.pages, applied.pagePlans, purpose);
+      setPreviewPageId(applied.pages[0]?.id ?? null);
+      setProposedOperations(null);
+      setSelectedOperationIds(new Set());
+    } catch (err) {
+      setPlanApplyErrors([err instanceof Error ? err.message : "적용에 실패했습니다."]);
+    } finally {
+      setApplyingPlan(false);
+    }
+  }
+
+  // 오퍼레이션의 pageId/capabilityId를 사람이 읽는 제목/이름으로 치환해 요약 문장을 만든다.
+  function describeOperation(op: PagePlanOperationView): string {
+    const pageTitle = (id: string | null) => result?.pages.find((p) => p.id === id)?.title ?? id ?? "";
+    switch (op.type) {
+      case "RENAME_PAGE":
+        return `"${pageTitle(op.pageId)}" → "${op.newTitle}"로 이름 변경`;
+      case "MERGE_PAGES":
+        return `"${pageTitle(op.otherPageId)}" 페이지를 "${pageTitle(op.pageId)}" 페이지로 병합`;
+      case "MOVE_CAPABILITY": {
+        const capability = op.capabilityId ? findCapability(op.capabilityId) : undefined;
+        const label = capability
+          ? capability.type
+            ? (CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type)
+            : (capability.action ?? capability.kind)
+          : op.capabilityId;
+        const resourceName = capability?.resourceName ?? "";
+        return `${resourceName} ${label ?? ""} 기능을 "${pageTitle(op.destinationPageId)}" 페이지로 이동`;
+      }
+      case "ADD_PAGE":
+        return `"${op.newTitle}" 페이지 신설`;
+      case "REMOVE_PAGE":
+        return `"${pageTitle(op.pageId)}" 페이지 삭제`;
+      case "SPLIT_PAGE":
+        return `"${pageTitle(op.pageId)}"에서 "${op.newTitle}" 페이지 분리`;
+      case "SET_PAGE_TYPE":
+        return `"${pageTitle(op.pageId)}" 페이지 유형을 ${op.pageType}로 변경`;
+      case "SET_LAYOUT":
+        return `"${pageTitle(op.pageId)}" 레이아웃을 ${op.layoutRef}로 변경`;
+      case "SET_FEATURE":
+        return `"${pageTitle(op.pageId)}"의 ${op.featureKey} 기능을 ${op.featureEnabled ? "활성화" : "비활성화"}`;
+      case "ADD_NAVIGATION":
+        return `${op.navigationRule?.sourcePageId ?? "페이지"}에 ${op.navigationRule?.trigger ?? "이동"} 네비게이션 추가`;
+      case "ADD_FLOW":
+        return `${op.flow?.id ?? "신규"} 워크플로우 추가`;
+      case "ASSIGN_FLOW":
+        return `${op.flowId} 워크플로우를 "${pageTitle(op.pageId)}"의 ${op.actionId} 액션에 연결`;
+      default:
+        return op.reason ?? "";
+    }
+  }
+
   async function handleDeploy() {
     if (!accessToken || !result || !targetName.trim() || !apiBaseUrl.trim()) return;
     setDeploying(true);
@@ -113,6 +493,13 @@ export default function PreviewWizardPage() {
         apiBaseUrl: apiBaseUrl.trim(),
         capabilities: result.capabilities,
         pages: result.pages,
+        pagePlans: result.pagePlans,
+        flows: result.flows,
+        bindings: result.bindings,
+        authStrategy: result.authStrategy,
+        purpose,
+        generationMode: result.generationMode,
+        partOverrides,
       });
       router.push(`/instances/${vmId}/deployments/${deployment.id}`);
     } catch (err) {
@@ -123,6 +510,104 @@ export default function PreviewWizardPage() {
 
   const findCapability = (id: string): PreviewCapability | undefined =>
     result?.capabilities.find((c) => c.id === id);
+
+  // 신뢰도 낮은/확인 못 한 항목을 사용자가 직접 지정하는 보완 UI(§10) — 지금은 access token 위치
+  // 하나만 다룬다. 로컬 상태만 바꾸면 review/deploy가 그대로 result.capabilities를 다시 보내므로
+  // 서버 호출 없이 이후 단계(라이브 프리뷰 로그인, 배포)에 곧바로 반영된다.
+  function handleSetAccessTokenPath() {
+    const path = accessTokenPathInput.trim();
+    if (!path || !result) return;
+    const unresolved = result.unresolved.filter((f) => f.field !== ACCESS_TOKEN_PATH_FIELD);
+    const capabilities = result.capabilities.map((c) => (c.type === "LOGIN" ? { ...c, accessTokenPath: path } : c));
+    setResult({
+      ...result,
+      capabilities,
+      unresolved,
+      status: unresolved.length === 0 && result.status === "NEEDS_INPUT" ? "READY" : result.status,
+    });
+    refreshBlocks(capabilities, result.pages, result.pagePlans, purpose);
+  }
+
+  // 자동 탐지가 실패했을 때(AUTH_LOGIN_NOT_FOUND) 사용자가 로그인 API를 직접 등록한다. 서버가 모르는
+  // capability라 confidence는 항상 LOW로 표시하고, AUTH_PAGE 스켈레톤이 없으면 하나 만들어 붙인다.
+  // access token 위치까지 같이 입력하면 뒤이은 accessTokenPath 보완 단계를 또 거치지 않아도 된다.
+  function handleSetManualLogin() {
+    const path = manualLoginPath.trim();
+    if (!path || !result) return;
+    const usernameField = manualLoginUsernameField.trim() || "email";
+    const passwordField = manualLoginPasswordField.trim() || "password";
+    const accessTokenPath = manualLoginAccessTokenPath.trim() || null;
+
+    const loginCapability: PreviewCapability = {
+      id: "auth.login",
+      resourceName: "auth",
+      type: "LOGIN",
+      operationId: null,
+      path,
+      method: "POST",
+      hasSearch: false,
+      hasSort: false,
+      hasPagination: false,
+      confidence: "LOW",
+      evidence: ["사용자가 직접 지정함"],
+      fields: [usernameField, passwordField],
+      accessTokenPath,
+      searchParam: null,
+      risk: "SAFE",
+      automationPolicy: "AUTO_SAFE",
+      collectionPath: null,
+      totalCountPath: null,
+      kind: "AUTH",
+      action: null,
+      dependencies: [],
+    };
+    const capabilities = [...result.capabilities.filter((c) => c.type !== "LOGIN"), loginCapability];
+    const hasAuthPage = result.pages.some((p) => p.skeleton === "AUTH_PAGE");
+    const pages = hasAuthPage
+      ? result.pages
+      : [{ id: "auth-login-manual", title: "로그인", skeleton: "AUTH_PAGE" as const, capabilityIds: ["auth.login"] }, ...result.pages];
+    const pagePlans = hasAuthPage
+      ? result.pagePlans
+      : [{
+          id: "auth-login-manual",
+          title: "로그인",
+          route: "/login",
+          pageType: "AUTH" as const,
+          layoutRef: "auth-layout",
+          capabilityIds: ["auth.login"],
+          routeParameters: [],
+          queryParameters: [],
+          navigationRules: [],
+          features: {},
+          confidence: "LOW",
+          reason: "사용자가 로그인 API를 직접 지정함",
+          unsupportedCapabilityWarnings: [],
+        }, ...result.pagePlans];
+
+    let unresolved = result.unresolved.filter((f) => f.field !== AUTH_LOGIN_FIELD);
+    if (!accessTokenPath) {
+      unresolved = [
+        ...unresolved,
+        {
+          field: ACCESS_TOKEN_PATH_FIELD,
+          code: "ACCESS_TOKEN_PATH_UNKNOWN",
+          reason: "로그인 응답에서 access token 위치를 확인하지 못했습니다. 아래에서 직접 지정해주세요.",
+        },
+      ];
+    }
+    setResult({
+      ...result,
+      capabilities,
+      pages,
+      pagePlans,
+      unresolved,
+      status: unresolved.length === 0 && result.status === "NEEDS_INPUT" ? "READY" : result.status,
+    });
+    if (!previewPageId) {
+      setPreviewPageId("auth-login-manual");
+    }
+    refreshBlocks(capabilities, pages, pagePlans, purpose);
+  }
 
   if (!accessToken) return <PageLoader />;
 
@@ -191,12 +676,74 @@ export default function PreviewWizardPage() {
               }`}
             >
               <p className="font-bold">{STATUS_LABEL[result.status] ?? result.status}</p>
+              <p className="mt-1 text-muted">
+                {GENERATION_MODE_LABEL[result.generationMode] ?? result.generationMode}
+              </p>
               {result.unresolved.length > 0 && (
-                <div className="mt-2 space-y-1">
+                <div className="mt-2 space-y-2">
                   {result.unresolved.map((field, i) => (
-                    <p key={i}>
-                      · [{field.field}] {field.reason}
-                    </p>
+                    <div key={i}>
+                      <p>
+                        · [{field.field}] {field.reason}
+                      </p>
+                      {field.field === ACCESS_TOKEN_PATH_FIELD && (
+                        <div className="mt-1.5 flex gap-2">
+                          <Input
+                            value={accessTokenPathInput}
+                            onChange={(e) => setAccessTokenPathInput(e.target.value)}
+                            placeholder="예: data.accessToken"
+                            className="max-w-[240px]"
+                          />
+                          <Button type="button" onClick={handleSetAccessTokenPath} disabled={!accessTokenPathInput.trim()}>
+                            직접 설정
+                          </Button>
+                        </div>
+                      )}
+                      {field.field === AUTH_LOGIN_FIELD && (
+                        <div className="mt-1.5 grid grid-cols-2 gap-2 rounded-md border border-line-strong bg-white/[0.02] p-3">
+                          <Field label="로그인 API 경로" htmlFor="manual-login-path">
+                            <Input
+                              id="manual-login-path"
+                              value={manualLoginPath}
+                              onChange={(e) => setManualLoginPath(e.target.value)}
+                              placeholder="/auth/signin"
+                            />
+                          </Field>
+                          <Field label="Access Token 위치 (선택)" htmlFor="manual-login-token-path">
+                            <Input
+                              id="manual-login-token-path"
+                              value={manualLoginAccessTokenPath}
+                              onChange={(e) => setManualLoginAccessTokenPath(e.target.value)}
+                              placeholder="data.accessToken"
+                            />
+                          </Field>
+                          <Field label="아이디 필드명" htmlFor="manual-login-username">
+                            <Input
+                              id="manual-login-username"
+                              value={manualLoginUsernameField}
+                              onChange={(e) => setManualLoginUsernameField(e.target.value)}
+                              placeholder="email"
+                            />
+                          </Field>
+                          <Field label="비밀번호 필드명" htmlFor="manual-login-password">
+                            <Input
+                              id="manual-login-password"
+                              value={manualLoginPasswordField}
+                              onChange={(e) => setManualLoginPasswordField(e.target.value)}
+                              placeholder="password"
+                            />
+                          </Field>
+                          <Button
+                            type="button"
+                            className="col-span-2"
+                            onClick={handleSetManualLogin}
+                            disabled={!manualLoginPath.trim()}
+                          >
+                            로그인 API 직접 지정
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -222,17 +769,50 @@ export default function PreviewWizardPage() {
                     {page.capabilityIds.map((id) => {
                       const capability = findCapability(id);
                       if (!capability) return null;
+                      const mark = CONFIDENCE_MARK[capability.confidence];
+                      const risk = RISK_LABEL[capability.risk];
                       return (
                         <span
                           key={id}
-                          title={`${capability.method} ${capability.path} (신뢰도: ${capability.confidence})`}
-                          className="rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-muted"
+                          title={`${capability.method} ${capability.path} (신뢰도: ${capability.confidence}, 위험도: ${capability.risk})`}
+                          className="inline-flex items-center gap-1 rounded bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-muted"
                         >
-                          {CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type}
+                          {mark && <span className={`font-bold ${mark.className}`}>{mark.symbol}</span>}
+                          {capability.type
+                            ? CAPABILITY_TYPE_LABEL[capability.type] ?? capability.type
+                            : capability.action ?? capability.kind}
+                          {risk && <span className={`rounded px-1 py-0.5 font-bold ${risk.className}`}>{risk.label}</span>}
                         </span>
                       );
                     })}
                   </div>
+                  {(() => {
+                    const pagePlan = result.pagePlans.find((p) => p.id === page.id);
+                    const pageFlows = result.flows.filter((f) => f.trigger?.pageId === page.id);
+                    if (!pagePlan && pageFlows.length === 0) return null;
+                    return (
+                      <div className="mt-2 border-t border-line-strong pt-2 text-[11px] text-muted-soft">
+                        {pagePlan && (
+                          <p>
+                            경로: <span className="font-mono">{pagePlan.route}</span>
+                            {pagePlan.confidence && ` · 신뢰도: ${pagePlan.confidence}`}
+                          </p>
+                        )}
+                        {pageFlows.map((flow) => (
+                          <div key={flow.id} className="mt-1.5">
+                            <p className="font-bold text-muted">
+                              워크플로우: {flow.trigger?.actionId ?? flow.id}
+                            </p>
+                            <ol className="ml-3 list-decimal space-y-0.5">
+                              {flow.steps.map((step) => (
+                                <li key={step.id}>{describeFlowStep(step, result.bindings)}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -265,6 +845,61 @@ export default function PreviewWizardPage() {
                 </div>
               )}
             </div>
+
+            <div className="mt-3">
+              <Button type="button" onClick={handleProposePlan} disabled={proposing || !serviceDescription.trim()}>
+                {proposing ? "AI가 제안 생성 중..." : "AI로 서비스에 맞게 페이지 재구성 제안받기"}
+              </Button>
+              {!serviceDescription.trim() && (
+                <p className="mt-1 text-[11px] text-muted-soft">서비스 설명을 입력해야 사용할 수 있습니다.</p>
+              )}
+              {proposedOperations && (
+                <div className="mt-3 space-y-2 rounded-md border border-line bg-white/[0.03] p-3 text-xs">
+                  {proposedOperations.length === 0 ? (
+                    <p className="text-muted-soft">AI가 개선할 점을 찾지 못했습니다.</p>
+                  ) : (
+                    <>
+                      {proposedOperations.map((op) => (
+                        <label
+                          key={op.id}
+                          className={`flex items-start gap-2 rounded-md border p-2 ${
+                            op.valid ? "border-line-strong" : "border-danger-soft opacity-60"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={selectedOperationIds.has(op.id)}
+                            disabled={!op.valid}
+                            onChange={() => toggleOperationSelected(op.id)}
+                          />
+                          <span>
+                            <span className="block font-bold text-foreground">{describeOperation(op)}</span>
+                            {op.reason && <span className="block text-muted">{op.reason}</span>}
+                            {!op.valid && <span className="block text-danger">적용 불가: {op.validationError}</span>}
+                          </span>
+                        </label>
+                      ))}
+                      {planApplyErrors && planApplyErrors.length > 0 && (
+                        <div className="rounded-md border border-danger-soft bg-danger/10 p-2 text-danger">
+                          {planApplyErrors.map((e, i) => (
+                            <p key={i}>· {e}</p>
+                          ))}
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="primary"
+                        onClick={handleApplyPlan}
+                        disabled={applyingPlan || selectedOperationIds.size === 0}
+                      >
+                        {applyingPlan ? "적용 중..." : `선택한 ${selectedOperationIds.size}개 적용`}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="rounded-panel border border-line bg-panel p-5">
@@ -281,37 +916,64 @@ export default function PreviewWizardPage() {
                 placeholder="https://api.example.com"
               />
             </Field>
+            {result.pages.length > 0 && previewPageId && (
+              <BlueprintPartPicker
+                blocks={pageBlocks[previewPageId] ?? []}
+                pageId={previewPageId}
+                purpose={purpose}
+                overrides={partOverrides}
+                onChange={(next) => {
+                  setPartOverrides(next);
+                  refreshBlocks(result.capabilities, result.pages, result.pagePlans, purpose, next);
+                }}
+                onRequestAi={handleSuggestParts}
+                aiLoading={suggestingParts}
+                reasons={partReasons}
+              />
+            )}
             {result.pages.length > 0 && (
-              <>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {result.pages.map((page) => (
-                    <button
-                      key={page.id}
-                      type="button"
-                      onClick={() => setPreviewPageId(page.id)}
-                      className={`rounded-md border px-3 py-1.5 text-xs font-bold ${
-                        previewPageId === page.id ? "border-brand bg-soft text-brand-strong" : "border-line-strong text-muted"
-                      }`}
-                    >
-                      {page.title}
-                    </button>
-                  ))}
-                </div>
+              <ProductShell purpose={purpose} pages={result.pages} activePageId={previewPageId} onSelectPage={setPreviewPageId}>
                 {previewPageId && apiBaseUrl.trim() && (
                   <div className="rounded-md border border-line-strong bg-white/[0.02] p-4">
                     <PreviewPageRenderer
                       page={result.pages.find((p) => p.id === previewPageId)!}
+                      pagePlan={activePagePlan}
                       capabilities={result.capabilities}
+                      blocks={pageBlocks[previewPageId] ?? []}
+                      selectedRow={effectiveSelectedRow}
+                      onSelectRow={selectRow}
+                      routeParameters={activeRouteParameters}
+                      onNavigate={navigatePreview}
+                      flows={result.flows}
+                      bindings={result.bindings}
                       config={{
                         apiBaseUrl: apiBaseUrl.trim(),
                         authToken: previewAuthToken,
                         onAuthTokenChange: setPreviewAuthToken,
+                        onApiCall: (entry) => setApiCallLog((prev) => [entry, ...prev].slice(0, 30)),
+                        authStrategy: result.authStrategy,
+                        purpose,
                       }}
                     />
                   </div>
                 )}
-              </>
+              </ProductShell>
             )}
+          </section>
+
+          <section className="rounded-panel border border-line bg-panel p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-extrabold">요청·응답 확인</h2>
+              {apiCallLog.length > 0 && (
+                <Button type="button" onClick={() => setApiCallLog([])}>
+                  기록 지우기
+                </Button>
+              )}
+            </div>
+            <p className="mb-3 text-xs text-muted">
+              위 미리보기에서 화면을 조작하면 실제로 보낸 요청과 받은 응답이 여기 쌓입니다. 각 항목을 눌러 펼쳐보세요.
+            </p>
+            <ApiCallLog entries={apiCallLog} />
           </section>
 
           <div className="flex justify-between">

@@ -17,6 +17,7 @@ import gj.cloud.ops.application.deployment.dto.RepoConfig;
 import gj.cloud.ops.application.deployment.dto.ResolvedCompose;
 import gj.cloud.ops.application.deployment.dto.ServiceImageRef;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
 import gj.cloud.ops.application.deployment.validation.ValidationResult;
@@ -280,6 +281,25 @@ public class DeploymentExecutor {
         return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks, entity.getContext(), entity.getInstallPath());
     }
 
+    // Auto Preview 배포 시점의 blueprint 스냅샷을 저장한다 — Patch·재분석 없이 나중에 무엇을
+    // 배포했는지 그대로 확인할 수 있게. PreviewDeployController가 enqueueForTarget 직후 한 번만 호출한다.
+    public DeploymentEntity attachPreviewBlueprint(DeploymentEntity deployment, PreviewBlueprintSnapshot snapshot) {
+        return deploymentRepository.save(deployment.withPreviewBlueprint(toJson(snapshot)));
+    }
+
+    // 비밀값이 없어 exposedRoutesJson과 동일하게 평문으로 저장했으므로 복호화 없이 바로 역직렬화한다.
+    // Raw Compose/Git 배포는 저장된 적이 없어 null을 반환한다.
+    public PreviewBlueprintSnapshot getPreviewBlueprint(DeploymentEntity entity) {
+        if (entity.getPreviewBlueprintJson() == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(entity.getPreviewBlueprintJson(), PreviewBlueprintSnapshot.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("preview blueprint JSON 역직렬화 실패", e);
+        }
+    }
+
     // 사용자가 임의로 지정한 과거 SUCCEEDED 배포로 수동 롤백. 기존 자동 롤백(RollbackService)과 동일하게
     // 재빌드 없이 target의 release 디렉토리에 남아있는 resolved-compose.yml(이미지 태그 고정본)을 그대로 재기동함.
     // 이 롤백 자체도 하나의 배포 이력으로 남기고(RollbackService가 QUEUED→ROLLING_BACK→ROLLED_BACK으로 전이시킴)
@@ -432,6 +452,15 @@ public class DeploymentExecutor {
                         new DeploymentRoutesRequest(appId, TARGET_DELETE_LOCK_VALUE, List.of()));
             } catch (Exception e) {
                 log.warn("배포 대상 삭제 중 라우트 정리 실패(무시하고 계속): targetId={}, error={}", appId, e.getMessage());
+            }
+
+            // 컨테이너는 이미 위에서 내려갔는데 활성 배포(latestDeploymentId)의 DeploymentEntity.status는
+            // 그대로 두면 SUCCEEDED로 영원히 남아 배포 이력 목록에서 계속 "실행 중"처럼 보인다.
+            // runTeardown과 동일하게 STOPPED 처리 + 활성 배포 포인터 해제까지 해줘야 이력이 실제 상태와 맞는다.
+            String activeDeploymentId = target.getLatestDeploymentId();
+            if (activeDeploymentId != null) {
+                updateEntity(activeDeploymentId, entity -> entity.withStatus(DeploymentStatus.STOPPED));
+                deploymentTargetService.clearActiveDeployment(appId, activeDeploymentId);
             }
 
             deploymentTargetService.deactivate(appId);
