@@ -144,6 +144,7 @@ public class AiPartAdvisor {
         allowed.add(block.componentId()); // 현재 기본 = "기본 유지" 선택지
         for (BlueprintPartRegistry.BlueprintPart part : BlueprintPartRegistry.ALL) {
             if (part.kind() == kind.get() && part.acceptedSurfaces().contains(block.slot())
+                    && part.supportsMode(block.mode())
                     && !allowed.contains(part.componentId())) {
                 allowed.add(part.componentId());
             }

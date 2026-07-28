@@ -49,6 +49,7 @@ tasks.named('test') {
 // 이렇게 하면 배포 앱과 포털이 같은 컴포넌트를 쓰게 되어 '두 런타임 손수 동기화' 문제가 사라진다.
 def portalDir = "${projectDir}/../../Frontend/portal"
 def previewTemplateOut = layout.buildDirectory.dir("preview-template")
+def blueprintManifestOut = layout.buildDirectory.dir("blueprint-manifest")
 
 tasks.register('syncPreviewTemplate', Copy) {
     description = 'Copy portal preview-runtime sources into resources for the Auto Preview deployed artifact.'
@@ -76,4 +77,12 @@ tasks.register('syncPreviewTemplate', Copy) {
 }
 
 sourceSets.main.resources.srcDir previewTemplateOut
-tasks.named('processResources') { dependsOn 'syncPreviewTemplate' }
+
+tasks.register('syncBlueprintManifest', Copy) {
+    description = 'Copy the canonical Blueprint component manifest into Ops resources.'
+    from("${portalDir}/components/preview-runtime/blueprints/manifests/component-manifest.json")
+    into(blueprintManifestOut.map { it.dir("blueprint") })
+}
+
+sourceSets.main.resources.srcDir blueprintManifestOut
+tasks.named('processResources') { dependsOn 'syncPreviewTemplate', 'syncBlueprintManifest' }

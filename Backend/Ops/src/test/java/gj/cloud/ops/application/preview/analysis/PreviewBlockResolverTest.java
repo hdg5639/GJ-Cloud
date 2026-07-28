@@ -41,8 +41,9 @@ class PreviewBlockResolverTest {
 
         List<Block> blocks = resolver.resolve(page, List.of(vmsList, tagsList));
 
-        assertThat(blocks).containsExactly(
+        assertThat(blocks).startsWith(
                 new Block("dashboard", "dashboard-view", "page.content", List.of("vms.list", "tags.list"), null));
+        assertPageChrome(blocks, "vms.list");
     }
 
     @Test
@@ -57,12 +58,13 @@ class PreviewBlockResolverTest {
 
         List<Block> blocks = resolver.resolve(page, List.of(list, detail, create, update, delete));
 
-        assertThat(blocks).containsExactly(
+        assertThat(blocks).startsWith(
                 new Block("list", "resource-table", "page.main", List.of("vms.list"), null),
                 new Block("detail", "detail-panel", "page.aside", List.of("vms.detail"), null),
                 new Block("create", "create-edit-modal", "page.overlay", List.of("vms.create"), "CREATE"),
                 new Block("update", "create-edit-modal", "page.overlay", List.of("vms.update"), "UPDATE"),
-                new Block("delete", "delete-confirm-modal", "page.overlay", List.of("vms.delete"), null));
+                new Block("delete", "delete-confirm-modal", "page.overlay", List.of("vms.delete"), "DELETE"));
+        assertPageChrome(blocks, "vms.list");
     }
 
     @Test
@@ -79,13 +81,14 @@ class PreviewBlockResolverTest {
 
         List<Block> blocks = resolver.resolve(page, List.of(detail, start, portsList, portsCreate));
 
-        assertThat(blocks).containsExactly(
+        assertThat(blocks).startsWith(
                 // 독립 상세 페이지는 page.primary 슬롯에 full-detail-page를 쓴다 — detail-panel은
                 // ComponentContracts상 page.aside 전용이라 page.primary에 놓으면 슬롯 계약 위반이다.
                 new Block("detail", "full-detail-page", "page.primary", List.of(detail.id()), null),
-                new Block("actions", "quick-action-button-group", "page.actions", List.of(start.id()), null),
+                new Block("actions", "quick-action-button-group", "page.actions", List.of(start.id()), "COMMAND"),
                 new Block("child-ports", "child-resource-list", "page.secondary",
                         List.of(portsList.id(), portsCreate.id()), null));
+        assertPageChrome(blocks, detail.id());
         assertThat(blocks).noneMatch(block -> block.componentId().equals("resource-table"));
     }
 
@@ -96,8 +99,9 @@ class PreviewBlockResolverTest {
 
         List<Block> blocks = resolver.resolve(page, List.of(list));
 
-        assertThat(blocks).containsExactly(
+        assertThat(blocks).startsWith(
                 new Block("list", "resource-table", "page.main", List.of("posts.list"), null));
+        assertPageChrome(blocks, "posts.list");
     }
 
     @Test
@@ -120,9 +124,11 @@ class PreviewBlockResolverTest {
 
         List<Block> blocks = resolver.resolve(page, List.of(list, start, stop));
 
-        assertThat(blocks).containsExactly(
+        assertThat(blocks).startsWith(
                 new Block("list", "resource-table", "page.main", List.of("vms.list"), null),
-                new Block("actions", "quick-action-button-group", "page.actions", List.of("vms.start", "vms.stop"), null));
+                new Block("actions", "quick-action-button-group", "page.actions",
+                        List.of("vms.start", "vms.stop"), "COMMAND"));
+        assertPageChrome(blocks, "vms.list");
     }
 
     @Test
@@ -162,6 +168,14 @@ class PreviewBlockResolverTest {
         List<Block> blocks = resolver.resolve(page, List.of(vmsList, tagsList));
 
         assertThat(blocks).noneMatch(block -> block.componentId().equals("child-resource-list"));
+    }
+
+    private void assertPageChrome(List<Block> blocks, String capabilityId) {
+        assertThat(blocks).endsWith(
+                new Block("layout", "default-layout", "page.layout", List.of(capabilityId), null),
+                new Block("navigation", "default-navigation", "page.navigation", List.of(capabilityId), null),
+                new Block("feedback", "default-feedback", "page.feedback", List.of(capabilityId), null),
+                new Block("theme", "default-theme", "page.theme", List.of(capabilityId), null));
     }
 
     private Capability capabilityWithPath(String id, String resourceName, CapabilityType type, String path, String method) {

@@ -28,6 +28,33 @@ class BlueprintPartSelectorTest {
     }
 
     @Test
+    void swapsStandaloneInfrastructureDetailOnPrimarySurface() {
+        Capability detail = capability("machines.detail", "machines", CapabilityType.DETAIL);
+        Map<String, List<Block>> blocks = Map.of("machines-page", List.of(
+                new Block("detail", "full-detail-page", "page.primary", List.of("machines.detail"), null)));
+
+        Map<String, List<Block>> result = BlueprintPartSelector.select(blocks, List.of(detail), Purpose.PRODUCT_LIKE);
+
+        assertThat(result.get("machines-page").get(0).componentId()).isEqualTo("infrastructure-resource-detail");
+    }
+
+    @Test
+    void overlaySelectionRespectsCreateAndDeleteModes() {
+        Capability create = capability("machines.create", "machines", CapabilityType.CREATE);
+        Capability delete = capability("machines.delete", "machines", CapabilityType.DELETE);
+        Map<String, List<Block>> blocks = Map.of("machines-page", List.of(
+                new Block("create", "create-edit-modal", "page.overlay", List.of(create.id()), "CREATE"),
+                new Block("delete", "delete-confirm-modal", "page.overlay", List.of(delete.id()), "DELETE")));
+
+        Map<String, List<Block>> result = BlueprintPartSelector.select(
+                blocks, List.of(create, delete), Purpose.PRODUCT_LIKE);
+
+        assertThat(result.get("machines-page"))
+                .extracting(Block::componentId)
+                .containsExactly("resource-provisioning-wizard", "dependency-impact-modal");
+    }
+
+    @Test
     void swapsCrmListForEntityDirectory() {
         Capability list = capability("customers.list", "customers", CapabilityType.LIST);
         Map<String, List<Block>> blocks = Map.of("customers-page", List.of(

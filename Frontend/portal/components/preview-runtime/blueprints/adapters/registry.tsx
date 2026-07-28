@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { statusFieldOf } from "../../status";
 import type { BlueprintRecord } from "../core";
 import { BlueprintKeyValueGrid, blueprintRecordTitle } from "../core";
+import type { BlueprintMountPoint, BlueprintPartDescriptor } from "../core";
+import manifest from "../manifests/component-manifest.json";
 import {
   AlertInbox,
   AuditLogTable,
@@ -36,24 +38,29 @@ import {
   toMediaItems,
   toTimelineEvents,
 } from "./map";
-import { MEGA_BLUEPRINT_PARTS, MEGA_BLUEPRINT_PART_LABELS } from "./megaParts";
+import {
+  blueprintComponent,
+  type GeneratedBlueprintPartId,
+} from "./generatedPartComponents";
 
 const EMPTY_CHART = { labels: [], series: [] };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Blueprint 파츠 단일 레지스트리 (프론트 정본)
-//
-// 새 파츠를 배선할 때 프론트에서 **여기 한 곳만** 고치면 된다. 이 맵에서 아래가 전부 파생된다:
-//   - ComponentId union (blueprint.ts의 `| BlueprintPartId`)
-//   - isCollectionPart / isDetailPart / isDashboardPart 판별
-//   - blueprint.ts의 findList/Detail/DashboardBlock 인식
-//   - PreviewPageRenderer의 dispatch (render* 함수)
-//
-// 대응하는 백엔드도 한 줄만 추가한다: BlueprintPartRegistry.java의 ALL(카테고리·slot·kind 매핑).
-// 즉 파츠 하나 = 프론트 1줄 + 백엔드 1줄. (componentId 문자열이 두 곳에서 동일해야 함)
-// ─────────────────────────────────────────────────────────────────────────────
+// component-manifest.json이 계약의 단일 정본이고 generatedPartComponents.ts가 구현 import를 만든다.
+// 이 파일의 CUSTOM_RENDERERS는 범용 records/record/metrics 어댑터보다 풍부한 매핑이 필요한 초기
+// 파츠만 덮어쓴다. 신규 파츠 등록은 manifest + codegen으로 끝나며 이 파일에 분기를 추가하지 않는다.
 
-export type BlueprintPartKind = "collection" | "detail" | "dashboard";
+export type BlueprintPartKind =
+  | "collection"
+  | "detail"
+  | "dashboard"
+  | "action"
+  | "modal"
+  | "workflow"
+  | "form"
+  | "layout"
+  | "navigation"
+  | "feedback"
+  | "theme";
 
 // 어댑터가 fetch해서 넘기는 렌더 컨텍스트 — kind별로 다르다.
 export interface CollectionRenderCtx {
@@ -72,8 +79,7 @@ type BlueprintPartEntry =
   | { kind: "detail"; render: (ctx: DetailRenderCtx) => ReactNode }
   | { kind: "dashboard"; render: (ctx: DashboardRenderCtx) => ReactNode };
 
-// ▼▼▼ 새 파츠는 여기 한 줄 추가 ▼▼▼
-export const BLUEPRINT_PARTS = {
+const CUSTOM_RENDERERS = {
   "entity-directory": {
     kind: "collection",
     render: ({ rows, onRowClick }) => (
@@ -231,28 +237,43 @@ export const BLUEPRINT_PARTS = {
     render: ({ rows }) => <ProjectDeliveryDashboard metrics={[]} milestones={rows} activity={[]} />,
   },
 } satisfies Record<string, BlueprintPartEntry>;
-// ▲▲▲
+export type BlueprintPartId = GeneratedBlueprintPartId;
 
-export type BlueprintPartId = keyof typeof BLUEPRINT_PARTS;
+const DESCRIPTORS = manifest as BlueprintPartDescriptor[];
+const DESCRIPTOR_BY_ID = new Map(DESCRIPTORS.map((part) => [part.componentId, part]));
+const CUSTOM_ENTRIES = CUSTOM_RENDERERS as Record<string, BlueprintPartEntry>;
 
-// 기본 파츠 맵 + Expansion Pack(megaParts) 맵을 합친 런타임 정본. partKind/render*/partsForKind가 모두
-// 이걸 본다. componentId 충돌은 없다(확장 팩 id는 전부 신규). 백엔드 BlueprintPartRegistry.ALL과 1:1.
-const ENTRIES: Record<string, BlueprintPartEntry> = {
-  ...(BLUEPRINT_PARTS as Record<string, BlueprintPartEntry>),
-  ...(MEGA_BLUEPRINT_PARTS as Record<string, BlueprintPartEntry>),
+const KIND_BY_MANIFEST_KIND: Record<BlueprintPartDescriptor["kind"], BlueprintPartKind> = {
+  ACTION: "action",
+  COLLECTION: "collection",
+  DASHBOARD: "dashboard",
+  DETAIL: "detail",
+  FEEDBACK: "feedback",
+  FORM: "form",
+  LAYOUT: "layout",
+  MODAL: "modal",
+  NAVIGATION: "navigation",
+  THEME: "theme",
+  WORKFLOW: "workflow",
 };
 
+export function partDescriptor(componentId: string): BlueprintPartDescriptor | undefined {
+  return DESCRIPTOR_BY_ID.get(componentId);
+}
+
 export function partKind(componentId: string): BlueprintPartKind | undefined {
-  return ENTRIES[componentId]?.kind;
+  const descriptor = partDescriptor(componentId);
+  return descriptor ? KIND_BY_MANIFEST_KIND[descriptor.kind] : undefined;
 }
 export const isCollectionPart = (componentId: string): boolean => partKind(componentId) === "collection";
 export const isDetailPart = (componentId: string): boolean => partKind(componentId) === "detail";
 export const isDashboardPart = (componentId: string): boolean => partKind(componentId) === "dashboard";
+export const isActionPart = (componentId: string): boolean => partKind(componentId) === "action";
+export const isOverlayPart = (componentId: string): boolean =>
+  ["modal", "workflow", "form"].includes(partKind(componentId) ?? "");
 
-// 사용자 오버라이드 UI(마법사 파츠 선택기)용 메타 — 파츠 id → 사람이 읽는 이름. 확장 팩 라벨을 먼저
-// 펼치고 기본 파츠의 한국어 라벨이 뒤에서 우선하도록 둔다(id 충돌은 없지만 안전상).
 export const BLUEPRINT_PART_LABELS: Record<string, string> = {
-  ...MEGA_BLUEPRINT_PART_LABELS,
+  ...Object.fromEntries(DESCRIPTORS.map((part) => [part.componentId, part.label])),
   "entity-directory": "디렉토리",
   "kanban-collection": "칸반 보드",
   "commerce-product-grid": "상품 그리드",
@@ -274,43 +295,92 @@ export const BLUEPRINT_PART_LABELS: Record<string, string> = {
   "project-delivery-dashboard": "프로젝트 배송 대시보드",
 };
 
-// 기본 컴포넌트 id → kind(백엔드 BlueprintPartRegistry.kindOfBaseComponent와 동일). 파츠 id는 partKind로.
-const BASE_COMPONENT_KIND: Record<string, BlueprintPartKind> = {
-  "resource-table": "collection",
-  "resource-card-grid": "collection",
-  "full-detail-page": "detail",
-  "dashboard-view": "dashboard",
-  "recent-activity-dashboard": "dashboard",
+const BASE_COMPONENT_MOUNT: Record<string, BlueprintMountPoint> = {
+  "resource-table": "COLLECTION",
+  "resource-card-grid": "COLLECTION",
+  "detail-panel": "DETAIL",
+  "full-detail-page": "DETAIL",
+  "dashboard-view": "DASHBOARD",
+  "recent-activity-dashboard": "DASHBOARD",
+  "quick-action-button-group": "ACTIONS",
+  "create-edit-modal": "OVERLAY",
+  "form-drawer": "OVERLAY",
+  "delete-confirm-modal": "OVERLAY",
+  "typed-confirm-modal": "OVERLAY",
+  "default-layout": "LAYOUT",
+  "default-navigation": "NAVIGATION",
+  "default-feedback": "FEEDBACK",
+  "default-theme": "THEME",
 };
 
-// Block의 현재 componentId(기본 또는 파츠)가 스왑 대상 kind면 그 kind를, 아니면 undefined.
-export function componentKind(componentId: string): BlueprintPartKind | undefined {
-  return BASE_COMPONENT_KIND[componentId] ?? partKind(componentId);
+export function componentMount(componentId: string): BlueprintMountPoint | undefined {
+  return BASE_COMPONENT_MOUNT[componentId] ?? partDescriptor(componentId)?.mountPoint;
 }
 
-// purpose 기준 그 kind의 '기본' 컴포넌트 id(오버라이드에서 "기본 유지"를 표현할 때 쓴다).
-export function baseComponentFor(kind: BlueprintPartKind, purpose: string | null): string {
+// 기존 호출부 호환용. 파츠의 시각 kind가 아니라 실제 교체 지점(mount point)을 반환한다.
+export const componentKind = componentMount;
+
+export function baseComponentFor(
+  mountPoint: BlueprintMountPoint,
+  purpose: string | null,
+  mode?: string | null,
+  slot?: string
+): string {
   const productLike = purpose === "PRODUCT_LIKE";
-  if (kind === "collection") return productLike ? "resource-card-grid" : "resource-table";
-  if (kind === "dashboard") return productLike ? "recent-activity-dashboard" : "dashboard-view";
-  return "full-detail-page";
+  if (mountPoint === "COLLECTION") return productLike ? "resource-card-grid" : "resource-table";
+  if (mountPoint === "DETAIL") return slot === "page.aside" ? "detail-panel" : "full-detail-page";
+  if (mountPoint === "DASHBOARD") return productLike ? "recent-activity-dashboard" : "dashboard-view";
+  if (mountPoint === "ACTIONS") return "quick-action-button-group";
+  if (mountPoint === "OVERLAY") {
+    if (mode === "DELETE") return purpose === "ADMIN" ? "typed-confirm-modal" : "delete-confirm-modal";
+    return purpose === "PRODUCT_LIKE" ? "form-drawer" : "create-edit-modal";
+  }
+  if (mountPoint === "LAYOUT") return "default-layout";
+  if (mountPoint === "NAVIGATION") return "default-navigation";
+  if (mountPoint === "FEEDBACK") return "default-feedback";
+  return "default-theme";
+}
+
+export function partsForMount(
+  mountPoint: BlueprintMountPoint,
+  mode?: string | null
+): { id: string; label: string; kind: BlueprintPartKind }[] {
+  return DESCRIPTORS
+    .filter((part) => part.mountPoint === mountPoint)
+    .filter((part) => !mode || part.supportedModes.length === 0 || part.supportedModes.includes(mode as "CREATE" | "UPDATE" | "DELETE" | "COMMAND"))
+    .map((part) => ({
+      id: part.componentId,
+      label: BLUEPRINT_PART_LABELS[part.componentId] ?? part.label,
+      kind: KIND_BY_MANIFEST_KIND[part.kind],
+    }));
 }
 
 export function partsForKind(kind: BlueprintPartKind): { id: string; label: string }[] {
-  return Object.entries(ENTRIES)
-    .filter(([, entry]) => entry.kind === kind)
-    .map(([id]) => ({ id, label: BLUEPRINT_PART_LABELS[id] ?? id }));
+  return DESCRIPTORS
+    .filter((part) => KIND_BY_MANIFEST_KIND[part.kind] === kind)
+    .map((part) => ({ id: part.componentId, label: BLUEPRINT_PART_LABELS[part.componentId] ?? part.label }));
 }
 
 export function renderCollectionPart(componentId: string, ctx: CollectionRenderCtx): ReactNode {
-  const entry = ENTRIES[componentId];
-  return entry && entry.kind === "collection" ? entry.render(ctx) : null;
+  const custom = CUSTOM_ENTRIES[componentId];
+  if (custom?.kind === "collection") return custom.render(ctx);
+  const Component = blueprintComponent(componentId);
+  return Component ? createElement(Component, { records: ctx.rows, onSelect: ctx.onRowClick }) : null;
 }
 export function renderDetailPart(componentId: string, ctx: DetailRenderCtx): ReactNode {
-  const entry = ENTRIES[componentId];
-  return entry && entry.kind === "detail" ? entry.render(ctx) : null;
+  const custom = CUSTOM_ENTRIES[componentId];
+  if (custom?.kind === "detail") return custom.render(ctx);
+  const Component = blueprintComponent(componentId);
+  return Component ? createElement(Component, { record: ctx.record, activity: [], actions: [] }) : null;
 }
 export function renderDashboardPart(componentId: string, ctx: DashboardRenderCtx): ReactNode {
-  const entry = ENTRIES[componentId];
-  return entry && entry.kind === "dashboard" ? entry.render(ctx) : null;
+  const custom = CUSTOM_ENTRIES[componentId];
+  if (custom?.kind === "dashboard") return custom.render(ctx);
+  const Component = blueprintComponent(componentId);
+  return Component ? createElement(Component, { metrics: [], records: ctx.rows, activity: [] }) : null;
+}
+
+export function renderBlueprintPart(componentId: string, props: Record<string, unknown>): ReactNode {
+  const Component = blueprintComponent(componentId);
+  return Component ? createElement(Component, props) : null;
 }

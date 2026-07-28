@@ -117,8 +117,24 @@ public final class ComponentContracts {
                     List.of("IDLE", "SUBMITTING", "ERROR"),
                     List.of("page.actions"), false, false, List.of(CapabilityKind.COMMAND),
                     // 계열 없음 — purpose별 두 번째 Variant는 아직 없음(§22 4번 우선순위 후보).
-                    null, List.of()))
+                    null, List.of())),
+            // Blueprint Parts의 페이지 chrome mount. 실제 구현은 Selector가 단일 manifest에서 고르며,
+            // 기본 컴포넌트는 레이아웃을 바꾸지 않는 no-op이다. 대표 capability는 카테고리 선택 근거로만
+            // 전달되므로 모든 정식 capability type/kind를 허용한다.
+            Map.entry("default-layout", chromeContract("default-layout", "page.layout")),
+            Map.entry("default-navigation", chromeContract("default-navigation", "page.navigation")),
+            Map.entry("default-feedback", chromeContract("default-feedback", "page.feedback")),
+            Map.entry("default-theme", chromeContract("default-theme", "page.theme"))
     );
+
+    private static ComponentContract chromeContract(String componentId, String surface) {
+        return new ComponentContract(
+                componentId, "PAGE_FEATURE",
+                List.of(CapabilityType.LIST, CapabilityType.DETAIL, CapabilityType.CREATE,
+                        CapabilityType.UPDATE, CapabilityType.DELETE, CapabilityType.LOGIN),
+                true, List.of("IDLE"), List.of(surface), false, false,
+                List.of(CapabilityKind.COMMAND), null, List.of());
+    }
 
     private ComponentContracts() {
     }

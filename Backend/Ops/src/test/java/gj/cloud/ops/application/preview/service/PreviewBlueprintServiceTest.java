@@ -32,8 +32,10 @@ class PreviewBlueprintServiceTest {
 
         Map<String, List<Block>> compiled = service.compilePageBlocks(List.of(page), List.of(list), null);
 
-        assertThat(compiled.get("vms-page")).containsExactly(
+        assertThat(compiled.get("vms-page")).startsWith(
                 new Block("list", "resource-table", "page.main", List.of("vms.list"), null));
+        assertThat(compiled.get("vms-page")).extracting(Block::componentId)
+                .endsWith("default-layout", "default-navigation", "default-feedback", "default-theme");
     }
 
     @Test

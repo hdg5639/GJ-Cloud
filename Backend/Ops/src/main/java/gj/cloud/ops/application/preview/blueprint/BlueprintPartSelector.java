@@ -74,6 +74,7 @@ public final class BlueprintPartSelector {
                     .filter(part -> part.componentId().equals(override))
                     .filter(part -> part.kind() == kind.get())
                     .filter(part -> part.acceptedSurfaces().contains(block.slot()))
+                    .filter(part -> part.supportsMode(block.mode()))
                     .findFirst()
                     .map(part -> withComponent(block, part.componentId()))
                     .orElseGet(() -> autoSelect(block, byId, purpose, kind.get()));
@@ -91,7 +92,7 @@ public final class BlueprintPartSelector {
         if (category == null) {
             return block;
         }
-        return BlueprintPartRegistry.find(kind, category, block.slot(), purpose)
+        return BlueprintPartRegistry.find(kind, category, block.slot(), purpose, block.mode())
                 .map(part -> withComponent(block, part.componentId()))
                 .orElse(block);
     }

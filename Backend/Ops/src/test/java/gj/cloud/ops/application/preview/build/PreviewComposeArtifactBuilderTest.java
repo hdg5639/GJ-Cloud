@@ -15,6 +15,7 @@ import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.RiskLevel;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
+import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import org.junit.jupiter.api.Test;
 
@@ -34,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PreviewComposeArtifactBuilderTest {
 
     private final PreviewComposeArtifactBuilder builder =
-            new PreviewComposeArtifactBuilder(new ObjectMapper(), new PreviewBlockResolver(), new RuleBasedFlowGenerator());
+            new PreviewComposeArtifactBuilder(new ObjectMapper(), new PreviewBlockResolver());
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
@@ -42,9 +43,7 @@ class PreviewComposeArtifactBuilderTest {
         // API_KEY_HEADER로 검증 — Bearer만 가정하던 예전 방식이었다면 이 값이 App.tsx에 안 박혀 있었을 것.
         // purpose=API_TEST(BlueprintCompiler가 손대지 않는 목적)로 기본 Variant(resource-table)가
         // 그대로 나오는지 확인한다.
-        ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
-                Purpose.API_TEST);
+        ComposeArtifact artifact = buildArtifact(Purpose.API_TEST);
 
         assertThat(artifact.sourceType()).isEqualTo(SourceType.AUTO_PREVIEW);
         assertThat(artifact.exposedRoutes()).hasSize(1);
@@ -54,18 +53,20 @@ class PreviewComposeArtifactBuilderTest {
         Map<String, String> files = artifact.uploadedFiles().stream()
                 .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
 
-        assertThat(files.keySet()).containsExactlyInAnyOrder(
+        assertThat(files.keySet()).contains(
                 "package.json", "tsconfig.json", "vite.config.ts", "index.html",
-                "Dockerfile", "src/main.tsx", "src/index.css", "src/flow.ts", "src/App.tsx");
+                "Dockerfile", "src/main.tsx", "src/index.css", "src/App.tsx",
+                "src/components/preview-runtime/PreviewPageRenderer.tsx",
+                "src/components/preview-runtime/blueprints/manifests/component-manifest.json",
+                "src/components/preview-runtime/blueprints/adapters/generatedPartComponents.ts");
 
         String appTsx = files.get("src/App.tsx");
         assertThat(appTsx).doesNotContain(
                 "__API_BASE_URL_JSON__", "__CAPABILITIES_JSON__", "__PAGES_JSON__",
                 "__AUTH_STRATEGY_JSON__", "__PURPOSE_JSON__", "__PAGE_BLOCKS_JSON__", "__FLOWS_JSON__", "__BINDINGS_JSON__");
-        // App.tsx가 실행기를 직접 인라인하지 않고 분리된 파일에서 import하는지(위 주석의 JVM 상수 풀
-        // 제한 회피 이유가 실제로 지켜지는지) 확인.
-        assertThat(appTsx).contains("from \"./flow\"");
-        assertThat(files.get("src/flow.ts")).contains("export async function executeFlow(");
+        // App.tsx는 JSON만 주입하고 React 구현은 공유 Runtime을 import해야 한다.
+        assertThat(appTsx).contains("import { PreviewRuntimeApp }");
+        assertThat(appTsx).doesNotContain("function ResourceTable(", "function PageRenderer(");
         assertThat(appTsx).contains("https://api.example.com");
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");
@@ -86,43 +87,31 @@ class PreviewComposeArtifactBuilderTest {
     // 실제로 반영되는지 확인한다.
     @Test
     void productLikePurposeCompilesToResourceCardGridVariant() {
-        ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
-                Purpose.PRODUCT_LIKE);
+        ComposeArtifact artifact = buildArtifact(Purpose.PRODUCT_LIKE);
 
         Map<String, String> files = artifact.uploadedFiles().stream()
                 .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
         String appTsx = files.get("src/App.tsx");
 
         assertThat(appTsx).contains("\"componentId\":\"resource-card-grid\"");
-        assertThat(appTsx).contains("function ResourceCardGrid(");
-        assertThat(appTsx).doesNotContain("\"componentId\":\"resource-table\"");
-        // create/edit 계열도 같은 purpose로 함께 컴파일되는지 확인한다(vms-page의 CREATE 블록).
-        assertThat(appTsx).contains("\"componentId\":\"form-drawer\"");
-        assertThat(appTsx).contains("function FormDrawer(");
-        assertThat(appTsx).doesNotContain("\"componentId\":\"create-edit-modal\"");
-        assertThat(appTsx).contains("const PURPOSE: Purpose | null = \"PRODUCT_LIKE\"");
-        assertThat(appTsx).contains("Service Preview").contains("shell-product-nav");
+        assertThat(appTsx).contains("\"componentId\":\"infrastructure-resource-detail\"");
+        assertThat(appTsx).contains("\"componentId\":\"resource-provisioning-wizard\"");
+        assertThat(appTsx).doesNotContain("function ResourceCardGrid(", "function FormDrawer(");
+        assertThat(appTsx).contains("const PURPOSE = \"PRODUCT_LIKE\" as unknown as Purpose | null");
     }
 
     // purpose=ADMIN이면 destructive 계열도 typed-confirm-modal로 컴파일되는지 확인한다.
     @Test
     void adminPurposeCompilesToTypedConfirmModalVariant() {
-        ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
-                Purpose.ADMIN);
+        ComposeArtifact artifact = buildArtifact(Purpose.ADMIN);
 
         Map<String, String> files = artifact.uploadedFiles().stream()
                 .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
         String appTsx = files.get("src/App.tsx");
 
-        assertThat(appTsx).contains("\"componentId\":\"typed-confirm-modal\"");
-        assertThat(appTsx).contains("function TypedConfirmModal(");
-        assertThat(appTsx).doesNotContain("\"componentId\":\"delete-confirm-modal\"");
-        // ADMIN은 list 계열은 그대로 resource-table을 유지해야 한다(PRODUCT_LIKE 전용 규칙과 섞이지 않는지 확인).
-        assertThat(appTsx).contains("\"componentId\":\"resource-table\"");
-        assertThat(appTsx).contains("const PURPOSE: Purpose | null = \"ADMIN\"");
-        assertThat(appTsx).contains("ADMIN CONSOLE").contains("shell-sidebar");
+        assertThat(appTsx).contains("\"componentId\":\"dependency-impact-modal\"");
+        assertThat(appTsx).doesNotContain("function TypedConfirmModal(");
+        assertThat(appTsx).contains("const PURPOSE = \"ADMIN\" as unknown as Purpose | null");
     }
 
     // §22 7번 — sampleCapabilities()의 vms 리소스는 CREATE+DETAIL을 모두 갖고 있어
@@ -130,9 +119,7 @@ class PreviewComposeArtifactBuilderTest {
     // 전역에 실제로 임베딩되고, PageRenderer가 onSubmitOverride로 배선하는지까지 확인한다.
     @Test
     void generatedCreateFlowIsEmbeddedAndWiredIntoPageRenderer() {
-        ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
-                Purpose.API_TEST);
+        ComposeArtifact artifact = buildArtifact(Purpose.API_TEST);
 
         Map<String, String> files = artifact.uploadedFiles().stream()
                 .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
@@ -140,24 +127,24 @@ class PreviewComposeArtifactBuilderTest {
 
         assertThat(appTsx).contains("\"vms-page-create-flow\"");
         assertThat(appTsx).contains("\"vms.create-binding\"");
-        assertThat(appTsx).contains("onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}");
+        assertThat(files.get("src/components/preview-runtime/PreviewPageRenderer.tsx"))
+                .contains("onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}");
     }
 
     @Test
     void commandFlowAndChildResourceComponentAreEmbeddedAndWired() {
-        ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
-                Purpose.PRODUCT_LIKE);
+        ComposeArtifact artifact = buildArtifact(Purpose.PRODUCT_LIKE);
 
         Map<String, String> files = artifact.uploadedFiles().stream()
                 .collect(Collectors.toMap(UploadedFile::vmPath, f -> new String(f.content(), StandardCharsets.UTF_8)));
         String appTsx = files.get("src/App.tsx");
 
         assertThat(appTsx).contains("\"vms-page-start-flow\"");
-        assertThat(appTsx).contains("runCommandFlow(capability, rowId(selectedRow))");
+        assertThat(files.get("src/components/preview-runtime/PreviewPageRenderer.tsx"))
+                .contains("runCommandFlow(capability, id)");
         assertThat(appTsx).contains("\"componentId\":\"child-resource-list\"");
-        assertThat(appTsx).contains("function ChildResourceList(");
-        assertThat(appTsx).contains("pathParamId={parentId}");
+        assertThat(files.get("src/components/preview-runtime/ChildResourceList.tsx"))
+                .contains("pathParamId={parentId}");
     }
 
     private void assertThatIsValidJson(String json) {
@@ -169,28 +156,11 @@ class PreviewComposeArtifactBuilderTest {
         }
     }
 
-    // 수동 npm/vite 빌드 검증용 — 필요할 때만 이 테스트를 개별 실행해 임시 디렉토리에 파일을 쓴다.
-    @Test
-    void writeGeneratedProjectToTempDirForManualBuildVerification() throws IOException {
-        ComposeArtifact artifact = builder.build(
-                "https://api.example.com", sampleCapabilities(), samplePages(), AuthStrategy.apiKeyHeader("X-API-Key"),
-                Purpose.PRODUCT_LIKE);
-        Path dir = Files.createTempDirectory("gamjabox-preview-verify-");
-        for (UploadedFile file : artifact.uploadedFiles()) {
-            Path target = dir.resolve(file.vmPath());
-            Files.createDirectories(target.getParent());
-            Files.write(target, file.content());
-        }
-        System.out.println("Generated preview project written to: " + dir);
-    }
-
-    // 전면 이전(Phase B) 검증용 — 포털 실물 컴포넌트를 번들한 생성 프로젝트를 temp에 쓴다.
+    // 포털 실물 컴포넌트를 번들한 생성 프로젝트를 temp에 쓴다.
     // 개별 실행 후 npm install && npx tsc --noEmit && npx vite build로 그린 확인.
     @Test
     void writeRealComponentProjectToTempDirForManualBuildVerification() throws IOException {
-        ComposeArtifact artifact = builder.buildWithRealComponents(
-                "https://api.example.com", sampleCapabilities(), samplePages(), List.of(), List.of(),
-                AuthStrategy.apiKeyHeader("X-API-Key"), Purpose.PRODUCT_LIKE, java.util.Map.of());
+        ComposeArtifact artifact = buildArtifact(Purpose.PRODUCT_LIKE);
         Path dir = Files.createTempDirectory("gamjabox-preview-real-");
         for (UploadedFile file : artifact.uploadedFiles()) {
             Path target = dir.resolve(file.vmPath());
@@ -198,6 +168,17 @@ class PreviewComposeArtifactBuilderTest {
             Files.write(target, file.content());
         }
         System.out.println("Real-component preview project written to: " + dir);
+    }
+
+    private ComposeArtifact buildArtifact(Purpose purpose) {
+        List<Capability> capabilities = sampleCapabilities();
+        List<PageDraft> pages = samplePages();
+        RuleBasedFlowGenerator.ValidatedResult generated = new RuleBasedFlowGenerator()
+                .generateValidated(PagePlanMapper.from(pages, capabilities), capabilities);
+        return builder.build(
+                "https://api.example.com", capabilities, pages,
+                generated.result().flows(), generated.result().bindings(),
+                AuthStrategy.apiKeyHeader("X-API-Key"), purpose, Map.of());
     }
 
     private List<Capability> sampleCapabilities() {

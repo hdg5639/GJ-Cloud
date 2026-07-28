@@ -15,24 +15,40 @@ public final class SkeletonSlotContracts {
             PageSkeletonType.AUTH_PAGE, Map.of(
                     "page.content", Cardinality.EXACTLY_ONE),
             PageSkeletonType.DASHBOARD, Map.of(
-                    "page.content", Cardinality.EXACTLY_ONE),
+                    "page.content", Cardinality.EXACTLY_ONE,
+                    "page.layout", Cardinality.ZERO_OR_ONE,
+                    "page.navigation", Cardinality.ZERO_OR_ONE,
+                    "page.feedback", Cardinality.ZERO_OR_ONE,
+                    "page.theme", Cardinality.ZERO_OR_ONE),
             PageSkeletonType.RESOURCE_LIST, Map.of(
                     "page.main", Cardinality.EXACTLY_ONE,
                     "page.aside", Cardinality.ZERO_OR_ONE,
                     "page.overlay", Cardinality.ZERO_OR_MORE,
                     "page.actions", Cardinality.ZERO_OR_ONE,
-                    "page.secondary", Cardinality.ZERO_OR_MORE),
+                    "page.secondary", Cardinality.ZERO_OR_MORE,
+                    "page.layout", Cardinality.ZERO_OR_ONE,
+                    "page.navigation", Cardinality.ZERO_OR_ONE,
+                    "page.feedback", Cardinality.ZERO_OR_ONE,
+                    "page.theme", Cardinality.ZERO_OR_ONE),
             PageSkeletonType.RESOURCE_DETAIL, Map.of(
                     "page.primary", Cardinality.EXACTLY_ONE,
                     "page.actions", Cardinality.ZERO_OR_ONE,
                     "page.secondary", Cardinality.ZERO_OR_MORE,
-                    "page.overlay", Cardinality.ZERO_OR_MORE),
+                    "page.overlay", Cardinality.ZERO_OR_MORE,
+                    "page.layout", Cardinality.ZERO_OR_ONE,
+                    "page.navigation", Cardinality.ZERO_OR_ONE,
+                    "page.feedback", Cardinality.ZERO_OR_ONE,
+                    "page.theme", Cardinality.ZERO_OR_ONE),
             PageSkeletonType.LIST_DETAIL, Map.of(
                     "page.main", Cardinality.EXACTLY_ONE,
                     "page.aside", Cardinality.ZERO_OR_ONE,
                     "page.overlay", Cardinality.ZERO_OR_MORE,
                     "page.actions", Cardinality.ZERO_OR_ONE,
-                    "page.secondary", Cardinality.ZERO_OR_MORE)
+                    "page.secondary", Cardinality.ZERO_OR_MORE,
+                    "page.layout", Cardinality.ZERO_OR_ONE,
+                    "page.navigation", Cardinality.ZERO_OR_ONE,
+                    "page.feedback", Cardinality.ZERO_OR_ONE,
+                    "page.theme", Cardinality.ZERO_OR_ONE)
     );
 
     private SkeletonSlotContracts() {

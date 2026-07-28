@@ -1,6 +1,1536 @@
-import type { BlueprintPartDescriptor } from "../core";
-
-export const MEGA_BLUEPRINT_PARTS = [
+[
+  {
+    "componentId": "admin-workspace-layout",
+    "exportName": "AdminWorkspaceLayout",
+    "family": "workspace-shell",
+    "category": "ADMIN",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "ADMIN"
+    ],
+    "tags": [
+      "admin",
+      "sidebar",
+      "dense"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Admin Workspace Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/AdminWorkspaceLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "analytics-dashboard-layout",
+    "exportName": "AnalyticsDashboardLayout",
+    "family": "dashboard-layout",
+    "category": "ANALYTICS",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "analytics",
+      "metrics",
+      "charts"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Analytics Dashboard Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/AnalyticsDashboardLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "commerce-catalog-layout",
+    "exportName": "CommerceCatalogLayout",
+    "family": "catalog-layout",
+    "category": "COMMERCE",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "commerce",
+      "catalog",
+      "cart"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Commerce Catalog Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/CommerceCatalogLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "content-studio-layout",
+    "exportName": "ContentStudioLayout",
+    "family": "studio-layout",
+    "category": "CONTENT",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "content",
+      "editor",
+      "preview"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Content Studio Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/ContentStudioLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "master-detail-layout",
+    "exportName": "MasterDetailLayout",
+    "family": "master-detail-layout",
+    "category": "ADMIN",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "API_TEST"
+    ],
+    "tags": [
+      "master-detail",
+      "list",
+      "detail"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Master Detail Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/MasterDetailLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "operations-cockpit-layout",
+    "exportName": "OperationsCockpitLayout",
+    "family": "operations-layout",
+    "category": "OBSERVABILITY",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "operations",
+      "health",
+      "events"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Operations Cockpit Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/OperationsCockpitLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "settings-workbench-layout",
+    "exportName": "SettingsWorkbenchLayout",
+    "family": "settings-layout",
+    "category": "SETTINGS",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "settings",
+      "navigation",
+      "forms"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Settings Workbench Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/SettingsWorkbenchLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "workflow-stage-layout",
+    "exportName": "WorkflowStageLayout",
+    "family": "workflow-layout",
+    "category": "WORKFLOW",
+    "kind": "LAYOUT",
+    "acceptedSurfaces": [
+      "page.content",
+      "page.layout"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "workflow",
+      "steps",
+      "progress"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Workflow Stage Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/WorkflowStageLayout.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "executive-kpi-dashboard",
+    "exportName": "ExecutiveKpiDashboard",
+    "family": "dashboard",
+    "category": "ANALYTICS",
+    "kind": "DASHBOARD",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "kpi",
+      "executive",
+      "trend"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Executive Kpi Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/ExecutiveKpiDashboard.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "operations-health-dashboard",
+    "exportName": "OperationsHealthDashboard",
+    "family": "dashboard",
+    "category": "OBSERVABILITY",
+    "kind": "DASHBOARD",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "operations",
+      "service-health",
+      "incidents"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Operations Health Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/OperationsHealthDashboard.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "commerce-revenue-dashboard",
+    "exportName": "CommerceRevenueDashboard",
+    "family": "dashboard",
+    "category": "COMMERCE",
+    "kind": "DASHBOARD",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "commerce",
+      "revenue",
+      "orders"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Commerce Revenue Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/CommerceRevenueDashboard.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "content-performance-dashboard",
+    "exportName": "ContentPerformanceDashboard",
+    "family": "dashboard",
+    "category": "CONTENT",
+    "kind": "DASHBOARD",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "content",
+      "audience",
+      "publishing"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Content Performance Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/ContentPerformanceDashboard.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "admin-governance-dashboard",
+    "exportName": "AdminGovernanceDashboard",
+    "family": "dashboard",
+    "category": "ADMIN",
+    "kind": "DASHBOARD",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "ADMIN"
+    ],
+    "tags": [
+      "governance",
+      "policy",
+      "security"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Admin Governance Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/AdminGovernanceDashboard.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "project-delivery-dashboard",
+    "exportName": "ProjectDeliveryDashboard",
+    "family": "dashboard",
+    "category": "PROJECT",
+    "kind": "DASHBOARD",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "project",
+      "milestones",
+      "activity"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Project Delivery Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/ProjectDeliveryDashboard.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "kanban-collection",
+    "exportName": "KanbanCollection",
+    "family": "collection",
+    "category": "PROJECT",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "kanban",
+      "workflow",
+      "cards"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Kanban Collection",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/KanbanCollection.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "timeline-collection",
+    "exportName": "TimelineCollection",
+    "family": "collection",
+    "category": "OBSERVABILITY",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.secondary",
+      "page.aside"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "timeline",
+      "events",
+      "activity"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Timeline Collection",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/TimelineCollection.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "media-gallery-collection",
+    "exportName": "MediaGalleryCollection",
+    "family": "collection",
+    "category": "CONTENT",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "media",
+      "gallery",
+      "assets"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Media Gallery Collection",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/MediaGalleryCollection.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "entity-directory",
+    "exportName": "EntityDirectory",
+    "family": "collection",
+    "category": "CRM",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "people",
+      "directory",
+      "cards"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Entity Directory",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/EntityDirectory.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "alert-inbox",
+    "exportName": "AlertInbox",
+    "family": "collection",
+    "category": "OBSERVABILITY",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.aside"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "alerts",
+      "incidents",
+      "acknowledge"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Alert Inbox",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/AlertInbox.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "commerce-product-grid",
+    "exportName": "CommerceProductGrid",
+    "family": "collection",
+    "category": "COMMERCE",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "commerce",
+      "products",
+      "grid"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Commerce Product Grid",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/CommerceProductGrid.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "audit-log-table",
+    "exportName": "AuditLogTable",
+    "family": "collection",
+    "category": "ADMIN",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "API_TEST"
+    ],
+    "tags": [
+      "audit",
+      "table",
+      "security"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Audit Log Table",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/AuditLogTable.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "compact-metric-table",
+    "exportName": "CompactMetricTable",
+    "family": "collection",
+    "category": "ANALYTICS",
+    "kind": "COLLECTION",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.aside"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "metrics",
+      "table",
+      "sparkline"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Compact Metric Table",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/CompactMetricTable.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "infrastructure-resource-detail",
+    "exportName": "InfrastructureResourceDetail",
+    "family": "detail",
+    "category": "INFRASTRUCTURE",
+    "kind": "DETAIL",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content",
+      "page.primary"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "infrastructure",
+      "status",
+      "commands"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Infrastructure Resource Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/InfrastructureResourceDetail.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "commerce-order-detail",
+    "exportName": "CommerceOrderDetail",
+    "family": "detail",
+    "category": "COMMERCE",
+    "kind": "DETAIL",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content",
+      "page.primary"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "commerce",
+      "order",
+      "fulfillment"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Commerce Order Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/CommerceOrderDetail.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "customer-profile-detail",
+    "exportName": "CustomerProfileDetail",
+    "family": "detail",
+    "category": "CRM",
+    "kind": "DETAIL",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content",
+      "page.primary"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "customer",
+      "profile",
+      "journey"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Customer Profile Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/CustomerProfileDetail.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "content-article-detail",
+    "exportName": "ContentArticleDetail",
+    "family": "detail",
+    "category": "CONTENT",
+    "kind": "DETAIL",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content",
+      "page.primary"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "content",
+      "publishing",
+      "revision"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Content Article Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/ContentArticleDetail.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "incident-detail",
+    "exportName": "IncidentDetail",
+    "family": "detail",
+    "category": "OBSERVABILITY",
+    "kind": "DETAIL",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content",
+      "page.primary"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "incident",
+      "timeline",
+      "runbook"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Incident Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/IncidentDetail.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "settings-detail",
+    "exportName": "SettingsDetail",
+    "family": "detail",
+    "category": "SETTINGS",
+    "kind": "DETAIL",
+    "acceptedSurfaces": [
+      "page.main",
+      "page.content",
+      "page.primary"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "settings",
+      "permissions",
+      "sections"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Settings Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/SettingsDetail.tsx",
+    "overlayPresentation": null
+  },
+  {
+    "componentId": "typed-danger-modal",
+    "exportName": "TypedDangerModal",
+    "family": "destructive",
+    "category": "ADMIN",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "danger",
+      "typed-confirmation",
+      "irreversible"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Typed Danger Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "DELETE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/TypedDangerModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "bulk-action-modal",
+    "exportName": "BulkActionModal",
+    "family": "bulk-action",
+    "category": "ADMIN",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN"
+    ],
+    "tags": [
+      "bulk",
+      "action",
+      "audit"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Bulk Action Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/BulkActionModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "import-data-modal",
+    "exportName": "ImportDataModal",
+    "family": "data-transfer",
+    "category": "ADMIN",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "API_TEST"
+    ],
+    "tags": [
+      "import",
+      "file",
+      "validate"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Import Data Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/ImportDataModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "export-data-modal",
+    "exportName": "ExportDataModal",
+    "family": "data-transfer",
+    "category": "ADMIN",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "API_TEST"
+    ],
+    "tags": [
+      "export",
+      "fields",
+      "download"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Export Data Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/ExportDataModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "assign-owner-modal",
+    "exportName": "AssignOwnerModal",
+    "family": "assignment",
+    "category": "CRM",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "owner",
+      "people",
+      "assignment"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Assign Owner Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/AssignOwnerModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "change-status-modal",
+    "exportName": "ChangeStatusModal",
+    "family": "status-transition",
+    "category": "WORKFLOW",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "status",
+      "transition",
+      "workflow"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Change Status Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/ChangeStatusModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "schedule-action-modal",
+    "exportName": "ScheduleActionModal",
+    "family": "schedule",
+    "category": "WORKFLOW",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "schedule",
+      "command",
+      "future"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Schedule Action Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/ScheduleActionModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "permission-matrix-modal",
+    "exportName": "PermissionMatrixModal",
+    "family": "permissions",
+    "category": "ADMIN",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN"
+    ],
+    "tags": [
+      "permissions",
+      "access-control",
+      "matrix"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Permission Matrix Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/PermissionMatrixModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "payload-preview-modal",
+    "exportName": "PayloadPreviewModal",
+    "family": "technical-preview",
+    "category": "ADMIN",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "API_TEST",
+      "ADMIN"
+    ],
+    "tags": [
+      "payload",
+      "json",
+      "debug"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Payload Preview Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/PayloadPreviewModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "dependency-impact-modal",
+    "exportName": "DependencyImpactModal",
+    "family": "destructive",
+    "category": "INFRASTRUCTURE",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "PRODUCT_LIKE"
+    ],
+    "tags": [
+      "dependency",
+      "impact",
+      "confirmation"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Dependency Impact Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "DELETE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/DependencyImpactModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "duplicate-resource-modal",
+    "exportName": "DuplicateResourceModal",
+    "family": "copy",
+    "category": "WORKFLOW",
+    "kind": "MODAL",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "duplicate",
+      "copy",
+      "children"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Duplicate Resource Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/DuplicateResourceModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "resource-provisioning-wizard",
+    "exportName": "ResourceProvisioningWizard",
+    "family": "create-workflow",
+    "category": "INFRASTRUCTURE",
+    "kind": "WORKFLOW",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "provision",
+      "create",
+      "polling"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Resource Provisioning Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/ResourceProvisioningWizard.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "deployment-workflow-wizard",
+    "exportName": "DeploymentWorkflowWizard",
+    "family": "deployment-workflow",
+    "category": "INFRASTRUCTURE",
+    "kind": "WORKFLOW",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "deployment",
+      "progress",
+      "strategy"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Deployment Workflow Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/DeploymentWorkflowWizard.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "approval-workflow-wizard",
+    "exportName": "ApprovalWorkflowWizard",
+    "family": "approval-workflow",
+    "category": "WORKFLOW",
+    "kind": "WORKFLOW",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "approval",
+      "review",
+      "decision"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Approval Workflow Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/ApprovalWorkflowWizard.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "publish-workflow-wizard",
+    "exportName": "PublishWorkflowWizard",
+    "family": "publish-workflow",
+    "category": "CONTENT",
+    "kind": "WORKFLOW",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "publish",
+      "schedule",
+      "content"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Publish Workflow Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/PublishWorkflowWizard.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "data-import-wizard",
+    "exportName": "DataImportWizard",
+    "family": "data-workflow",
+    "category": "ADMIN",
+    "kind": "WORKFLOW",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "ADMIN",
+      "API_TEST"
+    ],
+    "tags": [
+      "import",
+      "validate",
+      "commit"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "Data Import Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/DataImportWizard.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
+  {
+    "componentId": "user-onboarding-wizard",
+    "exportName": "UserOnboardingWizard",
+    "family": "onboarding-workflow",
+    "category": "CRM",
+    "kind": "WORKFLOW",
+    "acceptedSurfaces": [
+      "page.overlay"
+    ],
+    "preferredPurposes": [
+      "PRODUCT_LIKE",
+      "ADMIN"
+    ],
+    "tags": [
+      "user",
+      "invite",
+      "role"
+    ],
+    "states": [
+      "IDLE",
+      "LOADING",
+      "EMPTY",
+      "ERROR",
+      "SUCCESS"
+    ],
+    "label": "User Onboarding Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/UserOnboardingWizard.tsx",
+    "overlayPresentation": "SELF_HOSTED"
+  },
   {
     "componentId": "security-command-layout",
     "exportName": "SecurityCommandLayout",
@@ -8,7 +1538,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "SECURITY",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -25,7 +1556,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Security Command Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/SecurityCommandLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "support-console-layout",
@@ -34,7 +1571,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "SUPPORT",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -51,7 +1589,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Support Console Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/SupportConsoleLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "finance-ledger-layout",
@@ -60,7 +1604,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "FINANCE",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -77,7 +1622,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Finance Ledger Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/FinanceLedgerLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "logistics-dispatch-layout",
@@ -86,7 +1637,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "LOGISTICS",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -103,7 +1655,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Logistics Dispatch Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/LogisticsDispatchLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "inventory-warehouse-layout",
@@ -112,7 +1670,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "INVENTORY",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -129,7 +1688,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Inventory Warehouse Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/InventoryWarehouseLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "booking-planner-layout",
@@ -138,7 +1703,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "BOOKING",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -155,7 +1721,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Booking Planner Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/BookingPlannerLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "event-operations-layout",
@@ -164,7 +1736,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "EVENTS",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -181,7 +1754,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Event Operations Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/EventOperationsLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "learning-portal-layout",
@@ -190,7 +1769,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "EDUCATION",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -207,7 +1787,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Learning Portal Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/LearningPortalLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "hr-people-ops-layout",
@@ -216,7 +1802,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "HR",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -233,7 +1820,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Hr People Ops Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/HrPeopleOpsLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "developer-platform-layout",
@@ -242,7 +1835,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "DEVELOPER",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -259,7 +1853,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Developer Platform Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/DeveloperPlatformLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "ai-studio-layout",
@@ -268,7 +1868,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "AI",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -285,7 +1886,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Ai Studio Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/AiStudioLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "iot-control-layout",
@@ -294,7 +1901,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "IOT",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -311,7 +1919,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Io TControl Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/IoTControlLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "real-estate-portfolio-layout",
@@ -320,7 +1934,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "REAL_ESTATE",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -337,7 +1952,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Real Estate Portfolio Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/RealEstatePortfolioLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "knowledge-base-layout",
@@ -346,7 +1967,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "KNOWLEDGE",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -363,7 +1985,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Knowledge Base Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/KnowledgeBaseLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "social-community-layout",
@@ -372,7 +2000,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "COMMUNITY",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -389,7 +2018,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Social Community Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/SocialCommunityLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "marketplace-operations-layout",
@@ -398,7 +2033,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "MARKETPLACE",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -415,7 +2051,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Marketplace Operations Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/MarketplaceOperationsLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "billing-workspace-layout",
@@ -424,7 +2066,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "BILLING",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -441,7 +2084,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Billing Workspace Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/BillingWorkspaceLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "travel-planner-layout",
@@ -450,7 +2099,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "TRAVEL",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -467,7 +2117,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Travel Planner Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/TravelPlannerLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "legal-case-layout",
@@ -476,7 +2132,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "LEGAL",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -493,7 +2150,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Legal Case Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/LegalCaseLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "media-production-layout",
@@ -502,7 +2165,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "MEDIA",
     "kind": "LAYOUT",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.layout"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -519,7 +2183,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Media Production Layout",
+    "mountPoint": "LAYOUT",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "layouts/MediaProductionLayout.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "security-threat-dashboard",
@@ -546,7 +2216,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Security Threat Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/SecurityThreatDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "soc-overview-dashboard",
@@ -573,7 +2249,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Soc Overview Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/SocOverviewDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "support-sla-dashboard",
@@ -600,7 +2282,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Support Sla Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/SupportSlaDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "customer-success-dashboard",
@@ -627,7 +2315,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Customer Success Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/CustomerSuccessDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "finance-cashflow-dashboard",
@@ -654,7 +2348,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Finance Cashflow Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/FinanceCashflowDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "billing-revenue-dashboard",
@@ -681,7 +2381,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Billing Revenue Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/BillingRevenueDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "inventory-turnover-dashboard",
@@ -708,7 +2414,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Inventory Turnover Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/InventoryTurnoverDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "warehouse-capacity-dashboard",
@@ -735,7 +2447,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Warehouse Capacity Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/WarehouseCapacityDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "logistics-fleet-dashboard",
@@ -762,7 +2480,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Logistics Fleet Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/LogisticsFleetDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "delivery-performance-dashboard",
@@ -789,7 +2513,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Delivery Performance Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/DeliveryPerformanceDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "booking-occupancy-dashboard",
@@ -816,7 +2546,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Booking Occupancy Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/BookingOccupancyDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "event-attendance-dashboard",
@@ -843,7 +2579,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Event Attendance Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/EventAttendanceDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "learning-progress-dashboard",
@@ -870,7 +2612,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Learning Progress Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/LearningProgressDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "cohort-performance-dashboard",
@@ -897,7 +2645,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Cohort Performance Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/CohortPerformanceDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "hr-workforce-dashboard",
@@ -924,7 +2678,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Hr Workforce Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/HrWorkforceDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "recruiting-pipeline-dashboard",
@@ -951,7 +2711,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Recruiting Pipeline Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/RecruitingPipelineDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "developer-usage-dashboard",
@@ -978,7 +2744,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Developer Usage Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/DeveloperUsageDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "api-reliability-dashboard",
@@ -1005,7 +2777,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Api Reliability Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/ApiReliabilityDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "ai-model-ops-dashboard",
@@ -1032,7 +2810,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Ai Model Ops Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/AiModelOpsDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "prompt-analytics-dashboard",
@@ -1059,7 +2843,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Prompt Analytics Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/PromptAnalyticsDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "iot-device-fleet-dashboard",
@@ -1086,7 +2876,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Io TDevice Fleet Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/IoTDeviceFleetDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "energy-usage-dashboard",
@@ -1113,7 +2909,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Energy Usage Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/EnergyUsageDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "real-estate-portfolio-dashboard",
@@ -1140,7 +2942,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Real Estate Portfolio Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/RealEstatePortfolioDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "property-occupancy-dashboard",
@@ -1167,7 +2975,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Property Occupancy Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/PropertyOccupancyDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "community-engagement-dashboard",
@@ -1194,7 +3008,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Community Engagement Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/CommunityEngagementDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "marketplace-liquidity-dashboard",
@@ -1221,7 +3041,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Marketplace Liquidity Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/MarketplaceLiquidityDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "travel-operations-dashboard",
@@ -1248,7 +3074,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Travel Operations Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/TravelOperationsDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "legal-matter-dashboard",
@@ -1275,7 +3107,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Legal Matter Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/LegalMatterDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "media-pipeline-dashboard",
@@ -1302,7 +3140,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Media Pipeline Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/MediaPipelineDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "knowledge-health-dashboard",
@@ -1329,7 +3173,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Knowledge Health Dashboard",
+    "mountPoint": "DASHBOARD",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "dashboards/KnowledgeHealthDashboard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "threat-event-stream",
@@ -1356,7 +3206,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Threat Event Stream",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/ThreatEventStream.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "vulnerability-matrix",
@@ -1383,7 +3239,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Vulnerability Matrix",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/VulnerabilityMatrix.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "support-ticket-inbox",
@@ -1410,7 +3272,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Support Ticket Inbox",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/SupportTicketInbox.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "customer-health-board",
@@ -1437,7 +3305,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Customer Health Board",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/CustomerHealthBoard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "transaction-ledger",
@@ -1464,7 +3338,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Transaction Ledger",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/TransactionLedger.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "invoice-collection",
@@ -1491,7 +3371,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Invoice Collection",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/InvoiceCollection.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "inventory-sku-matrix",
@@ -1518,7 +3404,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Inventory Sku Matrix",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/InventorySkuMatrix.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "warehouse-bin-explorer",
@@ -1545,7 +3437,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Warehouse Bin Explorer",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/WarehouseBinExplorer.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "shipment-tracking-board",
@@ -1572,7 +3470,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Shipment Tracking Board",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/ShipmentTrackingBoard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "route-stop-timeline",
@@ -1599,7 +3503,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Route Stop Timeline",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/RouteStopTimeline.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "reservation-calendar",
@@ -1626,7 +3536,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Reservation Calendar",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/ReservationCalendar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "venue-seat-map",
@@ -1653,7 +3569,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Venue Seat Map",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/VenueSeatMap.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "course-catalog-grid",
@@ -1680,7 +3602,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Course Catalog Grid",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/CourseCatalogGrid.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "learner-roster",
@@ -1707,7 +3635,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Learner Roster",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/LearnerRoster.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "employee-directory-grid",
@@ -1734,7 +3668,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Employee Directory Grid",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/EmployeeDirectoryGrid.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "candidate-pipeline",
@@ -1761,7 +3701,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Candidate Pipeline",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/CandidatePipeline.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "api-endpoint-catalog",
@@ -1788,7 +3734,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Api Endpoint Catalog",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/ApiEndpointCatalog.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "deployment-environment-matrix",
@@ -1815,7 +3767,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Deployment Environment Matrix",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/DeploymentEnvironmentMatrix.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "model-registry-collection",
@@ -1842,7 +3800,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Model Registry Collection",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/ModelRegistryCollection.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "prompt-library-grid",
@@ -1869,7 +3833,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Prompt Library Grid",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/PromptLibraryGrid.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "device-topology-list",
@@ -1896,7 +3866,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Device Topology List",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/DeviceTopologyList.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "sensor-reading-table",
@@ -1923,7 +3899,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Sensor Reading Table",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/SensorReadingTable.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "property-listing-grid",
@@ -1950,7 +3932,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Property Listing Grid",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/PropertyListingGrid.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "tenant-directory",
@@ -1977,7 +3965,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Tenant Directory",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/TenantDirectory.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "community-feed",
@@ -2004,7 +3998,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Community Feed",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/CommunityFeed.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "moderation-queue",
@@ -2031,7 +4031,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Moderation Queue",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/ModerationQueue.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "vendor-marketplace-grid",
@@ -2058,7 +4064,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Vendor Marketplace Grid",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/VendorMarketplaceGrid.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "trip-itinerary-collection",
@@ -2085,7 +4097,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Trip Itinerary Collection",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/TripItineraryCollection.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "legal-case-docket",
@@ -2112,7 +4130,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Legal Case Docket",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/LegalCaseDocket.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "asset-production-board",
@@ -2139,7 +4163,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Asset Production Board",
+    "mountPoint": "COLLECTION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "collections/AssetProductionBoard.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "threat-incident-detail",
@@ -2150,7 +4180,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2167,7 +4198,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Threat Incident Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/ThreatIncidentDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "vulnerability-detail",
@@ -2178,7 +4215,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2195,7 +4233,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Vulnerability Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/VulnerabilityDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "support-ticket-detail",
@@ -2206,7 +4250,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2223,7 +4268,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Support Ticket Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/SupportTicketDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "customer-success-detail",
@@ -2234,7 +4285,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2251,7 +4303,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Customer Success Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/CustomerSuccessDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "transaction-detail",
@@ -2262,7 +4320,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2279,7 +4338,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Transaction Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/TransactionDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "invoice-detail",
@@ -2290,7 +4355,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2307,7 +4373,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Invoice Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/InvoiceDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "inventory-item-detail",
@@ -2318,7 +4390,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2335,7 +4408,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Inventory Item Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/InventoryItemDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "shipment-detail",
@@ -2346,7 +4425,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2363,7 +4443,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Shipment Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/ShipmentDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "reservation-detail",
@@ -2374,7 +4460,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2391,7 +4478,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Reservation Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/ReservationDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "event-detail",
@@ -2402,7 +4495,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2419,7 +4513,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Event Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/EventDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "course-detail",
@@ -2430,7 +4530,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2447,7 +4548,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Course Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/CourseDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "learner-detail",
@@ -2458,7 +4565,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2475,7 +4583,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Learner Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/LearnerDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "employee-profile-detail",
@@ -2486,7 +4600,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2503,7 +4618,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Employee Profile Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/EmployeeProfileDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "candidate-detail",
@@ -2514,7 +4635,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2531,7 +4653,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Candidate Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/CandidateDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "api-product-detail",
@@ -2542,7 +4670,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2559,7 +4688,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Api Product Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/ApiProductDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "deployment-detail",
@@ -2570,7 +4705,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2587,7 +4723,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Deployment Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/DeploymentDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "model-detail",
@@ -2598,7 +4740,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2615,7 +4758,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Model Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/ModelDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "prompt-detail",
@@ -2626,7 +4775,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2643,7 +4793,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Prompt Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/PromptDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "device-detail",
@@ -2654,7 +4810,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2671,7 +4828,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Device Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/DeviceDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "property-detail",
@@ -2682,7 +4845,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2699,7 +4863,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Property Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/PropertyDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "community-member-detail",
@@ -2710,7 +4880,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2727,7 +4898,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Community Member Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/CommunityMemberDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "vendor-detail",
@@ -2738,7 +4915,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2755,7 +4933,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Vendor Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/VendorDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "trip-detail",
@@ -2766,7 +4950,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2783,7 +4968,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Trip Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/TripDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "legal-matter-detail",
@@ -2794,7 +4985,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2811,7 +5003,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Legal Matter Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/LegalMatterDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "media-asset-detail",
@@ -2822,7 +5020,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2839,7 +5038,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Media Asset Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/MediaAssetDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "knowledge-article-detail",
@@ -2850,7 +5055,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.main",
       "page.aside",
-      "page.content"
+      "page.content",
+      "page.primary"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -2867,7 +5073,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Knowledge Article Detail",
+    "mountPoint": "DETAIL",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "details/KnowledgeArticleDetail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "acknowledge-alert-modal",
@@ -2893,7 +5105,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Acknowledge Alert Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/AcknowledgeAlertModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "escalate-incident-modal",
@@ -2919,7 +5141,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Escalate Incident Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/EscalateIncidentModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "merge-tickets-modal",
@@ -2945,7 +5177,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Merge Tickets Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/MergeTicketsModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "send-reply-modal",
@@ -2971,7 +5213,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Send Reply Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/SendReplyModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "issue-refund-modal",
@@ -2997,7 +5249,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Issue Refund Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/IssueRefundModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "capture-payment-modal",
@@ -3023,7 +5285,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Capture Payment Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/CapturePaymentModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "adjust-inventory-modal",
@@ -3049,7 +5321,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Adjust Inventory Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/AdjustInventoryModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "transfer-stock-modal",
@@ -3075,7 +5357,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Transfer Stock Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/TransferStockModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "reassign-shipment-modal",
@@ -3101,7 +5393,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Reassign Shipment Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/ReassignShipmentModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "delivery-exception-modal",
@@ -3127,7 +5429,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Delivery Exception Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/DeliveryExceptionModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "reschedule-booking-modal",
@@ -3153,7 +5465,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Reschedule Booking Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/RescheduleBookingModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "seat-assignment-modal",
@@ -3179,7 +5501,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Seat Assignment Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/SeatAssignmentModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "enroll-learner-modal",
@@ -3205,7 +5537,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Enroll Learner Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/EnrollLearnerModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "grade-submission-modal",
@@ -3231,7 +5573,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Grade Submission Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/GradeSubmissionModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "time-off-request-modal",
@@ -3257,7 +5609,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Time Off Request Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/TimeOffRequestModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "compensation-change-modal",
@@ -3283,7 +5645,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Compensation Change Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/CompensationChangeModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "rotate-api-key-modal",
@@ -3309,7 +5681,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Rotate Api Key Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/RotateApiKeyModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "promote-deployment-modal",
@@ -3335,7 +5717,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Promote Deployment Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/PromoteDeploymentModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "model-evaluation-modal",
@@ -3361,7 +5753,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Model Evaluation Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/ModelEvaluationModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "prompt-test-modal",
@@ -3387,7 +5789,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Prompt Test Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/PromptTestModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "device-command-modal",
@@ -3413,7 +5825,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Device Command Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/DeviceCommandModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "firmware-update-modal",
@@ -3439,7 +5861,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Firmware Update Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/FirmwareUpdateModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "property-inquiry-modal",
@@ -3465,7 +5897,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Property Inquiry Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/PropertyInquiryModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "lease-renewal-modal",
@@ -3491,7 +5933,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Lease Renewal Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/LeaseRenewalModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "moderate-content-modal",
@@ -3517,7 +5969,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Moderate Content Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/ModerateContentModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "vendor-payout-modal",
@@ -3543,7 +6005,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Vendor Payout Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/VendorPayoutModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "trip-change-modal",
@@ -3569,7 +6041,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Trip Change Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/TripChangeModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "legal-hold-modal",
@@ -3595,7 +6077,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Legal Hold Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/LegalHoldModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "publish-asset-modal",
@@ -3621,7 +6113,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Publish Asset Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/PublishAssetModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "knowledge-merge-modal",
@@ -3647,7 +6149,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Knowledge Merge Modal",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "modals/KnowledgeMergeModal.tsx",
+    "overlayPresentation": "SELF_HOSTED"
   },
   {
     "componentId": "incident-response-wizard",
@@ -3675,7 +6187,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Incident Response Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/IncidentResponseWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "vulnerability-remediation-wizard",
@@ -3703,7 +6225,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Vulnerability Remediation Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/VulnerabilityRemediationWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "ticket-escalation-wizard",
@@ -3731,7 +6263,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Ticket Escalation Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/TicketEscalationWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "customer-renewal-wizard",
@@ -3759,7 +6301,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Customer Renewal Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/CustomerRenewalWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "payment-reconciliation-wizard",
@@ -3787,7 +6339,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Payment Reconciliation Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/PaymentReconciliationWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "subscription-upgrade-wizard",
@@ -3815,7 +6377,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Subscription Upgrade Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/SubscriptionUpgradeWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "stock-replenishment-wizard",
@@ -3843,7 +6415,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Stock Replenishment Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/StockReplenishmentWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "shipment-exception-wizard",
@@ -3871,7 +6453,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Shipment Exception Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/ShipmentExceptionWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "reservation-setup-wizard",
@@ -3899,7 +6491,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Reservation Setup Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/ReservationSetupWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "event-launch-wizard",
@@ -3927,7 +6529,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Event Launch Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/EventLaunchWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "course-publishing-wizard",
@@ -3955,7 +6567,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Course Publishing Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/CoursePublishingWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "employee-onboarding-wizard",
@@ -3983,7 +6605,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Employee Onboarding Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/EmployeeOnboardingWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "candidate-hiring-wizard",
@@ -4011,7 +6643,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Candidate Hiring Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/CandidateHiringWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "api-product-launch-wizard",
@@ -4039,7 +6681,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Api Product Launch Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/ApiProductLaunchWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "release-promotion-wizard",
@@ -4067,7 +6719,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Release Promotion Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/ReleasePromotionWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "model-deployment-wizard",
@@ -4095,7 +6757,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Model Deployment Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/ModelDeploymentWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "device-provisioning-wizard",
@@ -4123,7 +6795,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Device Provisioning Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/DeviceProvisioningWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "property-listing-wizard",
@@ -4151,7 +6833,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Property Listing Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/PropertyListingWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "vendor-onboarding-wizard",
@@ -4179,7 +6871,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Vendor Onboarding Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/VendorOnboardingWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "legal-review-wizard",
@@ -4207,7 +6909,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Legal Review Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/LegalReviewWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "media-publishing-wizard",
@@ -4235,7 +6947,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Media Publishing Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/MediaPublishingWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "knowledge-approval-wizard",
@@ -4263,7 +6985,17 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "COMPLETED",
       "ERROR"
-    ]
+    ],
+    "label": "Knowledge Approval Wizard",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE",
+      "COMMAND"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "workflows/KnowledgeApprovalWizard.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "dynamic-schema-form",
@@ -4291,7 +7023,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Dynamic Schema Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/DynamicSchemaForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "sectioned-settings-form",
@@ -4319,7 +7060,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Sectioned Settings Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/SectionedSettingsForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "inline-quick-edit-form",
@@ -4347,7 +7097,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Inline Quick Edit Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/InlineQuickEditForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "query-builder-form",
@@ -4375,7 +7134,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Query Builder Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/QueryBuilderForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "filter-rule-builder",
@@ -4403,7 +7171,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Filter Rule Builder",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/FilterRuleBuilder.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "pricing-plan-form",
@@ -4431,7 +7208,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Pricing Plan Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/PricingPlanForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "checkout-address-form",
@@ -4459,7 +7245,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Checkout Address Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/CheckoutAddressForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "support-reply-composer",
@@ -4487,7 +7282,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Support Reply Composer",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/SupportReplyComposer.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "content-editor-form",
@@ -4515,7 +7319,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Content Editor Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/ContentEditorForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "metadata-editor-form",
@@ -4543,7 +7356,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Metadata Editor Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/MetadataEditorForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "api-request-builder-form",
@@ -4571,7 +7393,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Api Request Builder Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/ApiRequestBuilderForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "secret-reference-form",
@@ -4599,7 +7430,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Secret Reference Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/SecretReferenceForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "schedule-rule-form",
@@ -4627,7 +7467,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Schedule Rule Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/ScheduleRuleForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "permission-policy-form",
@@ -4655,7 +7504,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Permission Policy Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/PermissionPolicyForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "notification-preference-form",
@@ -4683,7 +7541,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Notification Preference Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/NotificationPreferenceForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "survey-builder-form",
@@ -4711,7 +7578,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Survey Builder Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/SurveyBuilderForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "localization-form",
@@ -4739,7 +7615,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Localization Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/LocalizationForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "theme-configurator-form",
@@ -4767,7 +7652,16 @@ export const MEGA_BLUEPRINT_PARTS = [
       "SUBMITTING",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Theme Configurator Form",
+    "mountPoint": "OVERLAY",
+    "supportedModes": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "autoSelectable": true,
+    "sourcePath": "forms/ThemeConfiguratorForm.tsx",
+    "overlayPresentation": "WRAPPED"
   },
   {
     "componentId": "global-command-bar",
@@ -4795,7 +7689,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Global Command Bar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/GlobalCommandBar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "dense-admin-toolbar",
@@ -4823,7 +7723,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Dense Admin Toolbar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/DenseAdminToolbar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "product-hero-actions",
@@ -4851,7 +7757,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Product Hero Actions",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/ProductHeroActions.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "resource-quick-actions",
@@ -4879,7 +7791,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Resource Quick Actions",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/ResourceQuickActions.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "bulk-selection-toolbar",
@@ -4907,7 +7825,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Bulk Selection Toolbar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/BulkSelectionToolbar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "inline-row-actions",
@@ -4935,7 +7859,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Inline Row Actions",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/InlineRowActions.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "split-button-actions",
@@ -4963,7 +7893,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Split Button Actions",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/SplitButtonActions.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "floating-create-action",
@@ -4991,7 +7927,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Floating Create Action",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/FloatingCreateAction.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "status-transition-bar",
@@ -5019,7 +7961,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Status Transition Bar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/StatusTransitionBar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "review-decision-bar",
@@ -5047,7 +7995,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Review Decision Bar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/ReviewDecisionBar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "pagination-toolbar",
@@ -5075,7 +8029,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Pagination Toolbar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/PaginationToolbar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "view-mode-switcher",
@@ -5103,7 +8063,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "View Mode Switcher",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/ViewModeSwitcher.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "filter-chip-bar",
@@ -5131,7 +8097,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Filter Chip Bar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/FilterChipBar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "saved-view-bar",
@@ -5159,7 +8131,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Saved View Bar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/SavedViewBar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "share-export-toolbar",
@@ -5187,7 +8165,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Share Export Toolbar",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/ShareExportToolbar.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "danger-zone-actions",
@@ -5215,7 +8199,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "DISABLED",
       "SUBMITTING"
-    ]
+    ],
+    "label": "Danger Zone Actions",
+    "mountPoint": "ACTIONS",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "actions/DangerZoneActions.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "icon-rail-navigation",
@@ -5226,7 +8216,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5242,7 +8233,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Icon Rail Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/IconRailNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "collapsible-sidebar-navigation",
@@ -5253,7 +8250,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5269,7 +8267,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Collapsible Sidebar Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/CollapsibleSidebarNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "workspace-top-navigation",
@@ -5280,7 +8284,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5296,7 +8301,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Workspace Top Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/WorkspaceTopNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "breadcrumb-trail",
@@ -5307,7 +8318,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5323,7 +8335,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Breadcrumb Trail",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/BreadcrumbTrail.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "tabbed-section-navigation",
@@ -5334,7 +8352,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5350,7 +8369,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Tabbed Section Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/TabbedSectionNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "stepper-navigation",
@@ -5361,7 +8386,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5377,7 +8403,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Stepper Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/StepperNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "command-palette",
@@ -5388,7 +8420,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5404,7 +8437,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Command Palette",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/CommandPalette.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "mega-menu-navigation",
@@ -5415,7 +8454,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5431,7 +8471,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Mega Menu Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/MegaMenuNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "context-switcher-navigation",
@@ -5442,7 +8488,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5458,7 +8505,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Context Switcher Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/ContextSwitcherNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "mobile-bottom-navigation",
@@ -5469,7 +8522,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5485,7 +8539,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Mobile Bottom Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/MobileBottomNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "admin-tree-navigation",
@@ -5496,7 +8556,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5512,7 +8573,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Admin Tree Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/AdminTreeNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "docs-navigation",
@@ -5523,7 +8590,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5539,7 +8607,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Docs Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/DocsNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "calendar-navigation",
@@ -5550,7 +8624,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5566,7 +8641,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Calendar Navigation",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/CalendarNavigation.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "product-subnav",
@@ -5577,7 +8658,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.header",
       "page.toolbar",
-      "page.aside"
+      "page.aside",
+      "page.navigation"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5593,7 +8675,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "IDLE",
       "ACTIVE",
       "DISABLED"
-    ]
+    ],
+    "label": "Product Subnav",
+    "mountPoint": "NAVIGATION",
+    "supportedModes": [],
+    "autoSelectable": true,
+    "sourcePath": "navigation/ProductSubnav.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "illustrated-empty-state",
@@ -5604,7 +8692,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5622,7 +8711,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Illustrated Empty State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/IllustratedEmptyState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "permission-denied-state",
@@ -5633,7 +8728,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5651,7 +8747,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Permission Denied State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/PermissionDeniedState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "offline-state",
@@ -5662,7 +8764,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5680,7 +8783,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Offline State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/OfflineState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "maintenance-state",
@@ -5691,7 +8800,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5709,7 +8819,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Maintenance State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/MaintenanceState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "rate-limit-state",
@@ -5720,7 +8836,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5738,7 +8855,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Rate Limit State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/RateLimitState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "data-load-error-state",
@@ -5749,7 +8872,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5767,7 +8891,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Data Load Error State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/DataLoadErrorState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "search-no-results-state",
@@ -5778,7 +8908,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5796,7 +8927,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Search No Results State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/SearchNoResultsState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "import-success-state",
@@ -5807,7 +8944,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5825,7 +8963,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Import Success State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/ImportSuccessState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "operation-failed-state",
@@ -5836,7 +8980,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5854,7 +8999,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Operation Failed State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/OperationFailedState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "skeleton-dashboard-state",
@@ -5865,7 +9016,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5883,7 +9035,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Skeleton Dashboard State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/SkeletonDashboardState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "table-loading-state",
@@ -5894,7 +9052,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5912,7 +9071,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Table Loading State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/TableLoadingState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "partial-data-warning",
@@ -5923,7 +9088,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5941,7 +9107,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Partial Data Warning",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/PartialDataWarning.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "unsaved-changes-banner",
@@ -5952,7 +9124,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5970,7 +9143,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "Unsaved Changes Banner",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/UnsavedChangesBanner.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "first-run-onboarding-state",
@@ -5981,7 +9160,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "acceptedSurfaces": [
       "page.content",
       "page.main",
-      "table.empty"
+      "table.empty",
+      "page.feedback"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -5999,7 +9179,13 @@ export const MEGA_BLUEPRINT_PARTS = [
       "EMPTY",
       "ERROR",
       "SUCCESS"
-    ]
+    ],
+    "label": "First Run Onboarding State",
+    "mountPoint": "FEEDBACK",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "feedback/FirstRunOnboardingState.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "terminal-green-theme",
@@ -6008,7 +9194,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6022,7 +9209,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "terminal-green-theme"
+    "theme": "terminal-green-theme",
+    "label": "Terminal Green Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/TerminalGreenTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "glass-aurora-theme",
@@ -6031,7 +9224,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6045,7 +9239,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "glass-aurora-theme"
+    "theme": "glass-aurora-theme",
+    "label": "Glass Aurora Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/GlassAuroraTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "editorial-paper-theme",
@@ -6054,7 +9254,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6068,7 +9269,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "editorial-paper-theme"
+    "theme": "editorial-paper-theme",
+    "label": "Editorial Paper Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/EditorialPaperTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "brutalist-mono-theme",
@@ -6077,7 +9284,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6091,7 +9299,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "brutalist-mono-theme"
+    "theme": "brutalist-mono-theme",
+    "label": "Brutalist Mono Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/BrutalistMonoTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "enterprise-blue-theme",
@@ -6100,7 +9314,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6114,7 +9329,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "enterprise-blue-theme"
+    "theme": "enterprise-blue-theme",
+    "label": "Enterprise Blue Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/EnterpriseBlueTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "warm-commerce-theme",
@@ -6123,7 +9344,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6137,7 +9359,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "warm-commerce-theme"
+    "theme": "warm-commerce-theme",
+    "label": "Warm Commerce Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/WarmCommerceTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "neon-cyber-theme",
@@ -6146,7 +9374,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6160,7 +9389,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "neon-cyber-theme"
+    "theme": "neon-cyber-theme",
+    "label": "Neon Cyber Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/NeonCyberTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "soft-pastel-theme",
@@ -6169,7 +9404,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6183,7 +9419,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "soft-pastel-theme"
+    "theme": "soft-pastel-theme",
+    "label": "Soft Pastel Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/SoftPastelTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "ocean-data-theme",
@@ -6192,7 +9434,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6206,7 +9449,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "ocean-data-theme"
+    "theme": "ocean-data-theme",
+    "label": "Ocean Data Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/OceanDataTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "sunset-operations-theme",
@@ -6215,7 +9464,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6229,7 +9479,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "sunset-operations-theme"
+    "theme": "sunset-operations-theme",
+    "label": "Sunset Operations Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/SunsetOperationsTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "forest-saas-theme",
@@ -6238,7 +9494,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6252,7 +9509,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "forest-saas-theme"
+    "theme": "forest-saas-theme",
+    "label": "Forest Saa STheme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/ForestSaaSTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "monochrome-pro-theme",
@@ -6261,7 +9524,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6275,7 +9539,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "monochrome-pro-theme"
+    "theme": "monochrome-pro-theme",
+    "label": "Monochrome Pro Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/MonochromeProTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "lavender-creator-theme",
@@ -6284,7 +9554,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6298,7 +9569,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "lavender-creator-theme"
+    "theme": "lavender-creator-theme",
+    "label": "Lavender Creator Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/LavenderCreatorTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "crimson-security-theme",
@@ -6307,7 +9584,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6321,7 +9599,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "crimson-security-theme"
+    "theme": "crimson-security-theme",
+    "label": "Crimson Security Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/CrimsonSecurityTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "sandstone-finance-theme",
@@ -6330,7 +9614,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6344,7 +9629,13 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "sandstone-finance-theme"
+    "theme": "sandstone-finance-theme",
+    "label": "Sandstone Finance Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/SandstoneFinanceTheme.tsx",
+    "overlayPresentation": null
   },
   {
     "componentId": "high-contrast-accessibility-theme",
@@ -6353,7 +9644,8 @@ export const MEGA_BLUEPRINT_PARTS = [
     "category": "THEME",
     "kind": "THEME",
     "acceptedSurfaces": [
-      "page.content"
+      "page.content",
+      "page.theme"
     ],
     "preferredPurposes": [
       "ADMIN",
@@ -6367,6 +9659,12 @@ export const MEGA_BLUEPRINT_PARTS = [
     "states": [
       "IDLE"
     ],
-    "theme": "high-contrast-accessibility-theme"
+    "theme": "high-contrast-accessibility-theme",
+    "label": "High Contrast Accessibility Theme",
+    "mountPoint": "THEME",
+    "supportedModes": [],
+    "autoSelectable": false,
+    "sourcePath": "themes/HighContrastAccessibilityTheme.tsx",
+    "overlayPresentation": null
   }
-] as BlueprintPartDescriptor[];
+]

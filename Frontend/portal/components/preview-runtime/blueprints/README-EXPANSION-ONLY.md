@@ -27,4 +27,6 @@ The integration files update existing barrel exports and catalog types so the ne
 
 ## Important
 
-This is a frontend Blueprint candidate library only. Activating a Part in the production Auto Preview runtime still requires matching ComponentContract, compiler selection, and deployed static-runtime registration.
+This file describes the historical second-pack payload. In the current repository all 236 expansion
+Parts are included in the canonical `manifests/component-manifest.json`; code generation and the shared
+Portal/deployment runtime wire them without a second hand-maintained registry.
