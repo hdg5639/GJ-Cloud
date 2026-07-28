@@ -190,7 +190,7 @@ class PreviewComposeArtifactBuilderTest {
     void writeRealComponentProjectToTempDirForManualBuildVerification() throws IOException {
         ComposeArtifact artifact = builder.buildWithRealComponents(
                 "https://api.example.com", sampleCapabilities(), samplePages(), List.of(), List.of(),
-                AuthStrategy.apiKeyHeader("X-API-Key"), Purpose.PRODUCT_LIKE);
+                AuthStrategy.apiKeyHeader("X-API-Key"), Purpose.PRODUCT_LIKE, java.util.Map.of());
         Path dir = Files.createTempDirectory("gamjabox-preview-real-");
         for (UploadedFile file : artifact.uploadedFiles()) {
             Path target = dir.resolve(file.vmPath());

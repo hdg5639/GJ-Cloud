@@ -131,7 +131,7 @@ public class PreviewDeployController {
         // 수행하고 파츠 치환은 아티팩트 생성 단계에서만 적용해 배포가 막히지 않는다.
         ComposeArtifact artifact = previewComposeArtifactBuilder.buildWithRealComponents(
                 body.apiBaseUrl(), capabilities, effectivePages, flows, bindings,
-                body.authStrategy(), body.purpose());
+                body.authStrategy(), body.purpose(), body.partOverrides());
 
         DeploymentTargetEntity target = deploymentTargetService.create(
                 vmId.toString(),

@@ -31,10 +31,12 @@ public class PreviewBlueprintService {
         return BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose);
     }
 
-    // Phase A: 라이브 프리뷰에서만 카테고리 기반 Blueprint 파츠로 componentId를 치환한다(배포는 미적용).
+    // 라이브 프리뷰에서 카테고리 기반 Blueprint 파츠로 componentId를 치환한다. overrides가 있으면
+    // 사용자가 지정한 파츠/기본 컴포넌트를 우선한다(Phase C). null이면 전부 자동선택.
     public Map<String, List<Block>> selectBlueprintParts(Map<String, List<Block>> pageBlocks,
-                                                         List<Capability> capabilities, Purpose purpose) {
-        return BlueprintPartSelector.select(pageBlocks, capabilities, purpose);
+                                                         List<Capability> capabilities, Purpose purpose,
+                                                         Map<String, String> partOverrides) {
+        return BlueprintPartSelector.select(pageBlocks, capabilities, purpose, partOverrides);
     }
 
     public Map<String, List<Block>> compilePagePlanBlocks(List<PagePlan> pagePlans, List<Capability> capabilities,

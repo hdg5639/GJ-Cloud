@@ -61,9 +61,10 @@ public class PreviewController {
         var blocks = request.pagePlans() != null && !request.pagePlans().isEmpty()
                 ? previewBlueprintService.compilePagePlanBlocks(request.pagePlans(), request.capabilities(), request.purpose())
                 : previewBlueprintService.compilePageBlocks(request.pages(), request.capabilities(), request.purpose());
-        // 파츠 선택은 라이브 프리뷰(이 엔드포인트)에서만 얹는다 — 배포 경로(PreviewDeployController)는
-        // 기본 컴포넌트를 그대로 검증/생성해야 아직 못 그리는 파츠 id가 배포를 막지 않는다(Phase A).
-        blocks = previewBlueprintService.selectBlueprintParts(blocks, request.capabilities(), request.purpose());
+        // 파츠 선택을 얹는다(사용자 오버라이드 우선, 없으면 자동선택). 검증(PreviewDeployController)은
+        // 기본 Block으로 하므로 여기서 파츠 치환해도 배포가 막히지 않는다.
+        blocks = previewBlueprintService.selectBlueprintParts(
+                blocks, request.capabilities(), request.purpose(), request.partOverrides());
         return ApiResponse.ok(new PreviewBlocksResponse(blocks));
     }
 

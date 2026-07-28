@@ -106,11 +106,11 @@ public class PreviewComposeArtifactBuilder {
     // Blueprint 파츠도 이 경로에선 라이브 프리뷰와 동일하게 선택기를 적용해 실제로 렌더된다.
     public ComposeArtifact buildWithRealComponents(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
-            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose, Map<String, String> partOverrides
     ) {
         Map<String, List<Block>> pageBlocks = BlueprintPartSelector.select(
                 BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose),
-                capabilities, purpose);
+                capabilities, purpose, partOverrides);
 
         List<UploadedFile> uploadedFiles = new ArrayList<>();
         uploadedFiles.add(file("package.json", PACKAGE_JSON_V2));
