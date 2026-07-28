@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/panel";
 import { cn } from "@/components/ui/cn";
+import { Input, Select, Textarea } from "@/components/ui/field";
+import { Modal as ModalPortal } from "@/components/ui/modal";
 import {
   BlueprintActionButtons,
   BlueprintEmptyState,
@@ -31,13 +33,13 @@ function styleClass(style: string): string {
     glass: "border-white/15 bg-white/[0.045] backdrop-blur-xl",
     terminal: "rounded-none border-[color:var(--preview-blueprint-brand,#9ef01a)]/35 bg-[#061008] font-mono",
     editorial: "rounded-none border-line bg-[color:var(--preview-theme-paper,#f4efe6)] text-[color:var(--preview-theme-ink,#1d1b18)]",
-    brutalist: "rounded-none border-2 border-foreground shadow-[5px_5px_0_var(--foreground)]",
+    brutalist: "rounded-none border-2 border-foreground bg-panel text-foreground shadow-[5px_5px_0_var(--foreground)]",
     soft: "rounded-[24px] border-transparent bg-white/[0.035] shadow-[0_18px_60px_rgba(0,0,0,.12)]",
     commerce: "rounded-[20px] border-[color:var(--preview-theme-accent,#ff8b4d)]/30 bg-gradient-to-br from-[color:var(--preview-theme-accent,#ff8b4d)]/10 to-transparent",
     command: "border-[color:var(--preview-status-ok,#3fbf74)]/25 bg-[#07100c]",
     minimal: "rounded-[10px] border-line/70 bg-transparent",
     neon: "border-[color:var(--preview-theme-accent,#a855f7)]/40 bg-gradient-to-br from-purple-500/10 via-cyan-500/5 to-transparent shadow-[0_0_36px_rgba(168,85,247,.12)]",
-    paper: "rounded-[6px] border-black/10 bg-[#f7f2e8] text-[#24211c] shadow-[0_8px_30px_rgba(24,20,12,.14)]",
+    paper: "rounded-[6px] border-black/10 bg-[#f7f2e8] text-[#24211c] shadow-[0_8px_30px_rgba(24,20,12,.14)] [--background:#f7f2e8] [--foreground:#24211c] [--panel:#fffaf0] [--line:#24211c24] [--line-strong:#24211c3d] [--muted:#625d54] [--muted-soft:#817a6f] [--soft:#eee8dc] [--brand:#426b1f] [--brand-strong:#345617]",
     dense: "rounded-[8px] border-line bg-panel",
     enterprise: "rounded-[14px] border-line bg-panel",
   }[style] ?? "rounded-[14px] border-line bg-panel";
@@ -98,7 +100,7 @@ export function createCollectionPart(config: MegaCollectionConfig) {
     if (config.style === "timeline") return <BlueprintSection title={config.title} description={config.description}><div className="space-y-4">{records.map((record, index) => <button key={blueprintRecordId(record) || index} type="button" onClick={() => onSelect?.(record)} className="relative block w-full border-l border-line pl-5 text-left"><span className="absolute -left-[5px] top-1 h-2.5 w-2.5 rounded-full bg-brand" /><div className="flex justify-between gap-3"><strong>{formatBlueprintValue(record[primary] ?? blueprintRecordTitle(record))}</strong><span className="text-xs text-muted-soft">{formatBlueprintValue(record.timestamp ?? record.date ?? record.createdAt)}</span></div><p className="mt-1 text-xs text-muted-soft">{formatBlueprintValue(record[secondary])}</p></button>)}</div></BlueprintSection>;
     if (config.style === "inbox") return <div className={cn("divide-y divide-line overflow-hidden rounded-[14px] border border-line", className)}>{records.map((record, index) => <button key={blueprintRecordId(record) || index} type="button" onClick={() => onSelect?.(record)} className="flex w-full items-start gap-3 p-4 text-left hover:bg-white/[0.025]"><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand" /><div className="min-w-0 flex-1"><div className="flex justify-between gap-3"><strong className="truncate">{formatBlueprintValue(record[primary] ?? blueprintRecordTitle(record))}</strong><span className="text-[10px] text-muted-soft">{formatBlueprintValue(record.timestamp ?? record.updatedAt)}</span></div><p className="mt-1 truncate text-xs text-muted-soft">{formatBlueprintValue(record[secondary])}</p></div><BlueprintStatusPill value={record[status] ?? "new"} /></button>)}</div>;
     if (config.style === "board") { const groups = new Map<string, BlueprintRecord[]>(); records.forEach((record) => { const key = formatBlueprintValue(record[status] ?? "Unassigned"); groups.set(key, [...(groups.get(key) ?? []), record]); }); return <div className={cn("grid gap-4 xl:grid-cols-3", className)}>{[...groups.entries()].map(([group, items]) => <section key={group} className="rounded-[14px] border border-line bg-white/[0.015] p-3"><div className="mb-3 flex justify-between"><strong className="text-sm">{group}</strong><span className="text-xs text-muted-soft">{items.length}</span></div><div className="space-y-2">{items.map((record) => <button key={blueprintRecordId(record)} type="button" onClick={() => onSelect?.(record)} className="block w-full rounded-[12px] border border-line bg-panel p-3 text-left"><strong className="block truncate text-sm">{formatBlueprintValue(record[primary] ?? blueprintRecordTitle(record))}</strong><p className="mt-1 line-clamp-2 text-xs text-muted-soft">{formatBlueprintValue(record[secondary])}</p></button>)}</div></section>)}</div>; }
-    if (config.style === "calendar") return <BlueprintSection title={config.title} description={config.description}><div className="grid grid-cols-7 gap-1">{Array.from({ length: 35 }, (_, day) => { const record = records[day % records.length]; return <button key={day} type="button" onClick={() => onSelect?.(record)} className="min-h-20 rounded-[8px] border border-line p-2 text-left"><span className="text-[10px] text-muted-soft">{day + 1}</span>{day < records.length && <><strong className="mt-2 block truncate text-xs">{formatBlueprintValue(record[primary] ?? blueprintRecordTitle(record))}</strong><BlueprintStatusPill value={record[status] ?? "scheduled"} /></>}</button>; })}</div></BlueprintSection>;
+    if (config.style === "calendar") return <BlueprintSection title={config.title} description={config.description}><div className="-mx-1 overflow-x-auto px-1 pb-1"><div className="min-w-[700px]"><div className="mb-1 grid grid-cols-7 gap-1">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((weekday) => <div key={weekday} className="px-2 py-1 text-center text-[10px] font-black uppercase tracking-[.12em] text-muted-soft">{weekday}</div>)}</div><div className="grid grid-cols-7 gap-1">{Array.from({ length: 35 }, (_, day) => { const record = records[day]; return <button key={day} type="button" disabled={!record} onClick={() => record && onSelect?.(record)} className={cn("min-h-24 overflow-hidden rounded-[10px] border border-line bg-panel p-2.5 text-left transition", record ? "hover:border-line-strong hover:bg-white/[.025]" : "cursor-default opacity-45")}><span className="text-[10px] font-bold text-muted-soft">{day + 1}</span>{record && <div className="mt-2 min-w-0"><strong className="block truncate text-xs">{formatBlueprintValue(record[primary] ?? blueprintRecordTitle(record))}</strong><p className="mt-1 truncate text-[10px] text-muted-soft">{formatBlueprintValue(record[secondary])}</p><div className="mt-2"><BlueprintStatusPill value={record[status] ?? "scheduled"} /></div></div>}</button>; })}</div></div></div></BlueprintSection>;
     if (config.style === "tree") return <BlueprintSection title={config.title} description={config.description}><div className="space-y-1">{records.map((record, index) => <button key={blueprintRecordId(record) || index} type="button" onClick={() => onSelect?.(record)} className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left hover:bg-white/[0.025]" style={{ paddingLeft: `${12 + Number(record.depth ?? index % 3) * 18}px` }}><span className="text-muted-soft">{Number(record.depth ?? 0) > 0 ? "└" : "▾"}</span><strong className="text-sm">{formatBlueprintValue(record[primary] ?? blueprintRecordTitle(record))}</strong><span className="ml-auto"><BlueprintStatusPill value={record[status] ?? "active"} /></span></button>)}</div></BlueprintSection>;
     if (config.style === "map") return <div className={cn("relative min-h-[420px] overflow-hidden rounded-[18px] border border-line bg-[radial-gradient(circle_at_30%_25%,rgba(158,240,26,.08),transparent_26%),linear-gradient(135deg,rgba(255,255,255,.025),transparent)]", className)}><div className="absolute inset-0 opacity-30" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px)", backgroundSize: "32px 32px" }} />{records.slice(0, 16).map((record, index) => <button key={blueprintRecordId(record) || index} type="button" onClick={() => onSelect?.(record)} className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-brand bg-panel px-2 py-1 text-[10px] font-bold shadow-lg" style={{ left: `${12 + ((index * 17) % 78)}%`, top: `${15 + ((index * 29) % 70)}%` }}>{formatBlueprintValue(record[primary] ?? index + 1)}</button>)}</div>;
     return <div className={cn(config.style === "gallery" ? "grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4" : "grid gap-3 sm:grid-cols-2 xl:grid-cols-3", className)}>{records.map((record, index) => <article key={blueprintRecordId(record) || index} className="overflow-hidden rounded-[16px] border border-line bg-panel"><button type="button" onClick={() => onSelect?.(record)} className="block w-full text-left">{config.style === "gallery" && <div className="aspect-video bg-gradient-to-br from-brand/15 to-transparent">{typeof record.imageUrl === "string" && <img src={record.imageUrl} alt="" className="h-full w-full object-cover" />}</div>}<div className="p-4"><div className="flex items-start justify-between gap-3"><strong className="truncate">{formatBlueprintValue(record[primary] ?? blueprintRecordTitle(record))}</strong><BlueprintStatusPill value={record[status] ?? "active"} /></div><p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-soft">{formatBlueprintValue(record[secondary])}</p></div></button>{onAction && <div className="border-t border-line p-3"><Button size="small" className="w-full" onClick={() => onAction(record)}>{config.actionLabel ?? "Open"}</Button></div>}</article>)}</div>;
@@ -127,16 +129,129 @@ export function createDetailPart(config: MegaDetailConfig) {
 }
 
 export function createModalPart(config: MegaModalConfig) {
-  function Modal({ open, context = {}, options = [], busy = false, onClose, onConfirm }: MegaModalProps) {
+  function GeneratedModal({ open, context = {}, options = [], busy = false, onClose, onConfirm }: MegaModalProps) {
     const [values, setValues] = useState<BlueprintRecord>({});
     const fields = config.fields ?? [];
-    if (!open) return null;
     const requiredTextMatches = !config.requireText || String(values.confirmation ?? "") === config.requireText;
     const submit = () => { if (requiredTextMatches && !busy) void onConfirm(values); };
-    return <div className="fixed inset-0 z-[120] grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true"><div className={cn("max-h-[90vh] w-full max-w-xl overflow-auto border p-0 shadow-2xl", styleClass(config.style === "danger" ? "brutalist" : config.style === "command" ? "terminal" : config.style === "review" ? "paper" : "enterprise"))}><header className="border-b border-line px-5 py-4"><p className="text-[10px] font-black uppercase tracking-[.18em] text-muted-soft">{config.eyebrow}</p><h2 className="mt-1 text-xl font-black">{config.title}</h2><p className="mt-1 text-sm text-muted-soft">{config.description}</p></header><div className="space-y-4 p-5">{Object.keys(context).length > 0 && <div className="rounded-[12px] border border-line bg-white/[.02] p-3"><BlueprintKeyValueGrid fields={recordFields(context).slice(0, 4)} columns={2} /></div>}{fields.map((field) => <label key={field.key} className="block text-xs font-bold text-muted-soft">{field.label}{field.type === "textarea" ? <textarea className="mt-2 min-h-24 w-full rounded-[10px] border border-line bg-soft px-3 py-2 text-sm text-foreground" value={String(values[field.key] ?? "")} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} /> : field.type === "select" ? <select className="mt-2 min-h-10 w-full rounded-[10px] border border-line bg-soft px-3 text-sm text-foreground" value={String(values[field.key] ?? "")} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">Select</option>{(field.options ?? options.map((option) => option.value)).map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} className="mt-2 min-h-10 w-full rounded-[10px] border border-line bg-soft px-3 text-sm text-foreground" value={String(values[field.key] ?? "")} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} />}</label>)}{config.requireReason && <label className="block text-xs font-bold text-muted-soft">Reason<textarea className="mt-2 min-h-24 w-full rounded-[10px] border border-line bg-soft px-3 py-2 text-sm text-foreground" value={String(values.reason ?? "")} onChange={(event) => setValues((current) => ({ ...current, reason: event.target.value }))} /></label>}{config.requireText && <label className="block text-xs font-bold text-muted-soft">Type <strong>{config.requireText}</strong> to confirm<input className="mt-2 min-h-10 w-full rounded-[10px] border border-line bg-soft px-3 text-sm text-foreground" value={String(values.confirmation ?? "")} onChange={(event) => setValues((current) => ({ ...current, confirmation: event.target.value }))} /></label>}</div><footer className="flex justify-end gap-2 border-t border-line px-5 py-4"><Button onClick={onClose}>Cancel</Button><Button variant={config.style === "danger" ? "danger-solid" : "primary"} disabled={!requiredTextMatches || busy} onClick={submit}>{busy ? "Working…" : config.confirmLabel}</Button></footer></div></div>;
+    const modalStyle = config.style === "danger"
+      ? "brutalist"
+      : config.style === "command"
+        ? "terminal"
+        : config.style === "review"
+          ? "paper"
+          : "enterprise";
+    const nativeColorScheme = config.style === "review" ? "light" : "dark";
+
+    return (
+      <ModalPortal open={open} onClose={onClose}>
+        <section
+          className={cn(
+            "mx-auto flex max-h-[min(92vh,760px)] w-[min(94vw,640px)] flex-col overflow-hidden border p-0 shadow-2xl",
+            styleClass(modalStyle)
+          )}
+        >
+          <header className="flex shrink-0 items-start justify-between gap-4 border-b border-line bg-panel/70 px-5 py-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[.18em] text-muted-soft">{config.eyebrow}</p>
+              <h2 className="mt-1 text-xl font-black text-foreground">{config.title}</h2>
+              <p className="mt-1 max-w-lg text-sm leading-5 text-muted">{config.description}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] border border-line bg-panel text-lg text-muted transition hover:border-line-strong hover:text-foreground"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
+            {Object.keys(context).length > 0 && (
+              <div className="mb-5 rounded-[12px] border border-line bg-panel/55 p-3">
+                <BlueprintKeyValueGrid fields={recordFields(context).slice(0, 4)} columns={2} />
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {fields.map((field) => (
+                <label
+                  key={field.key}
+                  className={cn("block min-w-0 text-xs font-bold text-muted", field.type === "textarea" && "sm:col-span-2")}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {field.label}
+                    {field.required && <span className="text-danger">*</span>}
+                  </span>
+                  {field.type === "textarea" ? (
+                    <Textarea
+                      className="mt-2 bg-panel"
+                      value={String(values[field.key] ?? "")}
+                      onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                    />
+                  ) : field.type === "select" ? (
+                    <Select
+                      className="mt-2 bg-panel"
+                      value={String(values[field.key] ?? "")}
+                      onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                    >
+                      <option value="">Select</option>
+                      {(field.options ?? options.map((option) => option.value)).map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <Input
+                      type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+                      className="mt-2 bg-panel"
+                      style={{ colorScheme: nativeColorScheme }}
+                      value={String(values[field.key] ?? "")}
+                      onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+
+            {config.requireReason && (
+              <label className="mt-4 block text-xs font-bold text-muted">
+                Reason
+                <Textarea
+                  className="mt-2 bg-panel"
+                  value={String(values.reason ?? "")}
+                  onChange={(event) => setValues((current) => ({ ...current, reason: event.target.value }))}
+                />
+              </label>
+            )}
+            {config.requireText && (
+              <label className="mt-4 block text-xs font-bold text-muted">
+                Type <strong className="text-foreground">{config.requireText}</strong> to confirm
+                <Input
+                  className="mt-2 bg-panel"
+                  value={String(values.confirmation ?? "")}
+                  onChange={(event) => setValues((current) => ({ ...current, confirmation: event.target.value }))}
+                />
+              </label>
+            )}
+          </div>
+
+          <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-line bg-panel/70 px-5 py-4">
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant={config.style === "danger" ? "danger-solid" : "primary"}
+              disabled={!requiredTextMatches || busy}
+              onClick={submit}
+            >
+              {busy ? "Working…" : config.confirmLabel}
+            </Button>
+          </footer>
+        </section>
+      </ModalPortal>
+    );
   }
-  Modal.displayName = config.title.replace(/\s+/g, "");
-  return Modal;
+  GeneratedModal.displayName = config.title.replace(/\s+/g, "");
+  return GeneratedModal;
 }
 
 export function createWorkflowPart(config: MegaWorkflowConfig) {

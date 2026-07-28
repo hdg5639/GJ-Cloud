@@ -5,10 +5,6 @@ import { LoginForm } from "./LoginForm";
 import { ResourceTable } from "./ResourceTable";
 import { ResourceCardGrid } from "./ResourceCardGrid";
 import { DetailPanel } from "./DetailPanel";
-import { CreateEditModal } from "./CreateEditModal";
-import { FormDrawer } from "./FormDrawer";
-import { DeleteConfirmModal } from "./DeleteConfirmModal";
-import { TypedConfirmModal } from "./TypedConfirmModal";
 import { DashboardView } from "./DashboardView";
 import { RecentActivityDashboard } from "./RecentActivityDashboard";
 import { QuickActionButtonGroup } from "./QuickActionButtonGroup";
@@ -23,11 +19,9 @@ import {
   isDetailPart,
   isDashboardPart,
   isActionPart,
-  isOverlayPart,
 } from "./blueprints/adapters";
 import {
   BlueprintActionPart,
-  BlueprintOverlayPart,
   BlueprintPageChrome,
 } from "./blueprints/adapters/BlueprintPartHost";
 import { callCapability, rowId } from "./api";
@@ -51,12 +45,13 @@ import {
 } from "./flow/flowExecutor";
 import { createCapabilityBindingCaller } from "./flow/runtime";
 import type { ApiBinding, FlowBlueprint } from "./flow/types";
-
-type OverlayState =
-  | { kind: "NONE" }
-  | { kind: "CREATE" }
-  | { kind: "UPDATE"; row: Record<string, unknown> }
-  | { kind: "DELETE"; id: string };
+import {
+  createJourneyBlueprint,
+  JourneyRuntime,
+  type JourneyExecutionResult,
+  type JourneyMode,
+  type JourneySession,
+} from "./journey";
 
 type NavigationType = PreviewNavigationRule["type"];
 
@@ -97,10 +92,16 @@ export function PreviewPageRenderer({
   flows?: FlowBlueprint[];
   bindings?: ApiBinding[];
 }) {
-  const [overlay, setOverlay] = useState<OverlayState>({ kind: "NONE" });
+  const [journey, setJourney] = useState<JourneySession | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [flowRun, setFlowRun] = useState<FlowRunView | null>(null);
   const flowAbortRef = useRef<AbortController | null>(null);
+  const journeyNavigationRef = useRef<{
+    sessionId: string;
+    pageId: string | null;
+    parameters: Record<string, unknown>;
+    type: NavigationType;
+  } | null>(null);
   const feedbackComponentId = blocks.find((block) => block.slot === "page.feedback")?.componentId;
 
   useEffect(() => {
@@ -110,8 +111,9 @@ export function PreviewPageRenderer({
   useEffect(() => {
     flowAbortRef.current?.abort();
     flowAbortRef.current = null;
+    journeyNavigationRef.current = null;
     setFlowRun(null);
-    setOverlay({ kind: "NONE" });
+    setJourney(null);
   }, [page.id]);
 
   if (page.skeleton === "AUTH_PAGE") {
@@ -214,79 +216,133 @@ export function PreviewPageRenderer({
   async function runFlow(
     flow: FlowBlueprint,
     seed: Parameters<typeof createFlowContext>[0],
-    capability?: PreviewCapability
+    capability?: PreviewCapability,
+    showProgress = true,
+    navigate?: (targetPageId: string, parameters: Record<string, unknown>) => void
   ): Promise<FlowExecutionResult> {
     flowAbortRef.current?.abort();
     const controller = new AbortController();
     flowAbortRef.current = controller;
-    setFlowRun({
-      flowId: flow.id,
-      title: flowTitle(flow, capability),
-      status: "RUNNING",
-      stepStatuses: {},
-      message: null,
-    });
+    if (showProgress) {
+      setFlowRun({
+        flowId: flow.id,
+        title: flowTitle(flow, capability),
+        status: "RUNNING",
+        stepStatuses: {},
+        message: null,
+      });
+    }
 
     try {
       const result = await executeFlow(flow, bindings, createFlowContext(seed), {
         signal: controller.signal,
         callBinding: createCapabilityBindingCaller(capabilities, config, controller.signal),
-        navigate: (targetPageId, parameters) => performNavigation(targetPageId, parameters, "OPEN_PAGE"),
-        onMessage: (kind, message) =>
+        navigate: navigate ?? ((targetPageId, parameters) => performNavigation(targetPageId, parameters, "OPEN_PAGE")),
+        onMessage: (kind, message) => showProgress &&
           setFlowRun((current) => current ? { ...current, message, status: kind === "ERROR" ? "ERROR" : current.status } : current),
-        onPollStatusChange: (stepId, status) =>
+        onPollStatusChange: (stepId, status) => showProgress &&
           setFlowRun((current) => current ? {
             ...current,
             stepStatuses: { ...current.stepStatuses, [stepId]: status },
           } : current),
-        onRefreshBindingError: (bindingId, error) =>
+        onRefreshBindingError: (bindingId, error) => showProgress &&
           setFlowRun((current) => current ? {
             ...current,
             message: `${bindingId} 새로고침 실패: ${error instanceof Error ? error.message : String(error)}`,
           } : current),
       });
-      setFlowRun((current) => current ? { ...current, status: result.status } : current);
+      if (showProgress) setFlowRun((current) => current ? { ...current, status: result.status } : current);
       return result;
     } catch (error) {
-      setFlowRun((current) => current ? {
-        ...current,
-        status: controller.signal.aborted ? "CANCELLED" : "ERROR",
-        message: error instanceof Error ? error.message : "워크플로우 실행에 실패했습니다.",
-      } : current);
+      if (showProgress) {
+        setFlowRun((current) => current ? {
+          ...current,
+          status: controller.signal.aborted ? "CANCELLED" : "ERROR",
+          message: error instanceof Error ? error.message : "워크플로우 실행에 실패했습니다.",
+        } : current);
+      }
       throw error;
     } finally {
       if (flowAbortRef.current === controller) flowAbortRef.current = null;
     }
   }
 
-  const createFlow = create
-    ? flows.find((flow) => flow.trigger?.pageId === page.id && flow.trigger?.actionId === create.id)
-    : undefined;
-
-  async function runCreateFlow(flow: FlowBlueprint, formValues: Record<string, string>): Promise<boolean> {
-    const result = await runFlow(flow, { form: formValues, route: routeParameters }, create);
-    if (result.status !== "SUCCESS") return false;
-    refresh();
-    return true;
+  function beginJourney(
+    mode: JourneyMode,
+    capability: PreviewCapability,
+    componentId?: string,
+    initialValues: Record<string, unknown> = {},
+    targetId = ""
+  ) {
+    flowAbortRef.current?.abort();
+    setFlowRun(null);
+    setJourney({
+      id: `${page.id}:${capability.id}:${Date.now()}`,
+      blueprint: createJourneyBlueprint({ pageId: page.id, mode, capability, componentId }),
+      capability,
+      targetId,
+      initialValues,
+    });
   }
 
-  async function runCommandFlow(capability: PreviewCapability, targetId: string): Promise<boolean> {
+  async function executeJourney(
+    session: JourneySession,
+    values: Record<string, unknown>
+  ): Promise<JourneyExecutionResult> {
+    const capability = session.capability;
     const flow = flows.find(
       (candidate) => candidate.trigger?.pageId === page.id && candidate.trigger?.actionId === capability.id
     );
-    if (!flow) {
-      await callCapability(config, capability, { pathParams: { ...routeParameters, id: targetId } });
-      return true;
+    if (flow) {
+      const result = await runFlow(
+        flow,
+        {
+          form: values,
+          route: {
+            ...routeParameters,
+            selected: session.targetId,
+            id: session.targetId,
+          },
+          row: Object.keys(session.initialValues).length > 0 ? session.initialValues : effectiveRow,
+          context: { journeyId: session.blueprint.id, journeyMode: session.blueprint.mode },
+        },
+        capability,
+        false,
+        (targetPageId, parameters) => {
+          journeyNavigationRef.current = {
+            sessionId: session.id,
+            pageId: targetPageId,
+            parameters,
+            type: "OPEN_PAGE",
+          };
+        }
+      );
+      if (result.status !== "SUCCESS") {
+        throw new Error(result.status === "CANCELLED"
+          ? "작업이 취소되었습니다."
+          : `워크플로우가 ${result.status} 상태로 종료되었습니다.`);
+      }
+    } else {
+      await callCapability(config, capability, {
+        pathParams: session.targetId
+          ? { ...routeParameters, selected: session.targetId, id: session.targetId }
+          : routeParameters,
+        body: capability.type === "DELETE" || capability.method.toUpperCase() === "GET" ? undefined : values,
+      });
     }
-    const result = await runFlow(
-      flow,
-      {
-        route: { ...routeParameters, selected: targetId, id: targetId },
-        row: effectiveRow,
-      },
-      capability
-    );
-    return result.status === "SUCCESS";
+
+    if (session.blueprint.mode === "DELETE" && page.skeleton === "RESOURCE_DETAIL") {
+      journeyNavigationRef.current = {
+        sessionId: session.id,
+        pageId: null,
+        parameters: {},
+        type: "GO_BACK",
+      };
+    }
+    refresh();
+    return {
+      message: `${capability.action ?? capability.resourceName} 작업이 완료되었습니다.`,
+    };
   }
 
   function renderChildResources(parentId: string) {
@@ -317,12 +373,20 @@ export function PreviewPageRenderer({
     return (
       <div className="flex gap-3">
         {update && (
-          <button type="button" className="text-xs font-bold text-brand-strong" onClick={() => setOverlay({ kind: "UPDATE", row })}>
+          <button
+            type="button"
+            className="text-xs font-bold text-brand-strong"
+            onClick={() => beginJourney("UPDATE", update, updateBlock?.componentId, row, routeTargetId || rowId(row))}
+          >
             수정
           </button>
         )}
         {del && (
-          <button type="button" className="text-xs font-bold text-danger" onClick={() => setOverlay({ kind: "DELETE", id: rowId(row) })}>
+          <button
+            type="button"
+            className="text-xs font-bold text-danger"
+            onClick={() => beginJourney("DELETE", del, deleteBlock?.componentId, row, routeTargetId || rowId(row))}
+          >
             삭제
           </button>
         )}
@@ -350,10 +414,7 @@ export function PreviewPageRenderer({
               <BlueprintActionPart
                 componentId={commandBlock.componentId}
                 capabilities={commandCapabilities}
-                onExecute={async (capability) => {
-                  await runCommandFlow(capability, id);
-                  refresh();
-                }}
+                onExecute={(capability) => beginJourney("COMMAND", capability, undefined, targetRow, id)}
               />
             ) : (
               <QuickActionButtonGroup
@@ -361,7 +422,10 @@ export function PreviewPageRenderer({
                 config={config}
                 targetId={id}
                 onSuccess={refresh}
-                onExecute={(capability) => runCommandFlow(capability, id)}
+                onExecute={async (capability) => {
+                  beginJourney("COMMAND", capability, undefined, targetRow, id);
+                  return false;
+                }}
               />
             )}
           </div>
@@ -401,7 +465,7 @@ export function PreviewPageRenderer({
                 config={config}
                 refreshKey={refreshKey}
                 onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
-                onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                onCreateClick={create ? () => beginJourney("CREATE", create, createBlock?.componentId) : undefined}
                 feedbackComponentId={feedbackComponentId}
               />
             ) : listBlock?.componentId === "resource-card-grid" ? (
@@ -410,7 +474,7 @@ export function PreviewPageRenderer({
                 config={config}
                 refreshKey={refreshKey}
                 onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
-                onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                onCreateClick={create ? () => beginJourney("CREATE", create, createBlock?.componentId) : undefined}
               />
             ) : (
               <ResourceTable
@@ -418,7 +482,7 @@ export function PreviewPageRenderer({
                 config={config}
                 refreshKey={refreshKey}
                 onRowClick={detail || update || del || commandBlock || pagePlan?.navigationRules.length ? handleRowSelection : undefined}
-                onCreateClick={create ? () => setOverlay({ kind: "CREATE" }) : undefined}
+                onCreateClick={create ? () => beginJourney("CREATE", create, createBlock?.componentId) : undefined}
               />
             )}
             {selectedRow && (detail || commandCapabilities.length > 0) && renderDetail(selectedRow, false)}
@@ -426,116 +490,28 @@ export function PreviewPageRenderer({
         )}
       </BlueprintPageChrome>
 
-      {create && createBlock && isOverlayPart(createBlock.componentId) ? (
-        <BlueprintOverlayPart
-          componentId={createBlock.componentId}
-          open={overlay.kind === "CREATE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={create}
-          config={config}
-          onSuccess={refresh}
-          onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
-        />
-      ) : create && (createBlock?.componentId === "form-drawer" ? (
-        <FormDrawer
-          open={overlay.kind === "CREATE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={create}
-          config={config}
-          onSuccess={refresh}
-          onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
-        />
-      ) : (
-        <CreateEditModal
-          open={overlay.kind === "CREATE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={create}
-          config={config}
-          onSuccess={refresh}
-          onSubmitOverride={createFlow ? (values) => runCreateFlow(createFlow, values) : undefined}
-        />
-      ))}
-
-      {update && updateBlock && isOverlayPart(updateBlock.componentId) ? (
-        <BlueprintOverlayPart
-          componentId={updateBlock.componentId}
-          open={overlay.kind === "UPDATE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={update}
-          config={config}
-          initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
-          targetId={routeTargetId || undefined}
-          onSuccess={refresh}
-        />
-      ) : update && (updateBlock?.componentId === "form-drawer" ? (
-        <FormDrawer
-          open={overlay.kind === "UPDATE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={update}
-          config={config}
-          initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
-          pathParamId={routeTargetId || undefined}
-          onSuccess={refresh}
-        />
-      ) : (
-        <CreateEditModal
-          open={overlay.kind === "UPDATE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={update}
-          config={config}
-          initialValues={overlay.kind === "UPDATE" ? overlay.row : undefined}
-          pathParamId={routeTargetId || undefined}
-          onSuccess={refresh}
-        />
-      ))}
-
-      {del && deleteBlock && isOverlayPart(deleteBlock.componentId) ? (
-        <BlueprintOverlayPart
-          componentId={deleteBlock.componentId}
-          open={overlay.kind === "DELETE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={del}
-          config={config}
-          targetId={overlay.kind === "DELETE" ? overlay.id : ""}
-          onSuccess={() => {
-            if (page.skeleton === "RESOURCE_DETAIL") performNavigation(null, {}, "GO_BACK");
-            onSelectRow(null);
-            refresh();
-          }}
-        />
-      ) : del && deleteBlock?.componentId === "typed-confirm-modal" ? (
-        <TypedConfirmModal
-          open={overlay.kind === "DELETE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={del}
-          config={config}
-          targetId={overlay.kind === "DELETE" ? overlay.id : ""}
-          onSuccess={() => {
-            if (page.skeleton === "RESOURCE_DETAIL") {
-              performNavigation(null, {}, "GO_BACK");
-            }
-            onSelectRow(null);
-            setOverlay({ kind: "NONE" });
-            refresh();
-          }}
-        />
-      ) : del ? (
-        <DeleteConfirmModal
-          open={overlay.kind === "DELETE"}
-          onClose={() => setOverlay({ kind: "NONE" })}
-          capability={del}
-          config={config}
-          targetId={overlay.kind === "DELETE" ? overlay.id : ""}
-          onSuccess={() => {
-            if (page.skeleton === "RESOURCE_DETAIL") {
-              performNavigation(null, {}, "GO_BACK");
-            }
-            onSelectRow(null);
-            setOverlay({ kind: "NONE" });
-            refresh();
-          }}
-        />
-      ) : null}
+      <JourneyRuntime
+        key={journey?.id ?? "journey-idle"}
+        session={journey}
+        onExecute={executeJourney}
+        onCompleted={(completedSession) => {
+          if (completedSession.blueprint.mode === "DELETE") onSelectRow(null);
+          const pendingNavigation = journeyNavigationRef.current;
+          if (pendingNavigation?.sessionId === completedSession.id) {
+            performNavigation(
+              pendingNavigation.pageId,
+              pendingNavigation.parameters,
+              pendingNavigation.type
+            );
+            journeyNavigationRef.current = null;
+          }
+        }}
+        onClose={() => {
+          flowAbortRef.current?.abort();
+          journeyNavigationRef.current = null;
+          setJourney(null);
+        }}
+      />
 
       <AsyncFlowProgressModal
         run={flowRun}
