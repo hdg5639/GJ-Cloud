@@ -36,6 +36,7 @@ import {
   toMediaItems,
   toTimelineEvents,
 } from "./map";
+import { MEGA_BLUEPRINT_PARTS, MEGA_BLUEPRINT_PART_LABELS } from "./megaParts";
 
 const EMPTY_CHART = { labels: [], series: [] };
 
@@ -234,7 +235,12 @@ export const BLUEPRINT_PARTS = {
 
 export type BlueprintPartId = keyof typeof BLUEPRINT_PARTS;
 
-const ENTRIES = BLUEPRINT_PARTS as Record<string, BlueprintPartEntry>;
+// 기본 파츠 맵 + Expansion Pack(megaParts) 맵을 합친 런타임 정본. partKind/render*/partsForKind가 모두
+// 이걸 본다. componentId 충돌은 없다(확장 팩 id는 전부 신규). 백엔드 BlueprintPartRegistry.ALL과 1:1.
+const ENTRIES: Record<string, BlueprintPartEntry> = {
+  ...(BLUEPRINT_PARTS as Record<string, BlueprintPartEntry>),
+  ...(MEGA_BLUEPRINT_PARTS as Record<string, BlueprintPartEntry>),
+};
 
 export function partKind(componentId: string): BlueprintPartKind | undefined {
   return ENTRIES[componentId]?.kind;
@@ -243,8 +249,10 @@ export const isCollectionPart = (componentId: string): boolean => partKind(compo
 export const isDetailPart = (componentId: string): boolean => partKind(componentId) === "detail";
 export const isDashboardPart = (componentId: string): boolean => partKind(componentId) === "dashboard";
 
-// 사용자 오버라이드 UI(마법사 파츠 선택기)용 메타 — 파츠 id → 사람이 읽는 이름.
+// 사용자 오버라이드 UI(마법사 파츠 선택기)용 메타 — 파츠 id → 사람이 읽는 이름. 확장 팩 라벨을 먼저
+// 펼치고 기본 파츠의 한국어 라벨이 뒤에서 우선하도록 둔다(id 충돌은 없지만 안전상).
 export const BLUEPRINT_PART_LABELS: Record<string, string> = {
+  ...MEGA_BLUEPRINT_PART_LABELS,
   "entity-directory": "디렉토리",
   "kanban-collection": "칸반 보드",
   "commerce-product-grid": "상품 그리드",
@@ -289,8 +297,8 @@ export function baseComponentFor(kind: BlueprintPartKind, purpose: string | null
 }
 
 export function partsForKind(kind: BlueprintPartKind): { id: string; label: string }[] {
-  return Object.entries(BLUEPRINT_PARTS)
-    .filter(([, entry]) => (entry as { kind: BlueprintPartKind }).kind === kind)
+  return Object.entries(ENTRIES)
+    .filter(([, entry]) => entry.kind === kind)
     .map(([id]) => ({ id, label: BLUEPRINT_PART_LABELS[id] ?? id }));
 }
 

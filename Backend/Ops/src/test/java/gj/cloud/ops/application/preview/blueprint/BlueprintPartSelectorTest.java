@@ -113,6 +113,33 @@ class BlueprintPartSelectorTest {
         assertThat(result.get("customers-page").get(0).componentId()).isEqualTo("entity-directory");
     }
 
+    @Test
+    void swapsExpansionPackFinanceDashboardForNewCategory() {
+        // Expansion Pack — "transactions"는 신규 FINANCE 카테고리로 분류되고, FINANCE DASHBOARD 파츠
+        // (finance-cashflow-dashboard, 해당 kind/category 유일)로 치환된다. 단, 확장 팩 파츠는
+        // preferredPurposes가 ADMIN/PRODUCT_LIKE라 그 purpose에서만 자동선택된다.
+        Capability list = capability("transactions.list", "transactions", CapabilityType.LIST);
+        Map<String, List<Block>> blocks = Map.of("finance-page", List.of(
+                new Block("dash", "dashboard-view", "page.content", List.of("transactions.list"), null)));
+
+        Map<String, List<Block>> result = BlueprintPartSelector.select(blocks, List.of(list), Purpose.ADMIN);
+
+        assertThat(result.get("finance-page").get(0).componentId()).isEqualTo("finance-cashflow-dashboard");
+    }
+
+    @Test
+    void expansionPackPartIsNotAutoSelectedForApiTestPurpose() {
+        // 확장 팩 파츠는 preferredPurposes=ADMIN/PRODUCT_LIKE이므로 API_TEST에서는 자동선택되지 않고
+        // 기본 컴포넌트가 유지된다.
+        Capability list = capability("transactions.list", "transactions", CapabilityType.LIST);
+        Map<String, List<Block>> blocks = Map.of("finance-page", List.of(
+                new Block("dash", "dashboard-view", "page.content", List.of("transactions.list"), null)));
+
+        Map<String, List<Block>> result = BlueprintPartSelector.select(blocks, List.of(list), Purpose.API_TEST);
+
+        assertThat(result.get("finance-page").get(0).componentId()).isEqualTo("dashboard-view");
+    }
+
     private Capability capability(String id, String resourceName, CapabilityType type) {
         return new Capability(id, resourceName, type, null, "/" + resourceName, "GET", false, false, false, "HIGH",
                 List.of(), List.of(), null, null, RiskLevel.SAFE, AutomationPolicy.AUTO_SAFE, null, null,

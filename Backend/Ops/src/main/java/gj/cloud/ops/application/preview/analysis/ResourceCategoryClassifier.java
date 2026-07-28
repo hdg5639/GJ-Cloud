@@ -39,6 +39,54 @@ public final class ResourceCategoryClassifier {
                 "employee", "team"));
         NAME_HINTS.put(BlueprintCategory.SETTINGS, List.of(
                 "setting", "config", "preference", "permission", "role", "policy"));
+
+        // ── Expansion Pack 신규 도메인(megaComponentManifest 카테고리와 1:1). 위 기존 카테고리가
+        //    선점한 범용어(invoice/payment→COMMERCE, event→OBSERVABILITY, ticket→PROJECT,
+        //    employee→CRM, media/asset→CONTENT 등)는 피하고 각 도메인 고유 명사만 둔다. ──
+        NAME_HINTS.put(BlueprintCategory.SECURITY, List.of(
+                "security", "threat", "vulnerability", "firewall", "malware", "compliance", "cve", "breach",
+                "siem", "soc"));
+        NAME_HINTS.put(BlueprintCategory.SUPPORT, List.of(
+                "support", "helpdesk", "faq", "complaint", "inquiry", "escalation"));
+        NAME_HINTS.put(BlueprintCategory.FINANCE, List.of(
+                "finance", "transaction", "ledger", "expense", "budget", "tax", "journal", "reconciliation"));
+        NAME_HINTS.put(BlueprintCategory.BILLING, List.of(
+                "billing", "subscription", "plan", "charge", "refund", "dunning"));
+        NAME_HINTS.put(BlueprintCategory.INVENTORY, List.of(
+                "inventory", "stock", "warehouse", "supply", "reorder", "lot", "bin"));
+        NAME_HINTS.put(BlueprintCategory.LOGISTICS, List.of(
+                "logistics", "delivery", "route", "fleet", "carrier", "dispatch", "freight"));
+        NAME_HINTS.put(BlueprintCategory.BOOKING, List.of(
+                "booking", "reservation", "appointment", "availability", "slot"));
+        NAME_HINTS.put(BlueprintCategory.EVENTS, List.of(
+                "venue", "session", "attendee", "registration", "agenda", "speaker", "rsvp"));
+        NAME_HINTS.put(BlueprintCategory.EDUCATION, List.of(
+                "course", "lesson", "student", "enrollment", "curriculum", "quiz", "assignment", "grade",
+                "classroom"));
+        NAME_HINTS.put(BlueprintCategory.HR, List.of(
+                "candidate", "applicant", "recruit", "payroll", "leave", "onboarding", "timesheet", "headcount"));
+        NAME_HINTS.put(BlueprintCategory.DEVELOPER, List.of(
+                "apikey", "endpoint", "repository", "repo", "webhook", "sdk", "integration", "apiclient",
+                "oauthapp"));
+        NAME_HINTS.put(BlueprintCategory.AI, List.of(
+                "model", "prompt", "dataset", "embedding", "inference", "training", "agent", "finetune",
+                "completion"));
+        NAME_HINTS.put(BlueprintCategory.IOT, List.of(
+                "device", "sensor", "gateway", "telemetry", "firmware", "actuator"));
+        NAME_HINTS.put(BlueprintCategory.REAL_ESTATE, List.of(
+                "property", "listing", "lease", "rental", "apartment", "realestate", "unit"));
+        NAME_HINTS.put(BlueprintCategory.COMMUNITY, List.of(
+                "community", "forum", "thread", "discussion", "badge", "reputation", "group"));
+        NAME_HINTS.put(BlueprintCategory.MARKETPLACE, List.of(
+                "marketplace", "vendor", "seller", "storefront", "offer", "bid"));
+        NAME_HINTS.put(BlueprintCategory.MEDIA, List.of(
+                "video", "audio", "episode", "playlist", "channel", "broadcast", "podcast"));
+        NAME_HINTS.put(BlueprintCategory.TRAVEL, List.of(
+                "trip", "flight", "hotel", "itinerary", "destination"));
+        NAME_HINTS.put(BlueprintCategory.LEGAL, List.of(
+                "contract", "clause", "matter", "litigation", "legalcase", "nda", "casefile"));
+        NAME_HINTS.put(BlueprintCategory.KNOWLEDGE, List.of(
+                "knowledge", "wiki", "glossary", "handbook", "runbook"));
     }
 
     public BlueprintCategory classify(Capability capability) {

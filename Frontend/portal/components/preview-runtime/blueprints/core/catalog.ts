@@ -10,7 +10,28 @@ export type BlueprintCategory =
   | "OBSERVABILITY"
   | "PROJECT"
   | "SETTINGS"
-  | "WORKFLOW";
+  | "WORKFLOW"
+  // Expansion Pack 신규 도메인(백엔드 BlueprintCategory enum과 1:1).
+  | "AI"
+  | "BILLING"
+  | "BOOKING"
+  | "COMMUNITY"
+  | "DEVELOPER"
+  | "EDUCATION"
+  | "EVENTS"
+  | "FINANCE"
+  | "HR"
+  | "INVENTORY"
+  | "IOT"
+  | "KNOWLEDGE"
+  | "LEGAL"
+  | "LOGISTICS"
+  | "MARKETPLACE"
+  | "MEDIA"
+  | "REAL_ESTATE"
+  | "SECURITY"
+  | "SUPPORT"
+  | "TRAVEL";
 
 export type BlueprintSurface =
   | "page.content"

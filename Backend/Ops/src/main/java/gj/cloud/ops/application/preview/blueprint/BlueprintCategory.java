@@ -13,5 +13,27 @@ public enum BlueprintCategory {
     OBSERVABILITY,
     PROJECT,
     SETTINGS,
-    WORKFLOW
+    WORKFLOW,
+    // Expansion Pack 신규 도메인 카테고리(megaComponentManifest와 1:1). 프론트 core/catalog.ts의
+    // BlueprintCategory와도 맞춘다.
+    AI,
+    BILLING,
+    BOOKING,
+    COMMUNITY,
+    DEVELOPER,
+    EDUCATION,
+    EVENTS,
+    FINANCE,
+    HR,
+    INVENTORY,
+    IOT,
+    KNOWLEDGE,
+    LEGAL,
+    LOGISTICS,
+    MARKETPLACE,
+    MEDIA,
+    REAL_ESTATE,
+    SECURITY,
+    SUPPORT,
+    TRAVEL
 }

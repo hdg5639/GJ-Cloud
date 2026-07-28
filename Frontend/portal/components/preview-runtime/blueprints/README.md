@@ -90,6 +90,15 @@ Frontend/portal/components/preview-runtime/blueprints/
   - 대시보드: `operations-health-dashboard`(OBSERVABILITY), `admin-governance-dashboard`(ADMIN),
     `commerce-revenue-dashboard`(COMMERCE), `content-performance-dashboard`(CONTENT),
     `executive-kpi-dashboard`(ANALYTICS), `project-delivery-dashboard`(PROJECT)
-- **Library (등록 대기)**: 모달/워크플로우 위저드는 렌더 kind가 달라(드롭인 대체가 아님) 이 "2줄 배선"
-  대상이 아니다 — Flow/모달 파이프라인 쪽에서 별도로 소비된다. `timeline-collection` 등 카테고리 귀속이
-  모호한 컬렉션도 아직 자동선택에 등록하지 않았다(오버라이드로는 지정 가능).
+- **Expansion Pack (config 팩토리 기반, 배선됨)** — `core/megaFactory.tsx`의 `create*Part(config)`로
+  만들어진 확장 팩. collection/detail/dashboard **86종**을 `adapters/megaParts.tsx`에서 배선했다(균일
+  시그니처라 개별 매퍼 없이 `records=rows` 한 줄). 신규 도메인 카테고리 20종(SECURITY/FINANCE/HR/IOT/
+  LEGAL/…)을 백엔드 `BlueprintCategory` enum + `ResourceCategoryClassifier` 힌트 + 프론트 `catalog.ts`에
+  추가해 자동선택이 걸린다. 확장 팩 파츠는 `preferredPurposes=ADMIN/PRODUCT_LIKE`라 API_TEST에선 기본
+  컴포넌트가 유지된다. (kind, category)당 첫 파츠만 자동선택되고, 같은 카테고리의 나머지는 마법사
+  드롭다운(오버라이드)으로 도달한다.
+- **Library (등록 대기)**: 모달/워크플로우 위저드 + 확장 팩의 layouts/modals/workflows/forms/actions/
+  navigation/feedback/themes **150종**은 렌더 kind가 달라(드롭인 대체가 아님) 이 selector 배선 대상이
+  아니다 — 레이아웃 선택 엔진·테마 시스템 등 별도 런타임이 생겨야 소비된다(Combined Report §29 로드맵).
+  소스로 존재하며 컴파일된다. `timeline-collection` 등 카테고리 귀속이 모호한 컬렉션도 자동선택 미등록
+  (오버라이드로는 지정 가능).
