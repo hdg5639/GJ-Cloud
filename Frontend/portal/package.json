@@ -8,8 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "blueprint:generate": "node ../../scripts/generate-blueprint-registry.mjs",
-    "blueprint:check": "node ../../scripts/generate-blueprint-registry.mjs --check"
+    "blueprint:generate": "node scripts/generate-blueprint-registry.mjs",
+    "blueprint:check": "node scripts/generate-blueprint-registry.mjs --check"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",

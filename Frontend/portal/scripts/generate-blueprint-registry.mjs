@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const blueprintRoot = path.join(root, "Frontend/portal/components/preview-runtime/blueprints");
+const portalRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const blueprintRoot = path.join(portalRoot, "components/preview-runtime/blueprints");
 const manifestPath = path.join(blueprintRoot, "manifests/component-manifest.json");
 const generatedRegistryPath = path.join(blueprintRoot, "adapters/generatedPartComponents.ts");
 
@@ -69,7 +69,7 @@ function normalize(parts) {
     const sourcePath = `${directory}/${part.exportName}.tsx`;
     const implementationPath = path.join(blueprintRoot, sourcePath);
     if (!fs.existsSync(implementationPath)) {
-      throw new Error(`구현 파일 누락: ${path.relative(root, implementationPath)}`);
+      throw new Error(`구현 파일 누락: ${path.relative(portalRoot, implementationPath)}`);
     }
     const implementation = fs.readFileSync(implementationPath, "utf8");
     const exportPattern = new RegExp(`export\\s+(?:function|const)\\s+${part.exportName}\\b`);
@@ -127,7 +127,7 @@ function writeOrCheck(file, content, check) {
   if (check) {
     const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
     if (current !== content) {
-      throw new Error(`${path.relative(root, file)}가 manifest와 동기화되지 않았습니다. npm run blueprint:generate를 실행하세요.`);
+      throw new Error(`${path.relative(portalRoot, file)}가 manifest와 동기화되지 않았습니다. npm run blueprint:generate를 실행하세요.`);
     }
     return;
   }
