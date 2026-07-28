@@ -236,6 +236,25 @@ export function extractCount(
   return findCountField(result, 0) ?? extractArray(result, collectionPath).length;
 }
 
+// 상세(DETAIL) 응답의 봉투를 한 겹 벗긴다. 목록은 collectionPath로 배열 위치를 알지만 상세는 그런
+// 힌트가 없어, {success, data:{...}} 같은 공통 래퍼면 실제 리소스 객체(data)를 못 찾고 래퍼 필드
+// (success/message/…)를 그대로 렌더했다. 알려진 봉투 키가 "객체" 값을 가지면 그것으로 언랩한다
+// (배열이면 목록이지 상세가 아니므로 제외). 봉투가 아니면(래퍼 없이 바로 리소스) 원본을 그대로 둔다.
+const ENVELOPE_KEYS = ["data", "result", "payload", "item", "content", "body"];
+export function unwrapEnvelope(result: unknown): Record<string, unknown> | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return (result ?? null) as Record<string, unknown> | null;
+  }
+  const obj = result as Record<string, unknown>;
+  for (const key of ENVELOPE_KEYS) {
+    const inner = obj[key];
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      return inner as Record<string, unknown>;
+    }
+  }
+  return obj;
+}
+
 export function formatCellValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "—";

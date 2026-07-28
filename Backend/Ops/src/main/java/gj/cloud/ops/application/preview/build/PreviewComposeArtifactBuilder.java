@@ -620,6 +620,12 @@ public class PreviewComposeArtifactBuilder {
               font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
               background: #0b0d0f;
               color: #e5e7eb;
+              /* Auto Preview 상태 배지 팔레트 — 이 4개 hex만 바꾸면 배지/요약/카드 색이 전부 갈린다.
+                 배경/테두리는 color-mix로 파생하므로 tone당 색 하나만 관리한다. */
+              --preview-status-ok: #46d17f;
+              --preview-status-warn: #f5a623;
+              --preview-status-idle: #8b93a0;
+              --preview-status-danger: #f2555a;
             }
             * { box-sizing: border-box; }
             body { margin: 0; }
@@ -1038,6 +1044,23 @@ public class PreviewComposeArtifactBuilder {
               return candidate != null ? String(candidate) : "";
             }
 
+            // 상세 응답의 봉투를 한 겹 벗긴다(포털 api.ts unwrapEnvelope와 동일). {success, data:{...}}
+            // 같은 래퍼면 실제 리소스 객체를 렌더하도록 data를 꺼낸다. 배열 값(목록)이나 봉투 아님은 제외.
+            const ENVELOPE_KEYS = ["data", "result", "payload", "item", "content", "body"];
+            function unwrapEnvelope(result: unknown): Record<string, unknown> | null {
+              if (!result || typeof result !== "object" || Array.isArray(result)) {
+                return (result ?? null) as Record<string, unknown> | null;
+              }
+              const obj = result as Record<string, unknown>;
+              for (const key of ENVELOPE_KEYS) {
+                const inner = obj[key];
+                if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+                  return inner as Record<string, unknown>;
+                }
+              }
+              return obj;
+            }
+
             // 상태 배지 규칙 — 포털 status.ts와 동일 어휘/의미(둘 다 손대야 함). status/state/phase
             // 필드 값을 색으로 구분해 목록을 대시보드처럼 보이게 한다.
             type StatusTone = "ok" | "warn" | "idle" | "danger" | "neutral";
@@ -1074,13 +1097,22 @@ public class PreviewComposeArtifactBuilder {
               }
               return null;
             }
+            // 색은 index.css의 CSS 변수(--preview-status-*)에서 읽고 배경/테두리는 color-mix로 파생한다 —
+            // tone당 변수 하나만 갈아끼우면 전체 색이 바뀐다. 변수 미정의 대비 fallback hex 포함.
+            const TONE_VAR: Record<StatusTone, string> = {
+              ok: "var(--preview-status-ok, #46d17f)",
+              warn: "var(--preview-status-warn, #f5a623)",
+              danger: "var(--preview-status-danger, #f2555a)",
+              idle: "var(--preview-status-idle, #8b93a0)",
+              neutral: "var(--preview-status-idle, #8b93a0)",
+            };
             function toneStyle(tone: StatusTone): { color: string; background: string; borderColor: string } {
-              switch (tone) {
-                case "ok": return { color: "#46d17f", background: "rgba(70,209,127,0.13)", borderColor: "rgba(70,209,127,0.30)" };
-                case "warn": return { color: "#f5a623", background: "rgba(245,166,35,0.14)", borderColor: "rgba(245,166,35,0.32)" };
-                case "danger": return { color: "#f2555a", background: "rgba(242,85,90,0.14)", borderColor: "rgba(242,85,90,0.32)" };
-                default: return { color: "#8b93a0", background: "rgba(139,147,160,0.14)", borderColor: "rgba(139,147,160,0.30)" };
-              }
+              const color = TONE_VAR[tone];
+              return {
+                color,
+                background: `color-mix(in srgb, ${color} 14%, transparent)`,
+                borderColor: `color-mix(in srgb, ${color} 32%, transparent)`,
+              };
             }
             function summarizeStatus(rows: Record<string, unknown>[], fieldKey: string): { value: string; tone: StatusTone; count: number }[] {
               const order: string[] = [];
@@ -1489,7 +1521,7 @@ public class PreviewComposeArtifactBuilder {
                   setError(null);
                   try {
                     const result = await callCapability(capability, authToken, { pathParams: { id } });
-                    if (!cancelled) setData(result as Record<string, unknown>);
+                    if (!cancelled) setData(unwrapEnvelope(result));
                   } catch (err) {
                     if (!cancelled) setError(err instanceof Error ? err.message : "상세 정보를 불러오지 못했습니다");
                   } finally {
@@ -1511,9 +1543,16 @@ public class PreviewComposeArtifactBuilder {
                 return null;
               }
 
+              const statusField = statusFieldOf(data);
+              const statusValue = statusField ? data[statusField] : undefined;
+              const fieldEntries = Object.entries(data).filter(([key]) => key !== statusField);
+
               return (
                 <div>
-                  {Object.entries(data).map(([key, value]) => (
+                  {typeof statusValue === "string" && (
+                    <div style={{ marginBottom: 12 }}><StatusBadge value={statusValue} /></div>
+                  )}
+                  {fieldEntries.map(([key, value]) => (
                     <div
                       key={key}
                       style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #262b26", fontSize: 13 }}
@@ -1549,7 +1588,7 @@ public class PreviewComposeArtifactBuilder {
                   setError(null);
                   try {
                     const result = await callCapability(capability, authToken, { pathParams: { id } });
-                    if (!cancelled) setData(result as Record<string, unknown>);
+                    if (!cancelled) setData(unwrapEnvelope(result));
                   } catch (err) {
                     if (!cancelled) setError(err instanceof Error ? err.message : "상세 정보를 불러오지 못했습니다");
                   } finally {
@@ -1571,16 +1610,25 @@ public class PreviewComposeArtifactBuilder {
                 return null;
               }
 
+              const statusField = statusFieldOf(data);
+              const statusValue = statusField ? data[statusField] : undefined;
+              const fieldEntries = Object.entries(data).filter(([key]) => key !== statusField);
+
               return (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-                  {Object.entries(data).map(([key, value]) => (
-                    <div key={key} className="panel" style={{ padding: 12 }}>
-                      <p className="muted" style={{ fontSize: 11 }}>{key}</p>
-                      <p style={{ fontFamily: "monospace", fontSize: 13, marginTop: 4, wordBreak: "break-all" }}>
-                        {formatCellValue(value)}
-                      </p>
-                    </div>
-                  ))}
+                <div>
+                  {typeof statusValue === "string" && (
+                    <div style={{ marginBottom: 14 }}><StatusBadge value={statusValue} /></div>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+                    {fieldEntries.map(([key, value]) => (
+                      <div key={key} className="panel" style={{ padding: 12 }}>
+                        <p className="muted" style={{ fontSize: 11 }}>{key}</p>
+                        <p style={{ fontFamily: "monospace", fontSize: 13, marginTop: 4, wordBreak: "break-all" }}>
+                          {formatCellValue(value)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             }

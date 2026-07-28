@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { PageLoader } from "@/components/ui/loader";
-import { callCapability, formatCellValue } from "./api";
+import { callCapability, formatCellValue, unwrapEnvelope } from "./api";
+import { StatusBadge } from "./StatusBadge";
+import { statusFieldOf } from "./status";
 import type { PreviewCapability, PreviewRuntimeConfig } from "./types";
 
 // Direction Recovery Change Request §9.2 "full-detail-page" — side-detail-panel(DetailPanel)과
@@ -35,7 +37,7 @@ export function FullDetailPage({
       try {
         const result = await callCapability(config, capability, { pathParams: { id } });
         if (!cancelled) {
-          setData(result as Record<string, unknown>);
+          setData(unwrapEnvelope(result));
         }
       } catch (err) {
         if (!cancelled) {
@@ -65,14 +67,25 @@ export function FullDetailPage({
     return null;
   }
 
+  const statusField = statusFieldOf(data);
+  const statusValue = statusField ? data[statusField] : undefined;
+  const fieldEntries = Object.entries(data).filter(([key]) => key !== statusField);
+
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-      {Object.entries(data).map(([key, value]) => (
-        <div key={key} className="rounded-md border border-line-strong bg-white/[0.02] p-3">
-          <p className="text-xs font-bold text-muted-soft">{key}</p>
-          <p className="mt-1 break-all font-mono text-sm">{formatCellValue(value)}</p>
+    <div>
+      {typeof statusValue === "string" && (
+        <div className="mb-4">
+          <StatusBadge value={statusValue} />
         </div>
-      ))}
+      )}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        {fieldEntries.map(([key, value]) => (
+          <div key={key} className="rounded-md border border-line-strong bg-white/[0.02] p-3">
+            <p className="text-xs font-bold text-muted-soft">{key}</p>
+            <p className="mt-1 break-all font-mono text-sm">{formatCellValue(value)}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

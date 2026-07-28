@@ -64,19 +64,22 @@ export function summarizeStatus(rows: Record<string, unknown>[], fieldKey: strin
   return order.map((value) => ({ value, tone: statusTone(value), count: counts.get(value) ?? 0 }));
 }
 
-// tone → 인라인 스타일(hex). Tailwind 커스텀 색 설정에 의존하지 않도록 색은 인라인으로 준다 —
-// 라이트(포털)/다크(배포) 양쪽 바탕에서 tint+border+텍스트 조합이 읽힌다.
+// tone → 인라인 스타일. 색은 CSS 변수(globals.css --preview-status-*)에서 읽고, 배경/테두리는
+// color-mix로 그 색에서 파생한다 — tone당 변수 하나만 갈아끼우면 배지/요약/카드 색이 전부 바뀐다.
+// 변수 미정의 환경을 대비해 var()에 fallback hex를 함께 준다.
+const TONE_VAR: Record<StatusTone, string> = {
+  ok: "var(--preview-status-ok, #3fbf74)",
+  warn: "var(--preview-status-warn, #d98c12)",
+  danger: "var(--preview-status-danger, #e0484d)",
+  idle: "var(--preview-status-idle, #7c8791)",
+  neutral: "var(--preview-status-idle, #7c8791)",
+};
+
 export function toneStyle(tone: StatusTone): { color: string; background: string; borderColor: string } {
-  switch (tone) {
-    case "ok":
-      return { color: "#3fbf74", background: "rgba(70,209,127,0.13)", borderColor: "rgba(70,209,127,0.30)" };
-    case "warn":
-      return { color: "#d98c12", background: "rgba(245,166,35,0.14)", borderColor: "rgba(245,166,35,0.32)" };
-    case "danger":
-      return { color: "#e0484d", background: "rgba(242,85,90,0.14)", borderColor: "rgba(242,85,90,0.32)" };
-    case "idle":
-    case "neutral":
-    default:
-      return { color: "#7c8791", background: "rgba(139,147,160,0.14)", borderColor: "rgba(139,147,160,0.30)" };
-  }
+  const color = TONE_VAR[tone];
+  return {
+    color,
+    background: `color-mix(in srgb, ${color} 14%, transparent)`,
+    borderColor: `color-mix(in srgb, ${color} 32%, transparent)`,
+  };
 }

@@ -22,6 +22,14 @@
   --success: #08b85b;
   --success-soft: #eaf8ef;
 
+  /* Auto Preview 상태 배지 팔레트 — 여기 4개 hex만 바꾸면 배지/요약/카드 색이 전부 갈린다.
+     배경/테두리는 color-mix로 이 색에서 파생하므로 tone당 색 하나만 관리한다. 커스텀 프로퍼티라
+     .theme-dark에도 상속돼 라이트/다크 공통으로 쓰인다. */
+  --preview-status-ok: #3fbf74;
+  --preview-status-warn: #d98c12;
+  --preview-status-idle: #7c8791;
+  --preview-status-danger: #e0484d;
+
   --radius-panel-size: 16px;
 
   color-scheme: light;

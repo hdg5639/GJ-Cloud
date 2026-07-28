@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { PageLoader } from "@/components/ui/loader";
-import { callCapability, formatCellValue } from "./api";
+import { callCapability, formatCellValue, unwrapEnvelope } from "./api";
+import { StatusBadge } from "./StatusBadge";
+import { statusFieldOf } from "./status";
 import type { PreviewCapability, PreviewRuntimeConfig } from "./types";
 
 export function DetailPanel({
@@ -35,7 +37,7 @@ export function DetailPanel({
       try {
         const result = await callCapability(config, capability, { pathParams: { id } });
         if (!cancelled) {
-          setData(result as Record<string, unknown>);
+          setData(unwrapEnvelope(result));
         }
       } catch (err) {
         if (!cancelled) {
@@ -65,16 +67,27 @@ export function DetailPanel({
     return null;
   }
 
+  const statusField = statusFieldOf(data);
+  const statusValue = statusField ? data[statusField] : undefined;
+  const fieldEntries = Object.entries(data).filter(([key]) => key !== statusField);
+
   return (
-    <div className="grid grid-cols-[140px_1fr] gap-y-2 text-sm">
-      {Object.entries(data).flatMap(([key, value]) => [
-        <div key={`${key}-k`} className="text-muted-soft">
-          {key}
-        </div>,
-        <div key={`${key}-v`} className="break-all font-mono">
-          {formatCellValue(value)}
-        </div>,
-      ])}
+    <div>
+      {typeof statusValue === "string" && (
+        <div className="mb-3">
+          <StatusBadge value={statusValue} />
+        </div>
+      )}
+      <div className="grid grid-cols-[140px_1fr] gap-y-2 text-sm">
+        {fieldEntries.flatMap(([key, value]) => [
+          <div key={`${key}-k`} className="text-muted-soft">
+            {key}
+          </div>,
+          <div key={`${key}-v`} className="break-all font-mono">
+            {formatCellValue(value)}
+          </div>,
+        ])}
+      </div>
     </div>
   );
 }
