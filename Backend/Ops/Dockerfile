@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM eclipse-temurin:17-jdk AS builder
 # 빌드 컨텍스트 = 리포 루트(compose.yaml의 context: .). build.gradle의 syncPreviewTemplate가
 # ${projectDir}/../../Frontend/portal 에서 포털 preview-runtime 실물을 리소스로 굽기 때문에,
@@ -12,7 +13,9 @@ COPY Backend/Ops/src src
 COPY Frontend/portal/lib/types.ts /build/Frontend/portal/lib/types.ts
 COPY Frontend/portal/components/ui /build/Frontend/portal/components/ui
 COPY Frontend/portal/components/preview-runtime /build/Frontend/portal/components/preview-runtime
-RUN ./gradlew bootJar -x test --no-daemon
+# Gradle 홈(/root/.gradle: 배포판 + 의존성 + 빌드 캐시)을 빌드 간 재사용해 재빌드를 크게 단축한다.
+# 서비스별 캐시 id로 병렬 빌드 시 락 경합을 피한다(첫 빌드는 콜드라 여전히 느림).
+RUN --mount=type=cache,target=/root/.gradle,id=gradle-ops ./gradlew bootJar -x test --no-daemon
 
 FROM eclipse-temurin:17-jre
 # RepositorySnapshotBuilder가 배포 스펙 생성 전에 대상 저장소를 이 컨테이너 안에서 직접 얕은 클론(git clone)해
