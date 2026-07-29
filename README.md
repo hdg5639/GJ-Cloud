@@ -185,72 +185,408 @@ GitHub App으로 저장소를 연결하고 자동 배포를 켜면 지정 브랜
 
 ## Auto Preview (Ops)
 
-배포까지 하려면 결국 "테스트해볼 화면"이 필요하다는 문제에서 출발했다 — API만 만들어둔 상태에서 프론트를 매번 손으로 짜지 않고, OpenAPI 문서 하나로 실제로 호출되는 테스트 UI를 자동 생성해 바로 배포하는 기능이다.
+Auto Preview는 API만 구현된 서비스에 실제 사용자 서비스처럼 보이고 작동하는 테스트 화면을 자동으로 조립하는 Ops 기능이다. 단순히 엔드포인트마다 폼 하나를 만드는 것이 아니라, 서비스 설명과 OpenAPI 증거를 바탕으로 사용자의 목표를 추론하고 여러 API를 연결한 시나리오, 페이지, 모달, 상태 전이, 검증 단계까지 생성한다. 완성된 결과는 브라우저에서 실제 API를 호출해 시험하고 일반 배포 파이프라인으로 VM에 배포할 수 있다.
 
+핵심 원칙은 다음과 같다.
+
+1. **OpenAPI가 실행 계약의 정본이다.** AI가 존재하지 않는 API, 필드, 응답 경로를 임의로 만들어 실행 계층에 넣을 수 없다.
+2. **시나리오를 먼저 만들고 UI를 나중에 투영한다.** 화면 모양을 먼저 정한 뒤 API를 끼워 맞추지 않는다.
+3. **AI는 의미를 제안하고 Compiler가 실행 가능성을 결정한다.** AI 출력은 semantic stage와 서비스 이해에 집중하며 실제 HTTP binding은 결정론적으로 만든다.
+4. **포털과 배포본은 같은 Runtime을 사용한다.** 프리뷰와 실제 배포 앱 사이에 기능이 어긋나는 이중 구현을 두지 않는다.
+5. **완전한 자동 생성이 불가능해도 사용 가능한 범위까지 단계적으로 폴백한다.** 서비스형 시나리오, 규칙 기반 시나리오, 개별 Operation Preview 순서로 기능을 보존한다.
+
+### 사용자 작업 흐름
+
+Auto Preview 화면은 입력·미리보기·배포의 세 단계로 구성된다. 앞뒤 단계로 이동해도 현재 분석 결과와 사용자가 입력한 값은 유지된다.
+
+#### 1단계: API와 서비스 정보 입력
+
+OpenAPI는 다음 두 방식 중 정확히 하나로 입력한다.
+
+- HTTPS OpenAPI URL: 서버가 문서를 직접 가져온다.
+- 로컬 JSON/YAML 파일: 브라우저가 최대 5MB 파일을 텍스트로 읽어 분석 요청에 포함한다.
+
+여기에 다음 정보를 선택적으로 더할 수 있다.
+
+- Swagger UI, Redoc, 제품 문서 같은 **서비스 문서 페이지 URL**
+- 서비스의 사용자, 목적, 핵심 기능을 설명하는 **서비스 설명**
+- 반드시 테스트하고 싶은 행동 순서를 적는 **시나리오 의도**
+- 생성 목적: `API_TEST`, `PRODUCT_LIKE`, `ADMIN`
+- 초기 프리뷰 모드: 시나리오 중심, 추론 시나리오 중심, 개별 Operation 중심
+
+분석 요청의 입력 제한은 다음과 같다.
+
+| 입력 | 제한 |
+|---|---:|
+| OpenAPI URL | 2,048자 |
+| OpenAPI JSON/YAML 원문 | 5,242,880자, 파서 기준 최대 5MB |
+| 서비스 문서 페이지 URL | 2,048자 |
+| 서비스 설명 | 2,000자 |
+| 시나리오 의도 | 4,000자 |
+| 선택 Capability | 최대 300개, ID당 160자 |
+
+분석 버튼을 누르면 로딩 상태와 진행 중 표시가 즉시 나타난다. 입력한 OpenAPI 원문과 문서 HTML 원문은 분석용으로만 사용하며 AI 감사 로그나 Blueprint 스냅샷에 그대로 저장하지 않는다.
+
+#### 2단계: 서비스 화면 확인과 재구성
+
+실행 가능한 시나리오가 하나라도 있으면 **서비스 화면**이 기본 탭으로 열린다. 시나리오 디버거나 엔드포인트 목록은 보조 도구이며, 사용자는 처음부터 실제 제품형 화면을 확인한다.
+
+오른쪽의 독립 스크롤 분석 패널에서는 다음 정보를 볼 수 있다.
+
+- 엔진이 이해한 서비스 유형, 주요 Actor, Entity, 사용자 Goal
+- 서비스 이해에 사용된 입력 출처
+- 감지된 API Capability와 카테고리
+- 생성된 페이지, Flow, Scenario와 아직 해결하지 못한 항목
+- 정적 검증 경고와 AI 검수 결과
+
+사용자는 API 카테고리를 태그로 선택하고 “사용자가 상품을 비교한 뒤 장바구니에 넣고 결제 직전까지 이동”처럼 원하는 흐름을 자연어로 입력해 다시 생성할 수 있다. 재생성은 단순히 모달 하나만 바꾸는 작업이 아니다. 선택 범위에 맞춰 서비스 이해, Scenario, 페이지 경계, Flow, Blueprint Parts를 모두 다시 계산한다. 인증 Capability와 선택된 기능의 의존 Capability는 누락되지 않도록 자동으로 포함한다.
+
+AI 검수 결과는 읽기 전용 조언으로 끝나지 않는다. 검수 내용을 바탕으로 구조화된 Page Plan 수정안을 요청하고, 사용자가 적용할 항목을 선택한 뒤 검증된 patch만 현재 결과에 반영할 수 있다.
+
+#### 3단계: VM 배포
+
+사용자는 배포 대상 이름과 실제 API Base URL을 지정한다. 배포 요청이 승인되면 현재 Scenario·Page Plan·Flow·Binding·Blueprint를 다시 검증하고 공용 Runtime이 들어간 Vite + React 프로젝트를 생성한 뒤 기존 비동기 배포 파이프라인에 전달한다. 배포 로그 화면에서도 포털 상단 내비게이션을 유지하므로 사용자가 Auto Preview 첫 화면으로 강제 이동하지 않고 원하는 위치로 이동할 수 있다.
+
+### 전체 처리 파이프라인
+
+```text
+OpenAPI HTTPS URL 또는 JSON/YAML 파일
+서비스 설명 + 시나리오 의도 + 선택한 Capability + 문서 페이지
+    │
+    ▼
+입력 보안 검사와 문서 정규화
+    ├─ OpenAPI 3.x 파싱
+    ├─ operation/parameter/request/response/security 증거 추출
+    ├─ 외부 $ref·redirect·내부망 접근 차단
+    └─ 서비스 문서 본문 추출
+    │
+    ▼
+전체 Capability Catalog 생성
+    ├─ LIST/DETAIL/CREATE/UPDATE/DELETE/LOGIN
+    ├─ QUERY/MUTATION/COMMAND/AUTH/METRIC/EVENT_STREAM/FILE_TRANSFER/WORKFLOW
+    ├─ 검색·페이지네이션·응답 배열·ID·토큰 경로 감지
+    └─ 위험도·자동화 정책·Capability 의존성 계산
+    │
+    ▼
+활성 Capability Scope 계산
+    ├─ 사용자가 선택한 카테고리
+    ├─ 인증 Capability 자동 포함
+    └─ 의존성 closure 자동 포함
+    │
+    ▼
+서비스 의미 계획
+    ├─ 서비스 유형·Actor·Entity·Goal 추론
+    ├─ AI semantic Scenario 제안
+    └─ 실패·저신뢰·실행 불가 시 규칙 기반 planner 폴백
+    │
+    ▼
+Scenario Compiler
+    ├─ semantic stage를 실제 Capability에 연결
+    ├─ path/query/header/body/response extraction binding 생성
+    ├─ state producer/consumer와 검증 단계 구성
+    └─ 그래프·위험 작업·API 참조 hard validation
+    │
+    ▼
+Page Plan · Flow · UI Projection
+    ├─ 자연스러운 화면 경계와 내비게이션 생성
+    ├─ 단일 페이지 작업공간 또는 다중 페이지 제품 구조 선택
+    └─ Stage마다 content/interaction/presentation 계약 생성
+    │
+    ▼
+Blueprint Retrieval · Composition
+    ├─ Manifest/Elasticsearch에서 호환 Parts 검색
+    ├─ 목적·데이터 shape·surface·risk 기준 hard filter
+    ├─ 다양성을 고려해 전역 조합
+    └─ 충돌 그룹만 국소 재선택
+    │
+    ▼
+라이브 Product Runtime
+    ├─ 실제 API 호출과 상태 전달
+    ├─ 여러 모달·페이지·검토·확인·추적 흐름 실행
+    ├─ 재시도·건너뛰기·취소·bounded polling
+    └─ Developer Inspector에서 요청/응답/추출/검증 확인
+    │
+    ▼
+배포 전 최종 컴파일
+    ├─ 미사용 엔드포인트 제거
+    ├─ Flow ID 정규화와 전체 계약 재검증
+    ├─ 공용 Runtime + Blueprint JSON 아티팩트 생성
+    └─ DeploymentTarget 생성 후 기존 VM 배포 파이프라인 실행
 ```
-OpenAPI 문서 URL 입력
-    │
-    ▼  결정적 정규화
-    │
-    목록/상세/생성/수정/삭제/명령/로그인 Capability 추론
-    → 검색 파라미터·페이지네이션·인증 방식(Bearer/API Key)·목록 응답 구조 감지
-    │
-    ▼  AI 의미 계획 (실패·저신뢰 시 규칙 기반 fallback)
-    │
-    정규화된 Capability·operation 설명만 입력
-    → 서비스 유형·Actor·핵심 Entity·사용자 Goal 이해
-    → 소수의 고가치 다중 API Scenario를 구조화 출력으로 제안
-    → UI ID·HTTP path·operation binding은 AI 출력 스키마에서 배제
-    │
-    ▼  Scenario Compiler
-    │
-    인증 후 조회, 목록에서 선택 후 상세 확인, 생성·수정·명령 후 재조회 검증 패턴 생성
-    → 실제로 발견된 Capability만 path/query/body binding으로 연결
-    → 그래프 순환·도달 불가·state producer 누락·존재하지 않는 API 참조를 hard gate로 차단
-    → 완전 실행 / 제한 실행 / Operation Preview fallback을 명시
-    │
-    ▼  Blueprint 조립
-    │
-    Scenario Stage에 content·interaction·presentation UX tag 부여
-    → 안내형은 탐색/상세/입력/검토/추적/결과 화면 경계로 투영
-    → 압축형은 같은 Stage를 단일 작업공간으로 투영(Scenario 의미·binding·실행 순서는 불변)
-    단일 Manifest에서 타입·Registry·카탈로그를 코드 생성
-    → Product Recipe와 purpose·의도·위험도를 기준으로 281종 Parts 중 호환 컴포넌트를 선택
-    → 필요하면 AI가 허용된 후보 안에서 파츠만 제안(검증과 최종 선택은 결정론적)
-    │
-    ▼  라이브 프리뷰
-    │
-    Scenario Runtime이 실제 대상 API로 여러 단계를 순서대로 호출하고 응답을 다음 단계 state로 전달
-    → 준비 → 검토 → 실행 → 추적 → 후속 조회 검증을 한 사용자 목표로 실행
-    → 단계별 재시도·선택적 건너뛰기·취소·bounded polling 지원
-    → Developer Inspector에서 요청·응답·추출값·검증 결과·소요시간을 동기화해 표시
-    → 개별 화면 조작은 기존 엔드포인트 뷰에서 그대로 제공
-    → 여러 모달은 Journey Engine이 입력 → 검토 → 확인 → 실행 → 완료 흐름으로 연결
-    → 이전 단계로 돌아가도 입력 상태 유지, 실패 시 재시도, 완료 후 라우팅
-    │
-    ▼  확정 시 배포
-    │
-    공용 Scenario/Preview Runtime + Scenario·Blueprint JSON으로 Vite 프로젝트 생성
-    → 기존 배포 파이프라인으로 VM에 그대로 배포
-```
 
-Blueprint Parts는 collection 38종, detail 32종, dashboard 36종, modal 41종, workflow 28종을 비롯해 form·layout·navigation·action·feedback·theme까지 총 281종이다. `component-manifest.json`이 파츠 ID, 종류, mount point, capability 호환성과 추천 목적의 단일 정본이며, Registry와 타입 연결 코드는 여기서 자동 생성된다. 따라서 새 파츠를 추가할 때 렌더러·타입·카탈로그 여러 곳을 손으로 중복 배선하지 않는다.
+### 1. OpenAPI 수집과 정규화
 
-Journey Engine은 화면 상호작용을 기존 API Flow 실행 계층과 분리한다. 생성은 `입력 → 실행 → 완료`, 수정은 `입력 → 영향 검토 → 실행`, 삭제는 `영향 검토 → 대상명 타이핑 확인 → 실행`을 기본으로 하며, 위험도와 작업명에 따라 확인 단계를 추가하거나 환불·재고 이동·인시던트 승격·배포 승격 같은 도메인 모달을 자동 선택한다. Journey 정의는 실행 전에 중복 ID, 잘못된 연결, 순환, 도달 불가능 단계, EXECUTE/SUCCESS 누락을 검증한다.
+`OpenApiNormalizer`는 입력 방식에 관계없이 같은 내부 모델을 만든다.
 
-Scenario Runtime은 Journey보다 상위 계층에서 사용자 목표 전체를 소유한다. Scenario state와 화면 로컬 상태를 분리하고, API 응답에서 추출한 `authToken`, `selectedId`, `createdId`, 상태값을 명시적 binding으로 다음 단계에 넘긴다. 검증은 같은 호출의 성공 응답만 믿지 않고 상세 재조회·목록 포함 여부·상태 terminal value 같은 후속 관찰로 판정한다. 비밀번호·토큰·Authorization 값은 Inspector에서 마스킹한다.
+- OpenAPI 3.x 문서만 허용한다.
+- JSON 파싱을 먼저 시도하고 실패하면 안전한 YAML 파서로 처리한다.
+- 원격 URL은 HTTPS만 허용하며 loopback, site-local, link-local, multicast, any-local 주소와 클라우드 메타데이터 주소를 차단한다.
+- HTTP redirect는 따라가지 않는다. redirect를 악용한 SSRF 우회도 허용하지 않는다.
+- 원격 요청 제한 시간은 기본 15초, 문서 크기는 최대 5MB, 분석 operation 수는 기본 최대 300개다.
+- 외부 `$ref`는 가져오지 않는다. 같은 문서 내부 참조만 제한된 깊이에서 해석한다.
+- 공통 응답 envelope는 최대 4단계까지 벗기며, 응답 field path는 operation당 최대 60개까지 수집한다.
 
-UI Projection은 컴파일된 Scenario 이후에만 계산되는 재현 가능한 표현 계층이다. StageRole마다 Renderer Contract와 UX tag를 결정하고, 각 Stage를 정확히 하나의 화면 경계에 배치하는 검증을 거친다. 사용자는 안내형 화면을 앞뒤로 이동하거나 압축형 작업공간으로 전환할 수 있으며 입력·선택·실행 결과는 유지된다. Collection/Detail 단계는 기존 Blueprint Manifest와 Product Recipe에서 호환 파츠를 결정적으로 골라 실제 데이터로 렌더링한다. 표현을 바꿔도 `capabilityId`, binding, state, `nextStageIds`는 수정하지 않는다.
+정규화 결과에는 `info.title`, `info.description`, version, server 목록, security scheme, operation ID, method/path, 태그와 설명, path/query parameter, request body field, response field/array/enum 증거가 포함된다. 이후 단계는 원본 OpenAPI 전체가 아니라 이 제한된 구조화 증거를 사용한다.
 
-Blueprint 검색은 `component-manifest.json` Registry를 정본으로, Elasticsearch를 재생성 가능한 파생 인덱스로 사용한다. Manifest의 family·tag·surface·purpose·mode에서 Stage 지원 범위와 데이터 shape 계약을 투영한 뒤, mount point·slot·runtime·risk policy를 hard filter하고 ES 관련도와 category·quality·stability 점수로 재랭킹한다. ES가 비활성화됐거나 응답하지 않으면 같은 계약을 적용한 Registry 검색으로 자동 폴백하며, 검색 결과에는 엔진·후보 수·제외 사유·지연시간 진단이 포함된다. `/ops/preview/blueprints/reindex`로 인덱스를 Registry에서 완전히 재구축할 수 있고, 새 파츠는 Manifest 등록만으로 검색 대상이 된다.
+### 2. 서비스 문맥 결합
 
-후보 검색 뒤에는 전역 Composition 단계가 한 번 더 동작한다. 각 Block을 `PICK_ONE`, `OPTIONAL_ONE`, `PICK_MANY`, `ORDER_MANY` 선택 모드를 가진 exclusive group으로 다루고, 검색 순위와 현재 요청·누적 사용 빈도를 함께 반영하는 교체 가능한 전략으로 파츠를 고른다. 최종 검증기는 후보 그룹 이탈과 선택 개수 오류를 차단하고, 동일 파츠·family·모달/드로어 presentation·여러 페이지의 같은 layout이 과도하게 반복되는지도 탐지한다. 충돌이 있으면 이미 정상인 선택은 유지한 채 표시된 그룹만 대체 후보로 국소 재선택하며, 선택 전략·진단·재선택 그룹은 AI 파츠 추천 응답에 함께 포함된다.
+OpenAPI의 기술 정보만으로 “이 서비스가 누구를 위한 것인지” 알기 어려울 수 있다. `ServiceContextResolver`는 다음 입력을 출처와 함께 결합한다.
 
-AI는 `scenario-planner-v1` 구조화 계약으로 서비스 의미와 semantic stage만 제안한다. 제안한 capability는 실제 catalog에 존재해야 하며, 상태 변경 COMMIT은 선행 REVIEW와 후속 VERIFY/TRACK이 없으면 거절된다. 그래프·state producer/consumer·응답 extraction을 만들 수 없는 출력도 실행 전에 제거된다. 모델 호출 실패, 유효한 시나리오 부재, 낮은 신뢰도에서는 같은 요청 안에서 규칙 기반 planner로 자동 대체되고 Operation Preview도 항상 남는다. AI 감사 로그에는 모델·토큰·성공 여부만 저장하며 프롬프트와 응답 원문은 저장하지 않는다.
+1. 사용자가 직접 작성한 서비스 설명
+2. 사용자가 작성한 시나리오 의도
+3. 선택적으로 가져온 서비스 문서 페이지
+4. OpenAPI `info.description`
+5. OpenAPI `info.title`
 
-포털 프리뷰와 배포 앱은 같은 TypeScript Runtime 소스를 사용한다. Ops 빌드가 포털의 `preview-runtime`과 UI primitive를 리소스로 포함하고, 배포 시에는 React 구현을 Java 문자열로 다시 만들지 않고 Runtime 파일을 그대로 복사한 뒤 Scenario·Blueprint·Flow·Binding JSON만 주입한다. 이 덕분에 프리뷰에서 정상인 시나리오·모달·인증·응답 파싱 동작이 배포본에서 별도로 어긋나는 이중 구현 문제를 없앴다. 배포 시점의 구성은 배포 기록에 함께 저장돼 재분석 없이 조회할 수 있다.
+문서 페이지 수집기는 동일한 SSRF 정책을 적용하고 redirect를 차단한다. 기본 제한 시간은 10초, HTML 최대 크기는 1MB, 최종 추출 텍스트는 최대 6,000자다. JavaScript와 하위 리소스는 실행하거나 가져오지 않는다. `script`, `style`, `nav`, `footer`, `header`, 코드 블록 등 설명과 무관한 요소를 제거하고 title, meta description, `main`, `article`, `role=main`, Markdown 성격의 본문을 우선 추출한다.
 
-현재 인증은 Bearer와 API Key header/query를 지원한다. Cookie 세션처럼 브라우저 출처·SameSite 정책에 강하게 묶인 인증과, Manifest 계약 밖의 임의 사용자 코드를 안전하게 실행하는 기능은 아직 지원 범위에 포함하지 않는다.
+결합된 서비스 문맥은 최대 12,000자로 제한된다. 응답에는 `resolvedServiceDescription`과 `serviceContextSources`가 함께 포함되어 사용자가 엔진이 무엇을 근거로 이해했는지 확인할 수 있다.
+
+### 3. Capability Catalog와 선택 범위
+
+정규화된 operation은 곧바로 UI 컴포넌트가 되지 않는다. 먼저 사람이 이해할 수 있는 기능 단위인 Capability로 변환한다.
+
+| 속성 | 의미 |
+|---|---|
+| `capabilityId` | `{resource}.{type/action}` 형식의 안정적인 기능 ID |
+| kind | `QUERY`, `MUTATION`, `COMMAND`, `AUTH`, `METRIC`, `EVENT_STREAM`, `FILE_TRANSFER`, `WORKFLOW` |
+| type | CRUD형 기능의 `LIST`, `DETAIL`, `CREATE`, `UPDATE`, `DELETE`, `LOGIN` |
+| evidence | Capability 판단에 사용한 실제 method/path/operation 증거 |
+| fields | 입력 필드, 응답 필드, 배열 경로, enum 등 데이터 shape |
+| extraction | access token, 선택 ID, 생성 ID, collection, total count 등을 꺼낼 경로 |
+| dependencies | 먼저 실행하거나 state를 공급해야 하는 다른 Capability |
+| risk | `SAFE`, `STATE_CHANGING`, `DESTRUCTIVE`, `IRREVERSIBLE`, `EXTERNAL_SIDE_EFFECT` |
+| automation policy | 자동 실행 가능 여부와 사용자 확인 요구 수준 |
+| confidence | 규칙과 증거에 따른 추론 신뢰도 |
+
+첫 분석에서는 모든 Capability를 `availableCapabilities`로 반환한다. 사용자가 태그를 선택해 재생성하면 선택 항목을 중심으로 `activeCapabilityIds`와 실행용 `capabilities`를 다시 만든다. 존재하지 않는 ID는 거절하며, 로그인과 의존 Capability는 자동 포함한다. AI에 전달되는 operation 증거도 활성 범위로 잘라 불필요한 API가 시나리오를 오염시키지 않게 한다. 전체 Catalog는 계속 유지하므로 사용자는 나중에 범위를 다시 넓힐 수 있다.
+
+### 4. 서비스 이해와 Scenario 의미 계획
+
+AI planner의 계약 버전은 `scenario-planner-v1`이다. 입력은 최대 120개 Capability와 160개 operation 증거로 제한하며, AI는 다음과 같은 의미만 구조화해 제안한다.
+
+- 서비스 archetype과 핵심 사용자
+- 주요 Entity와 사용자의 최종 Goal
+- Goal을 달성하기 위한 시나리오
+- 각 단계의 의미 역할과 선후 관계
+- 필요한 Capability와 예상 state
+
+AI는 React 컴포넌트 ID, HTTP path, query 이름, JSON field path를 직접 결정하지 않는다. 이 값은 실제 Catalog와 OpenAPI 증거를 가진 Compiler만 선택한다.
+
+Stage role은 `ENTRY`, `AUTHENTICATE`, `SELECT_CONTEXT`, `DISCOVER`, `INSPECT`, `SELECT`, `COMPARE`, `ACCUMULATE`, `CONFIGURE`, `PREPARE`, `REVIEW`, `COMMIT`, `WAIT`, `VERIFY`, `TRACK`, `RECOVER`, `CONTINUE`, `COMPLETE`로 구성된다. 예를 들어 구매형 서비스라면 탐색과 비교를 거쳐 선택을 누적하고, 검토 후 변경 요청을 실행하고, 후속 조회로 결과를 확인하는 목표 전체를 하나의 Scenario로 표현한다.
+
+AI 출력은 최대 6개 Scenario, Scenario당 최대 16개 stage, 최대 40개 state key로 정규화한다. 규칙 기반 planner는 최대 8개 Scenario를 만들 수 있다. 모델 호출 실패, 낮은 신뢰도, 유효한 Scenario 부재, 컴파일 불가능한 출력은 요청 전체를 실패시키지 않고 규칙 기반 결과로 대체한다.
+
+### 5. Scenario Compiler와 실행 안전성
+
+`ScenarioCompiler`는 의미 계획을 실제 실행 계약으로 바꾼다.
+
+- stage가 요구하는 Capability를 실제 Catalog에서 찾는다.
+- path, query, header, body 입력을 사용자 입력 또는 이전 state에 binding한다.
+- 응답에서 `authToken`, `selectedId`, `createdId`, 상태값, collection을 추출해 Scenario state에 저장한다.
+- 다음 stage가 필요한 값을 어느 stage가 생산하는지 명시한다.
+- 상태 변경 요청 뒤 상세 재조회, 목록 포함 여부, terminal status 확인 같은 verification을 붙인다.
+- 인증 후 조회, 목록에서 선택 후 상세 확인, 생성·수정·명령 후 재조회 같은 실행 패턴을 구성한다.
+
+Scenario schema version은 `1.0`, Runtime version은 `3.0.0`이다. Scenario는 최대 24개 stage를 가질 수 있다. 실행 전 검증기는 다음 문제를 hard error로 차단한다.
+
+- 존재하지 않는 Capability 또는 operation 참조
+- 중복 stage/flow ID
+- 시작점에서 도달할 수 없는 stage
+- 순환 그래프 또는 잘못된 다음 단계 연결
+- 필요한 state의 producer 누락
+- response extraction을 만들 수 없는 binding
+- 선행 `REVIEW`가 없는 위험한 `COMMIT`
+- 후속 `VERIFY` 또는 `TRACK`이 없는 상태 변경
+
+완전히 실행 가능한 Scenario는 시나리오 프리뷰로, 일부만 가능한 결과는 제한된 시나리오 프리뷰로 내린다. Scenario를 안전하게 컴파일할 수 없어도 개별 operation을 호출하는 Operation Preview는 유지한다.
+
+### 6. Page Plan, Flow, Journey와 UI Projection
+
+컴파일된 Scenario 이후에만 화면 구조를 만든다. 같은 Scenario라도 서비스 성격과 단계 관계에 따라 자연스럽게 페이지를 나눌 수도 있고, 한 작업공간에 여러 기능을 모을 수도 있다.
+
+- 최대 30개 Page Plan을 구성한다.
+- 안내형 표현은 탐색, 상세, 입력, 비교, 검토, 추적, 완료를 별도 화면 경계로 나눈다.
+- 압축형 표현은 의미와 실행 순서를 바꾸지 않고 관련 stage를 한 작업공간에 배치한다.
+- 각 stage는 정확히 하나의 화면 경계에 속해야 한다.
+- 표현 계층은 `capabilityId`, binding, state, `nextStageIds`를 수정할 수 없다.
+- Page patch는 최대 50개 flow, 50개 operation, 페이지당 20개 navigation rule로 제한한다.
+
+Flow는 실제 API 호출 단위를 순서대로 실행한다. Flow당 최대 20개 step을 허용한다. polling은 최대 300초, 3~60초 간격, 최대 100회로 제한해 무한 대기를 방지한다. 배포 전에는 Flow ID를 다시 정규화해 여러 페이지에서 같은 기능을 사용해도 중복 ID로 실패하지 않게 한다.
+
+Journey Engine은 하나의 stage 안에서 여러 모달과 사용자 상호작용을 연결한다.
+
+- 생성: `입력 → 실행 → 완료`
+- 수정: `입력 → 영향 검토 → 실행 → 결과 확인`
+- 삭제: `영향 검토 → 대상명 입력 확인 → 실행 → 완료`
+- 도메인 작업: 환불, 재고 이동, 인시던트 승격, 배포 승격 등 목적별 모달 조합
+
+위험도와 automation policy에 따라 확인 단계를 추가한다. 사용자가 이전 모달로 돌아가도 입력과 선택값을 유지하며, 실패한 실행은 같은 state로 재시도할 수 있다. Journey 정의도 중복 ID, 잘못된 연결, 순환, 도달 불가능 단계, 실행·성공 단계 누락을 미리 검증한다.
+
+### 7. Blueprint Parts 검색과 전역 조합
+
+`component-manifest.json`은 파츠 ID, family, mount point, slot, data shape, 지원 surface, capability 호환성, 목적, mode, risk policy의 단일 정본이다. 타입, Registry, Catalog 연결 코드는 Manifest에서 생성하므로 파츠를 추가할 때 TypeScript와 Java의 여러 분기를 손으로 중복 수정하지 않는다.
+
+현재 Parts 구성은 다음과 같다.
+
+| 종류 | 개수 | 예시 역할 |
+|---|---:|---|
+| ACTION | 16 | 주요 작업, 보조 작업, 위험 작업 트리거 |
+| COLLECTION | 38 | 목록, 카드 그리드, 검색 결과, 비교 목록 |
+| DASHBOARD | 36 | 서비스 홈, 요약, 상태, 추세 |
+| DETAIL | 32 | 객체 상세, 활동, 메타데이터, 관계 |
+| FEEDBACK | 14 | 로딩, 빈 상태, 경고, 성공/실패 |
+| FORM | 18 | 생성·수정·필터·설정 입력 |
+| LAYOUT | 28 | 제품형 셸, 분할 화면, 콘텐츠 구조 |
+| MODAL | 41 | 입력, 검토, 확인, 결과, 도메인 작업 |
+| NAVIGATION | 14 | 상단바, 탭, 단계, 문맥 이동 |
+| THEME | 16 | 서비스 분위기별 색상·표면 토큰 |
+| WORKFLOW | 28 | 준비, 실행, 추적, 복구, 완료 |
+| **합계** | **281** | |
+
+Blueprint 검색은 Manifest Registry를 정본으로 사용하고 Elasticsearch는 언제든 재생성 가능한 파생 인덱스로 사용한다. mount point, slot, runtime, data shape, risk policy를 hard filter한 뒤 관련도와 category, quality, stability 점수로 재랭킹한다. Elasticsearch가 비활성화되거나 응답하지 않으면 같은 계약을 적용하는 Registry 검색으로 자동 폴백한다. 검색 진단에는 사용 엔진, 후보 수, 제외 사유, 지연시간이 포함된다.
+
+검색된 후보는 Block별로 바로 확정하지 않고 전역 Composition 단계를 거친다.
+
+- `PICK_ONE`: 후보 중 정확히 하나
+- `OPTIONAL_ONE`: 필요할 때 최대 하나
+- `PICK_MANY`: 여러 파츠를 순서와 무관하게 선택
+- `ORDER_MANY`: 여러 파츠를 순서까지 포함해 선택
+
+검색 순위뿐 아니라 현재 요청과 누적 사용 빈도를 반영해 같은 표·카드·모달·레이아웃이 모든 페이지에서 반복되지 않도록 한다. 최종 검증에서 후보 그룹 이탈, 선택 개수 오류, 동일 family 과다 반복, modal/drawer presentation 편중, 페이지 간 layout 반복을 탐지한다. 충돌하면 정상 선택은 유지하고 문제 그룹만 최대 3회 국소 재선택한다. AI 파츠 추천도 허용 후보 안에서만 제안할 수 있으며 검증과 최종 결정은 결정론적이다.
+
+`POST /ops/preview/blueprints/reindex`를 호출하면 Elasticsearch 인덱스를 현재 Registry에서 완전히 다시 만들 수 있다.
+
+### 8. 제품형 Live Runtime
+
+포털 프리뷰와 배포 앱은 동일한 React/TypeScript `preview-runtime`을 사용한다. Java가 배포용 React 코드를 문자열로 다시 구현하지 않는다. Ops 빌드가 공용 Runtime과 UI primitive를 리소스로 포함하고, 배포 시 Runtime 파일을 복사한 뒤 Scenario·Blueprint·Page Plan·Flow·Binding JSON만 주입한다.
+
+프리뷰에는 세 가지 surface가 있다.
+
+1. **서비스 화면**: 실제 고객용 제품처럼 페이지, 데이터, 행동, 여러 모달을 조합한 기본 화면
+2. **Scenario Debugger**: stage, state, binding, 분기와 실행 상태를 개발자 관점에서 확인하는 화면
+3. **Endpoint Preview**: 특정 operation을 직접 입력하고 호출하는 최하위 폴백 화면
+
+제품 화면은 서비스 이해와 목적에 맞춰 Theme token을 자동 선택한다. 색상, 표면, 강조색, 상태색을 런타임 변수로 주입하므로 같은 Parts도 커머스, 운영 도구, 이벤트, 콘텐츠 서비스 등 서로 다른 분위기로 렌더링된다.
+
+Scenario Runtime은 다음 기능을 제공한다.
+
+- 여러 API를 순서대로 호출하고 응답을 다음 stage의 state로 전달
+- 준비, 검토, 실행, 추적, 후속 조회 검증을 하나의 사용자 Goal로 실행
+- 단계별 재시도, 선택적 건너뛰기, 전체 취소
+- 제한된 polling과 terminal state 판정
+- 페이지·모달을 뒤로 이동해도 입력, 선택, 호출 결과 유지
+- 실패 지점에서 state를 보존한 재실행
+- 요청·응답 로그와 실행 시간 기록
+
+Developer Inspector는 현재 요청, 응답, 추출된 state, verification 결과, 소요시간을 화면과 동기화해 보여준다. 비밀번호, access token, API key, Authorization header 등 민감값은 마스킹한다.
+
+브라우저 프리뷰는 사용자의 브라우저에서 대상 API를 직접 호출하므로 대상 API가 포털 Origin을 허용하지 않으면 CORS 정책에 의해 실패할 수 있다. 이는 OpenAPI 분석 성공 여부와 별개이며, 배포본에서는 배포된 Origin에 맞는 CORS 설정이 필요하다.
+
+### 9. AI 검수와 구조화 수정
+
+AI 검수는 현재 Blueprint를 자유 형식으로 덮어쓰지 않는다.
+
+1. 현재 서비스 이해, Scenario, Page Plan, 검증 진단을 검수한다.
+2. 문제와 개선 이유를 사용자에게 표시한다.
+3. 사용자가 수정안 생성을 요청하면 허용된 Page Plan patch operation만 제안한다.
+4. 사용자가 적용할 항목을 선택한다.
+5. 서버가 patch 개수와 참조 무결성, page/flow/operation/navigation 제한을 검사한다.
+6. 하나라도 유효하지 않으면 부분 적용하지 않고 전체 patch를 거절한다.
+7. 검증을 통과한 수정만 새 분석 결과에 반영한다.
+
+AI 호출 자체가 실패해도 기존 분석과 프리뷰를 사용할 수 있다. AI 감사 로그에는 model, input/output token 수, 성공 여부, 생성 종류만 저장하고 원문 프롬프트와 모델 응답은 저장하지 않는다.
+
+### 10. 배포 아티팩트와 스냅샷
+
+`POST /ops/{vmId}/preview/deploy`는 VM에 대한 `DEPLOY` 권한과 RUNNING 상태를 확인하고 `202 Accepted`로 비동기 배포를 시작한다.
+
+배포 전 서버는 다음 작업을 다시 수행한다.
+
+- Scenario가 실제 Capability Catalog만 참조하는지 검증
+- Page 또는 Scenario에서 사용하는 runtime Capability만 남기고 orphan endpoint 제거
+- 중복 Flow ID 정규화
+- Page Plan, Flow, Binding, navigation 계약 검증
+- Blueprint Block과 Component 호환성 검증
+- 위험 operation의 확인 정책 검증
+
+이후 `PreviewComposeArtifactBuilder`가 공용 Runtime을 복사하고 현재 구성을 JSON으로 주입한 Vite + React 프로젝트를 만든다. DeploymentTarget을 생성한 뒤 Git/Compose 배포와 동일한 배포 executor에 작업을 전달한다.
+
+배포 시점의 API Base URL, Capability, Page, 인증 설정, Block, status, purpose, Page Plan, Flow, Binding, preview/generation mode, compiler/registry version, Scenario를 `PreviewBlueprintSnapshot`으로 남긴다. 따라서 나중에 배포 이력을 조회할 때 OpenAPI를 다시 가져오거나 AI 분석을 다시 실행할 필요가 없다.
+
+데이터 보존 경계는 다음과 같다.
+
+| 데이터 | 저장 여부와 목적 |
+|---|---|
+| OpenAPI URL | Custom Scenario와 Regression Suite 재검증이 필요한 경우 저장 |
+| 업로드한 OpenAPI 원문 | 일반 분석·배포 스냅샷에는 원문 그대로 저장하지 않음 |
+| 서비스 문서 HTML 원문 | 저장하지 않음 |
+| 정규화 Capability/Page/Flow/Scenario | 분석 응답과 배포 Blueprint 스냅샷에 구조화 데이터로 포함 |
+| 배포 API Base URL과 인증 전략 | 배포 앱 실행과 이력 재현을 위해 스냅샷에 포함 |
+| Custom Scenario 자연어와 revision | 사용자 정의와 변경 이력을 위해 저장 |
+| Regression 실행 결과 | stage 결과와 진단을 최대 512KB까지 저장 |
+| AI 프롬프트·응답 원문 | 저장하지 않음 |
+| AI model·token·성공 여부·생성 종류 | 비용·성공률 감사 목적으로 저장 |
+
+### 11. PRO 커스텀 Scenario
+
+자동 생성 결과에 없는 특수 업무 흐름은 PRO 사용자가 자연어로 별도 정의할 수 있다.
+
+- Scenario 이름, 설명, 최대 4,000자의 자연어 요구사항 입력
+- 해당 서비스의 현재 Capability Catalog에 맞춰 컴파일
+- 검증을 통과한 revision만 활성화
+- OpenAPI fingerprint가 바뀌면 기존 Scenario 재검증
+- Scenario JSON 내보내기와 가져오기
+- 모든 revision과 컴파일/검증 snapshot 보존
+
+활성 Scenario를 수정할 때 기존 revision을 덮어쓰지 않는다. OpenAPI 변경으로 operation이나 field가 사라지면 자동 활성화하지 않고 재검증 결과를 남겨 사용자가 확인하게 한다.
+
+### 12. PRO Scenario 회귀 테스트
+
+Regression Suite는 활성 Custom Scenario와 revision을 묶어 실제 API에 반복 실행한다.
+
+- 수동 실행과 CI 실행
+- Suite별 OpenAPI, API Base URL, 초기 state, header 설정
+- 상태 변경 operation 허용 여부와 fail-fast 설정
+- 비동기 worker 실행
+- 실행 이력과 stage별 상세 결과 저장
+- 민감한 header/state/response 값 마스킹
+- 실행 결과 본문 최대 512KB 저장
+
+Suite를 만들 때 참조하는 Scenario가 활성 상태이고 revision과 OpenAPI fingerprint가 유효한지 확인한다. 실행은 mock이 아니라 지정한 API Base URL을 실제 호출한다. 상태 변경을 허용하지 않은 Suite에서는 위험 operation을 실행하지 않는다. Trigger type은 `MANUAL`, `CI`, `DEPLOYMENT`를 구분할 수 있다.
+
+### 주요 API
+
+| Method | Endpoint | 역할 |
+|---|---|---|
+| POST | `/ops/preview/analyze` | OpenAPI와 서비스 문맥 분석, Scenario/Page/Flow 생성 또는 재생성 |
+| POST | `/ops/preview/blocks` | 분석 결과를 Blueprint Block으로 컴파일 |
+| POST | `/ops/preview/parts/suggest` | 허용 후보 안에서 AI Parts 조합 제안 |
+| POST | `/ops/preview/blueprints/search` | 조건에 맞는 Blueprint Parts 검색 |
+| POST | `/ops/preview/blueprints/reindex` | Manifest Registry에서 Elasticsearch 인덱스 재구축 |
+| POST | `/ops/preview/review` | 현재 결과 AI 검수 |
+| POST | `/ops/preview/plan/propose` | 검수 결과 기반 Page Plan patch 제안 |
+| POST | `/ops/preview/plan/apply` | 선택한 patch 검증 및 일괄 적용 |
+| POST | `/ops/{vmId}/preview/deploy` | 현재 Preview를 VM 배포 대상으로 생성 |
+| POST/GET | `/ops/preview/custom-scenarios` | PRO Custom Scenario 생성·목록 |
+| POST | `/ops/preview/custom-scenarios/{id}/activate` | 검증된 Scenario revision 활성화 |
+| POST | `/ops/preview/custom-scenarios/{id}/revalidate` | 현재 OpenAPI 기준 재검증 |
+| GET | `/ops/preview/custom-scenarios/{id}/export` | Scenario JSON 내보내기 |
+| POST | `/ops/preview/custom-scenarios/import` | Scenario JSON 가져오기 |
+| POST/GET | `/ops/preview/regression-suites` | PRO Regression Suite 생성·목록 |
+| POST | `/ops/preview/regression-suites/{id}/runs` | 수동 회귀 실행 |
+| POST | `/ops/preview/regression-suites/{id}/ci/runs` | CI 회귀 실행 |
+| GET | `/ops/preview/regression-suites/{id}/runs` | Suite 실행 이력 |
+| GET | `/ops/preview/regression-suites/runs/{runId}` | 회귀 실행 상세 |
+| DELETE | `/ops/preview/regression-suites/{id}` | Suite 비활성화 |
+
+### 상태, 폴백과 현재 지원 범위
+
+분석 상태는 `READY`, `NEEDS_INPUT`, `UNSUPPORTED`로 구분하고 생성 방식은 `SERVICE_AWARE`, `RULE_BASED`, `FALLBACK_CRUD`로 기록한다. 사용자가 요청한 모드와 실제로 가능한 모드가 다르면 실행 가능성이 높은 쪽으로 명시적으로 낮춘다. 진단 정보에는 폴백 이유와 해결되지 않은 Capability/Page/Binding, 검색 엔진, 제외 후보가 포함된다.
+
+현재 인증 Runtime은 Bearer token과 API Key header/query를 지원한다. OpenAPI에서 token 추출 경로를 감지하지 못하면 사용자가 수동으로 지정할 수 있다. Cookie session처럼 브라우저 출처와 SameSite 정책에 강하게 결합된 인증, 외부 `$ref`, JavaScript 실행이 필요한 문서 페이지, Manifest 계약 밖의 임의 사용자 코드는 지원 범위에 포함하지 않는다.
+
+상태 변경·삭제·외부 부작용 operation은 위험도와 automation policy에 따라 검토 및 명시적 확인 없이 자동 실행하지 않는다. 분석·AI 계획·화면 조립 중 일부가 실패하더라도 검증되지 않은 결과를 강제로 실행하지 않고, 마지막으로 안전하게 사용할 수 있는 프리뷰 계층을 반환한다.
 
 ---
 
