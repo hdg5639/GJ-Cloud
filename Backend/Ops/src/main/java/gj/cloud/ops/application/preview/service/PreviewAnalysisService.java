@@ -17,17 +17,27 @@ import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.analysis.PageDraftGenerator;
 import gj.cloud.ops.application.preview.analysis.PreviewBlockResolver;
 import gj.cloud.ops.application.preview.analysis.SecuritySchemeEvidence;
+import gj.cloud.ops.application.preview.analysis.ApiOperationEvidence;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
 import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.RuleBasedPagePlanGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
+import gj.cloud.ops.application.preview.scenario.ScenarioGenerationService;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioGenerationResult;
+import gj.cloud.ops.global.exception.OpsException;
+import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 // Phase A 오케스트레이션 — OpenApiNormalizer(결정론적 파싱) → CapabilityExtractor(규칙 기반 추론) →
 // PageDraftGenerator(페이지 그룹핑) → 신뢰도/상태 매핑. 이 단계는 AI를 전혀 호출하지 않는다
@@ -43,10 +53,16 @@ public class PreviewAnalysisService {
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
     private final AuthStrategyDetector authStrategyDetector;
     private final PreviewBlockResolver blockResolver;
+    private final ScenarioGenerationService scenarioGenerationService;
+    private final ServiceContextResolver serviceContextResolver;
 
-    public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request) {
-        OpenApiEvidence evidence = openApiNormalizer.normalize(request.apiDocsUrl());
-        List<Capability> capabilities = capabilityExtractor.extract(evidence);
+    public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request, String requesterUserId) {
+        OpenApiEvidence evidence = normalize(request);
+        List<Capability> allCapabilities = capabilityExtractor.extract(evidence);
+        List<Capability> capabilities = selectCapabilities(allCapabilities, request.selectedCapabilityIds());
+        OpenApiEvidence scopedEvidence = scopeEvidence(evidence, capabilities);
+        ServiceContextResolver.ResolvedServiceContext serviceContext =
+                serviceContextResolver.resolve(request, scopedEvidence);
 
         // Direction Recovery Change Request §4.1 — purpose가 실제로 페이지 구성에 반영되는지가 이
         // 서비스의 핵심 정체성이다(project_auto_preview_product_definition). purpose가 없으면(다른
@@ -69,8 +85,9 @@ public class PreviewAnalysisService {
                 .findFirst()
                 .orElse(null);
         boolean hasLoginCapability = loginCapability != null;
-        boolean anySupportedScheme = evidence.securitySchemes().stream().anyMatch(SecuritySchemeEvidence::isSupportedByMvp);
-        boolean anySchemePresent = !evidence.securitySchemes().isEmpty();
+        boolean anySupportedScheme = scopedEvidence.securitySchemes().stream()
+                .anyMatch(SecuritySchemeEvidence::isSupportedByMvp);
+        boolean anySchemePresent = !scopedEvidence.securitySchemes().isEmpty();
 
         if (anySchemePresent && !anySupportedScheme) {
             unresolved.add(new UnresolvedField("auth.scheme", "AUTH_SCHEME_UNSUPPORTED",
@@ -88,8 +105,9 @@ public class PreviewAnalysisService {
                     "문서에서 생성 가능한 페이지를 찾지 못했습니다."));
         }
 
-        if (evidence.truncatedOperationCount() > 0) {
-            warnings.add("API 개수가 많아 " + evidence.truncatedOperationCount() + "개 오퍼레이션은 분석에서 제외되었습니다.");
+        if (scopedEvidence.truncatedOperationCount() > 0) {
+            warnings.add("API 개수가 많아 " + scopedEvidence.truncatedOperationCount()
+                    + "개 오퍼레이션은 분석에서 제외되었습니다.");
         }
 
         for (PageDraft page : pages) {
@@ -108,7 +126,7 @@ public class PreviewAnalysisService {
                 : unresolved.isEmpty() ? GenerationStatus.READY
                 : GenerationStatus.NEEDS_INPUT;
 
-        AuthStrategy authStrategy = authStrategyDetector.detect(evidence.securitySchemes());
+        AuthStrategy authStrategy = authStrategyDetector.detect(scopedEvidence.securitySchemes());
         List<PagePlan> pagePlans = PagePlanMapper.from(pages, capabilities);
 
         RuleBasedFlowGenerator.ValidatedResult flowResult = ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
@@ -118,8 +136,87 @@ public class PreviewAnalysisService {
             warnings.add("생성된 workflow가 검증에 실패해 제외되었습니다: " + String.join("; ", flowResult.errors()));
         }
 
+        ScenarioGenerationResult scenarioResult = scenarioGenerationService.generate(
+                requesterUserId, scopedEvidence, serviceContext.description(), request.purpose(),
+                capabilities, request.previewMode());
+        scenarioResult.diagnostics().forEach(diagnostic -> {
+            if (diagnostic.status() != gj.cloud.ops.application.preview.scenario.ScenarioModels.DiagnosticStatus.SUPPORTED) {
+                warnings.add("Scenario " + (diagnostic.scenarioId() == null ? "" : diagnostic.scenarioId() + " ")
+                        + "컴파일 진단: " + diagnostic.message());
+            }
+        });
+
         return new PreviewAnalysisResult(
-                status, evidence.serverUrls(), capabilities, pages, pagePlans, flowResult.result().flows(),
-                flowResult.result().bindings(), unresolved, warnings, evidenceRefs, authStrategy, generationMode);
+                status, evidence.serverUrls(), capabilities, allCapabilities, pages, pagePlans, flowResult.result().flows(),
+                flowResult.result().bindings(), unresolved, warnings, evidenceRefs, authStrategy, generationMode,
+                scenarioResult.serviceUnderstanding(), scenarioResult.scenarios(),
+                scenarioResult.diagnostics(), scenarioResult.previewMode(),
+                scenarioResult.planningSource(), scenarioResult.promptVersion(),
+                capabilities.stream().map(Capability::id).toList(),
+                serviceContext.description(), serviceContext.sources());
+    }
+
+    private OpenApiEvidence normalize(PreviewAnalyzeRequest request) {
+        boolean hasUrl = request.apiDocsUrl() != null && !request.apiDocsUrl().isBlank();
+        boolean hasContent = request.apiDocsContent() != null && !request.apiDocsContent().isBlank();
+        if (hasUrl == hasContent) {
+            throw new OpsException(OpsErrorCode.PREVIEW_API_SOURCE_REQUIRED);
+        }
+        return hasContent
+                ? openApiNormalizer.normalizeContent(request.apiDocsContent())
+                : openApiNormalizer.normalize(request.apiDocsUrl().trim());
+    }
+
+    /**
+     * 태그로 고른 capability와 그 의존성을 생성 범위로 사용한다. 로그인 capability는 인증된
+     * 사용자 흐름을 구성할 때 빠지지 않도록 자동 포함한다. 반환 순서는 원문 분석 순서를 유지한다.
+     */
+    private List<Capability> selectCapabilities(List<Capability> all, List<String> selectedIds) {
+        if (selectedIds == null || selectedIds.isEmpty()) {
+            return all;
+        }
+        Map<String, Capability> byId = all.stream()
+                .collect(Collectors.toMap(Capability::id, Function.identity(), (left, right) -> left));
+        LinkedHashSet<String> expanded = new LinkedHashSet<>();
+        for (String id : selectedIds) {
+            if (byId.containsKey(id)) expanded.add(id);
+        }
+        if (expanded.isEmpty()) {
+            throw new OpsException(OpsErrorCode.PREVIEW_CAPABILITY_SELECTION_INVALID);
+        }
+        all.stream()
+                .filter(capability -> capability.type() == CapabilityType.LOGIN)
+                .map(Capability::id)
+                .forEach(expanded::add);
+        boolean changed;
+        do {
+            changed = false;
+            for (String id : List.copyOf(expanded)) {
+                Capability capability = byId.get(id);
+                if (capability == null) continue;
+                for (String dependency : capability.dependencies()) {
+                    if (byId.containsKey(dependency) && expanded.add(dependency)) changed = true;
+                }
+            }
+        } while (changed);
+        Set<String> included = Set.copyOf(expanded);
+        return all.stream().filter(capability -> included.contains(capability.id())).toList();
+    }
+
+    private OpenApiEvidence scopeEvidence(OpenApiEvidence evidence, List<Capability> capabilities) {
+        Set<String> operationIds = capabilities.stream()
+                .map(Capability::operationId)
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toSet());
+        Set<String> methodPaths = capabilities.stream()
+                .map(capability -> capability.method() + " " + capability.path())
+                .collect(Collectors.toSet());
+        List<ApiOperationEvidence> operations = evidence.operations().stream()
+                .filter(operation -> operation.operationId() != null && operationIds.contains(operation.operationId())
+                        || methodPaths.contains(operation.method() + " " + operation.path()))
+                .toList();
+        return new OpenApiEvidence(
+                evidence.title(), evidence.description(), evidence.version(), evidence.serverUrls(),
+                evidence.securitySchemes(), operations, evidence.truncatedOperationCount());
     }
 }

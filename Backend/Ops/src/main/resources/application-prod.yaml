@@ -38,6 +38,9 @@ auth:
 vm:
   service-url: ${VM_SERVICE_URL}
 
+user:
+  service-url: ${USER_SERVICE_URL:http://user:8080}
+
 ai:
   api-key: ${OPENAI_API_KEY}
   model:
@@ -65,6 +68,14 @@ ops:
     max-total-size-bytes: 52428800
   ai-generation-cache:
     ttl-seconds: 900
+  blueprint-search:
+    elasticsearch:
+      enabled: ${BLUEPRINT_SEARCH_ENABLED:false}
+      url: ${ELASTICSEARCH_URL:http://elasticsearch:9200}
+      index: ${BLUEPRINT_SEARCH_INDEX:gamjabox-blueprints-v1}
+      username: ${ELASTICSEARCH_USERNAME:}
+      password: ${ELASTICSEARCH_PASSWORD:}
+      reindex-on-startup: ${BLUEPRINT_SEARCH_REINDEX_ON_STARTUP:false}
   github:
     app-id: ${GITHUB_APP_ID}
     app-slug: ${GITHUB_APP_SLUG}

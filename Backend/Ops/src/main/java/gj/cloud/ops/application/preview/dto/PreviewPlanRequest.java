@@ -14,7 +14,7 @@ import java.util.List;
 // ADD_NAVIGATION, ADD_FLOW 같은 제안이 기존 사용자 수정 상태 위에 누적될 수 있다. pagePlans가 없는
 // 구버전 클라이언트는 Controller에서 pages를 PagePlanMapper로 변환해 호환한다.
 public record PreviewPlanRequest(
-        @Size(max = 2000) String serviceDescription,
+        @Size(max = 12000) String serviceDescription,
         PreviewAnalyzeRequest.Purpose purpose,
         @NotEmpty List<Capability> capabilities,
         @NotEmpty List<PageDraft> pages,

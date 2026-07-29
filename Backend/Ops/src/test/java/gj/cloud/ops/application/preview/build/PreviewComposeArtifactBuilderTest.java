@@ -16,6 +16,11 @@ import gj.cloud.ops.application.preview.analysis.RiskLevel;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenarioStage;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompilationStatus;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.StageRole;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import org.junit.jupiter.api.Test;
 
@@ -60,20 +65,43 @@ class PreviewComposeArtifactBuilderTest {
                 "src/components/preview-runtime/journey/JourneyRuntime.tsx",
                 "src/components/preview-runtime/journey/recipes.ts",
                 "src/components/preview-runtime/journey/validator.ts",
+                "src/components/preview-runtime/scenario/ScenarioWorkbench.tsx",
+                "src/components/preview-runtime/scenario/ProductExperienceRuntime.tsx",
+                "src/components/preview-runtime/scenario/ProductExperienceInspector.tsx",
+                "src/components/preview-runtime/scenario/productExperience.ts",
+                "src/components/preview-runtime/scenario/productTheme.ts",
+                "src/components/preview-runtime/scenario/runtime.ts",
                 "src/components/preview-runtime/blueprints/manifests/component-manifest.json",
                 "src/components/preview-runtime/blueprints/adapters/generatedPartComponents.ts");
 
         String appTsx = files.get("src/App.tsx");
         assertThat(appTsx).doesNotContain(
                 "__API_BASE_URL_JSON__", "__CAPABILITIES_JSON__", "__PAGES_JSON__",
-                "__AUTH_STRATEGY_JSON__", "__PURPOSE_JSON__", "__PAGE_BLOCKS_JSON__", "__FLOWS_JSON__", "__BINDINGS_JSON__");
+                "__AUTH_STRATEGY_JSON__", "__PURPOSE_JSON__", "__PAGE_BLOCKS_JSON__", "__FLOWS_JSON__",
+                "__BINDINGS_JSON__", "__SCENARIOS_JSON__", "__PREVIEW_MODE_JSON__");
         // App.tsx는 JSON만 주입하고 React 구현은 공유 Runtime을 import해야 한다.
         assertThat(appTsx).contains("import { PreviewRuntimeApp }");
         assertThat(appTsx).doesNotContain("function ResourceTable(", "function PageRenderer(");
+        assertThat(files.get("src/components/preview-runtime/PreviewRuntimeApp.tsx"))
+                .contains("<ProductExperienceRuntime")
+                .contains("서비스 화면")
+                .contains("시나리오 디버거");
+        assertThat(files.get("src/components/preview-runtime/scenario/productExperience.ts"))
+                .contains("composeProductExperience")
+                .contains("validateProductExperience");
+        assertThat(files.get("src/components/preview-runtime/scenario/ProductExperienceInspector.tsx"))
+                .contains("Live test inspector")
+                .contains("이 단계부터 재시도")
+                .contains("Raw request body");
+        assertThat(files.get("src/components/preview-runtime/scenario/productTheme.ts"))
+                .contains("selectProductExperienceTheme")
+                .contains("--px-accent")
+                .contains("crimson-security");
         assertThat(appTsx).contains("https://api.example.com");
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");
         assertThat(appTsx).contains("\"dashboard\"");
+        assertThat(appTsx).contains("\"test-scenario\"").contains("\"SCENARIO_PREVIEW\"");
         assertThat(appTsx).contains("\"API_KEY_HEADER\"").contains("\"X-API-Key\"");
         // Blueprint 1차 — PAGE_BLOCKS가 componentId 기준으로 실제로 채워지는지(빈 객체로 치환되지
         // 않았는지)까지 확인. "login-form"은 auth-login 페이지의 Block.componentId여야 한다.
@@ -184,7 +212,18 @@ class PreviewComposeArtifactBuilderTest {
         return builder.build(
                 "https://api.example.com", capabilities, pages,
                 generated.result().flows(), generated.result().bindings(),
-                AuthStrategy.apiKeyHeader("X-API-Key"), purpose, Map.of());
+                AuthStrategy.apiKeyHeader("X-API-Key"), purpose,
+                List.of(sampleScenario()), PreviewMode.SCENARIO_PREVIEW, Map.of());
+    }
+
+    private CompiledScenario sampleScenario() {
+        return new CompiledScenario(
+                "test-scenario", "Test scenario", "developer", "Verify scenario embedding", "complete",
+                List.of(new CompiledScenarioStage(
+                        "complete", StageRole.COMPLETE, "Done", null, null, false,
+                        List.of(), List.of(), List.of(), List.of(), List.of(), null, RiskLevel.SAFE)),
+                List.of(), CompilationStatus.EXECUTABLE, List.of(), 1.0, "1.0", "3.0.0"
+        );
     }
 
     private List<Capability> sampleCapabilities() {

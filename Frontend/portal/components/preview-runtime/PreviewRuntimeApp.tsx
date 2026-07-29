@@ -4,11 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProductShell } from "./ProductShell";
 import { PreviewPageRenderer } from "./PreviewPageRenderer";
 import { ApiCallLog } from "./ApiCallLog";
+import { ProductExperienceRuntime, ScenarioWorkbench } from "./scenario";
 import { rowId } from "./api";
 import type { Block } from "./blueprint";
 import type { ApiBinding, FlowBlueprint } from "./flow/types";
-import type { ApiCallLogEntry, PreviewCapability, PreviewPage, PreviewAuthStrategy, Purpose } from "./types";
-import type { PreviewPagePlan } from "@/lib/types";
+import type {
+  ApiCallLogEntry,
+  PreviewCapability,
+  PreviewPage,
+  PreviewAuthStrategy,
+  PreviewRuntimeConfig,
+  Purpose,
+} from "./types";
+import type { PreviewCompiledScenario, PreviewMode, PreviewPagePlan } from "@/lib/types";
 
 type NavigationType = "OPEN_PAGE" | "OPEN_OVERLAY" | "GO_BACK" | "REPLACE_ROUTE";
 
@@ -26,6 +34,8 @@ export function PreviewRuntimeApp({
   bindings,
   authStrategy,
   purpose,
+  scenarios = [],
+  previewMode = "OPERATION_PREVIEW",
 }: {
   apiBaseUrl: string;
   capabilities: PreviewCapability[];
@@ -36,6 +46,8 @@ export function PreviewRuntimeApp({
   bindings: ApiBinding[];
   authStrategy: PreviewAuthStrategy;
   purpose: Purpose | null;
+  scenarios?: PreviewCompiledScenario[];
+  previewMode?: PreviewMode;
 }) {
   const [search, setSearch] = useState<string>(() =>
     typeof window === "undefined" ? "" : window.location.search
@@ -43,6 +55,11 @@ export function PreviewRuntimeApp({
   const [selectedRow, setSelectedRowState] = useState<Record<string, unknown> | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [apiLog, setApiLog] = useState<ApiCallLogEntry[]>([]);
+  const hasScenarioView = previewMode !== "OPERATION_PREVIEW"
+    && scenarios.some((scenario) => scenario.status !== "UNSUPPORTED");
+  const [runtimeView, setRuntimeView] = useState<"PRODUCT" | "SCENARIO" | "OPERATION">(
+    hasScenarioView ? "PRODUCT" : "OPERATION"
+  );
 
   useEffect(() => {
     const sync = () => setSearch(window.location.search);
@@ -123,7 +140,7 @@ export function PreviewRuntimeApp({
     writeQuery(targetPageId, parameters, type === "REPLACE_ROUTE" ? "replace" : "push");
   }
 
-  const config = {
+  const config: PreviewRuntimeConfig = {
     apiBaseUrl: apiBaseUrl.trim(),
     authToken,
     onAuthTokenChange: setAuthToken,
@@ -134,24 +151,67 @@ export function PreviewRuntimeApp({
 
   return (
     <div className="flex flex-col gap-4">
-      <ProductShell purpose={purpose} pages={pages} activePageId={activePageId} onSelectPage={selectPage}>
-        {activePage && apiBaseUrl.trim() && (
-          <PreviewPageRenderer
-            page={activePage}
-            pagePlan={activePagePlan}
-            capabilities={capabilities}
-            blocks={pageBlocks[activePage.id] ?? []}
-            selectedRow={effectiveSelectedRow}
-            onSelectRow={selectRow}
-            routeParameters={routeParameters}
-            onNavigate={navigate}
-            flows={flows}
-            bindings={bindings}
-            config={config}
-          />
-        )}
-      </ProductShell>
+      {hasScenarioView && (
+        <div className="inline-flex w-fit rounded-lg border border-line bg-panel p-1">
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-xs font-extrabold ${
+              runtimeView === "PRODUCT" ? "bg-brand text-black" : "text-muted"
+            }`}
+            onClick={() => setRuntimeView("PRODUCT")}
+          >
+            서비스 화면
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-xs font-extrabold ${
+              runtimeView === "SCENARIO" ? "bg-brand text-black" : "text-muted"
+            }`}
+            onClick={() => setRuntimeView("SCENARIO")}
+          >
+            시나리오 디버거
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-xs font-extrabold ${
+              runtimeView === "OPERATION" ? "bg-brand text-black" : "text-muted"
+            }`}
+            onClick={() => setRuntimeView("OPERATION")}
+          >
+            엔드포인트
+          </button>
+        </div>
+      )}
 
+      {runtimeView === "PRODUCT" && hasScenarioView ? (
+        <ProductExperienceRuntime
+          scenarios={scenarios}
+          capabilities={capabilities}
+          config={config}
+        />
+      ) : runtimeView === "SCENARIO" && hasScenarioView ? (
+        <ScenarioWorkbench scenarios={scenarios} capabilities={capabilities} config={config} />
+      ) : runtimeView === "OPERATION" ? (
+        <ProductShell purpose={purpose} pages={pages} activePageId={activePageId} onSelectPage={selectPage}>
+          {activePage && apiBaseUrl.trim() && (
+            <PreviewPageRenderer
+              page={activePage}
+              pagePlan={activePagePlan}
+              capabilities={capabilities}
+              blocks={pageBlocks[activePage.id] ?? []}
+              selectedRow={effectiveSelectedRow}
+              onSelectRow={selectRow}
+              routeParameters={routeParameters}
+              onNavigate={navigate}
+              flows={flows}
+              bindings={bindings}
+              config={config}
+            />
+          )}
+        </ProductShell>
+      ) : null}
+
+      {runtimeView === "OPERATION" && (
       <section className="rounded-panel border border-line bg-panel p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-extrabold">요청·응답 확인</h2>
@@ -163,6 +223,7 @@ export function PreviewRuntimeApp({
         </div>
         <ApiCallLog entries={apiLog} />
       </section>
+      )}
     </div>
   );
 }

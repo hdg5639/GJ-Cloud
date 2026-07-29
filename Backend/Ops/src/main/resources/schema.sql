@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS ai_preview_generation_log (
     created_at          TIMESTAMP    NOT NULL DEFAULT now(),
 
     CONSTRAINT chk_ai_preview_generation_log_kind CHECK (
-        kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION')
+        kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION', 'SCENARIO_PLANNING')
     )
 );
 
@@ -221,9 +221,125 @@ ALTER TABLE ai_preview_generation_log
     DROP CONSTRAINT IF EXISTS chk_ai_preview_generation_log_kind;
 ALTER TABLE ai_preview_generation_log
     ADD CONSTRAINT chk_ai_preview_generation_log_kind
-    CHECK (kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION'));
+    CHECK (kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION', 'SCENARIO_PLANNING'));
 
 CREATE INDEX IF NOT EXISTS idx_ai_preview_generation_log_requester ON ai_preview_generation_log(requester_user_id);
+
+-- PRO Custom Scenario Builder. 사용자 의도(semantic definition)와 특정 OpenAPI에 결합된 컴파일
+-- 결과(revision)를 분리해 API 문서가 변경돼도 원래 의도를 보존한 채 재컴파일할 수 있게 한다.
+CREATE TABLE IF NOT EXISTS custom_scenarios (
+    id                          VARCHAR(36)  PRIMARY KEY,
+    service_id                  VARCHAR(64)  NOT NULL,
+    owner_id                    VARCHAR(64)  NOT NULL,
+    name                        VARCHAR(100) NOT NULL,
+    description                 TEXT,
+    natural_language_source     TEXT         NOT NULL,
+    scenario_definition_json    TEXT,
+    status                      VARCHAR(20)  NOT NULL,
+    visibility                  VARCHAR(20)  NOT NULL DEFAULT 'PRIVATE',
+    created_at                  TIMESTAMP    NOT NULL DEFAULT now(),
+    updated_at                  TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_custom_scenario_status CHECK (
+        status IN ('GENERATING', 'DRAFT', 'VALIDATING', 'VALIDATED', 'ACTIVE', 'INVALIDATED', 'ARCHIVED')
+    ),
+    CONSTRAINT chk_custom_scenario_visibility CHECK (
+        visibility IN ('PRIVATE', 'TEAM')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_scenario_service_owner
+    ON custom_scenarios(service_id, owner_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS custom_scenario_revisions (
+    id                          VARCHAR(36)  PRIMARY KEY,
+    scenario_id                 VARCHAR(36)  NOT NULL REFERENCES custom_scenarios(id),
+    revision                    INTEGER      NOT NULL,
+    openapi_fingerprint         VARCHAR(64)  NOT NULL,
+    compiled_scenario_json      TEXT         NOT NULL,
+    validation_result_json      TEXT         NOT NULL,
+    valid                       BOOLEAN      NOT NULL,
+    created_at                  TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT uk_custom_scenario_revision UNIQUE (scenario_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_scenario_revision_latest
+    ON custom_scenario_revisions(scenario_id, revision DESC);
+
+-- Phase 10 Regression & Automation. 스위트 정의, 한 번의 스위트 실행, 시나리오별 상세 실행을
+-- 분리해 CI가 요약 상태를 빠르게 폴링하면서도 실패 단계와 요청 스냅샷을 별도로 조회할 수 있게 한다.
+CREATE TABLE IF NOT EXISTS regression_suites (
+    id                          VARCHAR(36)   PRIMARY KEY,
+    service_id                  VARCHAR(64)   NOT NULL,
+    owner_id                    VARCHAR(64)   NOT NULL,
+    name                        VARCHAR(100)  NOT NULL,
+    description                 TEXT,
+    api_docs_url                VARCHAR(2048) NOT NULL,
+    api_base_url                VARCHAR(2048) NOT NULL,
+    scenario_ids_json           TEXT          NOT NULL,
+    deployment_target_id        VARCHAR(36),
+    run_on_deployment           BOOLEAN       NOT NULL DEFAULT FALSE,
+    allow_state_changing_on_deployment BOOLEAN NOT NULL DEFAULT FALSE,
+    active                      BOOLEAN       NOT NULL DEFAULT TRUE,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT now(),
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_regression_suite_service_owner
+    ON regression_suites(service_id, owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_regression_suite_deployment_trigger
+    ON regression_suites(deployment_target_id)
+    WHERE active = TRUE AND run_on_deployment = TRUE;
+
+CREATE TABLE IF NOT EXISTS regression_suite_runs (
+    id                          VARCHAR(36)  PRIMARY KEY,
+    suite_id                    VARCHAR(36)  NOT NULL REFERENCES regression_suites(id),
+    owner_id                    VARCHAR(64)  NOT NULL,
+    status                      VARCHAR(20)  NOT NULL,
+    trigger_type                VARCHAR(20)  NOT NULL,
+    trigger_reference           VARCHAR(100),
+    input_ciphertext            TEXT         NOT NULL,
+    summary_json                TEXT,
+    total_count                 INTEGER      NOT NULL DEFAULT 0,
+    passed_count                INTEGER      NOT NULL DEFAULT 0,
+    failed_count                INTEGER      NOT NULL DEFAULT 0,
+    started_at                  TIMESTAMP,
+    completed_at                TIMESTAMP,
+    created_at                  TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_regression_run_status CHECK (
+        status IN ('QUEUED', 'RUNNING', 'PASSED', 'FAILED')
+    ),
+    CONSTRAINT chk_regression_trigger_type CHECK (
+        trigger_type IN ('MANUAL', 'CI', 'DEPLOYMENT')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_regression_suite_run_history
+    ON regression_suite_runs(suite_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS scenario_executions (
+    id                          VARCHAR(36)  PRIMARY KEY,
+    suite_run_id                VARCHAR(36)  NOT NULL REFERENCES regression_suite_runs(id),
+    scenario_id                 VARCHAR(36)  NOT NULL REFERENCES custom_scenarios(id),
+    scenario_revision_id        VARCHAR(36)  NOT NULL REFERENCES custom_scenario_revisions(id),
+    execution_status            VARCHAR(20)  NOT NULL,
+    input_snapshot_json         TEXT         NOT NULL,
+    state_snapshot_json         TEXT         NOT NULL,
+    result_summary_json         TEXT         NOT NULL,
+    failure_stage_id            VARCHAR(100),
+    failure_request_json        TEXT,
+    started_at                  TIMESTAMP    NOT NULL,
+    completed_at                TIMESTAMP    NOT NULL,
+
+    CONSTRAINT chk_scenario_execution_status CHECK (
+        execution_status IN ('RUNNING', 'PASSED', 'FAILED', 'SKIPPED')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_scenario_execution_run
+    ON scenario_executions(suite_run_id, started_at);
 
 CREATE TABLE IF NOT EXISTS db_backups (
     id                  VARCHAR(36)  PRIMARY KEY,

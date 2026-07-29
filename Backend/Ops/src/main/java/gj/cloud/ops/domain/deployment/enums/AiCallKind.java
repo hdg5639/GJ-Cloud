@@ -7,5 +7,6 @@ public enum AiCallKind {
     GENERATION,
     REVIEW,
     PLANNING,
-    PART_SUGGESTION
+    PART_SUGGESTION,
+    SCENARIO_PLANNING
 }

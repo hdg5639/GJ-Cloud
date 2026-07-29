@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/components/ui/cn";
 
@@ -12,6 +12,8 @@ export function BlueprintModalFrame({
   eyebrow,
   size = "md",
   footer,
+  style,
+  themeId,
   children,
 }: {
   open: boolean;
@@ -21,12 +23,18 @@ export function BlueprintModalFrame({
   eyebrow?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
   footer?: ReactNode;
+  style?: CSSProperties;
+  themeId?: string;
   children: ReactNode;
 }) {
   const widthClass = size === "sm" ? "max-w-md" : size === "lg" ? "max-w-3xl" : size === "xl" ? "max-w-5xl" : "max-w-xl";
   return (
     <Modal open={open} onClose={onClose}>
-      <section className={cn("mx-auto max-h-[92vh] w-[min(96vw,1200px)] overflow-hidden rounded-[18px] border border-line bg-background shadow-2xl", widthClass)}>
+      <section
+        className={cn("mx-auto max-h-[92vh] w-[min(96vw,1200px)] overflow-hidden rounded-[18px] border border-line bg-background text-foreground shadow-2xl", widthClass)}
+        style={style}
+        data-blueprint-theme={themeId}
+      >
         <header className="flex items-start justify-between gap-4 border-b border-line bg-panel px-5 py-4">
           <div>
             {eyebrow && <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-brand-strong">{eyebrow}</p>}

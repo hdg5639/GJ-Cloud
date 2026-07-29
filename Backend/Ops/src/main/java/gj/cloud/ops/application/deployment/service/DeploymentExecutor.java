@@ -18,6 +18,7 @@ import gj.cloud.ops.application.deployment.dto.ResolvedCompose;
 import gj.cloud.ops.application.deployment.dto.ServiceImageRef;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
+import gj.cloud.ops.application.preview.regression.RegressionSuiteService;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
 import gj.cloud.ops.application.deployment.validation.ValidationResult;
@@ -89,6 +90,7 @@ public class DeploymentExecutor {
     private final ObjectMapper objectMapper;
     private final DeploymentTargetService deploymentTargetService;
     private final ObjectProvider<AutoDeploymentService> autoDeploymentServiceProvider;
+    private final ObjectProvider<RegressionSuiteService> regressionSuiteServiceProvider;
 
     private final TaskExecutor deploymentTaskExecutor;
 
@@ -835,6 +837,17 @@ public class DeploymentExecutor {
 
             updateEntity(deploymentId, DeploymentEntity::withSucceeded);
             eventPublisher.publish(deploymentId, DeploymentEventType.DONE, "배포 완료");
+            if (useAutomationAuth) {
+                regressionSuiteServiceProvider.ifAvailable(service -> {
+                    try {
+                        service.triggerForDeployment(appId, deploymentId);
+                    } catch (RuntimeException error) {
+                        // 배포는 이미 성공했다. 회귀 테스트 예약 실패가 정상 배포 상태를 되돌리면 안 된다.
+                        log.warn("배포 후 회귀 테스트 예약 실패: targetId={}, deploymentId={}, error={}",
+                                appId, deploymentId, error.getMessage());
+                    }
+                });
+            }
         } catch (Exception e) {
             log.error("배포 파이프라인 처리 중 예외: deploymentId={}, error={}", deploymentId, e.getMessage());
             updateEntity(deploymentId, entity -> entity.withFailed(e.getMessage()));

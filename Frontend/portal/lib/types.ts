@@ -632,6 +632,7 @@ export interface PreviewAnalysisResult {
   status: GenerationStatus;
   apiServerUrls: string[];
   capabilities: PreviewCapability[];
+  availableCapabilities: PreviewCapability[];
   pages: PreviewPageDraft[];
   pagePlans: PreviewPagePlan[];
   // RuleBasedFlowGenerator가 pagePlans로부터 만든 것 중 검증을 통과한 항목만 담긴다(실패분은
@@ -643,6 +644,287 @@ export interface PreviewAnalysisResult {
   evidenceRefs: string[];
   authStrategy: PreviewAuthStrategy;
   generationMode: PreviewGenerationMode;
+  serviceUnderstanding: PreviewServiceUnderstanding;
+  scenarios: PreviewCompiledScenario[];
+  scenarioDiagnostics: PreviewScenarioDiagnostic[];
+  previewMode: PreviewMode;
+  scenarioPlanningSource: "LLM" | "RULE_BASED" | "OPERATION_ONLY";
+  scenarioPromptVersion: string | null;
+  activeCapabilityIds: string[];
+  resolvedServiceDescription: string;
+  serviceContextSources: Array<
+    "USER_DESCRIPTION" | "SCENARIO_INTENT" | "DOCUMENTATION_PAGE" | "OPENAPI_INFO"
+  >;
+}
+
+// Scenario-first Auto Preview Runtime v3 — Backend ScenarioModels의 TypeScript mirror.
+export type PreviewMode = "SCENARIO_PREVIEW" | "INFERRED_SCENARIO_PREVIEW" | "OPERATION_PREVIEW";
+export type PreviewScenarioStageRole =
+  | "ENTRY"
+  | "AUTHENTICATE"
+  | "SELECT_CONTEXT"
+  | "DISCOVER"
+  | "INSPECT"
+  | "SELECT"
+  | "COMPARE"
+  | "ACCUMULATE"
+  | "CONFIGURE"
+  | "PREPARE"
+  | "REVIEW"
+  | "COMMIT"
+  | "WAIT"
+  | "VERIFY"
+  | "TRACK"
+  | "RECOVER"
+  | "CONTINUE"
+  | "COMPLETE";
+export type PreviewScenarioCompilationStatus = "EXECUTABLE" | "PARTIALLY_SUPPORTED" | "UNSUPPORTED";
+export type PreviewScenarioDiagnosticStatus = "SUPPORTED" | "PARTIALLY_SUPPORTED" | "UNSUPPORTED";
+export type PreviewScenarioResolutionStrategy =
+  | "REMOVE_STAGE"
+  | "MERGE_STAGE"
+  | "REPLACE_WITH_LOCAL_STATE"
+  | "REPLACE_VERIFICATION_METHOD"
+  | "DOWNGRADE_TO_READ_ONLY"
+  | "MARK_AS_UNSUPPORTED"
+  | "REQUEST_MANUAL_BINDING";
+export type PreviewVerificationType =
+  | "HTTP_STATUS_MATCH"
+  | "RESPONSE_SCHEMA_VALID"
+  | "RESOURCE_EXISTS"
+  | "RESOURCE_NOT_EXISTS"
+  | "FIELD_EQUALS"
+  | "STATE_EQUALS"
+  | "COLLECTION_CONTAINS"
+  | "COLLECTION_EXCLUDES"
+  | "OUTPUT_EXTRACTABLE";
+export type PreviewScenarioBindingTarget = "PATH" | "QUERY" | "BODY" | "HEADER";
+
+export interface PreviewServiceActor {
+  id: string;
+  label: string;
+}
+
+export interface PreviewServiceUnderstanding {
+  domain: string;
+  serviceType: string;
+  actors: PreviewServiceActor[];
+  coreEntities: string[];
+  primaryGoals: string[];
+  confidence: number;
+  evidence: string[];
+}
+
+export interface PreviewScenarioInputBinding {
+  target: string;
+  targetKind: PreviewScenarioBindingTarget;
+  source: string;
+  required: boolean;
+}
+
+export interface PreviewScenarioOutputBinding {
+  fromCandidates: string[];
+  to: string;
+  sensitive: boolean;
+}
+
+export interface PreviewVerificationContract {
+  type: PreviewVerificationType;
+  capabilityId: string | null;
+  responsePath: string | null;
+  expectedSource: string | null;
+  acceptedValues: string[];
+  required: boolean;
+}
+
+export interface PreviewCompiledScenarioStage {
+  id: string;
+  role: PreviewScenarioStageRole;
+  intent: string;
+  capabilityId: string | null;
+  operationId: string | null;
+  optional: boolean;
+  inputs: string[];
+  outputs: string[];
+  nextStageIds: string[];
+  inputBindings: PreviewScenarioInputBinding[];
+  outputBindings: PreviewScenarioOutputBinding[];
+  verification: PreviewVerificationContract | null;
+  risk: PreviewRiskLevel;
+}
+
+export interface PreviewScenarioDiagnostic {
+  scenarioId: string | null;
+  stageId: string | null;
+  status: PreviewScenarioDiagnosticStatus;
+  message: string;
+  resolution: PreviewScenarioResolutionStrategy;
+  replacementCapabilityId: string | null;
+}
+
+export interface PreviewCompiledScenario {
+  id: string;
+  name: string;
+  actor: string;
+  goal: string;
+  entryStageId: string | null;
+  stages: PreviewCompiledScenarioStage[];
+  scenarioState: string[];
+  status: PreviewScenarioCompilationStatus;
+  diagnostics: PreviewScenarioDiagnostic[];
+  confidence: number;
+  schemaVersion: string;
+  runtimeVersion: string;
+}
+
+export interface PreviewScenarioStagePlan {
+  id: string;
+  role: PreviewScenarioStageRole;
+  intent: string;
+  capabilityRequirement: string | null;
+  required: boolean;
+  inputs: string[];
+  outputs: string[];
+  nextStageIds: string[];
+  verificationIntent: PreviewVerificationType | null;
+}
+
+export interface PreviewScenarioPlan {
+  id: string;
+  name: string;
+  actor: string;
+  goal: string;
+  entryConditions: string[];
+  stages: PreviewScenarioStagePlan[];
+  scenarioState: string[];
+  confidence: number;
+  evidence: string[];
+}
+
+export type CustomScenarioStatus =
+  | "GENERATING"
+  | "DRAFT"
+  | "VALIDATING"
+  | "VALIDATED"
+  | "ACTIVE"
+  | "INVALIDATED"
+  | "ARCHIVED";
+
+export type CustomScenarioVisibility = "PRIVATE" | "TEAM";
+
+export interface CustomScenarioView {
+  id: string;
+  serviceId: string;
+  name: string;
+  description: string | null;
+  naturalLanguageSource: string;
+  status: CustomScenarioStatus;
+  visibility: CustomScenarioVisibility;
+  definition: PreviewScenarioPlan;
+  revision: number;
+  openapiFingerprint: string;
+  compiledScenario: PreviewCompiledScenario;
+  valid: boolean;
+  validationErrors: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomScenarioExport {
+  format: "gamjabox.custom-scenario.v1";
+  name: string;
+  description: string | null;
+  naturalLanguageSource: string;
+  visibility: CustomScenarioVisibility;
+  definition: PreviewScenarioPlan;
+}
+
+export interface RegressionSuiteView {
+  id: string;
+  serviceId: string;
+  name: string;
+  description: string | null;
+  apiDocsUrl: string;
+  apiBaseUrl: string;
+  scenarioIds: string[];
+  deploymentTargetId: string | null;
+  runOnDeployment: boolean;
+  allowStateChangingOnDeployment: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RegressionRunStatus = "QUEUED" | "RUNNING" | "PASSED" | "FAILED";
+export type RegressionTriggerType = "MANUAL" | "CI" | "DEPLOYMENT";
+export type ScenarioExecutionStatus = "RUNNING" | "PASSED" | "FAILED" | "SKIPPED";
+
+export interface RegressionScenarioExecutionView {
+  id: string;
+  scenarioId: string;
+  scenarioRevisionId: string;
+  status: ScenarioExecutionStatus;
+  inputSnapshot: unknown;
+  stateSnapshot: unknown;
+  result: unknown;
+  failureStageId: string | null;
+  failureRequest: unknown;
+  startedAt: string;
+  completedAt: string;
+}
+
+export interface RegressionRunView {
+  id: string;
+  suiteId: string;
+  status: RegressionRunStatus;
+  triggerType: RegressionTriggerType;
+  triggerReference: string | null;
+  totalCount: number;
+  passedCount: number;
+  failedCount: number;
+  summary: unknown;
+  executions: RegressionScenarioExecutionView[];
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export type PreviewScenarioStageExecutionStatus =
+  | "IDLE"
+  | "WAITING_INPUT"
+  | "RUNNING"
+  | "SUCCESS"
+  | "FAILED"
+  | "SKIPPED"
+  | "CANCELLED";
+
+export interface PreviewScenarioAssertionResult {
+  type: PreviewVerificationType;
+  passed: boolean;
+  message: string;
+  actual: unknown;
+  expected: unknown;
+}
+
+export interface PreviewScenarioStageExecution {
+  stageId: string;
+  status: PreviewScenarioStageExecutionStatus;
+  operationId: string | null;
+  method: string | null;
+  url: string | null;
+  request: {
+    path: Record<string, string>;
+    query: Record<string, string>;
+    headers: Record<string, string>;
+    body: Record<string, unknown>;
+  } | null;
+  response: unknown;
+  responseHeaders: Record<string, string>;
+  extractedOutputs: Record<string, unknown>;
+  assertions: PreviewScenarioAssertionResult[];
+  durationMs: number | null;
+  error: string | null;
+  startedAt: number | null;
+  completedAt: number | null;
 }
 
 export interface PageReviewFinding {
@@ -713,6 +995,15 @@ export interface PartSuggestion {
 export interface PartSuggestionResult {
   suggestions: PartSuggestion[];
   aiSucceeded: boolean;
+  compositionFindings: Array<{
+    severity: "WARNING" | "ERROR";
+    code: string;
+    message: string;
+    groupIds: string[];
+    reselectableGroupIds: string[];
+  }>;
+  reselectedGroups: string[];
+  selectionStrategy: string | null;
 }
 
 // errors가 비어있지 않으면(all-or-nothing 실패) pages는 요청으로 보낸 pages 그대로다. pagePlans도

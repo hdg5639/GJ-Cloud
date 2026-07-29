@@ -9,6 +9,10 @@ import gj.cloud.ops.application.preview.ai.PartSuggestionResult;
 import gj.cloud.ops.application.preview.analysis.GenerationMode;
 import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
+import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchEngine;
+import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchModels.BlueprintReindexResult;
+import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchModels.BlueprintSearchQuery;
+import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchModels.BlueprintSearchResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalysisResult;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest;
 import gj.cloud.ops.application.preview.dto.PreviewBlocksRequest;
@@ -52,11 +56,15 @@ public class PreviewController {
     private final AiPagePlanner aiPagePlanner;
     private final AiPartAdvisor aiPartAdvisor;
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
+    private final BlueprintSearchEngine blueprintSearchEngine;
 
-    @Operation(summary = "OpenAPI 문서 분석", description = "OpenAPI 3.x 문서를 결정론적으로 분석해 capability와 페이지 초안을 반환합니다. 배포는 수행하지 않습니다.")
+    @Operation(summary = "OpenAPI 문서 분석·시나리오 재구성", description = "URL 또는 업로드 원문의 OpenAPI 3.x를 정규화하고, 선택한 capability·서비스 문서 페이지·자연어 사용자 흐름을 반영해 프리뷰 계획을 반환합니다. 배포는 수행하지 않습니다.")
     @PostMapping("/analyze")
-    public ApiResponse<PreviewAnalysisResult> analyze(@Valid @RequestBody PreviewAnalyzeRequest request) {
-        return ApiResponse.ok(previewAnalysisService.analyze(request));
+    public ApiResponse<PreviewAnalysisResult> analyze(
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody PreviewAnalyzeRequest request
+    ) {
+        return ApiResponse.ok(previewAnalysisService.analyze(request, principal.userId()));
     }
 
     @Operation(summary = "페이지 Blueprint Block 계산", description = "현재 PagePlan을 실제 렌더링 Block으로 컴파일합니다. pagePlans가 없는 구버전 요청은 pages를 사용합니다.")
@@ -83,6 +91,20 @@ public class PreviewController {
                 : previewBlueprintService.compilePageBlocks(request.pages(), request.capabilities(), request.purpose());
         return ApiResponse.ok(aiPartAdvisor.suggest(principal.userId(), request.serviceDescription(),
                 request.purpose(), request.capabilities(), blocks));
+    }
+
+    @Operation(summary = "Blueprint 검색 진단", description = "Registry hard compatibility filter 후 Elasticsearch 후보 검색과 재랭킹 결과·제외 진단을 반환합니다.")
+    @PostMapping("/blueprints/search")
+    public ApiResponse<BlueprintSearchResult> searchBlueprints(
+            @RequestBody BlueprintSearchQuery query
+    ) {
+        return ApiResponse.ok(blueprintSearchEngine.search(query));
+    }
+
+    @Operation(summary = "Blueprint 검색 인덱스 재구축", description = "정본 component-manifest.json에서 Elasticsearch 파생 인덱스를 완전히 다시 만듭니다.")
+    @PostMapping("/blueprints/reindex")
+    public ApiResponse<BlueprintReindexResult> reindexBlueprints() {
+        return ApiResponse.ok(blueprintSearchEngine.reindex());
     }
 
     @Operation(summary = "페이지 초안 AI 검수", description = "현재 capability/페이지 초안을 AI가 advisory로 검수하며 실제 계획은 수정하지 않습니다.")

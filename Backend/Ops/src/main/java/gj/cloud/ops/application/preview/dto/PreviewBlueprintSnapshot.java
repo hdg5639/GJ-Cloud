@@ -9,6 +9,8 @@ import gj.cloud.ops.application.preview.analysis.RegistryStatus;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
 
 import java.util.List;
 import java.util.Map;
@@ -27,8 +29,15 @@ public record PreviewBlueprintSnapshot(
         List<ApiBinding> bindings,
         GenerationMode generationMode,
         String compilerVersion,
-        String registryVersion
+        String registryVersion,
+        List<CompiledScenario> scenarios,
+        PreviewMode previewMode
 ) {
+    public PreviewBlueprintSnapshot {
+        scenarios = scenarios == null ? List.of() : List.copyOf(scenarios);
+        previewMode = previewMode == null ? PreviewMode.OPERATION_PREVIEW : previewMode;
+    }
+
     // 기존 테스트/저장 코드 소스 호환용 생성자.
     public PreviewBlueprintSnapshot(
             String apiBaseUrl,
@@ -43,6 +52,6 @@ public record PreviewBlueprintSnapshot(
             List<ApiBinding> bindings
     ) {
         this(apiBaseUrl, capabilities, pages, authStrategy, pageBlocks, status, purpose, pagePlans, flows, bindings,
-                GenerationMode.RULE_BASED, "2", "system-1");
+                GenerationMode.RULE_BASED, "2", "system-1", List.of(), PreviewMode.OPERATION_PREVIEW);
     }
 }

@@ -84,7 +84,26 @@ public enum OpsErrorCode {
     API_DOCS_TOO_LARGE(HttpStatus.BAD_REQUEST, "API 문서 크기가 허용 한도를 초과했습니다."),
     API_DOCS_PARSE_FAILED(HttpStatus.BAD_REQUEST, "API 문서를 해석하지 못했습니다. OpenAPI 3.x 형식인지 확인해주세요."),
     API_DOCS_UNSUPPORTED_VERSION(HttpStatus.BAD_REQUEST, "OpenAPI 3.x 문서만 지원합니다."),
-    INVALID_PREVIEW_BLUEPRINT(HttpStatus.BAD_REQUEST, "Auto Preview Blueprint 검증에 실패했습니다.");
+    PREVIEW_API_SOURCE_REQUIRED(HttpStatus.BAD_REQUEST, "API 문서 URL 또는 OpenAPI 파일 중 하나를 입력해주세요."),
+    PREVIEW_CAPABILITY_SELECTION_INVALID(HttpStatus.BAD_REQUEST, "선택한 API 기능을 현재 문서에서 찾지 못했습니다."),
+    INVALID_PREVIEW_BLUEPRINT(HttpStatus.BAD_REQUEST, "Auto Preview Blueprint 검증에 실패했습니다."),
+
+    // PRO Custom Scenario Builder
+    CUSTOM_SCENARIO_PRO_REQUIRED(HttpStatus.PAYMENT_REQUIRED,
+            "커스텀 시나리오 생성과 저장은 PRO 플랜에서 사용할 수 있습니다."),
+    CUSTOM_SCENARIO_GENERATION_FAILED(HttpStatus.UNPROCESSABLE_CONTENT,
+            "요청한 시나리오를 현재 API로 구성하지 못했습니다."),
+    CUSTOM_SCENARIO_NOT_FOUND(HttpStatus.NOT_FOUND, "커스텀 시나리오를 찾을 수 없습니다."),
+    CUSTOM_SCENARIO_INVALID(HttpStatus.UNPROCESSABLE_CONTENT,
+            "검증을 통과한 커스텀 시나리오만 활성화할 수 있습니다."),
+
+    // Scenario Regression & Automation
+    REGRESSION_SUITE_NOT_FOUND(HttpStatus.NOT_FOUND, "회귀 테스트 스위트를 찾을 수 없습니다."),
+    REGRESSION_SUITE_INVALID(HttpStatus.UNPROCESSABLE_CONTENT,
+            "실행 가능한 커스텀 시나리오만 회귀 테스트 스위트에 포함할 수 있습니다."),
+    REGRESSION_RUN_NOT_FOUND(HttpStatus.NOT_FOUND, "회귀 테스트 실행 이력을 찾을 수 없습니다."),
+    REGRESSION_TARGET_URL_INVALID(HttpStatus.BAD_REQUEST,
+            "회귀 테스트 대상 URL이 유효하지 않거나 내부 네트워크를 가리킵니다.");
 
     private final HttpStatus status;
     private final String message;

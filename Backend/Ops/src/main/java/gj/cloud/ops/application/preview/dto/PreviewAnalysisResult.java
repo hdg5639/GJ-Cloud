@@ -9,6 +9,11 @@ import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PlanningSource;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioDiagnostic;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ServiceUnderstanding;
 
 import java.util.List;
 
@@ -21,6 +26,8 @@ public record PreviewAnalysisResult(
         // 사용자가 그대로 쓸지 다른 주소로 바꿀지 확인할 수 있게 첫 번째 값만 넘기지 않고 전체를 넘긴다.
         List<String> apiServerUrls,
         List<Capability> capabilities,
+        // 재생성 태그를 다시 넓힐 수 있도록 문서에서 인식한 전체 목록을 별도로 유지한다.
+        List<Capability> availableCapabilities,
         List<PageDraft> pages,
         // 실행 가능한 페이지 계획의 정본. PageDraft는 FALLBACK_CRUD 및 구버전 요청 호환용으로 유지한다.
         List<PagePlan> pagePlans,
@@ -37,6 +44,17 @@ public record PreviewAnalysisResult(
         AuthStrategy authStrategy,
         // Direction Recovery Change Request §17 — 이 pages가 어떻게 만들어졌는지 항상 명시적으로
         // 리포트한다. FALLBACK_CRUD를 SERVICE_AWARE인 것처럼 보여주면 안 된다.
-        GenerationMode generationMode
+        GenerationMode generationMode,
+        // Scenario-first Runtime v3 — UI보다 먼저 확정되는 서비스 의미와 실행 시나리오.
+        ServiceUnderstanding serviceUnderstanding,
+        List<CompiledScenario> scenarios,
+        List<ScenarioDiagnostic> scenarioDiagnostics,
+        PreviewMode previewMode,
+        PlanningSource scenarioPlanningSource,
+        String scenarioPromptVersion,
+        // 분석에 사용된 전체 capability는 태그 재선택을 위해 유지하고, 실제 생성 범위는 별도로 노출한다.
+        List<String> activeCapabilityIds,
+        String resolvedServiceDescription,
+        List<String> serviceContextSources
 ) {
 }

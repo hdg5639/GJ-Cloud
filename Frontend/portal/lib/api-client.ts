@@ -57,6 +57,12 @@ import type {
   PartSuggestionResult,
   PreviewPlanApplyResponse,
   PageReviewFinding,
+  PreviewCompiledScenario,
+  PreviewMode,
+  CustomScenarioView,
+  CustomScenarioExport,
+  RegressionRunView,
+  RegressionSuiteView,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -676,7 +682,8 @@ export const api = {
         vmId: string,
         deploymentId: string,
         onEvent: (event: DeploymentEventPayload) => void,
-        onError?: (err: Error) => void
+        onError?: (err: Error) => void,
+        onConnected?: () => void
       ): (() => void) => {
         let stopped = false;
         let lastSequence = 0;
@@ -697,6 +704,7 @@ export const api = {
               }
             );
             if (!res.ok || !res.body) throw new Error("배포 이벤트 스트림 연결에 실패했습니다");
+            onConnected?.();
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -774,7 +782,16 @@ export const api = {
     preview: {
       analyze: (
         accessToken: string,
-        body: { apiDocsUrl: string; serviceDescription?: string; purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN" }
+        body: {
+          apiDocsUrl?: string;
+          apiDocsContent?: string;
+          documentationPageUrl?: string;
+          serviceDescription?: string;
+          scenarioIntent?: string;
+          selectedCapabilityIds?: string[];
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          previewMode?: "SCENARIO_PREVIEW" | "INFERRED_SCENARIO_PREVIEW" | "OPERATION_PREVIEW";
+        }
       ) =>
         request<PreviewAnalysisResult>("ops", "/ops/preview/analyze", {
           method: "POST",
@@ -843,6 +860,139 @@ export const api = {
           body: JSON.stringify(body),
           accessToken,
         }),
+      customScenarios: {
+        generate: (
+          accessToken: string,
+          body: {
+            serviceId: string;
+            apiDocsUrl: string;
+            name?: string;
+            description?: string;
+            naturalLanguageSource: string;
+            purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+            visibility?: "PRIVATE" | "TEAM";
+          }
+        ) =>
+          request<CustomScenarioView>("ops", "/ops/preview/custom-scenarios", {
+            method: "POST",
+            body: JSON.stringify(body),
+            accessToken,
+          }),
+        list: (accessToken: string, serviceId: string) =>
+          request<CustomScenarioView[]>(
+            "ops",
+            `/ops/preview/custom-scenarios?serviceId=${encodeURIComponent(serviceId)}`,
+            { accessToken }
+          ),
+        activate: (accessToken: string, scenarioId: string) =>
+          request<CustomScenarioView>(
+            "ops",
+            `/ops/preview/custom-scenarios/${encodeURIComponent(scenarioId)}/activate`,
+            { method: "POST", accessToken }
+          ),
+        revalidate: (accessToken: string, scenarioId: string, apiDocsUrl: string) =>
+          request<CustomScenarioView>(
+            "ops",
+            `/ops/preview/custom-scenarios/${encodeURIComponent(scenarioId)}/revalidate`,
+            {
+              method: "POST",
+              body: JSON.stringify({ apiDocsUrl }),
+              accessToken,
+            }
+          ),
+        export: (accessToken: string, scenarioId: string) =>
+          request<CustomScenarioExport>(
+            "ops",
+            `/ops/preview/custom-scenarios/${encodeURIComponent(scenarioId)}/export`,
+            { accessToken }
+          ),
+        import: (
+          accessToken: string,
+          serviceId: string,
+          apiDocsUrl: string,
+          scenario: CustomScenarioExport
+        ) =>
+          request<CustomScenarioView>("ops", "/ops/preview/custom-scenarios/import", {
+            method: "POST",
+            body: JSON.stringify({ serviceId, apiDocsUrl, scenario }),
+            accessToken,
+          }),
+      },
+      regressionSuites: {
+        create: (
+          accessToken: string,
+          body: {
+            serviceId: string;
+            name: string;
+            description?: string;
+            apiDocsUrl: string;
+            apiBaseUrl: string;
+            scenarioIds: string[];
+            deploymentTargetId?: string;
+            runOnDeployment?: boolean;
+            allowStateChangingOnDeployment?: boolean;
+          }
+        ) =>
+          request<RegressionSuiteView>("ops", "/ops/preview/regression-suites", {
+            method: "POST",
+            body: JSON.stringify(body),
+            accessToken,
+          }),
+        list: (accessToken: string, serviceId: string) =>
+          request<RegressionSuiteView[]>(
+            "ops",
+            `/ops/preview/regression-suites?serviceId=${encodeURIComponent(serviceId)}`,
+            { accessToken }
+          ),
+        run: (
+          accessToken: string,
+          suiteId: string,
+          body: {
+            initialState?: Record<string, unknown>;
+            headers?: Record<string, string>;
+            allowStateChanging?: boolean;
+            failFast?: boolean;
+          } = {}
+        ) =>
+          request<RegressionRunView>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}/runs`,
+            { method: "POST", body: JSON.stringify(body), accessToken }
+          ),
+        runFromCi: (
+          accessToken: string,
+          suiteId: string,
+          body: {
+            initialState?: Record<string, unknown>;
+            headers?: Record<string, string>;
+            allowStateChanging?: boolean;
+            failFast?: boolean;
+          } = {}
+        ) =>
+          request<RegressionRunView>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}/ci/runs`,
+            { method: "POST", body: JSON.stringify(body), accessToken }
+          ),
+        runs: (accessToken: string, suiteId: string) =>
+          request<RegressionRunView[]>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}/runs`,
+            { accessToken }
+          ),
+        runDetail: (accessToken: string, runId: string) =>
+          request<RegressionRunView>(
+            "ops",
+            `/ops/preview/regression-suites/runs/${encodeURIComponent(runId)}`,
+            { accessToken }
+          ),
+        delete: (accessToken: string, suiteId: string) =>
+          request<void>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}`,
+            { method: "DELETE", accessToken }
+          ),
+      },
       // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않고,
       // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인
       // 등록 같은 로컬 편집 직후) 이 엔드포인트로 Block을 다시 받는다.
@@ -875,6 +1025,8 @@ export const api = {
           authStrategy: PreviewAuthStrategy;
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
           generationMode?: PreviewGenerationMode;
+          scenarios?: PreviewCompiledScenario[];
+          previewMode?: PreviewMode;
           partOverrides?: Record<string, string>;
         }
       ) =>
