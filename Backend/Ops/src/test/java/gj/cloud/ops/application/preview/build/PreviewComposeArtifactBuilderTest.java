@@ -66,6 +66,8 @@ class PreviewComposeArtifactBuilderTest {
                 "src/components/preview-runtime/journey/recipes.ts",
                 "src/components/preview-runtime/journey/validator.ts",
                 "src/components/preview-runtime/scenario/ScenarioWorkbench.tsx",
+                "src/components/preview-runtime/scenario/ProductExperienceRuntime.tsx",
+                "src/components/preview-runtime/scenario/productExperience.ts",
                 "src/components/preview-runtime/scenario/runtime.ts",
                 "src/components/preview-runtime/blueprints/manifests/component-manifest.json",
                 "src/components/preview-runtime/blueprints/adapters/generatedPartComponents.ts");
@@ -78,6 +80,13 @@ class PreviewComposeArtifactBuilderTest {
         // App.tsx는 JSON만 주입하고 React 구현은 공유 Runtime을 import해야 한다.
         assertThat(appTsx).contains("import { PreviewRuntimeApp }");
         assertThat(appTsx).doesNotContain("function ResourceTable(", "function PageRenderer(");
+        assertThat(files.get("src/components/preview-runtime/PreviewRuntimeApp.tsx"))
+                .contains("<ProductExperienceRuntime")
+                .contains("서비스 화면")
+                .contains("시나리오 디버거");
+        assertThat(files.get("src/components/preview-runtime/scenario/productExperience.ts"))
+                .contains("composeProductExperience")
+                .contains("validateProductExperience");
         assertThat(appTsx).contains("https://api.example.com");
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");

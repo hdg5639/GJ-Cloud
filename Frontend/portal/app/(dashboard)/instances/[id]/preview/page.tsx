@@ -24,7 +24,7 @@ import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRen
 import { ProductShell } from "@/components/preview-runtime/ProductShell";
 import { BlueprintPartPicker } from "@/components/preview-runtime/BlueprintPartPicker";
 import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
-import { ScenarioWorkbench } from "@/components/preview-runtime/scenario";
+import { ProductExperienceRuntime, ScenarioWorkbench } from "@/components/preview-runtime/scenario";
 import { rowId } from "@/components/preview-runtime/api";
 import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
 import type { Block } from "@/components/preview-runtime/blueprint";
@@ -232,7 +232,7 @@ export default function PreviewWizardPage() {
   const [partReasons, setPartReasons] = useState<Record<string, string>>({});
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
   const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
-  const [previewSurface, setPreviewSurface] = useState<"SCENARIO" | "OPERATION">("SCENARIO");
+  const [previewSurface, setPreviewSurface] = useState<"PRODUCT" | "SCENARIO" | "OPERATION">("PRODUCT");
   const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
   const [manualLoginPath, setManualLoginPath] = useState("");
   const [manualLoginUsernameField, setManualLoginUsernameField] = useState("email");
@@ -987,11 +987,20 @@ export default function PreviewWizardPage() {
                 <button
                   type="button"
                   className={`rounded-md px-3 py-2 text-xs font-extrabold ${
+                    previewSurface === "PRODUCT" ? "bg-brand text-black" : "text-muted"
+                  }`}
+                  onClick={() => setPreviewSurface("PRODUCT")}
+                >
+                  서비스 화면
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-2 text-xs font-extrabold ${
                     previewSurface === "SCENARIO" ? "bg-brand text-black" : "text-muted"
                   }`}
                   onClick={() => setPreviewSurface("SCENARIO")}
                 >
-                  시나리오
+                  시나리오 디버거
                 </button>
                 <button
                   type="button"
@@ -1019,7 +1028,23 @@ export default function PreviewWizardPage() {
                 reasons={partReasons}
               />
             )}
-            {previewSurface === "SCENARIO"
+            {previewSurface === "PRODUCT"
+              && result.previewMode !== "OPERATION_PREVIEW"
+              && apiBaseUrl.trim() ? (
+              <ProductExperienceRuntime
+                scenarios={result.scenarios}
+                capabilities={result.capabilities}
+                config={{
+                  apiBaseUrl: apiBaseUrl.trim(),
+                  authToken: previewAuthToken,
+                  onAuthTokenChange: setPreviewAuthToken,
+                  onApiCall: (entry) => setApiCallLog((prev) => [entry, ...prev].slice(0, 30)),
+                  authStrategy: result.authStrategy,
+                  purpose,
+                }}
+                onOpenDeveloperView={() => setPreviewSurface("SCENARIO")}
+              />
+            ) : previewSurface === "SCENARIO"
               && result.previewMode !== "OPERATION_PREVIEW"
               && apiBaseUrl.trim() ? (
               <ScenarioWorkbench

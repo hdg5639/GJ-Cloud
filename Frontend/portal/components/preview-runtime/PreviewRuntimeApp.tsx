@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProductShell } from "./ProductShell";
 import { PreviewPageRenderer } from "./PreviewPageRenderer";
 import { ApiCallLog } from "./ApiCallLog";
-import { ScenarioWorkbench } from "./scenario";
+import { ProductExperienceRuntime, ScenarioWorkbench } from "./scenario";
 import { rowId } from "./api";
 import type { Block } from "./blueprint";
 import type { ApiBinding, FlowBlueprint } from "./flow/types";
@@ -57,8 +57,8 @@ export function PreviewRuntimeApp({
   const [apiLog, setApiLog] = useState<ApiCallLogEntry[]>([]);
   const hasScenarioView = previewMode !== "OPERATION_PREVIEW"
     && scenarios.some((scenario) => scenario.status !== "UNSUPPORTED");
-  const [runtimeView, setRuntimeView] = useState<"SCENARIO" | "OPERATION">(
-    hasScenarioView ? "SCENARIO" : "OPERATION"
+  const [runtimeView, setRuntimeView] = useState<"PRODUCT" | "SCENARIO" | "OPERATION">(
+    hasScenarioView ? "PRODUCT" : "OPERATION"
   );
 
   useEffect(() => {
@@ -156,11 +156,20 @@ export function PreviewRuntimeApp({
           <button
             type="button"
             className={`rounded-md px-3 py-2 text-xs font-extrabold ${
+              runtimeView === "PRODUCT" ? "bg-brand text-black" : "text-muted"
+            }`}
+            onClick={() => setRuntimeView("PRODUCT")}
+          >
+            서비스 화면
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-xs font-extrabold ${
               runtimeView === "SCENARIO" ? "bg-brand text-black" : "text-muted"
             }`}
             onClick={() => setRuntimeView("SCENARIO")}
           >
-            시나리오
+            시나리오 디버거
           </button>
           <button
             type="button"
@@ -174,9 +183,16 @@ export function PreviewRuntimeApp({
         </div>
       )}
 
-      {runtimeView === "SCENARIO" && hasScenarioView ? (
+      {runtimeView === "PRODUCT" && hasScenarioView ? (
+        <ProductExperienceRuntime
+          scenarios={scenarios}
+          capabilities={capabilities}
+          config={config}
+          onOpenDeveloperView={() => setRuntimeView("SCENARIO")}
+        />
+      ) : runtimeView === "SCENARIO" && hasScenarioView ? (
         <ScenarioWorkbench scenarios={scenarios} capabilities={capabilities} config={config} />
-      ) : (
+      ) : runtimeView === "OPERATION" ? (
         <ProductShell purpose={purpose} pages={pages} activePageId={activePageId} onSelectPage={selectPage}>
           {activePage && apiBaseUrl.trim() && (
             <PreviewPageRenderer
@@ -194,7 +210,7 @@ export function PreviewRuntimeApp({
             />
           )}
         </ProductShell>
-      )}
+      ) : null}
 
       {runtimeView === "OPERATION" && (
       <section className="rounded-panel border border-line bg-panel p-4">
