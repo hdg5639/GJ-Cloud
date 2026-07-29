@@ -20,6 +20,7 @@ import gj.cloud.ops.application.preview.build.PreviewComposeArtifactBuilder;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.dto.PreviewDeployRequest;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.flow.FlowBlueprintIds;
 import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
@@ -138,7 +139,9 @@ public class PreviewDeployController {
             flows = generated.result().flows();
             bindings = generated.result().bindings();
         } else {
-            flows = body.flows();
+            // 이전 분석 결과나 AI Patch가 pageId+action 이름만으로 id를 만들었을 수 있다. Flow 실행
+            // 연결은 trigger가 정본이므로 중복 id만 결정적으로 고유화하고 나머지 최종 검증은 그대로 한다.
+            flows = FlowBlueprintIds.ensureUnique(body.flows());
             bindings = body.bindings();
         }
 

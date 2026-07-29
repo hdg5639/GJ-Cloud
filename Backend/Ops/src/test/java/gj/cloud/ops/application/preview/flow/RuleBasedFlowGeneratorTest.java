@@ -181,6 +181,26 @@ class RuleBasedFlowGeneratorTest {
     }
 
     @Test
+    void commandsWithTheSameActionStillReceiveUniqueFlowIds() {
+        Capability cancelEvent = capability("events.cancel", "events", null, "/events/{id}/cancel", "POST",
+                List.of(), CapabilityKind.COMMAND, "cancel", List.of());
+        Capability cancelSeries = capability(
+                "events.cancel-series", "events", null, "/events/{id}/series/cancel", "POST",
+                List.of(), CapabilityKind.COMMAND, "cancel", List.of());
+        PagePlan page = pagePlan(
+                "events-page", List.of(cancelEvent.id(), cancelSeries.id()));
+
+        RuleBasedFlowGenerator.Result result =
+                generator.generate(List.of(page), List.of(cancelEvent, cancelSeries));
+
+        assertThat(result.flows()).extracting(FlowBlueprint::id).doesNotHaveDuplicates();
+        assertThat(result.flows()).extracting(flow -> flow.trigger().actionId())
+                .containsExactly("events.cancel", "events.cancel-series");
+        assertThat(result.flows()).allSatisfy(flow ->
+                assertThat(FlowBlueprintValidator.validate(flow, Set.of("events-page"))).isEmpty());
+    }
+
+    @Test
     void createFlowInsertsBoundedPollWhenDetailHasStatusTransition() {
         Capability create = capability("machines.create", "machines", CapabilityType.CREATE, "/machines", "POST",
                 List.of("name"), CapabilityKind.MUTATION, null, List.of());

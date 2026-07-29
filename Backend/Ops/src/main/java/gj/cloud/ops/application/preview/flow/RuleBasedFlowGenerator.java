@@ -106,7 +106,7 @@ public class RuleBasedFlowGenerator {
 
         List<ApiBinding> bindings = new ArrayList<>(ownBindings);
         bindings.addAll(refreshBindingsByCapabilityId.values());
-        return new Result(flows, bindings);
+        return new Result(FlowBlueprintIds.ensureUnique(flows), bindings);
     }
 
     private record GeneratedFlow(FlowBlueprint flow, List<ApiBinding> bindings) {
