@@ -11,6 +11,10 @@ import com.openai.models.responses.StructuredResponseOutputMessage;
 import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.blueprint.BlueprintPartRegistry;
+import gj.cloud.ops.application.preview.blueprint.composition.BlueprintCompositionModels.BlueprintCandidateOption;
+import gj.cloud.ops.application.preview.blueprint.composition.BlueprintCompositionModels.BlueprintExclusiveGroup;
+import gj.cloud.ops.application.preview.blueprint.composition.BlueprintCompositionModels.SelectionMode;
+import gj.cloud.ops.application.preview.blueprint.composition.BlueprintCompositionService;
 import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchEngine;
 import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchQueryFactory;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
@@ -57,19 +61,22 @@ public class AiPartAdvisor {
     private final ObjectMapper objectMapper;
     private final AiPreviewGenerationLogRepository logRepository;
     private final BlueprintSearchEngine blueprintSearchEngine;
+    private final BlueprintCompositionService blueprintCompositionService;
 
     public AiPartAdvisor(
             OpenAIClient client,
             @Value("${ai.model.standard}") String model,
             ObjectMapper objectMapper,
             AiPreviewGenerationLogRepository logRepository,
-            BlueprintSearchEngine blueprintSearchEngine
+            BlueprintSearchEngine blueprintSearchEngine,
+            BlueprintCompositionService blueprintCompositionService
     ) {
         this.client = client;
         this.model = model;
         this.objectMapper = objectMapper;
         this.logRepository = logRepository;
         this.blueprintSearchEngine = blueprintSearchEngine;
+        this.blueprintCompositionService = blueprintCompositionService;
     }
 
     public PartSuggestionResult suggest(
@@ -115,7 +122,7 @@ public class AiPartAdvisor {
             inputTokens = call.inputTokens();
             outputTokens = call.outputTokens();
 
-            List<PartSuggestion> validated = new ArrayList<>();
+            Map<String, PartSuggestion> validatedByGroup = new LinkedHashMap<>();
             List<PartSuggestion> raw = call.proposal().suggestions() == null
                     ? List.of() : call.proposal().suggestions();
             for (PartSuggestion suggestion : raw) {
@@ -126,10 +133,44 @@ public class AiPartAdvisor {
                 if (descriptor == null || !descriptor.allowedComponentIds().contains(suggestion.componentId())) {
                     continue; // 모델이 지어냈거나 이 Block과 호환되지 않는 componentId → 버린다.
                 }
-                validated.add(suggestion);
+                validatedByGroup.putIfAbsent(
+                        suggestion.pageId() + "/" + suggestion.instanceId(), suggestion);
+            }
+
+            Map<String, String> preferred = new LinkedHashMap<>();
+            validatedByGroup.forEach((groupId, suggestion) ->
+                    preferred.put(groupId, suggestion.componentId()));
+            var composition = blueprintCompositionService.compose(
+                    descriptors.stream().map(this::toExclusiveGroup).toList(), preferred);
+
+            List<PartSuggestion> composedSuggestions = new ArrayList<>();
+            for (var selection : composition.selections()) {
+                SwapDescriptor descriptor = byKey.get(selection.groupId());
+                if (descriptor == null) continue;
+                PartSuggestion original = validatedByGroup.get(selection.groupId());
+                if (original == null && selection.componentId().equals(descriptor.currentComponentId())) {
+                    continue; // 모델이 생략했고 조합기도 기본값을 유지했다면 override를 만들지 않는다.
+                }
+                String reason = original != null
+                        && selection.componentId().equals(original.componentId())
+                        ? original.reason()
+                        : "전체 화면의 반복 패턴과 파츠 다양성을 검증해 "
+                        + selection.componentId() + "(으)로 조정했습니다.";
+                composedSuggestions.add(new PartSuggestion(
+                        descriptor.pageId(),
+                        descriptor.instanceId(),
+                        selection.componentId(),
+                        reason
+                ));
             }
             succeeded = true;
-            return new PartSuggestionResult(validated, true);
+            return new PartSuggestionResult(
+                    composedSuggestions,
+                    true,
+                    composition.findings(),
+                    composition.reselectedGroupIds(),
+                    composition.strategy()
+            );
         } catch (Exception e) {
             log.warn("Auto Preview AI 파츠 제안 실패: {}", e.getMessage());
             return new PartSuggestionResult(List.of(), false);
@@ -166,8 +207,39 @@ public class AiPartAdvisor {
             return null; // 대체 가능한 등록 파츠가 없으면 제안할 게 없다.
         }
         String resourceName = primary != null ? primary.resourceName() : null;
-        return new SwapDescriptor(pageId, block.instanceId(), kind.get().name(), resourceName,
+        return new SwapDescriptor(pageId, block.instanceId(), block.slot(), kind.get().name(), resourceName,
                 block.componentId(), allowed);
+    }
+
+    private BlueprintExclusiveGroup toExclusiveGroup(SwapDescriptor descriptor) {
+        List<BlueprintCandidateOption> candidates = new ArrayList<>();
+        for (int index = 0; index < descriptor.allowedComponentIds().size(); index++) {
+            String componentId = descriptor.allowedComponentIds().get(index);
+            var registered = BlueprintPartRegistry.ALL.stream()
+                    .filter(part -> part.componentId().equals(componentId))
+                    .findFirst();
+            boolean baseComponent = componentId.equals(descriptor.currentComponentId());
+            candidates.add(new BlueprintCandidateOption(
+                    componentId,
+                    registered.map(BlueprintPartRegistry.BlueprintPart::family)
+                            .orElse("base-" + descriptor.kind().toLowerCase()),
+                    registered.map(BlueprintPartRegistry.BlueprintPart::implementationKind)
+                            .orElse("BASE"),
+                    registered.map(BlueprintPartRegistry.BlueprintPart::overlayPresentation)
+                            .orElse(null),
+                    Math.max(0.1, 1.0 - index * 0.06),
+                    baseComponent
+            ));
+        }
+        return new BlueprintExclusiveGroup(
+                descriptor.pageId() + "/" + descriptor.instanceId(),
+                descriptor.pageId(),
+                descriptor.instanceId(),
+                descriptor.slot(),
+                SelectionMode.PICK_ONE,
+                descriptor.currentComponentId(),
+                candidates
+        );
     }
 
     private Capability primaryCapability(Block block, Map<String, Capability> byId) {
@@ -222,7 +294,7 @@ public class AiPartAdvisor {
         return new AiCallResult(output, inputTokens, outputTokens);
     }
 
-    private record SwapDescriptor(String pageId, String instanceId, String kind, String resourceName,
+    private record SwapDescriptor(String pageId, String instanceId, String slot, String kind, String resourceName,
                                   String currentComponentId, List<String> allowedComponentIds) {
     }
 

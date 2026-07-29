@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchModels.BlueprintMetadata;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,7 @@ public class ElasticsearchBlueprintIndex {
     private final ObjectMapper objectMapper;
     private final RestClient client;
 
+    @Autowired
     public ElasticsearchBlueprintIndex(BlueprintSearchProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, createClient(properties));
     }

@@ -878,6 +878,15 @@ export interface PartSuggestion {
 export interface PartSuggestionResult {
   suggestions: PartSuggestion[];
   aiSucceeded: boolean;
+  compositionFindings: Array<{
+    severity: "WARNING" | "ERROR";
+    code: string;
+    message: string;
+    groupIds: string[];
+    reselectableGroupIds: string[];
+  }>;
+  reselectedGroups: string[];
+  selectionStrategy: string | null;
 }
 
 // errors가 비어있지 않으면(all-or-nothing 실패) pages는 요청으로 보낸 pages 그대로다. pagePlans도

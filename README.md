@@ -244,6 +244,8 @@ UI Projection은 컴파일된 Scenario 이후에만 계산되는 재현 가능�
 
 Blueprint 검색은 `component-manifest.json` Registry를 정본으로, Elasticsearch를 재생성 가능한 파생 인덱스로 사용한다. Manifest의 family·tag·surface·purpose·mode에서 Stage 지원 범위와 데이터 shape 계약을 투영한 뒤, mount point·slot·runtime·risk policy를 hard filter하고 ES 관련도와 category·quality·stability 점수로 재랭킹한다. ES가 비활성화됐거나 응답하지 않으면 같은 계약을 적용한 Registry 검색으로 자동 폴백하며, 검색 결과에는 엔진·후보 수·제외 사유·지연시간 진단이 포함된다. `/ops/preview/blueprints/reindex`로 인덱스를 Registry에서 완전히 재구축할 수 있고, 새 파츠는 Manifest 등록만으로 검색 대상이 된다.
 
+후보 검색 뒤에는 전역 Composition 단계가 한 번 더 동작한다. 각 Block을 `PICK_ONE`, `OPTIONAL_ONE`, `PICK_MANY`, `ORDER_MANY` 선택 모드를 가진 exclusive group으로 다루고, 검색 순위와 현재 요청·누적 사용 빈도를 함께 반영하는 교체 가능한 전략으로 파츠를 고른다. 최종 검증기는 후보 그룹 이탈과 선택 개수 오류를 차단하고, 동일 파츠·family·모달/드로어 presentation·여러 페이지의 같은 layout이 과도하게 반복되는지도 탐지한다. 충돌이 있으면 이미 정상인 선택은 유지한 채 표시된 그룹만 대체 후보로 국소 재선택하며, 선택 전략·진단·재선택 그룹은 AI 파츠 추천 응답에 함께 포함된다.
+
 AI는 `scenario-planner-v1` 구조화 계약으로 서비스 의미와 semantic stage만 제안한다. 제안한 capability는 실제 catalog에 존재해야 하며, 상태 변경 COMMIT은 선행 REVIEW와 후속 VERIFY/TRACK이 없으면 거절된다. 그래프·state producer/consumer·응답 extraction을 만들 수 없는 출력도 실행 전에 제거된다. 모델 호출 실패, 유효한 시나리오 부재, 낮은 신뢰도에서는 같은 요청 안에서 규칙 기반 planner로 자동 대체되고 Operation Preview도 항상 남는다. AI 감사 로그에는 모델·토큰·성공 여부만 저장하며 프롬프트와 응답 원문은 저장하지 않는다.
 
 포털 프리뷰와 배포 앱은 같은 TypeScript Runtime 소스를 사용한다. Ops 빌드가 포털의 `preview-runtime`과 UI primitive를 리소스로 포함하고, 배포 시에는 React 구현을 Java 문자열로 다시 만들지 않고 Runtime 파일을 그대로 복사한 뒤 Scenario·Blueprint·Flow·Binding JSON만 주입한다. 이 덕분에 프리뷰에서 정상인 시나리오·모달·인증·응답 파싱 동작이 배포본에서 별도로 어긋나는 이중 구현 문제를 없앴다. 배포 시점의 구성은 배포 기록에 함께 저장돼 재분석 없이 조회할 수 있다.
