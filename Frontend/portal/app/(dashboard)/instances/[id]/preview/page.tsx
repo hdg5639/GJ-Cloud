@@ -917,9 +917,15 @@ export default function PreviewWizardPage() {
               aria-label="인식된 API 패널 닫기"
             />
           )}
+          {/* 닫힌 패널을 translate로만 화면 밖에 두면 상위 레이아웃의 가로 overflow 조건에서
+              밀려난 패널이 노출될 수 있다. viewport 크기의 별도 clipping layer 안에서 이동시켜
+              닫힘 애니메이션은 유지하면서 화면 밖 내용과 그림자는 완전히 잘라낸다. */}
+          <div className="pointer-events-none fixed inset-0 z-[230] overflow-hidden">
           <aside
-            className={`fixed inset-y-0 right-0 z-[230] flex w-[min(94vw,460px)] flex-col border-l border-line bg-panel shadow-[-24px_0_70px_rgba(0,0,0,.38)] transition-transform duration-300 ease-out ${
-              analysisPanelOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
+            className={`pointer-events-auto absolute bottom-2 right-2 top-2 flex w-[min(calc(100vw-16px),460px)] flex-col overflow-hidden rounded-[18px] border border-line-strong bg-panel shadow-[-18px_14px_64px_rgba(0,0,0,.42),0_1px_0_rgba(255,255,255,.035)_inset] ring-1 ring-black/20 transition-[transform,opacity] duration-300 ease-out sm:bottom-3 sm:right-3 sm:top-3 ${
+              analysisPanelOpen
+                ? "translate-x-0 opacity-100"
+                : "pointer-events-none translate-x-[calc(100%+16px)] opacity-0"
             }`}
             aria-hidden={!analysisPanelOpen}
           >
@@ -940,7 +946,7 @@ export default function PreviewWizardPage() {
                 ×
               </button>
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-5">
             <section className="mb-4 rounded-[14px] border border-brand/25 bg-brand/[0.045] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1353,6 +1359,7 @@ export default function PreviewWizardPage() {
             </div>
             </div>
           </aside>
+          </div>
 
           <section className="rounded-panel border border-line bg-panel p-5">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
