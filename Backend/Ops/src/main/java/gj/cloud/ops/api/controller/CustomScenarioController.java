@@ -2,6 +2,8 @@ package gj.cloud.ops.api.controller;
 
 import gj.cloud.ops.application.preview.custom.CustomScenarioBuilderService;
 import gj.cloud.ops.application.preview.custom.CustomScenarioGenerateRequest;
+import gj.cloud.ops.application.preview.custom.CustomScenarioImportRequest;
+import gj.cloud.ops.application.preview.custom.CustomScenarioExport;
 import gj.cloud.ops.application.preview.custom.CustomScenarioRevalidateRequest;
 import gj.cloud.ops.application.preview.custom.CustomScenarioView;
 import gj.cloud.ops.global.response.ApiResponse;
@@ -74,6 +76,28 @@ public class CustomScenarioController {
     ) {
         return ApiResponse.ok(customScenarioBuilderService.revalidate(
                 bearerToken(authorization), principal.userId(), scenarioId, request));
+    }
+
+    @Operation(summary = "Custom Scenario 이식용 JSON 내보내기")
+    @GetMapping("/{scenarioId}/export")
+    public ApiResponse<CustomScenarioExport> exportScenario(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @PathVariable String scenarioId
+    ) {
+        return ApiResponse.ok(customScenarioBuilderService.exportScenario(
+                bearerToken(authorization), principal.userId(), scenarioId));
+    }
+
+    @Operation(summary = "내보낸 Custom Scenario를 현재 OpenAPI에 재컴파일해 가져오기")
+    @PostMapping("/import")
+    public ApiResponse<CustomScenarioView> importScenario(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody CustomScenarioImportRequest request
+    ) {
+        return ApiResponse.ok(customScenarioBuilderService.importScenario(
+                bearerToken(authorization), principal.userId(), request));
     }
 
     private String bearerToken(String authorization) {

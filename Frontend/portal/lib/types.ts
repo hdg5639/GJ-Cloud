@@ -824,6 +824,64 @@ export interface CustomScenarioView {
   updatedAt: string;
 }
 
+export interface CustomScenarioExport {
+  format: "gamjabox.custom-scenario.v1";
+  name: string;
+  description: string | null;
+  naturalLanguageSource: string;
+  visibility: CustomScenarioVisibility;
+  definition: PreviewScenarioPlan;
+}
+
+export interface RegressionSuiteView {
+  id: string;
+  serviceId: string;
+  name: string;
+  description: string | null;
+  apiDocsUrl: string;
+  apiBaseUrl: string;
+  scenarioIds: string[];
+  deploymentTargetId: string | null;
+  runOnDeployment: boolean;
+  allowStateChangingOnDeployment: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RegressionRunStatus = "QUEUED" | "RUNNING" | "PASSED" | "FAILED";
+export type RegressionTriggerType = "MANUAL" | "CI" | "DEPLOYMENT";
+export type ScenarioExecutionStatus = "RUNNING" | "PASSED" | "FAILED" | "SKIPPED";
+
+export interface RegressionScenarioExecutionView {
+  id: string;
+  scenarioId: string;
+  scenarioRevisionId: string;
+  status: ScenarioExecutionStatus;
+  inputSnapshot: unknown;
+  stateSnapshot: unknown;
+  result: unknown;
+  failureStageId: string | null;
+  failureRequest: unknown;
+  startedAt: string;
+  completedAt: string;
+}
+
+export interface RegressionRunView {
+  id: string;
+  suiteId: string;
+  status: RegressionRunStatus;
+  triggerType: RegressionTriggerType;
+  triggerReference: string | null;
+  totalCount: number;
+  passedCount: number;
+  failedCount: number;
+  summary: unknown;
+  executions: RegressionScenarioExecutionView[];
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
 export type PreviewScenarioStageExecutionStatus =
   | "IDLE"
   | "WAITING_INPUT"

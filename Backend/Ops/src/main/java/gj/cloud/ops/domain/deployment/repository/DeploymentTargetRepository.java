@@ -16,6 +16,8 @@ public interface DeploymentTargetRepository extends JpaRepository<DeploymentTarg
 
     Optional<DeploymentTargetEntity> findByIdAndVmIdAndActiveTrue(String id, String vmId);
 
+    Optional<DeploymentTargetEntity> findByIdAndOwnerUserIdAndActiveTrue(String id, String ownerUserId);
+
     boolean existsByVmIdAndNameIgnoreCaseAndActiveTrue(String vmId, String name);
 
     List<DeploymentTargetEntity> findAllByGithubInstallationIdAndGithubRepositoryIdAndAutoDeployEnabledTrueAndActiveTrue(

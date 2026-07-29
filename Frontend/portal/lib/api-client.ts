@@ -60,6 +60,9 @@ import type {
   PreviewCompiledScenario,
   PreviewMode,
   CustomScenarioView,
+  CustomScenarioExport,
+  RegressionRunView,
+  RegressionSuiteView,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -890,6 +893,98 @@ export const api = {
               body: JSON.stringify({ apiDocsUrl }),
               accessToken,
             }
+          ),
+        export: (accessToken: string, scenarioId: string) =>
+          request<CustomScenarioExport>(
+            "ops",
+            `/ops/preview/custom-scenarios/${encodeURIComponent(scenarioId)}/export`,
+            { accessToken }
+          ),
+        import: (
+          accessToken: string,
+          serviceId: string,
+          apiDocsUrl: string,
+          scenario: CustomScenarioExport
+        ) =>
+          request<CustomScenarioView>("ops", "/ops/preview/custom-scenarios/import", {
+            method: "POST",
+            body: JSON.stringify({ serviceId, apiDocsUrl, scenario }),
+            accessToken,
+          }),
+      },
+      regressionSuites: {
+        create: (
+          accessToken: string,
+          body: {
+            serviceId: string;
+            name: string;
+            description?: string;
+            apiDocsUrl: string;
+            apiBaseUrl: string;
+            scenarioIds: string[];
+            deploymentTargetId?: string;
+            runOnDeployment?: boolean;
+            allowStateChangingOnDeployment?: boolean;
+          }
+        ) =>
+          request<RegressionSuiteView>("ops", "/ops/preview/regression-suites", {
+            method: "POST",
+            body: JSON.stringify(body),
+            accessToken,
+          }),
+        list: (accessToken: string, serviceId: string) =>
+          request<RegressionSuiteView[]>(
+            "ops",
+            `/ops/preview/regression-suites?serviceId=${encodeURIComponent(serviceId)}`,
+            { accessToken }
+          ),
+        run: (
+          accessToken: string,
+          suiteId: string,
+          body: {
+            initialState?: Record<string, unknown>;
+            headers?: Record<string, string>;
+            allowStateChanging?: boolean;
+            failFast?: boolean;
+          } = {}
+        ) =>
+          request<RegressionRunView>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}/runs`,
+            { method: "POST", body: JSON.stringify(body), accessToken }
+          ),
+        runFromCi: (
+          accessToken: string,
+          suiteId: string,
+          body: {
+            initialState?: Record<string, unknown>;
+            headers?: Record<string, string>;
+            allowStateChanging?: boolean;
+            failFast?: boolean;
+          } = {}
+        ) =>
+          request<RegressionRunView>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}/ci/runs`,
+            { method: "POST", body: JSON.stringify(body), accessToken }
+          ),
+        runs: (accessToken: string, suiteId: string) =>
+          request<RegressionRunView[]>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}/runs`,
+            { accessToken }
+          ),
+        runDetail: (accessToken: string, runId: string) =>
+          request<RegressionRunView>(
+            "ops",
+            `/ops/preview/regression-suites/runs/${encodeURIComponent(runId)}`,
+            { accessToken }
+          ),
+        delete: (accessToken: string, suiteId: string) =>
+          request<void>(
+            "ops",
+            `/ops/preview/regression-suites/${encodeURIComponent(suiteId)}`,
+            { method: "DELETE", accessToken }
           ),
       },
       // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않고,
