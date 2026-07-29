@@ -247,6 +247,9 @@ AI 검수 결과는 읽기 전용 조언으로 끝나지 않는다. 검수 내�
 
 사용자는 배포 대상 이름과 실제 API Base URL을 지정한다. 배포 요청이 승인되면 현재 Scenario·Page Plan·Flow·Binding·Blueprint를 다시 검증하고 공용 Runtime이 들어간 Vite + React 프로젝트를 생성한 뒤 기존 비동기 배포 파이프라인에 전달한다. 배포 로그 화면에서도 포털 상단 내비게이션을 유지하므로 사용자가 Auto Preview 첫 화면으로 강제 이동하지 않고 원하는 위치로 이동할 수 있다.
 
+<details>
+<summary><strong>🔍 분석 엔진 상세</strong> — 입력 보안, OpenAPI 정규화, 서비스 이해와 Scenario 의미 계획</summary>
+
 ### 전체 처리 파이프라인
 
 ```text
@@ -377,6 +380,11 @@ Stage role은 `ENTRY`, `AUTHENTICATE`, `SELECT_CONTEXT`, `DISCOVER`, `INSPECT`, 
 
 AI 출력은 최대 6개 Scenario, Scenario당 최대 16개 stage, 최대 40개 state key로 정규화한다. 규칙 기반 planner는 최대 8개 Scenario를 만들 수 있다. 모델 호출 실패, 낮은 신뢰도, 유효한 Scenario 부재, 컴파일 불가능한 출력은 요청 전체를 실패시키지 않고 규칙 기반 결과로 대체한다.
 
+</details>
+
+<details>
+<summary><strong>🧩 실행·UI 조립 상세</strong> — Compiler, Page·Flow·Journey, Blueprint Parts와 Product Runtime</summary>
+
 ### 5. Scenario Compiler와 실행 안전성
 
 `ScenarioCompiler`는 의미 계획을 실제 실행 계약으로 바꾼다.
@@ -497,6 +505,11 @@ AI 검수는 현재 Blueprint를 자유 형식으로 덮어쓰지 않는다.
 
 AI 호출 자체가 실패해도 기존 분석과 프리뷰를 사용할 수 있다. AI 감사 로그에는 model, input/output token 수, 성공 여부, 생성 종류만 저장하고 원문 프롬프트와 모델 응답은 저장하지 않는다.
 
+</details>
+
+<details>
+<summary><strong>🚀 배포·PRO 자동화 상세</strong> — 배포 아티팩트, 스냅샷, Custom Scenario와 회귀 테스트</summary>
+
 ### 10. 배포 아티팩트와 스냅샷
 
 `POST /ops/{vmId}/preview/deploy`는 VM에 대한 `DEPLOY` 권한과 RUNNING 상태를 확인하고 `202 Accepted`로 비동기 배포를 시작한다.
@@ -555,6 +568,11 @@ Regression Suite는 활성 Custom Scenario와 revision을 묶어 실제 API에 �
 
 Suite를 만들 때 참조하는 Scenario가 활성 상태이고 revision과 OpenAPI fingerprint가 유효한지 확인한다. 실행은 mock이 아니라 지정한 API Base URL을 실제 호출한다. 상태 변경을 허용하지 않은 Suite에서는 위험 operation을 실행하지 않는다. Trigger type은 `MANUAL`, `CI`, `DEPLOYMENT`를 구분할 수 있다.
 
+</details>
+
+<details>
+<summary><strong>📚 API·제한 및 폴백</strong> — 전체 엔드포인트, 지원 범위와 안전한 강등 규칙</summary>
+
 ### 주요 API
 
 | Method | Endpoint | 역할 |
@@ -587,6 +605,8 @@ Suite를 만들 때 참조하는 Scenario가 활성 상태이고 revision과 Ope
 현재 인증 Runtime은 Bearer token과 API Key header/query를 지원한다. OpenAPI에서 token 추출 경로를 감지하지 못하면 사용자가 수동으로 지정할 수 있다. Cookie session처럼 브라우저 출처와 SameSite 정책에 강하게 결합된 인증, 외부 `$ref`, JavaScript 실행이 필요한 문서 페이지, Manifest 계약 밖의 임의 사용자 코드는 지원 범위에 포함하지 않는다.
 
 상태 변경·삭제·외부 부작용 operation은 위험도와 automation policy에 따라 검토 및 명시적 확인 없이 자동 실행하지 않는다. 분석·AI 계획·화면 조립 중 일부가 실패하더라도 검증되지 않은 결과를 강제로 실행하지 않고, 마지막으로 안전하게 사용할 수 있는 프리뷰 계층을 반환한다.
+
+</details>
 
 ---
 
