@@ -23,6 +23,8 @@ import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.RuleBasedPagePlanGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
+import gj.cloud.ops.application.preview.scenario.ScenarioGenerationService;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioGenerationResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -43,6 +45,7 @@ public class PreviewAnalysisService {
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
     private final AuthStrategyDetector authStrategyDetector;
     private final PreviewBlockResolver blockResolver;
+    private final ScenarioGenerationService scenarioGenerationService;
 
     public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request) {
         OpenApiEvidence evidence = openApiNormalizer.normalize(request.apiDocsUrl());
@@ -118,8 +121,19 @@ public class PreviewAnalysisService {
             warnings.add("생성된 workflow가 검증에 실패해 제외되었습니다: " + String.join("; ", flowResult.errors()));
         }
 
+        ScenarioGenerationResult scenarioResult = scenarioGenerationService.generate(
+                evidence, request.serviceDescription(), request.purpose(), capabilities, request.previewMode());
+        scenarioResult.diagnostics().forEach(diagnostic -> {
+            if (diagnostic.status() != gj.cloud.ops.application.preview.scenario.ScenarioModels.DiagnosticStatus.SUPPORTED) {
+                warnings.add("Scenario " + (diagnostic.scenarioId() == null ? "" : diagnostic.scenarioId() + " ")
+                        + "컴파일 진단: " + diagnostic.message());
+            }
+        });
+
         return new PreviewAnalysisResult(
                 status, evidence.serverUrls(), capabilities, pages, pagePlans, flowResult.result().flows(),
-                flowResult.result().bindings(), unresolved, warnings, evidenceRefs, authStrategy, generationMode);
+                flowResult.result().bindings(), unresolved, warnings, evidenceRefs, authStrategy, generationMode,
+                scenarioResult.serviceUnderstanding(), scenarioResult.scenarios(),
+                scenarioResult.diagnostics(), scenarioResult.previewMode());
     }
 }

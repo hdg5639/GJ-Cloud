@@ -26,6 +26,10 @@ import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import gj.cloud.ops.application.preview.planning.patch.PagePlanPatchValidator;
 import gj.cloud.ops.application.preview.planning.patch.PlanPatchState;
 import gj.cloud.ops.application.preview.service.PreviewBlueprintService;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompilationStatus;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
+import gj.cloud.ops.application.preview.scenario.ScenarioValidator;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
 import gj.cloud.ops.domain.deployment.entity.DeploymentTargetEntity;
@@ -92,19 +96,45 @@ public class PreviewDeployController {
         Set<String> assignedCapabilityIds = pagePlans.stream()
                 .flatMap(plan -> plan.capabilityIds().stream())
                 .collect(Collectors.toSet());
-        List<Capability> capabilities = body.capabilities().stream()
+        List<CompiledScenario> scenarios = body.scenarios() == null ? List.of() : body.scenarios();
+        boolean hasRunnableScenario = scenarios.stream()
+                .anyMatch(scenario -> scenario.status() != CompilationStatus.UNSUPPORTED);
+        PreviewMode previewMode = body.previewMode() == null || !hasRunnableScenario
+                ? PreviewMode.OPERATION_PREVIEW : body.previewMode();
+        Set<String> availableCapabilityIds = body.capabilities().stream()
+                .map(Capability::id)
+                .collect(Collectors.toSet());
+        List<String> scenarioErrors = scenarios.stream()
+                .filter(scenario -> scenario.status() != CompilationStatus.UNSUPPORTED)
+                .flatMap(scenario -> ScenarioValidator.validateCompiled(scenario, availableCapabilityIds).stream())
+                .toList();
+        if (!scenarioErrors.isEmpty()) {
+            log.warn("Auto Preview 배포 Scenario 검증 실패: {}", String.join("; ", scenarioErrors));
+            throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
+        }
+        Set<String> scenarioCapabilityIds = scenarios.stream()
+                .flatMap(scenario -> scenario.stages().stream())
+                .map(stage -> stage.capabilityId())
+                .filter(id -> id != null && !id.isBlank())
+                .collect(Collectors.toSet());
+
+        List<Capability> pageCapabilities = body.capabilities().stream()
                 .filter(capability -> assignedCapabilityIds.contains(capability.id()))
                 .toList();
-        if (capabilities.size() < body.capabilities().size()) {
-            log.warn("Auto Preview 배포: 유효한 페이지에 배치되지 않은 capability {}개를 제외함",
-                    body.capabilities().size() - capabilities.size());
+        List<Capability> runtimeCapabilities = body.capabilities().stream()
+                .filter(capability -> assignedCapabilityIds.contains(capability.id())
+                        || scenarioCapabilityIds.contains(capability.id()))
+                .toList();
+        if (runtimeCapabilities.size() < body.capabilities().size()) {
+            log.warn("Auto Preview 배포: 페이지·시나리오에서 참조되지 않은 capability {}개를 제외함",
+                    body.capabilities().size() - runtimeCapabilities.size());
         }
 
         List<FlowBlueprint> flows;
         List<ApiBinding> bindings;
         if (body.flows() == null || body.bindings() == null) {
             RuleBasedFlowGenerator.ValidatedResult generated =
-                    ruleBasedFlowGenerator.generateValidated(pagePlans, capabilities);
+                    ruleBasedFlowGenerator.generateValidated(pagePlans, pageCapabilities);
             flows = generated.result().flows();
             bindings = generated.result().bindings();
         } else {
@@ -113,7 +143,7 @@ public class PreviewDeployController {
         }
 
         PlanPatchState state = new PlanPatchState(pagePlans, flows, bindings);
-        List<String> blueprintErrors = PagePlanPatchValidator.validateFinal(state, capabilities);
+        List<String> blueprintErrors = PagePlanPatchValidator.validateFinal(state, pageCapabilities);
         if (!blueprintErrors.isEmpty()) {
             log.warn("Auto Preview 배포 Blueprint 검증 실패: {}", String.join("; ", blueprintErrors));
             throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
@@ -121,8 +151,8 @@ public class PreviewDeployController {
 
         List<PageDraft> effectivePages = PagePlanMapper.toDrafts(pagePlans);
         Map<String, List<Block>> pageBlocks =
-                previewBlueprintService.compilePagePlanBlocks(pagePlans, capabilities, body.purpose());
-        if (hasErrorFinding(effectivePages, pageBlocks, capabilities)) {
+                previewBlueprintService.compilePagePlanBlocks(pagePlans, pageCapabilities, body.purpose());
+        if (hasErrorFinding(effectivePages, pageBlocks, pageCapabilities)) {
             throw new OpsException(OpsErrorCode.INVALID_PREVIEW_BLUEPRINT);
         }
 
@@ -130,8 +160,8 @@ public class PreviewDeployController {
         // 프리뷰와 같은 컴포넌트(Blueprint 파츠 포함)를 쓴다. 검증(hasErrorFinding)은 기본 Block으로
         // 수행하고 파츠 치환은 아티팩트 생성 단계에서만 적용해 배포가 막히지 않는다.
         ComposeArtifact artifact = previewComposeArtifactBuilder.build(
-                body.apiBaseUrl(), capabilities, effectivePages, flows, bindings,
-                body.authStrategy(), body.purpose(), body.partOverrides());
+                body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
+                body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides());
 
         DeploymentTargetEntity target = deploymentTargetService.create(
                 vmId.toString(),
@@ -154,9 +184,9 @@ public class PreviewDeployController {
         GenerationMode generationMode = body.generationMode() == null
                 ? GenerationMode.RULE_BASED : body.generationMode();
         PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
-                body.apiBaseUrl(), capabilities, effectivePages, body.authStrategy(), pageBlocks,
+                body.apiBaseUrl(), runtimeCapabilities, effectivePages, body.authStrategy(), pageBlocks,
                 RegistryStatus.VALIDATED, body.purpose(), pagePlans, flows, bindings, generationMode,
-                BlueprintCompiler.VERSION, ComponentRegistry.VERSION);
+                BlueprintCompiler.VERSION, ComponentRegistry.VERSION, scenarios, previewMode);
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
         return ApiResponse.ok(DeploymentResponse.from(deployment));
     }

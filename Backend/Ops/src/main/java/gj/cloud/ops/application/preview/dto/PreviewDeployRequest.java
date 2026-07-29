@@ -7,6 +7,8 @@ import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -28,6 +30,8 @@ public record PreviewDeployRequest(
         @NotNull AuthStrategy authStrategy,
         PreviewAnalyzeRequest.Purpose purpose,
         GenerationMode generationMode,
+        List<CompiledScenario> scenarios,
+        PreviewMode previewMode,
         // Phase C 사용자 파츠 오버라이드 — "pageId/blockInstanceId" → 강제 componentId. 배포 산출물의
         // 파츠 선택에 반영된다(라이브 프리뷰에서 고른 그대로 배포). null이면 전부 자동선택.
         Map<String, String> partOverrides

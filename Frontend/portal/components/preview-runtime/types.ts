@@ -38,6 +38,7 @@ export interface ApiCallLogEntry {
   status: number | null;
   requestBody: unknown;
   responseBody: unknown;
+  responseHeaders?: Record<string, string>;
   error: string | null;
   timestamp: number;
 }

@@ -36,7 +36,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 | **파일 브라우저** | VM 내부 파일 조회·업로드·다운로드·편집·삭제. 텍스트 편집, 이미지/오디오/비디오 미리보기(Range 스트리밍) 지원 |
 | **배포 파이프라인** | Git 저장소 → 이미지 빌드 → 헬스체크 → 실패 시 자동 롤백. GitHub push 자동 재배포, VM 내 다중 앱 격리, 실행 이력 기반 재시도/수동 롤백, 배포 대상 완전 삭제, SSE 실시간 로그 |
 | **AI 배포 스펙 생성** | 저장소를 결정론적으로 분석해 확신 가능한 경우(정적 사이트 등)는 AI 호출 없이 규칙 기반으로 확정, 애매한 경우만 구조화 출력으로 AI에 위임. 렌더링된 compose를 AI가 비차단으로 검수 |
-| **Auto Preview** | OpenAPI 문서에서 Capability·페이지·Flow를 결정론적으로 추론하고 281종 Blueprint Parts로 실제 동작하는 UI를 조립. 다단계 Journey 모달로 입력·영향 검토·확인·실행을 연결하며, 확정한 화면은 동일 Runtime으로 VM에 배포 |
+| **Auto Preview** | OpenAPI에서 서비스 의미와 사용자 목표를 해석해 다중 API 시나리오를 컴파일하고 실제 백엔드 상태로 실행·검증. 실행 가능한 시나리오가 없으면 Operation Preview로 안전하게 폴백하며, 281종 Blueprint Parts와 동일 Runtime으로 VM에 배포 |
 | **Docker 관리** | 비동기 단계별 설치와 진행 상태 폴링, VM 내부 컨테이너/이미지/네트워크/compose 스택 조회 및 제어 |
 | **DB 백업** | PostgreSQL/MySQL/MongoDB/Redis 온디맨드 덤프, 파일 브라우저로 다운로드 |
 
@@ -192,9 +192,16 @@ OpenAPI 문서 URL 입력
     │
     ▼  분석 (핵심 구조는 AI 미사용 — 결정론적 규칙 기반)
     │
-    목록/상세/생성/수정/삭제/명령/로그인 Capability 추론
+    서비스 유형·Actor·핵심 Entity·사용자 Goal 이해
+    → 목록/상세/생성/수정/삭제/명령/로그인 Capability 추론
     → 검색 파라미터·페이지네이션·인증 방식(Bearer/API Key)·목록 응답 구조 감지
-    → Page Plan·API Binding·Flow Blueprint 생성 및 정적 검증
+    │
+    ▼  Scenario Compiler
+    │
+    인증 후 조회, 목록에서 선택 후 상세 확인, 생성·수정·명령 후 재조회 검증 패턴 생성
+    → 실제로 발견된 Capability만 path/query/body binding으로 연결
+    → 그래프 순환·도달 불가·state producer 누락·존재하지 않는 API 참조를 hard gate로 차단
+    → 완전 실행 / 제한 실행 / Operation Preview fallback을 명시
     │
     ▼  Blueprint 조립
     │
@@ -204,13 +211,17 @@ OpenAPI 문서 URL 입력
     │
     ▼  라이브 프리뷰
     │
-    실제 대상 API로 로그인 → 목록 → 상세 → 생성·수정·삭제·도메인 명령을 직접 호출
+    Scenario Runtime이 실제 대상 API로 여러 단계를 순서대로 호출하고 응답을 다음 단계 state로 전달
+    → 준비 → 검토 → 실행 → 추적 → 후속 조회 검증을 한 사용자 목표로 실행
+    → 단계별 재시도·선택적 건너뛰기·취소·bounded polling 지원
+    → Developer Inspector에서 요청·응답·추출값·검증 결과·소요시간을 동기화해 표시
+    → 개별 화면 조작은 기존 엔드포인트 뷰에서 그대로 제공
     → 여러 모달은 Journey Engine이 입력 → 검토 → 확인 → 실행 → 완료 흐름으로 연결
     → 이전 단계로 돌아가도 입력 상태 유지, 실패 시 재시도, 완료 후 라우팅
     │
     ▼  확정 시 배포
     │
-    공용 Preview Runtime + Blueprint JSON으로 Vite 프로젝트 생성
+    공용 Scenario/Preview Runtime + Scenario·Blueprint JSON으로 Vite 프로젝트 생성
     → 기존 배포 파이프라인으로 VM에 그대로 배포
 ```
 
@@ -218,7 +229,9 @@ Blueprint Parts는 collection 38종, detail 32종, dashboard 36종, modal 41종,
 
 Journey Engine은 화면 상호작용을 기존 API Flow 실행 계층과 분리한다. 생성은 `입력 → 실행 → 완료`, 수정은 `입력 → 영향 검토 → 실행`, 삭제는 `영향 검토 → 대상명 타이핑 확인 → 실행`을 기본으로 하며, 위험도와 작업명에 따라 확인 단계를 추가하거나 환불·재고 이동·인시던트 승격·배포 승격 같은 도메인 모달을 자동 선택한다. Journey 정의는 실행 전에 중복 ID, 잘못된 연결, 순환, 도달 불가능 단계, EXECUTE/SUCCESS 누락을 검증한다.
 
-포털 프리뷰와 배포 앱은 같은 TypeScript Runtime 소스를 사용한다. Ops 빌드가 포털의 `preview-runtime`과 UI primitive를 리소스로 포함하고, 배포 시에는 React 구현을 Java 문자열로 다시 만들지 않고 Runtime 파일을 그대로 복사한 뒤 Blueprint·Flow·Binding JSON만 주입한다. 이 덕분에 프리뷰에서 정상인 모달·인증·응답 파싱·Journey 동작이 배포본에서 별도로 어긋나는 이중 구현 문제를 없앴다. 배포 시점의 구성은 배포 기록에 함께 저장돼 재분석 없이 조회할 수 있다.
+Scenario Runtime은 Journey보다 상위 계층에서 사용자 목표 전체를 소유한다. Scenario state와 화면 로컬 상태를 분리하고, API 응답에서 추출한 `authToken`, `selectedId`, `createdId`, 상태값을 명시적 binding으로 다음 단계에 넘긴다. 검증은 같은 호출의 성공 응답만 믿지 않고 상세 재조회·목록 포함 여부·상태 terminal value 같은 후속 관찰로 판정한다. 비밀번호·토큰·Authorization 값은 Inspector에서 마스킹한다.
+
+포털 프리뷰와 배포 앱은 같은 TypeScript Runtime 소스를 사용한다. Ops 빌드가 포털의 `preview-runtime`과 UI primitive를 리소스로 포함하고, 배포 시에는 React 구현을 Java 문자열로 다시 만들지 않고 Runtime 파일을 그대로 복사한 뒤 Scenario·Blueprint·Flow·Binding JSON만 주입한다. 이 덕분에 프리뷰에서 정상인 시나리오·모달·인증·응답 파싱 동작이 배포본에서 별도로 어긋나는 이중 구현 문제를 없앴다. 배포 시점의 구성은 배포 기록에 함께 저장돼 재분석 없이 조회할 수 있다.
 
 현재 인증은 Bearer와 API Key header/query를 지원한다. Cookie 세션처럼 브라우저 출처·SameSite 정책에 강하게 묶인 인증과, Manifest 계약 밖의 임의 사용자 코드를 안전하게 실행하는 기능은 아직 지원 범위에 포함하지 않는다.
 

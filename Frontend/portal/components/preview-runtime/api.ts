@@ -70,6 +70,7 @@ export async function callCapability(
   const url = buildUrl(config, capability, options.pathParams, options.query);
   let status: number | null = null;
   let responseBody: unknown = null;
+  let responseHeaders: Record<string, string> = {};
   let errorMessage: string | null = null;
   try {
     const res = await fetch(url, {
@@ -83,6 +84,7 @@ export async function callCapability(
       signal: options.signal,
     });
     status = res.status;
+    responseHeaders = Object.fromEntries(res.headers.entries());
     if (!res.ok) {
       errorMessage = `${capability.method} ${url} 요청이 실패했습니다 (${res.status})`;
       throw new Error(errorMessage);
@@ -104,6 +106,7 @@ export async function callCapability(
       status,
       requestBody: options.body ?? null,
       responseBody,
+      responseHeaders,
       error: errorMessage,
       timestamp: Date.now(),
     });

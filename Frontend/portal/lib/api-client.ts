@@ -57,6 +57,8 @@ import type {
   PartSuggestionResult,
   PreviewPlanApplyResponse,
   PageReviewFinding,
+  PreviewCompiledScenario,
+  PreviewMode,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -774,7 +776,12 @@ export const api = {
     preview: {
       analyze: (
         accessToken: string,
-        body: { apiDocsUrl: string; serviceDescription?: string; purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN" }
+        body: {
+          apiDocsUrl: string;
+          serviceDescription?: string;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          previewMode?: "SCENARIO_PREVIEW" | "INFERRED_SCENARIO_PREVIEW" | "OPERATION_PREVIEW";
+        }
       ) =>
         request<PreviewAnalysisResult>("ops", "/ops/preview/analyze", {
           method: "POST",
@@ -875,6 +882,8 @@ export const api = {
           authStrategy: PreviewAuthStrategy;
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
           generationMode?: PreviewGenerationMode;
+          scenarios?: PreviewCompiledScenario[];
+          previewMode?: PreviewMode;
           partOverrides?: Record<string, string>;
         }
       ) =>

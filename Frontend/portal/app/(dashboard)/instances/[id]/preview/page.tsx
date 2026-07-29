@@ -14,6 +14,7 @@ import type {
   PreviewFlowStep,
   PreviewApiBinding,
   PreviewPagePlan,
+  PreviewMode,
 } from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import { PageLoader } from "@/components/ui/loader";
@@ -23,6 +24,7 @@ import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRen
 import { ProductShell } from "@/components/preview-runtime/ProductShell";
 import { BlueprintPartPicker } from "@/components/preview-runtime/BlueprintPartPicker";
 import { ApiCallLog } from "@/components/preview-runtime/ApiCallLog";
+import { ScenarioWorkbench } from "@/components/preview-runtime/scenario";
 import { rowId } from "@/components/preview-runtime/api";
 import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
 import type { Block } from "@/components/preview-runtime/blueprint";
@@ -121,6 +123,7 @@ export default function PreviewWizardPage() {
   const [apiDocsUrl, setApiDocsUrl] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
   const [purpose, setPurpose] = useState<Purpose>("API_TEST");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("SCENARIO_PREVIEW");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
@@ -229,6 +232,7 @@ export default function PreviewWizardPage() {
   const [partReasons, setPartReasons] = useState<Record<string, string>>({});
   const [previewAuthToken, setPreviewAuthToken] = useState<string | null>(null);
   const [apiCallLog, setApiCallLog] = useState<ApiCallLogEntry[]>([]);
+  const [previewSurface, setPreviewSurface] = useState<"SCENARIO" | "OPERATION">("SCENARIO");
   const [accessTokenPathInput, setAccessTokenPathInput] = useState("");
   const [manualLoginPath, setManualLoginPath] = useState("");
   const [manualLoginUsernameField, setManualLoginUsernameField] = useState("email");
@@ -307,6 +311,7 @@ export default function PreviewWizardPage() {
         apiDocsUrl: apiDocsUrl.trim(),
         serviceDescription: serviceDescription.trim() || undefined,
         purpose,
+        previewMode,
       });
       setResult(data);
       refreshBlocks(data.capabilities, data.pages, data.pagePlans, purpose);
@@ -319,6 +324,12 @@ export default function PreviewWizardPage() {
       setManualLoginUsernameField("email");
       setManualLoginPasswordField("password");
       setManualLoginAccessTokenPath("");
+      setPreviewSurface(
+        data.previewMode !== "OPERATION_PREVIEW"
+          && data.scenarios.some((scenario) => scenario.status !== "UNSUPPORTED")
+          ? "SCENARIO"
+          : "OPERATION"
+      );
       setStep(2);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "분석에 실패했습니다.");
@@ -499,6 +510,8 @@ export default function PreviewWizardPage() {
         authStrategy: result.authStrategy,
         purpose,
         generationMode: result.generationMode,
+        scenarios: result.scenarios,
+        previewMode: result.previewMode,
         partOverrides,
       });
       router.push(`/instances/${vmId}/deployments/${deployment.id}`);
@@ -653,6 +666,17 @@ export default function PreviewWizardPage() {
               ))}
             </Select>
           </Field>
+          <Field label="프리뷰 방식" htmlFor="preview-mode" className="mt-4">
+            <Select
+              id="preview-mode"
+              value={previewMode}
+              onChange={(e) => setPreviewMode(e.target.value as PreviewMode)}
+            >
+              <option value="SCENARIO_PREVIEW">사용자 시나리오 중심 (권장)</option>
+              <option value="INFERRED_SCENARIO_PREVIEW">추론 가능한 시나리오까지 표시</option>
+              <option value="OPERATION_PREVIEW">개별 엔드포인트 중심</option>
+            </Select>
+          </Field>
 
           {analysisError && <p className="mt-3 text-xs text-danger">{analysisError}</p>}
 
@@ -678,6 +702,13 @@ export default function PreviewWizardPage() {
               <p className="font-bold">{STATUS_LABEL[result.status] ?? result.status}</p>
               <p className="mt-1 text-muted">
                 {GENERATION_MODE_LABEL[result.generationMode] ?? result.generationMode}
+              </p>
+              <p className="mt-1 text-muted">
+                {result.previewMode === "SCENARIO_PREVIEW"
+                  ? `${result.scenarios.filter((scenario) => scenario.status === "EXECUTABLE").length}개의 실행 가능한 사용자 시나리오를 구성했습니다.`
+                  : result.previewMode === "INFERRED_SCENARIO_PREVIEW"
+                    ? "일부 시나리오는 제한된 기능으로 구성되었습니다."
+                    : "실행 가능한 시나리오가 없어 엔드포인트 프리뷰로 전환했습니다."}
               </p>
               {result.unresolved.length > 0 && (
                 <div className="mt-2 space-y-2">
@@ -756,6 +787,33 @@ export default function PreviewWizardPage() {
                 ))}
               </div>
             )}
+
+            <div className="mb-4 rounded-xl border border-line-strong bg-background/60 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-extrabold tracking-[.12em] text-brand-strong">SERVICE UNDERSTANDING</span>
+                <span className="rounded-full border border-line-strong px-2 py-0.5 text-[10px] font-bold text-muted">
+                  신뢰도 {Math.round(result.serviceUnderstanding.confidence * 100)}%
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <strong className="text-sm">{result.serviceUnderstanding.domain}</strong>
+                <span className="text-xs text-muted">{result.serviceUnderstanding.serviceType}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {result.serviceUnderstanding.coreEntities.map((entity) => (
+                  <span key={entity} className="rounded-md bg-white/[0.05] px-2 py-1 text-[11px] font-bold text-muted">
+                    {entity}
+                  </span>
+                ))}
+              </div>
+              {result.serviceUnderstanding.primaryGoals.length > 0 && (
+                <ul className="mt-3 space-y-1 text-xs text-muted">
+                  {result.serviceUnderstanding.primaryGoals.slice(0, 5).map((goal) => (
+                    <li key={goal}>· {goal}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <p className="mb-2 text-xs font-bold text-muted-soft">{result.pages.length}개 페이지 추천됨</p>
             <div className="space-y-2">
@@ -916,7 +974,30 @@ export default function PreviewWizardPage() {
                 placeholder="https://api.example.com"
               />
             </Field>
-            {result.pages.length > 0 && previewPageId && (
+            {result.previewMode !== "OPERATION_PREVIEW"
+              && result.scenarios.some((scenario) => scenario.status !== "UNSUPPORTED") && (
+              <div className="mb-4 inline-flex rounded-lg border border-line bg-background p-1">
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-2 text-xs font-extrabold ${
+                    previewSurface === "SCENARIO" ? "bg-brand text-black" : "text-muted"
+                  }`}
+                  onClick={() => setPreviewSurface("SCENARIO")}
+                >
+                  시나리오
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-2 text-xs font-extrabold ${
+                    previewSurface === "OPERATION" ? "bg-brand text-black" : "text-muted"
+                  }`}
+                  onClick={() => setPreviewSurface("OPERATION")}
+                >
+                  엔드포인트
+                </button>
+              </div>
+            )}
+            {previewSurface === "OPERATION" && result.pages.length > 0 && previewPageId && (
               <BlueprintPartPicker
                 blocks={pageBlocks[previewPageId] ?? []}
                 pageId={previewPageId}
@@ -931,7 +1012,22 @@ export default function PreviewWizardPage() {
                 reasons={partReasons}
               />
             )}
-            {result.pages.length > 0 && (
+            {previewSurface === "SCENARIO"
+              && result.previewMode !== "OPERATION_PREVIEW"
+              && apiBaseUrl.trim() ? (
+              <ScenarioWorkbench
+                scenarios={result.scenarios}
+                capabilities={result.capabilities}
+                config={{
+                  apiBaseUrl: apiBaseUrl.trim(),
+                  authToken: previewAuthToken,
+                  onAuthTokenChange: setPreviewAuthToken,
+                  onApiCall: (entry) => setApiCallLog((prev) => [entry, ...prev].slice(0, 30)),
+                  authStrategy: result.authStrategy,
+                  purpose,
+                }}
+              />
+            ) : result.pages.length > 0 && (
               <ProductShell purpose={purpose} pages={result.pages} activePageId={previewPageId} onSelectPage={setPreviewPageId}>
                 {previewPageId && apiBaseUrl.trim() && (
                   <div className="rounded-md border border-line-strong bg-white/[0.02] p-4">

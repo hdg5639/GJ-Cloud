@@ -16,6 +16,8 @@ import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
 import gj.cloud.ops.application.preview.blueprint.BlueprintPartSelector;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -51,7 +53,8 @@ public class PreviewComposeArtifactBuilder {
     // Blueprint 파츠도 이 경로에선 라이브 프리뷰와 동일하게 선택기를 적용해 실제로 렌더된다.
     public ComposeArtifact build(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
-            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose, Map<String, String> partOverrides
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
+            List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides
     ) {
         Map<String, List<Block>> pageBlocks = BlueprintPartSelector.select(
                 BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose),
@@ -66,7 +69,8 @@ public class PreviewComposeArtifactBuilder {
         uploadedFiles.add(file("src/main.tsx", MAIN_TSX));
         uploadedFiles.add(file("src/index.css", INDEX_CSS));
         uploadedFiles.add(file("src/App.tsx", renderAppTsx(
-                apiBaseUrl, capabilities, pages, pageBlocks, flows, bindings, authStrategy, purpose)));
+                apiBaseUrl, capabilities, pages, pageBlocks, flows, bindings, authStrategy, purpose,
+                scenarios, previewMode)));
         // 포털 preview-runtime + ui 프리미티브 + lib/types 실물(build.gradle이 baked).
         uploadedFiles.addAll(readPreviewTemplateFiles());
 
@@ -116,7 +120,7 @@ public class PreviewComposeArtifactBuilder {
     private String renderAppTsx(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages,
             Map<String, List<Block>> pageBlocks, List<FlowBlueprint> flows, List<ApiBinding> bindings,
-            AuthStrategy authStrategy, Purpose purpose
+            AuthStrategy authStrategy, Purpose purpose, List<CompiledScenario> scenarios, PreviewMode previewMode
     ) {
         return APP_TSX
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
@@ -126,7 +130,10 @@ public class PreviewComposeArtifactBuilder {
                 .replace("__FLOWS_JSON__", toJson(flows))
                 .replace("__BINDINGS_JSON__", toJson(bindings))
                 .replace("__AUTH_STRATEGY_JSON__", toJson(authStrategy))
-                .replace("__PURPOSE_JSON__", toJson(purpose != null ? purpose.name() : null));
+                .replace("__PURPOSE_JSON__", toJson(purpose != null ? purpose.name() : null))
+                .replace("__SCENARIOS_JSON__", toJson(scenarios == null ? List.of() : scenarios))
+                .replace("__PREVIEW_MODE_JSON__", toJson(previewMode == null
+                        ? PreviewMode.OPERATION_PREVIEW : previewMode));
     }
 
     private UploadedFile file(String vmPath, String content) {
@@ -287,6 +294,7 @@ public class PreviewComposeArtifactBuilder {
             import type { PreviewCapability, PreviewPage, PreviewAuthStrategy, Purpose } from "@/components/preview-runtime/types";
             import type { Block } from "@/components/preview-runtime/blueprint";
             import type { ApiBinding, FlowBlueprint } from "@/components/preview-runtime/flow/types";
+            import type { PreviewCompiledScenario, PreviewMode } from "@/lib/types";
 
             const API_BASE_URL = __API_BASE_URL_JSON__ as string;
             const CAPABILITIES = __CAPABILITIES_JSON__ as unknown as PreviewCapability[];
@@ -296,6 +304,8 @@ public class PreviewComposeArtifactBuilder {
             const BINDINGS = __BINDINGS_JSON__ as unknown as ApiBinding[];
             const AUTH_STRATEGY = __AUTH_STRATEGY_JSON__ as unknown as PreviewAuthStrategy;
             const PURPOSE = __PURPOSE_JSON__ as unknown as Purpose | null;
+            const SCENARIOS = __SCENARIOS_JSON__ as unknown as PreviewCompiledScenario[];
+            const PREVIEW_MODE = __PREVIEW_MODE_JSON__ as unknown as PreviewMode;
 
             export default function App() {
               return (
@@ -309,6 +319,8 @@ public class PreviewComposeArtifactBuilder {
                     bindings={BINDINGS}
                     authStrategy={AUTH_STRATEGY}
                     purpose={PURPOSE}
+                    scenarios={SCENARIOS}
+                    previewMode={PREVIEW_MODE}
                   />
                 </main>
               );

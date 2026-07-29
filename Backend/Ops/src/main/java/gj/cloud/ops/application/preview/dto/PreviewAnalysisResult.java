@@ -9,6 +9,10 @@ import gj.cloud.ops.application.preview.analysis.PageDraft;
 import gj.cloud.ops.application.preview.binding.ApiBinding;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioDiagnostic;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ServiceUnderstanding;
 
 import java.util.List;
 
@@ -37,6 +41,11 @@ public record PreviewAnalysisResult(
         AuthStrategy authStrategy,
         // Direction Recovery Change Request §17 — 이 pages가 어떻게 만들어졌는지 항상 명시적으로
         // 리포트한다. FALLBACK_CRUD를 SERVICE_AWARE인 것처럼 보여주면 안 된다.
-        GenerationMode generationMode
+        GenerationMode generationMode,
+        // Scenario-first Runtime v3 — UI보다 먼저 확정되는 서비스 의미와 실행 시나리오.
+        ServiceUnderstanding serviceUnderstanding,
+        List<CompiledScenario> scenarios,
+        List<ScenarioDiagnostic> scenarioDiagnostics,
+        PreviewMode previewMode
 ) {
 }
