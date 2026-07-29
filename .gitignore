@@ -27,7 +27,6 @@ Service_Info.md
 docs/github-auto-deploy.md
 
 ### Local docker ###
-compose.yaml
 .env
 .env.*
 !.env.example

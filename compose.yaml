@@ -1,0 +1,286 @@
+name: ${COMPOSE_PROJECT_NAME:-gamjabox}
+
+services:
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    env_file:
+      - .env
+    ports:
+      - "${CADDY_BIND_ADDRESS:-0.0.0.0}:${CADDY_HTTP_PORT:-80}:80"
+    volumes:
+      - "${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile:ro"
+      - "${LANDING_PATH:-./gamjabox-landing}:/srv/gamjabox-landing:ro"
+    depends_on:
+      - auth
+      - user
+      - vm
+      - ops
+      - portal
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_AUTH_DATABASE:-auth-db}
+      TZ: ${TZ:-Asia/Seoul}
+    command: ["--default-time-zone=${MYSQL_TIME_ZONE_OFFSET:-+09:00}"]
+    ports:
+      - "${MYSQL_BIND_ADDRESS:-127.0.0.1}:${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", 'mysqladmin ping -h 127.0.0.1 -u root -p"$${MYSQL_ROOT_PASSWORD}" --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    environment:
+      TZ: ${TZ:-Asia/Seoul}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+    ports:
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  auth:
+    build: ./Backend/Auth
+    image: ${AUTH_IMAGE:-gj-cloud-auth:latest}
+    ports:
+      - "${AUTH_BIND_ADDRESS:-127.0.0.1}:${AUTH_HOST_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      TZ: ${TZ:-Asia/Seoul}
+      DB_URL: "${AUTH_DB_URL:-jdbc:mysql://mysql:3306/auth-db?createDatabaseIfNotExist=true}"
+      DB_USERNAME: ${MYSQL_USERNAME:-root}
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?JWT_PRIVATE_KEY is required}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME is required}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD is required}
+      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required}
+      EMAIL_VERIFICATION_ENABLED: ${EMAIL_VERIFICATION_ENABLED:-true}
+      VM_SERVICE_CLIENT_SECRET: ${VM_SERVICE_CLIENT_SECRET:?VM_SERVICE_CLIENT_SECRET is required}
+      OPS_SERVICE_CLIENT_SECRET: ${OPS_SERVICE_CLIENT_SECRET:?OPS_SERVICE_CLIENT_SECRET is required}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  user:
+    build: ./Backend/User
+    image: ${USER_IMAGE:-gj-cloud-user:latest}
+    ports:
+      - "${USER_BIND_ADDRESS:-127.0.0.1}:${USER_HOST_PORT:-8081}:8080"
+    volumes:
+      - "${PROFILE_IMAGE_HOST_PATH:-/opt/gamjabox/data/profile-images}:${PROFILE_IMAGE_STORAGE_PATH:-/data/profile-images}"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      TZ: ${TZ:-Asia/Seoul}
+      DB_URL: "${USER_DB_URL:-jdbc:mysql://mysql:3306/user-db?createDatabaseIfNotExist=true}"
+      DB_USERNAME: ${MYSQL_USERNAME:-root}
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      AUTH_SERVER_URL: ${AUTH_SERVER_URL:-http://auth:8080}
+      VM_SERVICE_URL: ${VM_SERVICE_URL:-http://vm:8080}
+      OPS_SERVICE_URL: ${OPS_SERVICE_URL:-http://ops:8080}
+      PROFILE_IMAGE_STORAGE_PATH: ${PROFILE_IMAGE_STORAGE_PATH:-/data/profile-images}
+      PROFILE_IMAGE_PUBLIC_URL_PREFIX: ${PROFILE_IMAGE_PUBLIC_URL_PREFIX:?PROFILE_IMAGE_PUBLIC_URL_PREFIX is required}
+      PORT: 8080
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  postgres-vm:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_DB: ${POSTGRES_VM_DATABASE:-vm_db}
+      POSTGRES_USER: ${POSTGRES_VM_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_VM_PASSWORD:?POSTGRES_VM_PASSWORD is required}
+      TZ: ${TZ:-Asia/Seoul}
+      PGTZ: ${TZ:-Asia/Seoul}
+    ports:
+      - "${POSTGRES_VM_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_VM_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-vm-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  vm:
+    build: ./Backend/vm
+    image: ${VM_IMAGE:-gj-cloud-vm:latest}
+    ports:
+      - "${VM_BIND_ADDRESS:-127.0.0.1}:${VM_HOST_PORT:-8082}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      TZ: ${TZ:-Asia/Seoul}
+      DB_URL: "${VM_DB_URL:-r2dbc:postgresql://postgres-vm:5432/vm_db}"
+      DB_USERNAME: ${POSTGRES_VM_USERNAME:-postgres}
+      DB_PASSWORD: ${POSTGRES_VM_PASSWORD:?POSTGRES_VM_PASSWORD is required}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      AUTH_SERVER_URL: ${AUTH_SERVER_URL:-http://auth:8080}
+      USER_SERVICE_URL: ${USER_SERVICE_URL:-http://user:8080}
+      OPS_SERVICE_URL: ${OPS_SERVICE_URL:-http://ops:8080}
+      PROXMOX_URL: ${PROXMOX_URL:?PROXMOX_URL is required}
+      PROXMOX_TOKEN_ID: ${PROXMOX_TOKEN_ID:?PROXMOX_TOKEN_ID is required}
+      PROXMOX_TOKEN_SECRET: ${PROXMOX_TOKEN_SECRET:?PROXMOX_TOKEN_SECRET is required}
+      PROXMOX_NODE: ${PROXMOX_NODE:-pve}
+      PROXMOX_BRIDGE: ${PROXMOX_BRIDGE:-vmbr0}
+      PROXMOX_STORAGE: ${PROXMOX_STORAGE:-local-lvm}
+      PROXMOX_VMID_START: ${PROXMOX_VMID_START:-1000}
+      PROXMOX_VMID_END: ${PROXMOX_VMID_END:-8999}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}
+      CLOUDFLARE_ZONE_ID: ${CLOUDFLARE_ZONE_ID:?CLOUDFLARE_ZONE_ID is required}
+      CLOUDFLARE_TUNNEL_ID: ${CLOUDFLARE_TUNNEL_ID:?CLOUDFLARE_TUNNEL_ID is required}
+      CLOUDFLARE_BASE_DOMAIN: ${CLOUDFLARE_BASE_DOMAIN:-gamjabox.cloud}
+      RESERVED_SUBDOMAINS: ${RESERVED_SUBDOMAINS:?RESERVED_SUBDOMAINS is required}
+      VM_SERVICE_CLIENT_SECRET: ${VM_SERVICE_CLIENT_SECRET:?VM_SERVICE_CLIENT_SECRET is required}
+      PORT: 8080
+    depends_on:
+      postgres-vm:
+        condition: service_healthy
+      auth:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  postgres-ops:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_DB: ${POSTGRES_OPS_DATABASE:-ops_db}
+      POSTGRES_USER: ${POSTGRES_OPS_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_OPS_PASSWORD:?POSTGRES_OPS_PASSWORD is required}
+      TZ: ${TZ:-Asia/Seoul}
+      PGTZ: ${TZ:-Asia/Seoul}
+    ports:
+      - "${POSTGRES_OPS_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_OPS_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres-ops-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  ops:
+    build:
+      context: .
+      dockerfile: Backend/Ops/Dockerfile
+    image: ${OPS_IMAGE:-gj-cloud-ops:latest}
+    ports:
+      - "${OPS_BIND_ADDRESS:-127.0.0.1}:${OPS_HOST_PORT:-8083}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      TZ: ${TZ:-Asia/Seoul}
+      DB_URL: "${OPS_DB_URL:-jdbc:postgresql://postgres-ops:5432/ops_db}"
+      DB_USERNAME: ${POSTGRES_OPS_USERNAME:-postgres}
+      DB_PASSWORD: ${POSTGRES_OPS_PASSWORD:?POSTGRES_OPS_PASSWORD is required}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      AUTH_SERVER_URL: ${AUTH_SERVER_URL:-http://auth:8080}
+      VM_SERVICE_URL: ${VM_SERVICE_URL:-http://vm:8080}
+      OPS_KEY_ENCRYPTION_SECRET: ${OPS_KEY_ENCRYPTION_SECRET:?OPS_KEY_ENCRYPTION_SECRET is required}
+      VM_SSH_USERNAME: ${VM_SSH_USERNAME:-ubuntu}
+      PORTAL_ORIGIN: ${PORTAL_ORIGIN:?PORTAL_ORIGIN is required}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      AI_MODEL_STANDARD: ${AI_MODEL_STANDARD:?AI_MODEL_STANDARD is required}
+      AI_MODEL_ESCALATED: ${AI_MODEL_ESCALATED:?AI_MODEL_ESCALATED is required}
+      OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES: ${OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES:-26214400}
+      OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES: ${OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES:-26214400}
+      OPS_SERVICE_CLIENT_SECRET: ${OPS_SERVICE_CLIENT_SECRET:?OPS_SERVICE_CLIENT_SECRET is required}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?GITHUB_APP_ID is required}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:?GITHUB_APP_SLUG is required}
+      GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:?GITHUB_APP_CLIENT_ID is required}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:?GITHUB_APP_CLIENT_SECRET is required}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:?GITHUB_APP_PRIVATE_KEY is required}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?GITHUB_WEBHOOK_SECRET is required}
+      PORT: 8080
+    depends_on:
+      postgres-ops:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vm:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+  portal:
+    build:
+      context: ./Frontend/portal
+      args:
+        NEXT_PUBLIC_AUTH_API: ${NEXT_PUBLIC_AUTH_API:?NEXT_PUBLIC_AUTH_API is required}
+        NEXT_PUBLIC_USER_API: ${NEXT_PUBLIC_USER_API:?NEXT_PUBLIC_USER_API is required}
+        NEXT_PUBLIC_VM_API: ${NEXT_PUBLIC_VM_API:?NEXT_PUBLIC_VM_API is required}
+        NEXT_PUBLIC_OPS_API: ${NEXT_PUBLIC_OPS_API:?NEXT_PUBLIC_OPS_API is required}
+        NEXT_PUBLIC_ADMIN_API: ${NEXT_PUBLIC_ADMIN_API:?NEXT_PUBLIC_ADMIN_API is required}
+    image: ${PORTAL_IMAGE:-gj-cloud-portal:latest}
+    environment:
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN is required}
+    ports:
+      - "${PORTAL_BIND_ADDRESS:-127.0.0.1}:${PORTAL_HOST_PORT:-3000}:3000"
+    restart: unless-stopped
+    networks:
+      - loc-net
+
+networks:
+  loc-net:
+    external: true
+    name: ${DOCKER_NETWORK_NAME:-loc-net}
+
+volumes:
+  mysql-data:
+  redis-data:
+  postgres-vm-data:
+  postgres-ops-data:
