@@ -11,6 +11,8 @@ import com.openai.models.responses.StructuredResponseOutputMessage;
 import gj.cloud.ops.application.preview.analysis.Block;
 import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.blueprint.BlueprintPartRegistry;
+import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchEngine;
+import gj.cloud.ops.application.preview.blueprint.search.BlueprintSearchQueryFactory;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.domain.deployment.enums.AiCallKind;
 import gj.cloud.ops.domain.preview.entity.AiPreviewGenerationLogEntity;
@@ -54,17 +56,20 @@ public class AiPartAdvisor {
     private final String model;
     private final ObjectMapper objectMapper;
     private final AiPreviewGenerationLogRepository logRepository;
+    private final BlueprintSearchEngine blueprintSearchEngine;
 
     public AiPartAdvisor(
             OpenAIClient client,
             @Value("${ai.model.standard}") String model,
             ObjectMapper objectMapper,
-            AiPreviewGenerationLogRepository logRepository
+            AiPreviewGenerationLogRepository logRepository,
+            BlueprintSearchEngine blueprintSearchEngine
     ) {
         this.client = client;
         this.model = model;
         this.objectMapper = objectMapper;
         this.logRepository = logRepository;
+        this.blueprintSearchEngine = blueprintSearchEngine;
     }
 
     public PartSuggestionResult suggest(
@@ -85,7 +90,8 @@ public class AiPartAdvisor {
                     continue;
                 }
                 for (Block block : entry.getValue()) {
-                    SwapDescriptor descriptor = describe(pageId, block, byId);
+                    SwapDescriptor descriptor = describe(
+                            pageId, block, byId, capabilities, serviceDescription, purpose);
                     if (descriptor != null) {
                         descriptors.add(descriptor);
                         byKey.put(descriptor.pageId() + "/" + descriptor.instanceId(), descriptor);
@@ -135,24 +141,30 @@ public class AiPartAdvisor {
 
     // 이 Block이 스왑 대상이면(기본 컴포넌트가 파츠로 대체 가능) 허용 후보 목록과 함께 기술한다. 후보에는
     // kind/slot 호환 등록 파츠 + 현재 기본 컴포넌트 id("기본 유지")를 담는다. 대상이 아니면 null.
-    private SwapDescriptor describe(String pageId, Block block, Map<String, Capability> byId) {
+    private SwapDescriptor describe(
+            String pageId,
+            Block block,
+            Map<String, Capability> byId,
+            List<Capability> capabilities,
+            String serviceDescription,
+            Purpose purpose
+    ) {
         var kind = BlueprintPartRegistry.kindOfBaseComponent(block.componentId());
         if (kind.isEmpty()) {
             return null;
         }
         List<String> allowed = new ArrayList<>();
         allowed.add(block.componentId()); // 현재 기본 = "기본 유지" 선택지
-        for (BlueprintPartRegistry.BlueprintPart part : BlueprintPartRegistry.ALL) {
-            if (part.kind() == kind.get() && part.acceptedSurfaces().contains(block.slot())
-                    && part.supportsMode(block.mode())
-                    && !allowed.contains(part.componentId())) {
-                allowed.add(part.componentId());
-            }
+        Capability primary = primaryCapability(block, byId);
+        var retrieval = blueprintSearchEngine.search(BlueprintSearchQueryFactory.forBlock(
+                serviceDescription, block, kind.get(), purpose, primary, capabilities, 8));
+        for (var candidate : retrieval.candidates()) {
+            String componentId = candidate.metadata().blueprintId();
+            if (!allowed.contains(componentId)) allowed.add(componentId);
         }
         if (allowed.size() <= 1) {
             return null; // 대체 가능한 등록 파츠가 없으면 제안할 게 없다.
         }
-        Capability primary = primaryCapability(block, byId);
         String resourceName = primary != null ? primary.resourceName() : null;
         return new SwapDescriptor(pageId, block.instanceId(), kind.get().name(), resourceName,
                 block.componentId(), allowed);

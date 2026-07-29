@@ -9,17 +9,31 @@ import type {
 import type { PreviewCapability, PreviewRuntimeConfig } from "../types";
 import { extractArray, rowId } from "../api";
 import { buildScenarioRequest, emptyExecution, runApiStage, type ScenarioRequest, type ScenarioState } from "./runtime";
+import { ScenarioBlueprintSurface } from "./ScenarioBlueprintSurface";
+import {
+  buildScenarioProjections,
+  validateScenarioProjection,
+  type ScenarioProjectionMode,
+} from "./projection";
 
 const ROLE_LABEL: Record<string, string> = {
+  ENTRY: "진입",
   AUTHENTICATE: "인증",
+  SELECT_CONTEXT: "컨텍스트 선택",
   DISCOVER: "탐색",
   SELECT: "선택",
   INSPECT: "조회",
+  COMPARE: "비교",
+  ACCUMULATE: "항목 구성",
+  CONFIGURE: "설정",
   PREPARE: "입력",
   REVIEW: "검토",
   COMMIT: "실행",
+  WAIT: "대기",
   TRACK: "추적",
   VERIFY: "검증",
+  RECOVER: "복구",
+  CONTINUE: "계속",
   COMPLETE: "완료",
 };
 
@@ -120,7 +134,21 @@ export function ScenarioWorkbench({
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [running, setRunning] = useState(false);
+  const [projectionMode, setProjectionMode] = useState<ScenarioProjectionMode>("GUIDED");
+  const [projectionPageId, setProjectionPageId] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const projections = useMemo(
+    () => scenario ? buildScenarioProjections(scenario, config.purpose) : [],
+    [scenario, config.purpose]
+  );
+  const projection = projections.find((candidate) => candidate.mode === projectionMode) ?? projections[0] ?? null;
+
+  function focusStage(stageId: string | null) {
+    setActiveStageId(stageId);
+    if (!stageId || !projection) return;
+    const page = projection.pages.find((candidate) => candidate.stageIds.includes(stageId));
+    if (page) setProjectionPageId(page.id);
+  }
 
   function replaceState(next: ScenarioState) {
     stateRef.current = next;
@@ -153,6 +181,7 @@ export function ScenarioWorkbench({
     setActiveStageId(nextScenario?.entryStageId ?? null);
     setSelectedExecutionId(nextScenario?.entryStageId ?? null);
     setRunning(false);
+    setProjectionPageId("");
   }
 
   if (!scenario) {
@@ -167,6 +196,11 @@ export function ScenarioWorkbench({
   const stageById = new Map(scenario.stages.map((stage) => [stage.id, stage]));
   const activeStage = activeStageId ? stageById.get(activeStageId) ?? null : null;
   const selectedExecution = selectedExecutionId ? executions[selectedExecutionId] ?? null : null;
+  const projectionErrors = projection ? validateScenarioProjection(scenario, projection) : [];
+  const activeProjectionPage = projection?.pages.find((page) => page.id === projectionPageId)
+    ?? projection?.pages.find((page) => page.stageIds.includes(activeStageId ?? ""))
+    ?? projection?.pages[0]
+    ?? null;
   const completedCount = Object.values(executions).filter((execution) =>
     execution.status === "SUCCESS" || execution.status === "SKIPPED"
   ).length;
@@ -185,11 +219,11 @@ export function ScenarioWorkbench({
       status: "WAITING_INPUT",
       error: message,
     });
-    setActiveStageId(stage.id);
+    focusStage(stage.id);
   }
 
   async function executeStage(stage: PreviewCompiledScenarioStage): Promise<boolean> {
-    setActiveStageId(stage.id);
+    focusStage(stage.id);
     if (stage.role === "PREPARE" || stage.role === "CONFIGURE" || stage.role === "SELECT_CONTEXT") {
       const keys = localInputKeys(stage);
       const values = Object.fromEntries(keys.map((key) => [key, parseInput(inputDrafts[`${stage.id}:${key}`] ?? "")]));
@@ -299,7 +333,7 @@ export function ScenarioWorkbench({
         const succeeded = await executeStage(stage);
         if (!succeeded) break;
         current = stage.nextStageIds[0];
-        setActiveStageId(current ?? null);
+        focusStage(current ?? null);
         guard += 1;
       }
     } finally {
@@ -311,7 +345,7 @@ export function ScenarioWorkbench({
   function skipStage(stage: PreviewCompiledScenarioStage) {
     if (!stage.optional) return;
     recordExecution({ ...emptyExecution(stage), status: "SKIPPED", durationMs: 0 });
-    setActiveStageId(stage.nextStageIds[0] ?? null);
+    focusStage(stage.nextStageIds[0] ?? null);
   }
 
   function resetScenario() {
@@ -322,6 +356,7 @@ export function ScenarioWorkbench({
     setRawBodyDrafts({});
     setReviewedStages({});
     setActiveStageId(scenario.entryStageId);
+    setProjectionPageId("");
     setSelectedExecutionId(scenario.entryStageId);
     setRunning(false);
   }
@@ -337,6 +372,11 @@ export function ScenarioWorkbench({
             <p className="text-[11px] font-extrabold tracking-[.12em] text-brand-strong">SCENARIO RUNTIME</p>
             <h2 className="mt-1 text-lg font-extrabold">{scenario.name}</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted">{scenario.goal}</p>
+            {projection?.recipeId && (
+              <p className="mt-2 text-[10px] font-bold text-muted-soft">
+                Blueprint recipe · {projection.recipeId}
+              </p>
+            )}
           </div>
           <select
             className="h-9 rounded-md border border-line-strong bg-background px-3 text-xs font-bold"
@@ -355,13 +395,88 @@ export function ScenarioWorkbench({
           <span>{completedCount}/{scenario.stages.length} 단계 · 신뢰도 {Math.round(scenario.confidence * 100)}%</span>
           <span>{progress}%</span>
         </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+          <div className="inline-flex rounded-lg border border-line bg-background p-1">
+            {projections.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                className={`rounded-md px-3 py-1.5 text-[11px] font-extrabold transition-colors ${
+                  candidate.mode === projectionMode ? "bg-brand text-black" : "text-muted hover:text-foreground"
+                }`}
+                onClick={() => {
+                  setProjectionMode(candidate.mode);
+                  setProjectionPageId("");
+                }}
+              >
+                {candidate.label}
+              </button>
+            ))}
+          </div>
+          <p className="max-w-xl text-[11px] text-muted">{projection?.description}</p>
+        </div>
       </div>
 
       <div className={`grid ${inspectorOpen ? "lg:grid-cols-[minmax(0,1fr)_390px]" : ""}`}>
         <div className="space-y-3 p-4">
-          {scenario.stages.map((stage, index) => {
+          {projectionErrors.length > 0 && (
+            <div className="rounded-lg border border-danger/40 bg-danger/10 p-3 text-xs font-bold text-danger">
+              UI 투영 검증 실패: {projectionErrors.join("; ")}
+            </div>
+          )}
+          {projection && projection.pages.length > 1 && (
+            <nav className="overflow-x-auto rounded-xl border border-line bg-background/60 p-2" aria-label="시나리오 화면">
+              <ol className="flex min-w-max items-center gap-1">
+                {projection.pages.map((page, index) => {
+                  const selected = activeProjectionPage?.id === page.id;
+                  const pageDone = page.stageIds.every((stageId) => {
+                    const status = executions[stageId]?.status;
+                    return status === "SUCCESS" || status === "SKIPPED";
+                  });
+                  return (
+                    <li key={page.id} className="flex items-center">
+                      {index > 0 && <span className="mx-1 h-px w-5 bg-line-strong" />}
+                      <button
+                        type="button"
+                        className={`rounded-lg px-3 py-2 text-left transition-colors ${
+                          selected ? "bg-brand/10 text-brand-strong" : "text-muted hover:bg-white/[0.03] hover:text-foreground"
+                        }`}
+                        onClick={() => setProjectionPageId(page.id)}
+                      >
+                        <span className="block text-[9px] font-black tracking-[.1em]">
+                          {pageDone ? "완료" : `${index + 1} / ${projection.pages.length}`}
+                        </span>
+                        <span className="mt-0.5 block text-xs font-extrabold">{page.title}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </nav>
+          )}
+          {activeProjectionPage && (
+            <header className="rounded-xl border border-line bg-white/[0.02] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-extrabold tracking-[.12em] text-brand-strong">
+                    {activeProjectionPage.level} PROJECTION
+                  </p>
+                  <h3 className="mt-1 text-base font-extrabold">{activeProjectionPage.title}</h3>
+                  <p className="mt-1 text-xs text-muted">{activeProjectionPage.description}</p>
+                </div>
+                <span className="rounded-full border border-line px-2.5 py-1 text-[10px] font-bold text-muted">
+                  {activeProjectionPage.stageIds.length}개 단계
+                </span>
+              </div>
+            </header>
+          )}
+          {(activeProjectionPage?.stageIds ?? scenario.stages.map((stage) => stage.id)).map((stageId) => {
+            const stage = stageById.get(stageId);
+            if (!stage) return null;
+            const index = scenario.stages.findIndex((candidate) => candidate.id === stage.id);
             const execution = executions[stage.id] ?? emptyExecution(stage);
             const isActive = activeStage?.id === stage.id;
+            const stageProjection = projection?.stages[stage.id];
             const keys = localInputKeys(stage);
             const capability = stage.capabilityId
               ? capabilities.find((candidate) => candidate.id === stage.capabilityId)
@@ -381,7 +496,7 @@ export function ScenarioWorkbench({
                   type="button"
                   className="flex w-full items-start gap-3 text-left"
                   onClick={() => {
-                    setActiveStageId(stage.id);
+                    focusStage(stage.id);
                     setSelectedExecutionId(stage.id);
                   }}
                 >
@@ -396,6 +511,19 @@ export function ScenarioWorkbench({
                       </span>
                       {stage.risk !== "SAFE" && (
                         <span className="rounded-full bg-danger/10 px-2 py-0.5 text-[10px] font-bold text-danger">{stage.risk}</span>
+                      )}
+                      {stageProjection && (
+                        <>
+                          <span className="rounded-full border border-brand/20 bg-brand/[0.04] px-2 py-0.5 text-[10px] font-bold text-brand-strong">
+                            {stageProjection.rendererKind}
+                          </span>
+                          <span className="rounded-full border border-line bg-background px-2 py-0.5 text-[10px] font-bold text-muted">
+                            {stageProjection.tags.content}
+                          </span>
+                          <span className="rounded-full border border-line bg-background px-2 py-0.5 text-[10px] font-bold text-muted">
+                            {stageProjection.tags.interaction}
+                          </span>
+                        </>
                       )}
                     </span>
                     <span className="mt-1 block text-sm font-bold">{stage.intent}</span>
@@ -425,24 +553,54 @@ export function ScenarioWorkbench({
                     {stage.role === "SELECT" && (
                       <div>
                         {selectableRows.length > 0 ? (
-                          <select
-                            className="h-10 w-full rounded-md border border-line-strong bg-background px-3 text-sm"
-                            value={displayValue(scenarioState.selectedId)}
-                            onChange={(event) => replaceState({ ...stateRef.current, selectedId: event.target.value })}
-                          >
-                            <option value="">항목을 선택하세요</option>
-                            {selectableRows.map((row) => {
-                              const id = rowId(row);
-                              const label = String(row.name ?? row.title ?? row.label ?? id);
-                              return <option key={id} value={id}>{label}</option>;
-                            })}
-                          </select>
+                          <>
+                            <select
+                              className="h-10 w-full rounded-md border border-line-strong bg-background px-3 text-sm"
+                              value={displayValue(scenarioState.selectedId)}
+                              onChange={(event) => {
+                                const selectedId = event.target.value;
+                                const selectedRecord = selectableRows.find((row) => rowId(row) === selectedId);
+                                replaceState({ ...stateRef.current, selectedId, selectedRecord });
+                              }}
+                            >
+                              <option value="">항목을 선택하세요</option>
+                              {selectableRows.map((row) => {
+                                const id = rowId(row);
+                                const label = String(row.name ?? row.title ?? row.label ?? id);
+                                return <option key={id} value={id}>{label}</option>;
+                              })}
+                            </select>
+                            <ScenarioBlueprintSurface
+                              stage={stage}
+                              projection={stageProjection}
+                              rows={selectableRows}
+                              selectedId={displayValue(scenarioState.selectedId)}
+                              onSelect={(row) => replaceState({
+                                ...stateRef.current,
+                                selectedId: rowId(row),
+                                selectedRecord: row,
+                              })}
+                            />
+                          </>
                         ) : (
                           <p className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/10 p-3 text-xs text-[#e8b657]">
                             먼저 목록 조회 단계를 실행해야 선택할 수 있습니다.
                           </p>
                         )}
                       </div>
+                    )}
+                    {stage.role !== "SELECT" && (
+                      <ScenarioBlueprintSurface
+                        stage={stage}
+                        projection={stageProjection}
+                        rows={selectableRows}
+                        selectedId={displayValue(scenarioState.selectedId)}
+                        onSelect={(row) => replaceState({
+                          ...stateRef.current,
+                          selectedId: rowId(row),
+                          selectedRecord: row,
+                        })}
+                      />
                     )}
                     {stage.role === "REVIEW" && (
                       <label className="flex items-start gap-2 rounded-md border border-line-strong bg-background p-3 text-xs text-muted">
@@ -502,6 +660,26 @@ export function ScenarioWorkbench({
               </article>
             );
           })}
+          {projection && activeProjectionPage && projection.pages.length > 1 && (
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <button
+                type="button"
+                className="rounded-md border border-line-strong px-3 py-2 text-xs font-bold disabled:opacity-30"
+                disabled={!activeProjectionPage.previousPageId}
+                onClick={() => activeProjectionPage.previousPageId && setProjectionPageId(activeProjectionPage.previousPageId)}
+              >
+                이전 화면
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-line-strong px-3 py-2 text-xs font-bold disabled:opacity-30"
+                disabled={!activeProjectionPage.nextPageId}
+                onClick={() => activeProjectionPage.nextPageId && setProjectionPageId(activeProjectionPage.nextPageId)}
+              >
+                다음 화면
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"

@@ -211,8 +211,11 @@ OpenAPI 문서 URL 입력
     │
     ▼  Blueprint 조립
     │
+    Scenario Stage에 content·interaction·presentation UX tag 부여
+    → 안내형은 탐색/상세/입력/검토/추적/결과 화면 경계로 투영
+    → 압축형은 같은 Stage를 단일 작업공간으로 투영(Scenario 의미·binding·실행 순서는 불변)
     단일 Manifest에서 타입·Registry·카탈로그를 코드 생성
-    → 281종 Parts 중 purpose·category·slot에 맞는 컴포넌트를 선택
+    → Product Recipe와 purpose·의도·위험도를 기준으로 281종 Parts 중 호환 컴포넌트를 선택
     → 필요하면 AI가 허용된 후보 안에서 파츠만 제안(검증과 최종 선택은 결정론적)
     │
     ▼  라이브 프리뷰
@@ -236,6 +239,10 @@ Blueprint Parts는 collection 38종, detail 32종, dashboard 36종, modal 41종,
 Journey Engine은 화면 상호작용을 기존 API Flow 실행 계층과 분리한다. 생성은 `입력 → 실행 → 완료`, 수정은 `입력 → 영향 검토 → 실행`, 삭제는 `영향 검토 → 대상명 타이핑 확인 → 실행`을 기본으로 하며, 위험도와 작업명에 따라 확인 단계를 추가하거나 환불·재고 이동·인시던트 승격·배포 승격 같은 도메인 모달을 자동 선택한다. Journey 정의는 실행 전에 중복 ID, 잘못된 연결, 순환, 도달 불가능 단계, EXECUTE/SUCCESS 누락을 검증한다.
 
 Scenario Runtime은 Journey보다 상위 계층에서 사용자 목표 전체를 소유한다. Scenario state와 화면 로컬 상태를 분리하고, API 응답에서 추출한 `authToken`, `selectedId`, `createdId`, 상태값을 명시적 binding으로 다음 단계에 넘긴다. 검증은 같은 호출의 성공 응답만 믿지 않고 상세 재조회·목록 포함 여부·상태 terminal value 같은 후속 관찰로 판정한다. 비밀번호·토큰·Authorization 값은 Inspector에서 마스킹한다.
+
+UI Projection은 컴파일된 Scenario 이후에만 계산되는 재현 가능한 표현 계층이다. StageRole마다 Renderer Contract와 UX tag를 결정하고, 각 Stage를 정확히 하나의 화면 경계에 배치하는 검증을 거친다. 사용자는 안내형 화면을 앞뒤로 이동하거나 압축형 작업공간으로 전환할 수 있으며 입력·선택·실행 결과는 유지된다. Collection/Detail 단계는 기존 Blueprint Manifest와 Product Recipe에서 호환 파츠를 결정적으로 골라 실제 데이터로 렌더링한다. 표현을 바꿔도 `capabilityId`, binding, state, `nextStageIds`는 수정하지 않는다.
+
+Blueprint 검색은 `component-manifest.json` Registry를 정본으로, Elasticsearch를 재생성 가능한 파생 인덱스로 사용한다. Manifest의 family·tag·surface·purpose·mode에서 Stage 지원 범위와 데이터 shape 계약을 투영한 뒤, mount point·slot·runtime·risk policy를 hard filter하고 ES 관련도와 category·quality·stability 점수로 재랭킹한다. ES가 비활성화됐거나 응답하지 않으면 같은 계약을 적용한 Registry 검색으로 자동 폴백하며, 검색 결과에는 엔진·후보 수·제외 사유·지연시간 진단이 포함된다. `/ops/preview/blueprints/reindex`로 인덱스를 Registry에서 완전히 재구축할 수 있고, 새 파츠는 Manifest 등록만으로 검색 대상이 된다.
 
 AI는 `scenario-planner-v1` 구조화 계약으로 서비스 의미와 semantic stage만 제안한다. 제안한 capability는 실제 catalog에 존재해야 하며, 상태 변경 COMMIT은 선행 REVIEW와 후속 VERIFY/TRACK이 없으면 거절된다. 그래프·state producer/consumer·응답 extraction을 만들 수 없는 출력도 실행 전에 제거된다. 모델 호출 실패, 유효한 시나리오 부재, 낮은 신뢰도에서는 같은 요청 안에서 규칙 기반 planner로 자동 대체되고 Operation Preview도 항상 남는다. AI 감사 로그에는 모델·토큰·성공 여부만 저장하며 프롬프트와 응답 원문은 저장하지 않는다.
 
@@ -297,6 +304,8 @@ npm run build
 GitHub Actions는 서비스별 path filter로 필요한 워크플로우만 실행한다. `develop`은 `gamjabox-dev`, `main`은 `gamjabox-prod` 라벨의 self-hosted Linux/X64 runner를 사용하며, 모든 배포 명령은 서버의 `/home/ubuntu/GJ-Cloud`에서 실행된다. 백엔드와 포털 배포는 새 이미지를 기동한 뒤 컨테이너 내부 IP의 health endpoint를 확인하고, 실패하면 보존한 이전 이미지로 자동 롤백한다.
 
 루트와 각 서비스의 `compose.yaml`, `.env*`, 로컬 프록시 설정은 운영 자격증명을 포함할 수 있어 Git에서 제외한다. 공개 문서와 코드에는 환경변수 이름만 기록하고 실제 값은 서버 런타임 환경에서 관리한다.
+
+Ops Blueprint 검색은 기본적으로 Registry fallback 상태다. Elasticsearch를 사용할 때만 `BLUEPRINT_SEARCH_ENABLED=true`, `ELASTICSEARCH_URL`, 필요 시 `ELASTICSEARCH_USERNAME`·`ELASTICSEARCH_PASSWORD`를 설정한다. `BLUEPRINT_SEARCH_REINDEX_ON_STARTUP=true`는 기동 시 전용 `BLUEPRINT_SEARCH_INDEX`를 Manifest 정본으로 재구축하므로 단일 Ops 인스턴스의 관리된 배포에서만 사용한다.
 
 ---
 

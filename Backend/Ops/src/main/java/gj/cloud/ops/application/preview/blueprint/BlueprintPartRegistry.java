@@ -37,6 +37,11 @@ public final class BlueprintPartRegistry {
             Set<String> acceptedSurfaces,
             Set<Purpose> preferredPurposes,
             Set<String> supportedModes,
+            String label,
+            String family,
+            Set<String> tags,
+            Set<String> states,
+            String overlayPresentation,
             boolean autoSelectable
     ) {
         public boolean supportsMode(String mode) {
@@ -52,6 +57,11 @@ public final class BlueprintPartRegistry {
             List<String> acceptedSurfaces,
             List<String> preferredPurposes,
             List<String> supportedModes,
+            String label,
+            String family,
+            List<String> tags,
+            List<String> states,
+            String overlayPresentation,
             boolean autoSelectable
     ) {
         BlueprintPart toPart() {
@@ -63,6 +73,11 @@ public final class BlueprintPartRegistry {
                     Set.copyOf(acceptedSurfaces),
                     preferredPurposes.stream().map(Purpose::valueOf).collect(java.util.stream.Collectors.toUnmodifiableSet()),
                     Set.copyOf(supportedModes),
+                    label,
+                    family,
+                    Set.copyOf(tags),
+                    Set.copyOf(states),
+                    overlayPresentation,
                     autoSelectable
             );
         }
