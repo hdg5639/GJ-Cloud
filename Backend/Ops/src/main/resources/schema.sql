@@ -225,6 +225,48 @@ ALTER TABLE ai_preview_generation_log
 
 CREATE INDEX IF NOT EXISTS idx_ai_preview_generation_log_requester ON ai_preview_generation_log(requester_user_id);
 
+-- PRO Custom Scenario Builder. 사용자 의도(semantic definition)와 특정 OpenAPI에 결합된 컴파일
+-- 결과(revision)를 분리해 API 문서가 변경돼도 원래 의도를 보존한 채 재컴파일할 수 있게 한다.
+CREATE TABLE IF NOT EXISTS custom_scenarios (
+    id                          VARCHAR(36)  PRIMARY KEY,
+    service_id                  VARCHAR(64)  NOT NULL,
+    owner_id                    VARCHAR(64)  NOT NULL,
+    name                        VARCHAR(100) NOT NULL,
+    description                 TEXT,
+    natural_language_source     TEXT         NOT NULL,
+    scenario_definition_json    TEXT,
+    status                      VARCHAR(20)  NOT NULL,
+    visibility                  VARCHAR(20)  NOT NULL DEFAULT 'PRIVATE',
+    created_at                  TIMESTAMP    NOT NULL DEFAULT now(),
+    updated_at                  TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_custom_scenario_status CHECK (
+        status IN ('GENERATING', 'DRAFT', 'VALIDATING', 'VALIDATED', 'ACTIVE', 'INVALIDATED', 'ARCHIVED')
+    ),
+    CONSTRAINT chk_custom_scenario_visibility CHECK (
+        visibility IN ('PRIVATE', 'TEAM')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_scenario_service_owner
+    ON custom_scenarios(service_id, owner_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS custom_scenario_revisions (
+    id                          VARCHAR(36)  PRIMARY KEY,
+    scenario_id                 VARCHAR(36)  NOT NULL REFERENCES custom_scenarios(id),
+    revision                    INTEGER      NOT NULL,
+    openapi_fingerprint         VARCHAR(64)  NOT NULL,
+    compiled_scenario_json      TEXT         NOT NULL,
+    validation_result_json      TEXT         NOT NULL,
+    valid                       BOOLEAN      NOT NULL,
+    created_at                  TIMESTAMP    NOT NULL DEFAULT now(),
+
+    CONSTRAINT uk_custom_scenario_revision UNIQUE (scenario_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_scenario_revision_latest
+    ON custom_scenario_revisions(scenario_id, revision DESC);
+
 CREATE TABLE IF NOT EXISTS db_backups (
     id                  VARCHAR(36)  PRIMARY KEY,
     vm_id               VARCHAR(36)  NOT NULL,

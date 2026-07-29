@@ -38,6 +38,9 @@ auth:
 vm:
   service-url: ${VM_SERVICE_URL}
 
+user:
+  service-url: ${USER_SERVICE_URL:http://user:8080}
+
 ai:
   api-key: ${OPENAI_API_KEY}
   model:

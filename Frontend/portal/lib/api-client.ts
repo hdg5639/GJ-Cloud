@@ -59,6 +59,7 @@ import type {
   PageReviewFinding,
   PreviewCompiledScenario,
   PreviewMode,
+  CustomScenarioView,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -850,6 +851,47 @@ export const api = {
           body: JSON.stringify(body),
           accessToken,
         }),
+      customScenarios: {
+        generate: (
+          accessToken: string,
+          body: {
+            serviceId: string;
+            apiDocsUrl: string;
+            name?: string;
+            description?: string;
+            naturalLanguageSource: string;
+            purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+            visibility?: "PRIVATE" | "TEAM";
+          }
+        ) =>
+          request<CustomScenarioView>("ops", "/ops/preview/custom-scenarios", {
+            method: "POST",
+            body: JSON.stringify(body),
+            accessToken,
+          }),
+        list: (accessToken: string, serviceId: string) =>
+          request<CustomScenarioView[]>(
+            "ops",
+            `/ops/preview/custom-scenarios?serviceId=${encodeURIComponent(serviceId)}`,
+            { accessToken }
+          ),
+        activate: (accessToken: string, scenarioId: string) =>
+          request<CustomScenarioView>(
+            "ops",
+            `/ops/preview/custom-scenarios/${encodeURIComponent(scenarioId)}/activate`,
+            { method: "POST", accessToken }
+          ),
+        revalidate: (accessToken: string, scenarioId: string, apiDocsUrl: string) =>
+          request<CustomScenarioView>(
+            "ops",
+            `/ops/preview/custom-scenarios/${encodeURIComponent(scenarioId)}/revalidate`,
+            {
+              method: "POST",
+              body: JSON.stringify({ apiDocsUrl }),
+              accessToken,
+            }
+          ),
+      },
       // Direction Recovery Change Request §13.1 — 라이브 프리뷰가 조립 규칙을 직접 계산하지 않고,
       // capability/페이지가 바뀔 때마다(analyze/plan 응답 직후 + accessTokenPath 지정·수동 로그인
       // 등록 같은 로컬 편집 직후) 이 엔드포인트로 Block을 다시 받는다.

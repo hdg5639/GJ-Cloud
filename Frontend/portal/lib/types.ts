@@ -771,6 +771,59 @@ export interface PreviewCompiledScenario {
   runtimeVersion: string;
 }
 
+export interface PreviewScenarioStagePlan {
+  id: string;
+  role: PreviewScenarioStageRole;
+  intent: string;
+  capabilityRequirement: string | null;
+  required: boolean;
+  inputs: string[];
+  outputs: string[];
+  nextStageIds: string[];
+  verificationIntent: PreviewVerificationType | null;
+}
+
+export interface PreviewScenarioPlan {
+  id: string;
+  name: string;
+  actor: string;
+  goal: string;
+  entryConditions: string[];
+  stages: PreviewScenarioStagePlan[];
+  scenarioState: string[];
+  confidence: number;
+  evidence: string[];
+}
+
+export type CustomScenarioStatus =
+  | "GENERATING"
+  | "DRAFT"
+  | "VALIDATING"
+  | "VALIDATED"
+  | "ACTIVE"
+  | "INVALIDATED"
+  | "ARCHIVED";
+
+export type CustomScenarioVisibility = "PRIVATE" | "TEAM";
+
+export interface CustomScenarioView {
+  id: string;
+  serviceId: string;
+  name: string;
+  description: string | null;
+  naturalLanguageSource: string;
+  status: CustomScenarioStatus;
+  visibility: CustomScenarioVisibility;
+  definition: PreviewScenarioPlan;
+  revision: number;
+  openapiFingerprint: string;
+  compiledScenario: PreviewCompiledScenario;
+  valid: boolean;
+  validationErrors: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PreviewScenarioStageExecutionStatus =
   | "IDLE"
   | "WAITING_INPUT"
