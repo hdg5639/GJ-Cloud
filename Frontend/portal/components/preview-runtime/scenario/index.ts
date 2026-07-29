@@ -1,6 +1,7 @@
 export { ScenarioWorkbench } from "./ScenarioWorkbench";
 export { ProductExperienceRuntime } from "./ProductExperienceRuntime";
 export * from "./productExperience";
+export * from "./productTheme";
 export * from "./projection";
 export * from "./stageRendererContracts";
 export {

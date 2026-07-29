@@ -67,7 +67,9 @@ class PreviewComposeArtifactBuilderTest {
                 "src/components/preview-runtime/journey/validator.ts",
                 "src/components/preview-runtime/scenario/ScenarioWorkbench.tsx",
                 "src/components/preview-runtime/scenario/ProductExperienceRuntime.tsx",
+                "src/components/preview-runtime/scenario/ProductExperienceInspector.tsx",
                 "src/components/preview-runtime/scenario/productExperience.ts",
+                "src/components/preview-runtime/scenario/productTheme.ts",
                 "src/components/preview-runtime/scenario/runtime.ts",
                 "src/components/preview-runtime/blueprints/manifests/component-manifest.json",
                 "src/components/preview-runtime/blueprints/adapters/generatedPartComponents.ts");
@@ -87,6 +89,14 @@ class PreviewComposeArtifactBuilderTest {
         assertThat(files.get("src/components/preview-runtime/scenario/productExperience.ts"))
                 .contains("composeProductExperience")
                 .contains("validateProductExperience");
+        assertThat(files.get("src/components/preview-runtime/scenario/ProductExperienceInspector.tsx"))
+                .contains("Live test inspector")
+                .contains("이 단계부터 재시도")
+                .contains("Raw request body");
+        assertThat(files.get("src/components/preview-runtime/scenario/productTheme.ts"))
+                .contains("selectProductExperienceTheme")
+                .contains("--px-accent")
+                .contains("crimson-security");
         assertThat(appTsx).contains("https://api.example.com");
         assertThat(appTsx).contains("\"auth.login\"");
         assertThat(appTsx).contains("\"vms-page\"");

@@ -11,6 +11,7 @@ import {
 import type {
   PreviewCompiledScenario,
   PreviewCompiledScenarioStage,
+  PreviewScenarioStageExecution,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
@@ -31,9 +32,15 @@ import {
   type ProductArchetype,
 } from "./productExperience";
 import {
+  emptyExecution,
   runApiStage,
   type ScenarioState,
 } from "./runtime";
+import { ProductExperienceInspector } from "./ProductExperienceInspector";
+import {
+  selectProductExperienceTheme,
+  type ProductExperienceTheme,
+} from "./productTheme";
 
 type Row = Record<string, unknown>;
 
@@ -154,10 +161,10 @@ function ProductActionButton({
   onClick: () => void;
 }) {
   const style = action.tone === "PRIMARY"
-    ? "border-[#151916] bg-[#151916] text-white hover:bg-[#2a302c]"
+    ? "border-[var(--px-accent)] bg-[var(--px-accent)] text-[var(--px-on-accent)] hover:border-[var(--px-accent-hover)] hover:bg-[var(--px-accent-hover)]"
     : action.tone === "DANGER"
-      ? "border-[#ef6b6b]/35 bg-[#fff2f1] text-[#b73a3a] hover:bg-[#ffe7e5]"
-      : "border-[#d8ddd8] bg-white text-[#242a25] hover:bg-[#f5f7f5]";
+      ? "border-[color-mix(in_srgb,var(--px-danger)_35%,transparent)] bg-[var(--px-danger-bg)] text-[var(--px-danger)] hover:border-[var(--px-danger)]"
+      : "border-[var(--px-line)] bg-[var(--px-surface)] text-[var(--px-ink)] hover:bg-[var(--px-surface-soft)]";
   return (
     <button
       type="button"
@@ -187,8 +194,8 @@ function Card({
     <button
       type="button"
       onClick={onSelect}
-      className={`group overflow-hidden rounded-[22px] border bg-white text-left shadow-[0_10px_35px_rgba(28,35,29,.06)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(28,35,29,.12)] ${
-        selected ? "border-[#202820] ring-2 ring-[#202820]/10" : "border-[#e5e9e5]"
+      className={`group overflow-hidden rounded-[22px] border bg-[var(--px-surface)] text-left shadow-[var(--px-shadow-sm)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[var(--px-shadow-md)] ${
+        selected ? "border-[var(--px-accent)] ring-2 ring-[color-mix(in_srgb,var(--px-accent)_14%,transparent)]" : "border-[var(--px-line)]"
       }`}
     >
       {visual && (
@@ -196,15 +203,15 @@ function Card({
           className="h-32 border-b border-black/[0.04]"
           style={{
             background: [
-              "linear-gradient(135deg,#dcebdd,#f5e7cc)",
-              "linear-gradient(135deg,#dfddf3,#f4dce3)",
-              "linear-gradient(135deg,#d9e8ef,#e8edce)",
-              "linear-gradient(135deg,#f1ddcc,#e0e8f4)",
+              "linear-gradient(135deg,var(--px-visual-a),var(--px-visual-b))",
+              "linear-gradient(135deg,var(--px-visual-c),var(--px-visual-d))",
+              "linear-gradient(135deg,var(--px-visual-b),var(--px-visual-c))",
+              "linear-gradient(135deg,var(--px-visual-d),var(--px-visual-a))",
             ][index % 4],
           }}
         >
           <div className="flex h-full items-end justify-between p-4">
-            <span className="rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-[.1em] text-[#445047] backdrop-blur">
+            <span className="rounded-full bg-[color-mix(in_srgb,var(--px-surface)_82%,transparent)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[.1em] text-[var(--px-ink)] backdrop-blur">
               {textValue(row.category) || textValue(row.type) || "Featured"}
             </span>
             <span className="translate-y-2 text-2xl opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">↗</span>
@@ -212,13 +219,13 @@ function Card({
         </div>
       )}
       <div className="p-4">
-        <h3 className="line-clamp-1 text-[15px] font-black text-[#171b18]">{titleOf(row, index)}</h3>
-        <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-[#707872]">{subtitleOf(row)}</p>
+        <h3 className="line-clamp-1 text-[15px] font-black text-[var(--px-ink)]">{titleOf(row, index)}</h3>
+        <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-[var(--px-muted)]">{subtitleOf(row)}</p>
         <div className="mt-4 flex items-center justify-between gap-2">
-          <span className="text-xs font-extrabold text-[#2f3932]">
+          <span className="text-xs font-extrabold text-[var(--px-ink)]">
             {textValue(row.price) || textValue(row.author) || textValue(row.updatedAt) || "자세히 보기"}
           </span>
-          <span className="rounded-full bg-[#eef2ee] px-2.5 py-1 text-[10px] font-bold text-[#657067]">
+          <span className="rounded-full bg-[var(--px-tint)] px-2.5 py-1 text-[10px] font-bold text-[var(--px-accent)]">
             {textValue(row.status) || "활성"}
           </span>
         </div>
@@ -233,38 +240,38 @@ function HomeScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => v
       <section className="grid gap-4 md:grid-cols-[1.35fr_.65fr]">
         <button
           type="button"
-          className="group min-h-72 overflow-hidden rounded-[28px] bg-[#19251c] p-7 text-left text-white shadow-xl"
+          className="group min-h-72 overflow-hidden rounded-[28px] bg-[var(--px-hero)] p-7 text-left text-[var(--px-hero-ink)] shadow-xl"
           onClick={() => onSelect(rows[0])}
         >
-          <p className="text-xs font-black uppercase tracking-[.18em] text-[#a8c9ae]">For you</p>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-[var(--px-hero-muted)]">For you</p>
           <h2 className="mt-12 max-w-lg text-3xl font-black leading-tight md:text-4xl">
             오늘의 흐름을<br />가볍게 시작해 보세요.
           </h2>
-          <p className="mt-4 max-w-md text-sm leading-6 text-white/60">{subtitleOf(rows[0])}</p>
-          <span className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-[#cde7cf]">
+          <p className="mt-4 max-w-md text-sm leading-6 text-[color-mix(in_srgb,var(--px-hero-ink)_62%,transparent)]">{subtitleOf(rows[0])}</p>
+          <span className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-[var(--px-hero-muted)]">
             이어서 보기 <span className="transition-transform group-hover:translate-x-1">→</span>
           </span>
         </button>
         <div className="grid gap-4">
-          <div className="rounded-[24px] border border-[#e1e7e1] bg-[#eef4e9] p-6">
-            <p className="text-xs font-bold text-[#6c776d]">이번 주 활동</p>
-            <strong className="mt-3 block text-4xl font-black text-[#1e261f]">{Math.max(rows.length, 6)}</strong>
-            <p className="mt-2 text-xs text-[#788078]">지난주보다 활발하게 진행 중이에요.</p>
+          <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-tint)] p-6">
+            <p className="text-xs font-bold text-[var(--px-muted)]">이번 주 활동</p>
+            <strong className="mt-3 block text-4xl font-black text-[var(--px-ink)]">{Math.max(rows.length, 6)}</strong>
+            <p className="mt-2 text-xs text-[var(--px-muted)]">지난주보다 활발하게 진행 중이에요.</p>
           </div>
-          <div className="rounded-[24px] border border-[#e7e3dd] bg-[#f6efe6] p-6">
-            <p className="text-xs font-bold text-[#82776b]">다음 할 일</p>
-            <strong className="mt-3 block text-lg font-black text-[#28231f]">{titleOf(rows[1], 1)}</strong>
-            <p className="mt-2 text-xs text-[#827c75]">필요한 작업을 이어서 완료하세요.</p>
+          <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-secondary-tint)] p-6">
+            <p className="text-xs font-bold text-[var(--px-muted)]">다음 할 일</p>
+            <strong className="mt-3 block text-lg font-black text-[var(--px-ink)]">{titleOf(rows[1], 1)}</strong>
+            <p className="mt-2 text-xs text-[var(--px-muted)]">필요한 작업을 이어서 완료하세요.</p>
           </div>
         </div>
       </section>
       <section>
         <div className="mb-4 flex items-end justify-between">
           <div>
-            <p className="text-xs font-bold text-[#7b847c]">최근 항목</p>
-            <h2 className="mt-1 text-xl font-black text-[#181c19]">다시 이어서 하기</h2>
+            <p className="text-xs font-bold text-[var(--px-muted)]">최근 항목</p>
+            <h2 className="mt-1 text-xl font-black text-[var(--px-ink)]">다시 이어서 하기</h2>
           </div>
-          <button className="text-xs font-bold text-[#536056]" type="button">모두 보기 →</button>
+          <button className="text-xs font-bold text-[var(--px-accent)]" type="button">모두 보기 →</button>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {rows.slice(0, 3).map((row, index) => (
@@ -278,19 +285,19 @@ function HomeScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => v
 
 function CalendarScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
   return (
-    <section className="overflow-hidden rounded-[26px] border border-[#e1e6e1] bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-[#e8ece8] px-6 py-5">
+    <section className="overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm">
+      <div className="flex items-center justify-between border-b border-[var(--px-line)] px-6 py-5">
         <div>
-          <p className="text-xs font-bold text-[#818981]">2026년</p>
-          <h2 className="mt-1 text-xl font-black text-[#1c211d]">7월</h2>
+          <p className="text-xs font-bold text-[var(--px-muted)]">2026년</p>
+          <h2 className="mt-1 text-xl font-black text-[var(--px-ink)]">7월</h2>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe4df]">‹</button>
-          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe4df]">›</button>
+          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">‹</button>
+          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">›</button>
         </div>
       </div>
-      <div className="grid grid-cols-7 border-b border-[#edf0ed] bg-[#fafbfa]">
-        {DAYS.map((day) => <div key={day} className="px-2 py-3 text-center text-[11px] font-black text-[#7d857e]">{day}</div>)}
+      <div className="grid grid-cols-7 border-b border-[var(--px-line)] bg-[var(--px-surface-soft)]">
+        {DAYS.map((day) => <div key={day} className="px-2 py-3 text-center text-[11px] font-black text-[var(--px-muted)]">{day}</div>)}
       </div>
       <div className="grid grid-cols-7">
         {CALENDAR_DATES.map((date, index) => {
@@ -301,15 +308,15 @@ function CalendarScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) 
               type="button"
               key={`${date}-${index}`}
               onClick={() => onSelect(row)}
-              className={`min-h-24 border-b border-r border-[#edf0ed] p-2 text-left transition-colors hover:bg-[#f5f8f5] ${
-                date < 1 || date > 31 ? "text-[#c3c8c3]" : "text-[#313832]"
+              className={`min-h-24 border-b border-r border-[var(--px-line)] p-2 text-left transition-colors hover:bg-[var(--px-surface-soft)] ${
+                date < 1 || date > 31 ? "text-[var(--px-subtle)]" : "text-[var(--px-ink)]"
               }`}
             >
-              <span className={`grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-[#1e2c21] text-white" : ""}`}>
+              <span className={`grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-[var(--px-accent)] text-[var(--px-on-accent)]" : ""}`}>
                 {date < 1 ? 30 + date : date > 31 ? date - 31 : date}
               </span>
               {index % 6 === 1 && (
-                <span className="mt-2 block truncate rounded-md bg-[#e5f1e5] px-2 py-1 text-[9px] font-bold text-[#446149]">
+                <span className="mt-2 block truncate rounded-md bg-[var(--px-tint)] px-2 py-1 text-[9px] font-bold text-[var(--px-accent)]">
                   {titleOf(row, index)}
                 </span>
               )}
@@ -324,31 +331,31 @@ function CalendarScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) 
 function FeedScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <div className="rounded-[22px] border border-[#e2e7e2] bg-white p-4 shadow-sm">
+      <div className="rounded-[22px] border border-[var(--px-line)] bg-[var(--px-surface)] p-4 shadow-sm">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-[#dce9df] text-sm font-black text-[#405446]">나</span>
-          <button type="button" className="h-11 flex-1 rounded-full bg-[#f2f5f2] px-5 text-left text-sm text-[#858d86]">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--px-tint-strong)] text-sm font-black text-[var(--px-accent)]">나</span>
+          <button type="button" className="h-11 flex-1 rounded-full bg-[var(--px-surface-soft)] px-5 text-left text-sm text-[var(--px-subtle)]">
             무슨 생각을 하고 있나요?
           </button>
         </div>
       </div>
       {rows.map((row, index) => (
-        <article key={rowId(row)} className="rounded-[24px] border border-[#e2e7e2] bg-white p-5 shadow-sm">
+        <article key={rowId(row)} className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
           <button type="button" onClick={() => onSelect(row)} className="w-full text-left">
             <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-full bg-[#eee4d8] font-black text-[#5d5044]">
+              <span className="grid h-11 w-11 place-items-center rounded-full bg-[var(--px-secondary-tint)] font-black text-[var(--px-secondary)]">
                 {textValue(row.author).slice(0, 1) || titleOf(row, index).slice(0, 1)}
               </span>
               <div>
-                <strong className="text-sm text-[#202521]">{textValue(row.author) || "새로운 이웃"}</strong>
-                <p className="text-[11px] text-[#8a918b]">{index + 2}시간 전 · 모두에게 공개</p>
+                <strong className="text-sm text-[var(--px-ink)]">{textValue(row.author) || "새로운 이웃"}</strong>
+                <p className="text-[11px] text-[var(--px-subtle)]">{index + 2}시간 전 · 모두에게 공개</p>
               </div>
             </div>
-            <h3 className="mt-5 text-lg font-black text-[#1e231f]">{titleOf(row, index)}</h3>
-            <p className="mt-2 text-sm leading-6 text-[#687069]">{subtitleOf(row)}</p>
-            <div className="mt-5 h-48 rounded-[18px]" style={{ background: `linear-gradient(135deg,${index % 2 ? "#dbe5f0,#eee1dd" : "#dceadd,#efe3cf"})` }} />
+            <h3 className="mt-5 text-lg font-black text-[var(--px-ink)]">{titleOf(row, index)}</h3>
+            <p className="mt-2 text-sm leading-6 text-[var(--px-muted)]">{subtitleOf(row)}</p>
+            <div className="mt-5 h-48 rounded-[18px]" style={{ background: index % 2 ? "linear-gradient(135deg,var(--px-visual-c),var(--px-visual-d))" : "linear-gradient(135deg,var(--px-visual-a),var(--px-visual-b))" }} />
           </button>
-          <div className="mt-4 flex items-center gap-5 border-t border-[#edf0ed] pt-4 text-xs font-bold text-[#707871]">
+          <div className="mt-4 flex items-center gap-5 border-t border-[var(--px-line)] pt-4 text-xs font-bold text-[var(--px-muted)]">
             <button type="button">♡ 좋아요</button>
             <button type="button">◯ 댓글</button>
             <button type="button">↗ 공유</button>
@@ -362,55 +369,55 @@ function FeedScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => v
 function InboxScreen({ rows, selected, onSelect }: { rows: Row[]; selected: Row | null; onSelect: (row: Row) => void }) {
   const active = selected ?? rows[0];
   return (
-    <section className="grid min-h-[560px] overflow-hidden rounded-[26px] border border-[#e1e6e1] bg-white shadow-sm md:grid-cols-[320px_1fr]">
-      <div className="border-r border-[#e8ece8]">
-        <div className="border-b border-[#e8ece8] p-4">
-          <Input className="border-0 bg-[#f1f4f1] text-[#242a25]" placeholder="대화 검색" />
+    <section className="grid min-h-[560px] overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm md:grid-cols-[320px_1fr]">
+      <div className="border-r border-[var(--px-line)]">
+        <div className="border-b border-[var(--px-line)] p-4">
+          <Input className="border-0 bg-[var(--px-surface-soft)] text-[var(--px-ink)]" placeholder="대화 검색" />
         </div>
-        <div className="divide-y divide-[#edf0ed]">
+        <div className="divide-y divide-[var(--px-line)]">
           {rows.map((row, index) => (
             <button
               type="button"
               key={rowId(row)}
               onClick={() => onSelect(row)}
               className={`flex w-full items-start gap-3 p-4 text-left transition-colors ${
-                rowId(active) === rowId(row) ? "bg-[#edf4ee]" : "hover:bg-[#fafbfa]"
+                rowId(active) === rowId(row) ? "bg-[var(--px-tint)]" : "hover:bg-[var(--px-surface-soft)]"
               }`}
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#dfe7f0] text-xs font-black text-[#475566]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--px-secondary-tint)] text-xs font-black text-[var(--px-secondary)]">
                 {titleOf(row, index).slice(0, 1)}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex justify-between gap-2">
-                  <strong className="truncate text-sm text-[#222722]">{titleOf(row, index)}</strong>
-                  <span className="shrink-0 text-[9px] text-[#9aa09a]">{textValue(row.status)}</span>
+                  <strong className="truncate text-sm text-[var(--px-ink)]">{titleOf(row, index)}</strong>
+                  <span className="shrink-0 text-[9px] text-[var(--px-subtle)]">{textValue(row.status)}</span>
                 </div>
-                <p className="mt-1 truncate text-xs text-[#7d857e]">{textValue(row.message) || subtitleOf(row)}</p>
+                <p className="mt-1 truncate text-xs text-[var(--px-muted)]">{textValue(row.message) || subtitleOf(row)}</p>
               </div>
             </button>
           ))}
         </div>
       </div>
       <div className="flex min-w-0 flex-col">
-        <header className="flex items-center justify-between border-b border-[#e8ece8] px-6 py-4">
+        <header className="flex items-center justify-between border-b border-[var(--px-line)] px-6 py-4">
           <div>
-            <strong className="text-sm text-[#1f2420]">{titleOf(active)}</strong>
-            <p className="text-[10px] text-[#7f8780]">지금 대화 가능</p>
+            <strong className="text-sm text-[var(--px-ink)]">{titleOf(active)}</strong>
+            <p className="text-[10px] text-[var(--px-muted)]">지금 대화 가능</p>
           </div>
-          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe4df]">•••</button>
+          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">•••</button>
         </header>
-        <div className="flex flex-1 flex-col justify-end gap-3 bg-[#fafbfa] p-6">
-          <div className="max-w-[72%] rounded-[18px_18px_18px_4px] bg-white p-4 text-sm leading-6 text-[#4e5650] shadow-sm">
+        <div className="flex flex-1 flex-col justify-end gap-3 bg-[var(--px-surface-soft)] p-6">
+          <div className="max-w-[72%] rounded-[18px_18px_18px_4px] bg-[var(--px-surface)] p-4 text-sm leading-6 text-[var(--px-muted)] shadow-sm">
             {textValue(active.message) || subtitleOf(active)}
           </div>
-          <div className="ml-auto max-w-[72%] rounded-[18px_18px_4px_18px] bg-[#203025] p-4 text-sm leading-6 text-white">
+          <div className="ml-auto max-w-[72%] rounded-[18px_18px_4px_18px] bg-[var(--px-accent)] p-4 text-sm leading-6 text-[var(--px-on-accent)]">
             확인했어요. 조금 더 자세한 내용을 알려드릴게요.
           </div>
         </div>
-        <div className="border-t border-[#e8ece8] bg-white p-4">
-          <div className="flex items-end gap-2 rounded-[18px] bg-[#f2f5f2] p-2 pl-4">
-            <textarea className="min-h-10 flex-1 resize-none bg-transparent py-2 text-sm text-[#2e342f] outline-none" placeholder="메시지 입력" />
-            <button type="button" className="grid h-10 w-10 place-items-center rounded-full bg-[#203025] text-white">↑</button>
+        <div className="border-t border-[var(--px-line)] bg-[var(--px-surface)] p-4">
+          <div className="flex items-end gap-2 rounded-[18px] bg-[var(--px-surface-soft)] p-2 pl-4">
+            <textarea className="min-h-10 flex-1 resize-none bg-transparent py-2 text-sm text-[var(--px-ink)] outline-none" placeholder="메시지 입력" />
+            <button type="button" className="grid h-10 w-10 place-items-center rounded-full bg-[var(--px-accent)] text-[var(--px-on-accent)]">↑</button>
           </div>
         </div>
       </div>
@@ -420,30 +427,30 @@ function InboxScreen({ rows, selected, onSelect }: { rows: Row[]; selected: Row 
 
 function EditorScreen() {
   return (
-    <section className="grid min-h-[580px] overflow-hidden rounded-[26px] border border-[#e2e4df] bg-[#fbfaf7] shadow-sm lg:grid-cols-[1fr_280px]">
+    <section className="grid min-h-[580px] overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm lg:grid-cols-[1fr_280px]">
       <div className="p-7 md:p-10">
         <div className="mx-auto max-w-3xl">
           <input
             defaultValue="제목 없는 이야기"
-            className="w-full bg-transparent text-3xl font-black text-[#25231f] outline-none placeholder:text-[#bbb7af]"
+            className="w-full bg-transparent text-3xl font-black text-[var(--px-ink)] outline-none placeholder:text-[var(--px-subtle)]"
           />
-          <div className="mt-5 flex items-center gap-3 border-b border-[#e3e0d9] pb-5 text-xs font-bold text-[#858078]">
+          <div className="mt-5 flex items-center gap-3 border-b border-[var(--px-line)] pb-5 text-xs font-bold text-[var(--px-muted)]">
             <button type="button">B</button><button type="button" className="italic">I</button>
-            <span className="h-4 w-px bg-[#d8d4cd]" />
+            <span className="h-4 w-px bg-[var(--px-line-strong)]" />
             <button type="button">링크</button><button type="button">이미지</button><button type="button">인용</button>
           </div>
           <textarea
-            className="mt-7 min-h-[390px] w-full resize-none bg-transparent text-base leading-8 text-[#504c46] outline-none"
+            className="mt-7 min-h-[390px] w-full resize-none bg-transparent text-base leading-8 text-[var(--px-muted)] outline-none"
             placeholder="당신의 이야기를 시작하세요..."
           />
         </div>
       </div>
-      <aside className="border-l border-[#e5e2dc] bg-white/70 p-5">
-        <p className="text-[10px] font-black uppercase tracking-[.15em] text-[#989289]">Document</p>
+      <aside className="border-l border-[var(--px-line)] bg-[var(--px-surface-soft)] p-5">
+        <p className="text-[10px] font-black uppercase tracking-[.15em] text-[var(--px-subtle)]">Document</p>
         <div className="mt-5 space-y-5">
-          <Field label="상태"><Input defaultValue="초안" className="bg-white text-[#38342f]" /></Field>
-          <Field label="카테고리"><Input placeholder="카테고리 선택" className="bg-white text-[#38342f]" /></Field>
-          <Field label="요약"><Textarea placeholder="독자에게 보일 짧은 설명" className="bg-white text-[#38342f]" /></Field>
+          <Field label="상태"><Input defaultValue="초안" className="bg-[var(--px-surface)] text-[var(--px-ink)]" /></Field>
+          <Field label="카테고리"><Input placeholder="카테고리 선택" className="bg-[var(--px-surface)] text-[var(--px-ink)]" /></Field>
+          <Field label="요약"><Textarea placeholder="독자에게 보일 짧은 설명" className="bg-[var(--px-surface)] text-[var(--px-ink)]" /></Field>
         </div>
       </aside>
     </section>
@@ -454,12 +461,12 @@ function FilesScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => 
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#727a73]">
-          <span>내 파일</span><span>/</span><span className="text-[#252b26]">모든 항목</span>
+        <div className="flex items-center gap-2 text-xs font-bold text-[var(--px-muted)]">
+          <span>내 파일</span><span>/</span><span className="text-[var(--px-ink)]">모든 항목</span>
         </div>
-        <div className="flex rounded-full border border-[#dde2dd] bg-white p-1 text-xs font-bold">
-          <button type="button" className="rounded-full bg-[#edf2ed] px-3 py-1.5">격자</button>
-          <button type="button" className="px-3 py-1.5 text-[#8a918a]">목록</button>
+        <div className="flex rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] p-1 text-xs font-bold">
+          <button type="button" className="rounded-full bg-[var(--px-tint)] px-3 py-1.5">격자</button>
+          <button type="button" className="px-3 py-1.5 text-[var(--px-muted)]">목록</button>
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -468,13 +475,13 @@ function FilesScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => 
             key={rowId(row)}
             type="button"
             onClick={() => onSelect(row)}
-            className="rounded-[20px] border border-[#e1e6e1] bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
+            className="rounded-[20px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 text-left shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
           >
-            <span className={`grid h-12 w-12 place-items-center rounded-[14px] text-xl ${index % 2 ? "bg-[#e8e2f0]" : "bg-[#e5efe6]"}`}>
+            <span className={`grid h-12 w-12 place-items-center rounded-[14px] text-xl ${index % 2 ? "bg-[var(--px-secondary-tint)] text-[var(--px-secondary)]" : "bg-[var(--px-tint)] text-[var(--px-accent)]"}`}>
               {textValue(row.type) === "폴더" ? "▰" : "◇"}
             </span>
-            <strong className="mt-5 block truncate text-sm text-[#252a26]">{titleOf(row, index)}</strong>
-            <p className="mt-1 text-[10px] text-[#899089]">{textValue(row.status) || "최근 업데이트"}</p>
+            <strong className="mt-5 block truncate text-sm text-[var(--px-ink)]">{titleOf(row, index)}</strong>
+            <p className="mt-1 text-[10px] text-[var(--px-subtle)]">{textValue(row.status) || "최근 업데이트"}</p>
           </button>
         ))}
       </div>
@@ -486,25 +493,25 @@ function BookingScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) =
   const times = ["09:00", "10:30", "12:00", "13:30", "15:00", "16:30", "18:00"];
   return (
     <div className="grid gap-5 lg:grid-cols-[.75fr_1.25fr]">
-      <div className="rounded-[24px] border border-[#e2e6e2] bg-white p-5 shadow-sm">
-        <p className="text-xs font-black text-[#707870]">공간</p>
+      <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
+        <p className="text-xs font-black text-[var(--px-muted)]">공간</p>
         <div className="mt-4 space-y-2">
           {rows.slice(0, 4).map((row, index) => (
-            <button key={rowId(row)} type="button" onClick={() => onSelect(row)} className={`w-full rounded-[16px] border p-4 text-left ${index === 0 ? "border-[#273329] bg-[#edf3ee]" : "border-[#e6e9e6]"}`}>
-              <strong className="text-sm text-[#242a25]">{titleOf(row, index)}</strong>
-              <p className="mt-1 text-[10px] text-[#7d857e]">{textValue(row.category) || textValue(row.status)}</p>
+            <button key={rowId(row)} type="button" onClick={() => onSelect(row)} className={`w-full rounded-[16px] border p-4 text-left ${index === 0 ? "border-[var(--px-accent)] bg-[var(--px-tint)]" : "border-[var(--px-line)]"}`}>
+              <strong className="text-sm text-[var(--px-ink)]">{titleOf(row, index)}</strong>
+              <p className="mt-1 text-[10px] text-[var(--px-muted)]">{textValue(row.category) || textValue(row.status)}</p>
             </button>
           ))}
         </div>
       </div>
-      <div className="rounded-[24px] border border-[#e2e6e2] bg-white p-5 shadow-sm">
+      <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
         <div className="flex items-center justify-between">
-          <div><p className="text-xs text-[#7c847d]">7월 30일</p><h3 className="mt-1 text-lg font-black text-[#202521]">가능한 시간</h3></div>
-          <div className="flex gap-1">{["30", "31", "1"].map((date, index) => <button key={date} type="button" className={`grid h-10 w-10 place-items-center rounded-full text-xs font-bold ${index === 0 ? "bg-[#253228] text-white" : "bg-[#f1f4f1] text-[#666f68]"}`}>{date}</button>)}</div>
+          <div><p className="text-xs text-[var(--px-muted)]">7월 30일</p><h3 className="mt-1 text-lg font-black text-[var(--px-ink)]">가능한 시간</h3></div>
+          <div className="flex gap-1">{["30", "31", "1"].map((date, index) => <button key={date} type="button" className={`grid h-10 w-10 place-items-center rounded-full text-xs font-bold ${index === 0 ? "bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "bg-[var(--px-surface-soft)] text-[var(--px-muted)]"}`}>{date}</button>)}</div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {times.map((time, index) => (
-            <button key={time} type="button" className={`rounded-[14px] border px-4 py-4 text-sm font-bold transition-colors ${index === 3 ? "border-[#263229] bg-[#263229] text-white" : "border-[#dfe4df] text-[#374038] hover:bg-[#f1f5f1]"}`}>{time}</button>
+            <button key={time} type="button" className={`rounded-[14px] border px-4 py-4 text-sm font-bold transition-colors ${index === 3 ? "border-[var(--px-accent)] bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "border-[var(--px-line)] text-[var(--px-ink)] hover:bg-[var(--px-surface-soft)]"}`}>{time}</button>
           ))}
         </div>
       </div>
@@ -515,18 +522,18 @@ function BookingScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) =
 function ProfileScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
   return (
     <div className="space-y-5">
-      <section className="rounded-[28px] border border-[#e1e6e1] bg-white p-7 shadow-sm">
+      <section className="rounded-[28px] border border-[var(--px-line)] bg-[var(--px-surface)] p-7 shadow-sm">
         <div className="flex flex-wrap items-center gap-5">
-          <span className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-[#cadfce] to-[#ebdfcd] text-2xl font-black text-[#37483b]">ME</span>
+          <span className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-[var(--px-visual-a)] to-[var(--px-visual-b)] text-2xl font-black text-[var(--px-accent)]">ME</span>
           <div className="flex-1">
-            <h2 className="text-2xl font-black text-[#1d221e]">나의 공간</h2>
-            <p className="mt-1 text-sm text-[#737b74]">내 활동과 저장된 기록을 한곳에서 확인하세요.</p>
+            <h2 className="text-2xl font-black text-[var(--px-ink)]">나의 공간</h2>
+            <p className="mt-1 text-sm text-[var(--px-muted)]">내 활동과 저장된 기록을 한곳에서 확인하세요.</p>
           </div>
-          <button type="button" className="rounded-full border border-[#dce1dc] px-4 py-2 text-xs font-bold text-[#4f5851]">프로필 편집</button>
+          <button type="button" className="rounded-full border border-[var(--px-line)] px-4 py-2 text-xs font-bold text-[var(--px-muted)]">프로필 편집</button>
         </div>
-        <div className="mt-7 grid grid-cols-3 gap-3 border-t border-[#edf0ed] pt-6 text-center">
+        <div className="mt-7 grid grid-cols-3 gap-3 border-t border-[var(--px-line)] pt-6 text-center">
           {[["활동", rows.length], ["완료", Math.max(2, rows.length - 1)], ["저장됨", Math.max(3, rows.length + 2)]].map(([label, value]) => (
-            <div key={String(label)}><strong className="block text-xl text-[#242a25]">{value}</strong><span className="text-[10px] font-bold text-[#8a918b]">{label}</span></div>
+            <div key={String(label)}><strong className="block text-xl text-[var(--px-ink)]">{value}</strong><span className="text-[10px] font-bold text-[var(--px-subtle)]">{label}</span></div>
           ))}
         </div>
       </section>
@@ -575,19 +582,30 @@ function DetailOverlay({
   row,
   open,
   actions,
+  theme,
   onClose,
   onAction,
 }: {
   row: Row | null;
   open: boolean;
   actions: ExperienceAction[];
+  theme: ProductExperienceTheme;
   onClose: () => void;
   onAction: (action: ExperienceAction) => void;
 }) {
   if (!row) return null;
   const entries = Object.entries(row).filter(([, value]) => value !== null && value !== undefined).slice(0, 12);
   return (
-    <BlueprintModalFrame open={open} onClose={onClose} title={titleOf(row)} description={subtitleOf(row)} eyebrow="Details" size="lg">
+    <BlueprintModalFrame
+      open={open}
+      onClose={onClose}
+      title={titleOf(row)}
+      description={subtitleOf(row)}
+      eyebrow="Details"
+      size="lg"
+      style={theme.style}
+      themeId={theme.blueprintThemeId}
+    >
       <div className="grid gap-3 sm:grid-cols-2">
         {entries.map(([key, value]) => (
           <div key={key} className="rounded-[14px] border border-line bg-panel p-4">
@@ -639,6 +657,7 @@ function ActionOverlay({
   selected,
   busy,
   error,
+  theme,
   onDraft,
   onClose,
   onContinue,
@@ -652,6 +671,7 @@ function ActionOverlay({
   selected: Row | null;
   busy: boolean;
   error: string | null;
+  theme: ProductExperienceTheme;
   onDraft: (field: string, value: string) => void;
   onClose: () => void;
   onContinue: () => void;
@@ -706,7 +726,7 @@ function ActionOverlay({
   } else if (isResult) {
     content = (
       <div className="flex items-start gap-4 rounded-[16px] border border-brand/30 bg-brand/10 p-5">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-xl font-black text-black">✓</span>
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-xl font-black text-[var(--px-on-accent)]">✓</span>
         <div><strong className="text-sm">요청한 작업을 완료했습니다.</strong><p className="mt-1 text-xs leading-5 text-muted">화면 데이터에도 최신 결과를 반영했습니다.</p></div>
       </div>
     );
@@ -768,6 +788,8 @@ function ActionOverlay({
       eyebrow={isDanger ? "Please confirm" : undefined}
       size={isDetail ? "lg" : "md"}
       footer={footer}
+      style={theme.style}
+      themeId={theme.blueprintThemeId}
     >
       {content}
     </BlueprintModalFrame>
@@ -778,16 +800,18 @@ export function ProductExperienceRuntime({
   scenarios,
   capabilities,
   config,
-  onOpenDeveloperView,
 }: {
   scenarios: PreviewCompiledScenario[];
   capabilities: PreviewCapability[];
   config: PreviewRuntimeConfig;
-  onOpenDeveloperView?: () => void;
 }) {
   const graph = useMemo(
     () => composeProductExperience(scenarios, capabilities),
     [scenarios, capabilities]
+  );
+  const theme = useMemo(
+    () => selectProductExperienceTheme(graph.archetype, scenarios, capabilities),
+    [graph.archetype, scenarios, capabilities]
   );
   const validationErrors = useMemo(
     () => validateProductExperience(graph, scenarios),
@@ -803,10 +827,16 @@ export function ProductExperienceRuntime({
   const [selected, setSelected] = useState<Row | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
+  const [lastActionId, setLastActionId] = useState<string | null>(null);
   const [overlayIndex, setOverlayIndex] = useState(0);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [scenarioState, setScenarioState] = useState<ScenarioState>({});
   const stateRef = useRef<ScenarioState>({});
+  const [executions, setExecutions] = useState<Record<string, PreviewScenarioStageExecution>>({});
+  const [executionTimeline, setExecutionTimeline] = useState<PreviewScenarioStageExecution[]>([]);
+  const [currentStageId, setCurrentStageId] = useState<string | null>(null);
+  const [rawBodyDrafts, setRawBodyDrafts] = useState<Record<string, string>>({});
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -868,6 +898,10 @@ export function ProductExperienceRuntime({
   const screenActions = graph.actions.filter((action) => action.screenId === activeScreen?.id);
   const activeAction = graph.actions.find((action) => action.id === activeActionId) ?? null;
   const activeScenario = scenarios.find((scenario) => scenario.id === activeAction?.scenarioId) ?? null;
+  const inspectedAction = activeAction
+    ?? graph.actions.find((action) => action.id === lastActionId)
+    ?? null;
+  const inspectedScenario = scenarios.find((scenario) => scenario.id === inspectedAction?.scenarioId) ?? null;
   const actionOverlays = activeAction
     ? activeAction.overlayIds
       .map((id) => graph.overlays.find((overlay) => overlay.id === id))
@@ -895,6 +929,7 @@ export function ProductExperienceRuntime({
   function openAction(action: ExperienceAction) {
     setDetailOpen(false);
     setActiveActionId(action.id);
+    setLastActionId(action.id);
     setOverlayIndex(0);
     setDraft({});
     setActionError(null);
@@ -907,6 +942,13 @@ export function ProductExperienceRuntime({
     setDraft({});
     setActionError(null);
     setBusy(false);
+  }
+
+  function recordExecution(execution: PreviewScenarioStageExecution) {
+    setExecutions((current) => ({ ...current, [execution.stageId]: execution }));
+    if (execution.status !== "IDLE") {
+      setExecutionTimeline((current) => [...current, execution].slice(-80));
+    }
   }
 
   function saveLocalStages(stages: PreviewCompiledScenarioStage[]) {
@@ -933,8 +975,10 @@ export function ProductExperienceRuntime({
     void executeAction();
   }
 
-  async function executeAction() {
-    if (!activeAction || !activeScenario || busy) return;
+  async function executeAction(startStageId?: string) {
+    const executionAction = activeAction ?? inspectedAction;
+    const executionScenario = activeScenario ?? inspectedScenario;
+    if (!executionAction || !executionScenario || busy) return;
     setBusy(true);
     setActionError(null);
     const controller = new AbortController();
@@ -948,10 +992,21 @@ export function ProductExperienceRuntime({
       ...nextState,
       ...Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseValue(value)])),
     };
+    let reachedStart = !startStageId;
+    let failedStage: PreviewCompiledScenarioStage | null = null;
+    let failureRecorded = false;
     try {
-      for (const stage of activeScenario.stages) {
+      for (const stage of executionScenario.stages) {
+        if (!reachedStart) {
+          reachedStart = stage.id === startStageId;
+          if (!reachedStart) continue;
+        }
+        setCurrentStageId(stage.id);
+        failedStage = stage;
+        failureRecorded = false;
         if (controller.signal.aborted) throw new Error("작업을 취소했습니다.");
         if (stage.role === "PREPARE" || stage.role === "CONFIGURE" || stage.role === "SELECT_CONTEXT" || stage.role === "REVIEW") {
+          recordExecution({ ...emptyExecution(stage), status: "SUCCESS", durationMs: 0, completedAt: Date.now() });
           continue;
         }
         if (stage.role === "SELECT") {
@@ -960,28 +1015,65 @@ export function ProductExperienceRuntime({
             nextState.selectedId = rowId(firstRow);
             nextState.selectedRecord = firstRow;
           }
+          stateRef.current = nextState;
+          setScenarioState({ ...nextState });
+          recordExecution({
+            ...emptyExecution(stage),
+            status: "SUCCESS",
+            extractedOutputs: { selectedId: nextState.selectedId },
+            durationMs: 0,
+            completedAt: Date.now(),
+          });
           continue;
         }
-        if (stage.role === "COMPLETE" || !stage.capabilityId) continue;
+        if (stage.role === "COMPLETE" || !stage.capabilityId) {
+          recordExecution({ ...emptyExecution(stage), status: "SUCCESS", durationMs: 0, completedAt: Date.now() });
+          continue;
+        }
         const capability = capabilities.find((candidate) => candidate.id === stage.capabilityId);
         if (!capability) throw new Error("연결된 API 작업을 찾지 못했습니다.");
+        let requestOverride;
+        const rawBody = rawBodyDrafts[stage.id];
+        if (rawBody?.trim()) {
+          const parsed = JSON.parse(rawBody);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("원시 요청 본문은 JSON 객체여야 합니다.");
+          }
+          requestOverride = { body: parsed as Record<string, unknown> };
+        }
+        recordExecution({ ...emptyExecution(stage), status: "RUNNING", method: capability.method, startedAt: Date.now() });
         let result = await runApiStage({
           stage,
           capability,
           state: nextState,
           config,
           signal: controller.signal,
+          requestOverride,
         });
+        recordExecution(result.execution);
+        failureRecorded = result.execution.status !== "SUCCESS";
         if (stage.role === "TRACK" && result.execution.status === "FAILED") {
           for (let attempt = 0; attempt < 3 && result.execution.status === "FAILED"; attempt += 1) {
             await new Promise<void>((resolve) => window.setTimeout(resolve, 1500));
-            result = await runApiStage({ stage, capability, state: nextState, config, signal: controller.signal });
+            recordExecution({ ...emptyExecution(stage), status: "RUNNING", method: capability.method, startedAt: Date.now() });
+            result = await runApiStage({
+              stage,
+              capability,
+              state: nextState,
+              config,
+              signal: controller.signal,
+              requestOverride,
+            });
+            recordExecution(result.execution);
+            failureRecorded = result.execution.status !== "SUCCESS";
           }
         }
         if (result.execution.status !== "SUCCESS") {
           throw new Error(result.execution.error ?? `${stage.intent} 작업에 실패했습니다.`);
         }
         nextState = result.nextState;
+        stateRef.current = nextState;
+        setScenarioState({ ...nextState });
         const collection = extractArray(result.execution.response, capability.collectionPath);
         if (collection.length > 0) {
           setRowsByCapability((current) => ({ ...current, [capability.id]: collection }));
@@ -993,15 +1085,27 @@ export function ProductExperienceRuntime({
       stateRef.current = nextState;
       setScenarioState(nextState);
       await loadCollections(controller.signal);
-      const resultIndex = actionOverlays.findIndex((overlay) => overlay.kind === "RESULT_TOAST");
-      if (resultIndex >= 0) setOverlayIndex(resultIndex);
+      const executionOverlays = executionAction.overlayIds
+        .map((id) => graph.overlays.find((overlay) => overlay.id === id))
+        .filter((overlay): overlay is ExperienceOverlay => Boolean(overlay));
+      const resultIndex = executionOverlays.findIndex((overlay) => overlay.kind === "RESULT_TOAST");
+      if (activeAction && resultIndex >= 0) setOverlayIndex(resultIndex);
       else {
-        closeAction();
-        setToast(`${activeAction.label} 작업을 완료했습니다.`);
+        if (activeAction) closeAction();
+        setToast(`${executionAction.label} 작업을 완료했습니다.`);
       }
     } catch (cause) {
       if (!controller.signal.aborted) {
-        setActionError(cause instanceof Error ? cause.message : "작업을 완료하지 못했습니다.");
+        const message = cause instanceof Error ? cause.message : "작업을 완료하지 못했습니다.";
+        setActionError(message);
+        if (failedStage && !failureRecorded) {
+          recordExecution({
+            ...emptyExecution(failedStage),
+            status: "FAILED",
+            error: message,
+            completedAt: Date.now(),
+          });
+        }
         const progressIndex = actionOverlays.findIndex((overlay) => overlay.kind === "PROGRESS_MODAL");
         if (progressIndex >= 0) setOverlayIndex(progressIndex);
       }
@@ -1020,18 +1124,23 @@ export function ProductExperienceRuntime({
   if (!activeScreen) return null;
 
   return (
-    <section className="relative overflow-hidden rounded-[30px] border border-[#dfe5df] bg-[#f5f7f4] text-[#1d221e] shadow-[0_24px_80px_rgba(20,30,22,.14)]">
-      <header className="sticky top-0 z-20 border-b border-[#e0e5e0] bg-[#fbfcfa]/95 px-5 backdrop-blur-xl md:px-8">
+    <section
+      className="relative overflow-hidden rounded-[30px] border border-[var(--px-line)] bg-[var(--px-bg)] text-[var(--px-ink)] shadow-[var(--px-shadow-lg)]"
+      style={theme.style}
+      data-product-theme={theme.id}
+      data-blueprint-theme={theme.blueprintThemeId}
+    >
+      <header className="sticky top-0 z-20 border-b border-[var(--px-line)] bg-[color-mix(in_srgb,var(--px-surface)_95%,transparent)] px-5 backdrop-blur-xl md:px-8">
         <div className="mx-auto flex min-h-[72px] max-w-[1380px] items-center gap-6">
           <button
             type="button"
             className="flex shrink-0 items-center gap-3"
             onClick={() => navigateScreen(graph.defaultScreenId)}
           >
-            <span className="grid h-9 w-9 place-items-center rounded-[12px] bg-[#203025] text-sm font-black text-white">
+            <span className="grid h-9 w-9 place-items-center rounded-[12px] bg-[var(--px-accent)] text-sm font-black text-[var(--px-on-accent)]">
               {graph.productName.slice(0, 1)}
             </span>
-            <strong className="hidden text-base font-black tracking-[-.02em] text-[#1c221d] sm:block">{graph.productName}</strong>
+            <strong className="hidden text-base font-black tracking-[-.02em] text-[var(--px-ink)] sm:block">{graph.productName}</strong>
           </button>
           <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2" aria-label="서비스 메뉴">
             {graph.screens.map((screen) => (
@@ -1040,7 +1149,7 @@ export function ProductExperienceRuntime({
                 key={screen.id}
                 onClick={() => navigateScreen(screen.id)}
                 className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold transition-colors ${
-                  activeScreen.id === screen.id ? "bg-[#e7eee8] text-[#203026]" : "text-[#747d75] hover:bg-[#f0f3f0] hover:text-[#283029]"
+                  activeScreen.id === screen.id ? "bg-[var(--px-tint)] text-[var(--px-accent)]" : "text-[var(--px-muted)] hover:bg-[var(--px-surface-soft)] hover:text-[var(--px-ink)]"
                 }`}
               >
                 {screen.label}
@@ -1048,17 +1157,15 @@ export function ProductExperienceRuntime({
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-2">
-            {onOpenDeveloperView && (
-              <button
-                type="button"
-                onClick={onOpenDeveloperView}
-                className="hidden rounded-full border border-[#dfe4df] px-3 py-2 text-[10px] font-bold text-[#788079] lg:block"
-              >
-                개발자 보기
-              </button>
-            )}
-            <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[#dfe4df] bg-white text-xs">⌕</button>
-            <button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-[#e3eae4] text-xs font-black text-[#3c4d40]">ME</button>
+            <button
+              type="button"
+              onClick={() => setInspectorOpen(true)}
+              className="inline-flex rounded-full border border-[var(--px-line)] px-3 py-2 text-[10px] font-bold text-[var(--px-muted)]"
+            >
+              테스트 Inspector
+            </button>
+            <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] text-xs">⌕</button>
+            <button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-[var(--px-tint-strong)] text-xs font-black text-[var(--px-accent)]">ME</button>
           </div>
         </div>
       </header>
@@ -1066,9 +1173,9 @@ export function ProductExperienceRuntime({
       <main className="mx-auto min-h-[680px] max-w-[1380px] px-5 py-8 md:px-8 md:py-10">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
           <div>
-            <p className="text-xs font-bold text-[#7a837b]">{activeScreen.label}</p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-.035em] text-[#171b18] md:text-4xl">{activeScreen.title}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#747d75]">{activeScreen.description}</p>
+            <p className="text-xs font-bold text-[var(--px-muted)]">{activeScreen.label}</p>
+            <h1 className="mt-2 text-3xl font-black tracking-[-.035em] text-[var(--px-ink)] md:text-4xl">{activeScreen.title}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--px-muted)]">{activeScreen.description}</p>
           </div>
           <div className="flex max-w-3xl flex-wrap justify-end gap-2">
             {screenActions.map((action) => (
@@ -1078,7 +1185,7 @@ export function ProductExperienceRuntime({
               type="button"
               disabled={loadingCollections}
               onClick={() => void loadCollections()}
-              className="grid h-10 w-10 place-items-center rounded-full border border-[#d8ddd8] bg-white text-sm text-[#657066] shadow-sm disabled:opacity-50"
+              className="grid h-10 w-10 place-items-center rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] text-sm text-[var(--px-muted)] shadow-sm disabled:opacity-50"
               aria-label="새로고침"
             >
               {loadingCollections ? "…" : "↻"}
@@ -1087,7 +1194,7 @@ export function ProductExperienceRuntime({
         </div>
 
         {validationErrors.length > 0 && (
-          <div className="mb-5 rounded-[16px] border border-[#e9b2aa] bg-[#fff1ef] p-4 text-xs font-bold text-[#a33f34]">
+          <div className="mb-5 rounded-[16px] border border-[color-mix(in_srgb,var(--px-danger)_35%,transparent)] bg-[var(--px-danger-bg)] p-4 text-xs font-bold text-[var(--px-danger)]">
             화면 구성 검증 실패: {validationErrors.join("; ")}
           </div>
         )}
@@ -1100,8 +1207,8 @@ export function ProductExperienceRuntime({
         />
       </main>
 
-      <footer className="border-t border-[#e3e7e3] bg-white/60 px-8 py-5">
-        <div className="mx-auto flex max-w-[1380px] flex-wrap items-center justify-between gap-3 text-[10px] font-bold text-[#909791]">
+      <footer className="border-t border-[var(--px-line)] bg-[color-mix(in_srgb,var(--px-surface)_62%,transparent)] px-8 py-5">
+        <div className="mx-auto flex max-w-[1380px] flex-wrap items-center justify-between gap-3 text-[10px] font-bold text-[var(--px-subtle)]">
           <span>{graph.productName} · 모든 변경 사항이 자동으로 저장됩니다.</span>
           <span>개인정보 · 이용약관 · 도움말</span>
         </div>
@@ -1111,6 +1218,7 @@ export function ProductExperienceRuntime({
         row={selected}
         open={detailOpen}
         actions={screenActions}
+        theme={theme}
         onClose={() => setDetailOpen(false)}
         onAction={openAction}
       />
@@ -1125,6 +1233,7 @@ export function ProductExperienceRuntime({
           selected={selected}
           busy={busy}
           error={actionError}
+          theme={theme}
           onDraft={(field, value) => setDraft((current) => ({ ...current, [field]: value }))}
           onClose={closeAction}
           onContinue={advanceOverlay}
@@ -1132,9 +1241,28 @@ export function ProductExperienceRuntime({
         />
       )}
 
+      <ProductExperienceInspector
+        open={inspectorOpen}
+        screen={activeScreen}
+        action={inspectedAction}
+        scenario={inspectedScenario}
+        scenarioState={scenarioState}
+        executions={executions}
+        timeline={executionTimeline}
+        currentStageId={currentStageId}
+        running={busy}
+        selectedRecord={selected}
+        rawBodyDrafts={rawBodyDrafts}
+        theme={theme}
+        onRawBodyChange={(stageId, value) => setRawBodyDrafts((current) => ({ ...current, [stageId]: value }))}
+        onRetry={(stageId) => void executeAction(stageId)}
+        onCancel={() => abortRef.current?.abort()}
+        onClose={() => setInspectorOpen(false)}
+      />
+
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[220] flex -translate-x-1/2 items-center gap-3 rounded-full border border-[#dce5dd] bg-[#1f2c22] px-5 py-3 text-sm font-bold text-white shadow-2xl">
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-[#bce3c2] text-xs text-[#17301d]">✓</span>
+        <div className="fixed bottom-6 left-1/2 z-[220] flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--px-line-strong)] bg-[var(--px-hero)] px-5 py-3 text-sm font-bold text-[var(--px-hero-ink)] shadow-2xl">
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--px-success)] text-xs text-[var(--px-on-accent)]">✓</span>
           {toast}
         </div>
       )}

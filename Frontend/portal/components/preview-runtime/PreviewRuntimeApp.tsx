@@ -188,7 +188,6 @@ export function PreviewRuntimeApp({
           scenarios={scenarios}
           capabilities={capabilities}
           config={config}
-          onOpenDeveloperView={() => setRuntimeView("SCENARIO")}
         />
       ) : runtimeView === "SCENARIO" && hasScenarioView ? (
         <ScenarioWorkbench scenarios={scenarios} capabilities={capabilities} config={config} />

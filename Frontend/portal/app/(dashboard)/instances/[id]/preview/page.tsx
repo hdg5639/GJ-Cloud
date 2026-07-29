@@ -1042,7 +1042,6 @@ export default function PreviewWizardPage() {
                   authStrategy: result.authStrategy,
                   purpose,
                 }}
-                onOpenDeveloperView={() => setPreviewSurface("SCENARIO")}
               />
             ) : previewSurface === "SCENARIO"
               && result.previewMode !== "OPERATION_PREVIEW"
