@@ -100,6 +100,15 @@ class OpenApiNormalizerTest {
             """;
 
     @Test
+    void normalizesUploadedJsonContentWithoutFetchingAUrl() {
+        OpenApiEvidence evidence = normalizer.normalizeContent(VM_SERVICE_LIKE_DOC);
+
+        assertThat(evidence.title()).isEqualTo("vm-service");
+        assertThat(evidence.operations()).hasSize(5);
+        assertThat(evidence.serverUrls()).containsExactly("https://api.gamjabox.cloud");
+    }
+
+    @Test
     void extractsOperationsSecuritySchemesAndArrayResponses() {
         JsonNode root = normalizer.parse(VM_SERVICE_LIKE_DOC.getBytes(StandardCharsets.UTF_8));
         OpenApiEvidence evidence = normalizer.extract(root);

@@ -58,7 +58,7 @@ public class PreviewController {
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
     private final BlueprintSearchEngine blueprintSearchEngine;
 
-    @Operation(summary = "OpenAPI 문서 분석", description = "OpenAPI 3.x를 결정론적으로 정규화한 뒤 AI 의미 분석과 안전한 Scenario Compiler를 거쳐 프리뷰 계획을 반환합니다. 배포는 수행하지 않습니다.")
+    @Operation(summary = "OpenAPI 문서 분석·시나리오 재구성", description = "URL 또는 업로드 원문의 OpenAPI 3.x를 정규화하고, 선택한 capability·서비스 문서 페이지·자연어 사용자 흐름을 반영해 프리뷰 계획을 반환합니다. 배포는 수행하지 않습니다.")
     @PostMapping("/analyze")
     public ApiResponse<PreviewAnalysisResult> analyze(
             @AuthenticationPrincipal OpsPrincipal principal,

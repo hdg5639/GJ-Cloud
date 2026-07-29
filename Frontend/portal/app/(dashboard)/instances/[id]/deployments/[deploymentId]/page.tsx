@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { StatGrid, StatCard } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
   QUEUED: "off",
@@ -79,7 +80,6 @@ export default function DeploymentDetailPage() {
 
   useEffect(() => {
     if (!accessToken) return;
-    setConnected(true);
     stopRef.current = api.ops.deployments.streamEvents(
       accessToken,
       vmId,
@@ -91,7 +91,8 @@ export default function DeploymentDetailPage() {
         }
         if (event.eventType === "DONE") setConnected(false);
       },
-      () => setConnected(false)
+      () => setConnected(false),
+      () => setConnected(true)
     );
     return () => {
       stopRef.current?.();
@@ -175,10 +176,18 @@ export default function DeploymentDetailPage() {
     }
   }
 
-  if (!accessToken || loading) return <PageLoader />;
+  if (!accessToken || loading) {
+    return (
+      <div className="mx-auto max-w-[1380px]">
+        <InstanceSectionNav vmId={vmId} />
+        <PageLoader />
+      </div>
+    );
+  }
   if (!deployment) {
     return (
-      <div className="p-6">
+      <div className="mx-auto max-w-[1380px]">
+        <InstanceSectionNav vmId={vmId} />
         <p className="text-sm text-danger">{error ?? "배포를 찾을 수 없습니다."}</p>
       </div>
     );
@@ -187,7 +196,9 @@ export default function DeploymentDetailPage() {
   const inProgress = IN_PROGRESS_STATUSES.has(deployment.status);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
+    <div className="mx-auto max-w-[1380px]">
+      <InstanceSectionNav vmId={vmId} />
+      <div className="flex min-h-[640px] flex-col lg:h-[calc(100vh-185px)]">
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 min-w-0 shrink items-center gap-2.5 pl-4 pr-3.5">
           <button onClick={() => router.back()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
@@ -307,6 +318,7 @@ export default function DeploymentDetailPage() {
           </div>
         </div>
       </Modal>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
@@ -17,7 +18,7 @@ import type {
   PreviewMode,
 } from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
-import { PageLoader } from "@/components/ui/loader";
+import { PageLoader, Spinner } from "@/components/ui/loader";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { PreviewPageRenderer } from "@/components/preview-runtime/PreviewPageRenderer";
@@ -30,6 +31,7 @@ import type { ApiCallLogEntry } from "@/components/preview-runtime/types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
 type Purpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+type ApiDocumentSource = "URL" | "FILE";
 
 const PURPOSE_LABEL: Record<Purpose, string> = {
   API_TEST: "API 테스트 페이지",
@@ -120,7 +122,12 @@ export default function PreviewWizardPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // 1단계 — 입력
+  const [apiDocumentSource, setApiDocumentSource] = useState<ApiDocumentSource>("URL");
   const [apiDocsUrl, setApiDocsUrl] = useState("");
+  const [apiDocsContent, setApiDocsContent] = useState("");
+  const [apiDocsFileName, setApiDocsFileName] = useState("");
+  const apiDocsFileRef = useRef<HTMLInputElement>(null);
+  const [documentationPageUrl, setDocumentationPageUrl] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
   const [purpose, setPurpose] = useState<Purpose>("API_TEST");
   const [previewMode, setPreviewMode] = useState<PreviewMode>("SCENARIO_PREVIEW");
@@ -132,6 +139,11 @@ export default function PreviewWizardPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [reviewFindings, setReviewFindings] = useState<PageReviewFinding[] | null>(null);
+  const [analysisPanelOpen, setAnalysisPanelOpen] = useState(false);
+  const [scenarioIntent, setScenarioIntent] = useState("");
+  const [selectedResourceNames, setSelectedResourceNames] = useState<Set<string>>(new Set());
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerationError, setRegenerationError] = useState<string | null>(null);
   // Plan Review UI(Increment 5 2부) — proposing 중엔 AI 호출, proposedOperations는 아직 적용 안 된
   // 제안 목록(체크박스 검토용), selectedOperationIds는 사용자가 체크한 것, applyingPlan/planApplyErrors는
   // 선택한 서브셋을 실제로 적용하는 단계.
@@ -140,6 +152,8 @@ export default function PreviewWizardPage() {
   const [selectedOperationIds, setSelectedOperationIds] = useState<Set<string>>(new Set());
   const [applyingPlan, setApplyingPlan] = useState(false);
   const [planApplyErrors, setPlanApplyErrors] = useState<string[] | null>(null);
+  const [planAppliedNotice, setPlanAppliedNotice] = useState<string | null>(null);
+  const proposalRef = useRef<HTMLDivElement>(null);
   // Workflow Composition Phase 2 Change Request §7 "Navigation Requirements" — "selected-row state
   // must not be the only detail-navigation mechanism". previewPageId/선택된 행을 URL 쿼리파라미터
   // (?page=&selected=)에 반영해 새로고침 생존·브라우저 뒤로/앞으로가기·직접 URL 진입을 실제로
@@ -273,7 +287,7 @@ export default function PreviewWizardPage() {
     setSuggestingParts(true);
     try {
       const data = await api.ops.preview.suggestParts(accessToken, {
-        serviceDescription: serviceDescription.trim() || undefined,
+        serviceDescription: effectiveServiceDescription() || undefined,
         purpose,
         capabilities: result.capabilities,
         pages: result.pages,
@@ -297,7 +311,7 @@ export default function PreviewWizardPage() {
   }
 
   async function handleAnalyze() {
-    if (!accessToken || !apiDocsUrl.trim()) return;
+    if (!accessToken || !hasApiDocumentSource()) return;
     setAnalyzing(true);
     setAnalysisError(null);
     setResult(null);
@@ -306,14 +320,18 @@ export default function PreviewWizardPage() {
     setProposedOperations(null);
     setSelectedOperationIds(new Set());
     setPlanApplyErrors(null);
+    setPlanAppliedNotice(null);
     try {
       const data = await api.ops.preview.analyze(accessToken, {
-        apiDocsUrl: apiDocsUrl.trim(),
+        apiDocsUrl: apiDocumentSource === "URL" ? apiDocsUrl.trim() : undefined,
+        apiDocsContent: apiDocumentSource === "FILE" ? apiDocsContent : undefined,
+        documentationPageUrl: documentationPageUrl.trim() || undefined,
         serviceDescription: serviceDescription.trim() || undefined,
         purpose,
         previewMode,
       });
       setResult(data);
+      setSelectedResourceNames(activeResourceNames(data));
       refreshBlocks(data.capabilities, data.pages, data.pagePlans, purpose);
       setApiBaseUrl(data.apiServerUrls[0] ?? "");
       setPreviewPageId(data.pages[0]?.id ?? null);
@@ -327,7 +345,7 @@ export default function PreviewWizardPage() {
       setPreviewSurface(
         data.previewMode !== "OPERATION_PREVIEW"
           && data.scenarios.some((scenario) => scenario.status !== "UNSUPPORTED")
-          ? "SCENARIO"
+          ? "PRODUCT"
           : "OPERATION"
       );
       setStep(2);
@@ -338,12 +356,100 @@ export default function PreviewWizardPage() {
     }
   }
 
+  function hasApiDocumentSource(): boolean {
+    return apiDocumentSource === "URL" ? Boolean(apiDocsUrl.trim()) : Boolean(apiDocsContent);
+  }
+
+  async function handleApiDocumentFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setAnalysisError("OpenAPI 파일은 최대 5MB까지 업로드할 수 있습니다.");
+      event.target.value = "";
+      return;
+    }
+    try {
+      const content = await file.text();
+      setApiDocsContent(content);
+      setApiDocsFileName(file.name);
+      setAnalysisError(null);
+    } catch {
+      setAnalysisError("파일을 읽지 못했습니다. JSON 또는 YAML 파일인지 확인해주세요.");
+    }
+  }
+
+  function activeResourceNames(data: PreviewAnalysisResult): Set<string> {
+    const activeIds = new Set(data.activeCapabilityIds);
+    return new Set(
+      data.availableCapabilities
+        .filter((capability) => activeIds.has(capability.id))
+        .map((capability) => capability.resourceName)
+    );
+  }
+
+  function toggleResource(resourceName: string) {
+    setSelectedResourceNames((previous) => {
+      const next = new Set(previous);
+      if (next.has(resourceName)) next.delete(resourceName);
+      else next.add(resourceName);
+      return next;
+    });
+  }
+
+  async function handleRegenerateFromIntent() {
+    if (!accessToken || !result || !scenarioIntent.trim() || selectedResourceNames.size === 0) return;
+    const selectedCapabilityIds = result.availableCapabilities
+      .filter((capability) => selectedResourceNames.has(capability.resourceName))
+      .map((capability) => capability.id);
+    setRegenerating(true);
+    setRegenerationError(null);
+    setPlanAppliedNotice(null);
+    try {
+      const data = await api.ops.preview.analyze(accessToken, {
+        apiDocsUrl: apiDocumentSource === "URL" ? apiDocsUrl.trim() : undefined,
+        apiDocsContent: apiDocumentSource === "FILE" ? apiDocsContent : undefined,
+        documentationPageUrl: documentationPageUrl.trim() || undefined,
+        serviceDescription: serviceDescription.trim() || undefined,
+        scenarioIntent: scenarioIntent.trim(),
+        selectedCapabilityIds,
+        purpose,
+        previewMode,
+      });
+      setResult(data);
+      setSelectedResourceNames(activeResourceNames(data));
+      setReviewFindings(null);
+      setProposedOperations(null);
+      setSelectedOperationIds(new Set());
+      setPlanApplyErrors(null);
+      setPartOverrides({});
+      setPartReasons({});
+      refreshBlocks(data.capabilities, data.pages, data.pagePlans, purpose, {});
+      setPreviewPageId(data.pages[0]?.id ?? null);
+      setPreviewSurface(
+        data.previewMode !== "OPERATION_PREVIEW"
+          && data.scenarios.some((scenario) => scenario.status !== "UNSUPPORTED")
+          ? "PRODUCT"
+          : "OPERATION"
+      );
+      setPlanAppliedNotice("선택한 API와 자연어 플로우를 반영해 서비스 화면과 시나리오를 다시 만들었습니다.");
+      setAnalysisPanelOpen(false);
+    } catch (error) {
+      setRegenerationError(error instanceof Error ? error.message : "시나리오 재생성에 실패했습니다.");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  function effectiveServiceDescription(): string {
+    return result?.resolvedServiceDescription?.trim() || serviceDescription.trim();
+  }
+
   async function handleReview() {
     if (!accessToken || !result) return;
     setReviewing(true);
     try {
       const findings = await api.ops.preview.review(accessToken, {
-        serviceDescription: serviceDescription.trim() || undefined,
+        serviceDescription: effectiveServiceDescription() || undefined,
         capabilities: result.capabilities,
         pages: result.pages,
       });
@@ -358,13 +464,20 @@ export default function PreviewWizardPage() {
   // Plan Review UI(Increment 5 2부) — handleReview(코멘트만)와 달리 AI가 페이지를 실제로 바꿀 수
   // 있는 오퍼레이션을 제안하지만, 여기서는 아무것도 적용하지 않는다. 유효한(valid) 오퍼레이션은
   // 기본으로 체크해두고, 사용자가 체크박스를 조정한 뒤 handleApplyPlan으로 넘어간다.
-  async function handleProposePlan() {
+  async function handleProposePlan(reviewContext?: string) {
     if (!accessToken || !result) return;
     setProposing(true);
     setPlanApplyErrors(null);
     try {
+      const reviewInstruction = reviewContext?.trim()
+        ? [
+            effectiveServiceDescription(),
+            "아래 AI 검수 피드백을 우선 반영하는 구체적인 수정안을 제안해주세요.",
+            reviewContext.trim(),
+          ].filter(Boolean).join("\n\n")
+        : effectiveServiceDescription();
       const proposal = await api.ops.preview.planPropose(accessToken, {
-        serviceDescription: serviceDescription.trim() || undefined,
+        serviceDescription: reviewInstruction || undefined,
         purpose,
         capabilities: result.capabilities,
         pages: result.pages,
@@ -374,12 +487,20 @@ export default function PreviewWizardPage() {
       });
       setProposedOperations(proposal.operations);
       setSelectedOperationIds(new Set(proposal.operations.filter((op) => op.valid).map((op) => op.id)));
-    } catch {
+      window.requestAnimationFrame(() => proposalRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    } catch (err) {
       setProposedOperations([]);
       setSelectedOperationIds(new Set());
+      setPlanApplyErrors([err instanceof Error ? err.message : "AI 수정안을 만들지 못했습니다."]);
     } finally {
       setProposing(false);
     }
+  }
+
+  function reviewContextOf(findings: PageReviewFinding[]): string {
+    return findings
+      .map((finding, index) => `${index + 1}. ${finding.message}${finding.remediation ? `\n조치: ${finding.remediation}` : ""}`)
+      .join("\n");
   }
 
   function toggleOperationSelected(id: string) {
@@ -446,6 +567,9 @@ export default function PreviewWizardPage() {
       setPreviewPageId(applied.pages[0]?.id ?? null);
       setProposedOperations(null);
       setSelectedOperationIds(new Set());
+      setReviewFindings(null);
+      setPlanAppliedNotice(`선택한 ${selectedOps.length}개 수정안을 적용했습니다. 서비스 화면에서 결과를 확인해 주세요.`);
+      setAnalysisPanelOpen(false);
     } catch (err) {
       setPlanApplyErrors([err instanceof Error ? err.message : "적용에 실패했습니다."]);
     } finally {
@@ -625,28 +749,97 @@ export default function PreviewWizardPage() {
   if (!accessToken) return <PageLoader />;
 
   return (
-    <div className="mx-auto max-w-[900px]">
+    <div className="mx-auto max-w-[1380px]">
       <InstanceSectionNav vmId={vmId} />
 
       <header className="mb-5">
         <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">AUTO PREVIEW</span>
         <h1 className="my-[5px] text-[22px] font-extrabold tracking-tight">API 문서로 테스트 페이지 자동 생성</h1>
         <p className="m-0 text-sm text-muted">
-          OpenAPI 문서를 분석해 로그인·목록·상세·생성·삭제 화면을 자동으로 만들고 이 VM에 배포합니다.
+          OpenAPI URL이나 파일과 서비스 문맥을 분석해 실제 사용자 시나리오를 만들고 이 VM에 배포합니다.
         </p>
       </header>
 
       {/* 1단계 */}
       {step === 1 && (
-        <section className="rounded-panel border border-line bg-panel p-5">
-          <Field label="API Docs URL" htmlFor="preview-docs-url">
+        <section className="max-w-[900px] rounded-panel border border-line bg-panel p-5">
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-bold text-muted">OpenAPI 입력 방식</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {([
+                ["URL", "문서 URL", "서버에서 api-docs JSON/YAML을 가져옵니다."],
+                ["FILE", "파일 업로드", "로컬의 원본 JSON/YAML 파일을 직접 분석합니다."],
+              ] as const).map(([value, title, description]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setApiDocumentSource(value)}
+                  className={`rounded-[12px] border p-3 text-left transition ${
+                    apiDocumentSource === value
+                      ? "border-brand bg-brand/[0.07]"
+                      : "border-line-strong bg-white/[0.02] hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <span className="block text-sm font-extrabold text-foreground">{title}</span>
+                  <span className="mt-1 block text-[11px] leading-4 text-muted">{description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {apiDocumentSource === "URL" ? (
+            <Field label="API Docs URL" htmlFor="preview-docs-url">
+              <Input
+                id="preview-docs-url"
+                value={apiDocsUrl}
+                onChange={(e) => setApiDocsUrl(e.target.value)}
+                placeholder="https://api.example.com/v3/api-docs"
+                required
+              />
+            </Field>
+          ) : (
+            <div className="mb-3.5">
+              <p className="mb-[7px] text-xs font-bold text-muted">OpenAPI JSON/YAML 파일</p>
+              <input
+                ref={apiDocsFileRef}
+                type="file"
+                accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
+                className="hidden"
+                onChange={handleApiDocumentFile}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (apiDocsFileRef.current) {
+                    apiDocsFileRef.current.value = "";
+                    apiDocsFileRef.current.click();
+                  }
+                }}
+                className="flex min-h-[74px] w-full items-center justify-between gap-3 rounded-[12px] border border-dashed border-line-strong bg-white/[0.02] px-4 text-left hover:border-brand/50 hover:bg-brand/[0.03]"
+              >
+                <span>
+                  <span className="block text-sm font-extrabold text-foreground">
+                    {apiDocsFileName || "파일을 선택해 주세요"}
+                  </span>
+                  <span className="mt-1 block text-[11px] text-muted">
+                    JSON 또는 YAML · 최대 5MB · 원문은 저장하지 않습니다.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-[8px] border border-line-strong px-3 py-2 text-xs font-bold text-muted">
+                  찾아보기
+                </span>
+              </button>
+            </div>
+          )}
+          <Field label="서비스 문서·소개 페이지 URL (선택)" htmlFor="preview-documentation-page" className="mt-4">
             <Input
-              id="preview-docs-url"
-              value={apiDocsUrl}
-              onChange={(e) => setApiDocsUrl(e.target.value)}
-              placeholder="https://api.example.com/v3/api-docs"
-              required
+              id="preview-documentation-page"
+              value={documentationPageUrl}
+              onChange={(e) => setDocumentationPageUrl(e.target.value)}
+              placeholder="https://docs.example.com 또는 Swagger UI / Redoc 페이지"
             />
+            <span className="text-[11px] font-normal leading-4 text-muted-soft">
+              페이지의 제목과 설명만 안전하게 추출해 서비스 목적과 용어를 이해하는 데 사용합니다.
+            </span>
           </Field>
           <Field label="서비스 설명 (선택)" htmlFor="preview-description" className="mt-4">
             <Textarea
@@ -680,16 +873,156 @@ export default function PreviewWizardPage() {
 
           {analysisError && <p className="mt-3 text-xs text-danger">{analysisError}</p>}
 
-          <Button variant="primary" onClick={handleAnalyze} disabled={analyzing || !apiDocsUrl.trim()} className="mt-5">
-            {analyzing ? "분석 중..." : "분석"}
+          <Button
+            variant="primary"
+            onClick={handleAnalyze}
+            disabled={analyzing || !hasApiDocumentSource()}
+            className="mt-5 min-w-28"
+          >
+            {analyzing && <Spinner className="h-4 w-4" />}
+            {analyzing ? "분석 중" : "분석하기"}
           </Button>
+          {analyzing && (
+            <div
+              className="mt-5 flex items-center gap-4 rounded-[14px] border border-brand/25 bg-brand/[0.06] p-4"
+              role="status"
+              aria-live="polite"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/gamjabox-loader.svg" alt="" width={52} height={52} className="shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-foreground">OpenAPI 문서를 분석하고 있어요</p>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  API 구조를 읽고 사용자 시나리오, 페이지 구성, 서비스 분위기를 순서대로 만들고 있습니다.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-bold text-brand-strong">
+                  <span className="rounded-full bg-brand/10 px-2 py-1">API 인식</span>
+                  <span className="rounded-full bg-brand/10 px-2 py-1">시나리오 구성</span>
+                  <span className="rounded-full bg-brand/10 px-2 py-1">서비스 화면 조립</span>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
       {/* 2단계 */}
       {step === 2 && result && (
         <div className="space-y-4">
-          <section className="rounded-panel border border-line bg-panel p-5">
+          {analysisPanelOpen && (
+            <button
+              type="button"
+              className="fixed inset-0 z-[220] bg-black/45 backdrop-blur-[2px]"
+              onClick={() => setAnalysisPanelOpen(false)}
+              aria-label="인식된 API 패널 닫기"
+            />
+          )}
+          <aside
+            className={`fixed inset-y-0 right-0 z-[230] flex w-[min(94vw,460px)] flex-col border-l border-line bg-panel shadow-[-24px_0_70px_rgba(0,0,0,.38)] transition-transform duration-300 ease-out ${
+              analysisPanelOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
+            }`}
+            aria-hidden={!analysisPanelOpen}
+          >
+            <header className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-4">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-brand-strong">Analysis</p>
+                <h2 className="mt-1 text-base font-extrabold">인식된 API와 구성</h2>
+                <p className="mt-1 text-xs text-muted">
+                  {result.capabilities.length}개 API · {result.pages.length}개 화면 · {result.scenarios.length}개 시나리오
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnalysisPanelOpen(false)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] border border-line text-lg text-muted hover:bg-white/[0.05] hover:text-foreground"
+                aria-label="닫기"
+              >
+                ×
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            <section className="mb-4 rounded-[14px] border border-brand/25 bg-brand/[0.045] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-extrabold tracking-[.12em] text-brand-strong">SCENARIO COMPOSER</p>
+                  <h3 className="mt-1 text-sm font-extrabold">원하는 사용자 흐름으로 다시 만들기</h3>
+                </div>
+                <span className="rounded-full bg-brand/10 px-2 py-1 text-[10px] font-bold text-brand-strong">
+                  {selectedResourceNames.size}개 카테고리
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] leading-5 text-muted">
+                실제 사용자가 무엇을 하고 어떤 실패를 복구해야 하는지 적고, 사용할 API 영역을 선택하세요.
+                서비스 화면·페이지·시나리오가 함께 다시 구성됩니다.
+              </p>
+              <Textarea
+                value={scenarioIntent}
+                onChange={(event) => setScenarioIntent(event.target.value.slice(0, 4000))}
+                rows={4}
+                className="mt-3 min-h-[112px] bg-background/70 text-xs"
+                placeholder="예: 신규 사용자가 가입하고 상품을 검색해 장바구니에 담습니다. 결제가 실패하면 결제 수단을 변경해 다시 시도하고 주문 완료 화면을 확인합니다."
+              />
+              <div className="mt-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold text-muted">인식된 API 카테고리</p>
+                  <button
+                    type="button"
+                    className="text-[10px] font-bold text-brand-strong hover:underline"
+                    onClick={() => setSelectedResourceNames(new Set(result.availableCapabilities.map((capability) => capability.resourceName)))}
+                  >
+                    전체 선택
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from(new Set(result.availableCapabilities.map((capability) => capability.resourceName)))
+                    .sort()
+                    .map((resourceName) => {
+                      const resourceCapabilities = result.availableCapabilities.filter(
+                        (capability) => capability.resourceName === resourceName
+                      );
+                      const selected = selectedResourceNames.has(resourceName);
+                      const hasDangerous = resourceCapabilities.some(
+                        (capability) => capability.risk === "DESTRUCTIVE" || capability.risk === "IRREVERSIBLE"
+                      );
+                      return (
+                        <button
+                          key={resourceName}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => toggleResource(resourceName)}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-bold transition ${
+                            selected
+                              ? "border-brand/50 bg-brand/15 text-brand-strong"
+                              : "border-line-strong bg-background/60 text-muted hover:bg-white/[0.05]"
+                          }`}
+                        >
+                          {selected ? "✓" : "+"} {resourceName}
+                          <span className="text-[9px] opacity-70">{resourceCapabilities.length}</span>
+                          {hasDangerous && <span className="text-[9px] text-[#e8b657]">주의</span>}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+              {regenerationError && (
+                <p className="mt-3 rounded-[8px] border border-danger-soft bg-danger/10 p-2 text-[11px] text-danger">
+                  {regenerationError}
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="primary"
+                className="mt-4 w-full"
+                disabled={regenerating || !scenarioIntent.trim() || selectedResourceNames.size === 0}
+                onClick={handleRegenerateFromIntent}
+              >
+                {regenerating && <Spinner className="h-4 w-4" />}
+                {regenerating ? "서비스 흐름 재구성 중" : "선택한 API로 서비스 다시 만들기"}
+              </Button>
+              {selectedResourceNames.size === 0 && (
+                <p className="mt-1.5 text-[10px] text-[#e8b657]">최소 한 개의 API 카테고리를 선택해야 합니다.</p>
+              )}
+            </section>
             <div
               className={`mb-4 rounded-md border p-3 text-xs ${
                 result.status === "READY"
@@ -813,6 +1146,34 @@ export default function PreviewWizardPage() {
                   </span>
                 ))}
               </div>
+              {result.serviceContextSources.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5 border-t border-line-strong pt-3">
+                  {result.serviceContextSources.map((source) => (
+                    <span
+                      key={source}
+                      className="rounded-full border border-line-strong bg-white/[0.03] px-2 py-1 text-[9px] font-bold text-muted"
+                    >
+                      {source === "USER_DESCRIPTION"
+                        ? "직접 입력"
+                        : source === "SCENARIO_INTENT"
+                          ? "시나리오 의도"
+                          : source === "DOCUMENTATION_PAGE"
+                            ? "서비스 문서"
+                            : "OpenAPI 설명"}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {result.resolvedServiceDescription && (
+                <details className="mt-3 rounded-[9px] border border-line-strong bg-white/[0.02] text-[11px]">
+                  <summary className="cursor-pointer px-3 py-2 font-bold text-muted">
+                    분석에 사용된 서비스 문맥 보기
+                  </summary>
+                  <p className="max-h-52 overflow-y-auto whitespace-pre-wrap border-t border-line-strong px-3 py-2 leading-5 text-muted-soft">
+                    {result.resolvedServiceDescription}
+                  </p>
+                </details>
+              )}
               {result.serviceUnderstanding.primaryGoals.length > 0 && (
                 <ul className="mt-3 space-y-1 text-xs text-muted">
                   {result.serviceUnderstanding.primaryGoals.slice(0, 5).map((goal) => (
@@ -891,10 +1252,11 @@ export default function PreviewWizardPage() {
                   {reviewFindings.length === 0 ? (
                     <p className="text-muted-soft">특이사항이 없습니다.</p>
                   ) : (
-                    reviewFindings.map((finding, i) => (
+                    <>
+                      {reviewFindings.map((finding, i) => (
                       <div
                         key={i}
-                        className="border-l-2 pl-2"
+                        className="border-l-2 py-1 pl-2"
                         style={{
                           borderColor:
                             finding.severity === "CRITICAL" ? "#ff6b6b" : finding.severity === "WARNING" ? "#e8b657" : "#9aa39a",
@@ -904,24 +1266,55 @@ export default function PreviewWizardPage() {
                           [{finding.severity}] {finding.message}
                         </p>
                         {finding.remediation && <p className="mt-0.5 text-muted">→ {finding.remediation}</p>}
+                        <button
+                          type="button"
+                          className="mt-2 text-[11px] font-extrabold text-brand-strong hover:underline disabled:opacity-50"
+                          disabled={proposing}
+                          onClick={() => void handleProposePlan(reviewContextOf([finding]))}
+                        >
+                          이 피드백으로 수정안 만들기 →
+                        </button>
                       </div>
-                    ))
+                      ))}
+                      <Button
+                        type="button"
+                        size="small"
+                        onClick={() => void handleProposePlan(reviewContextOf(reviewFindings))}
+                        disabled={proposing}
+                      >
+                        {proposing ? "수정안 생성 중..." : "검수 결과 전체로 수정안 만들기"}
+                      </Button>
+                    </>
                   )}
                 </div>
               )}
             </div>
 
-            <div className="mt-3">
-              <Button type="button" onClick={handleProposePlan} disabled={proposing || !serviceDescription.trim()}>
+            <div className="mt-3" ref={proposalRef}>
+              <Button
+                type="button"
+                onClick={() => void handleProposePlan()}
+                disabled={proposing || !effectiveServiceDescription()}
+              >
                 {proposing ? "AI가 제안 생성 중..." : "AI로 서비스에 맞게 페이지 재구성 제안받기"}
               </Button>
-              {!serviceDescription.trim() && (
+              {!effectiveServiceDescription() && (
                 <p className="mt-1 text-[11px] text-muted-soft">서비스 설명을 입력해야 사용할 수 있습니다.</p>
               )}
               {proposedOperations && (
                 <div className="mt-3 space-y-2 rounded-md border border-line bg-white/[0.03] p-3 text-xs">
+                  <div className="rounded-md border border-brand/20 bg-brand/[0.06] p-2 text-muted">
+                    적용할 항목만 선택하세요. 선택한 변경은 미리보기와 최종 배포 구성에 즉시 반영됩니다.
+                  </div>
+                  {planApplyErrors && planApplyErrors.length > 0 && (
+                    <div className="rounded-md border border-danger-soft bg-danger/10 p-2 text-danger">
+                      {planApplyErrors.map((error, index) => (
+                        <p key={index}>· {error}</p>
+                      ))}
+                    </div>
+                  )}
                   {proposedOperations.length === 0 ? (
-                    <p className="text-muted-soft">AI가 개선할 점을 찾지 못했습니다.</p>
+                    !planApplyErrors?.length && <p className="text-muted-soft">AI가 개선할 점을 찾지 못했습니다.</p>
                   ) : (
                     <>
                       {proposedOperations.map((op) => (
@@ -945,13 +1338,6 @@ export default function PreviewWizardPage() {
                           </span>
                         </label>
                       ))}
-                      {planApplyErrors && planApplyErrors.length > 0 && (
-                        <div className="rounded-md border border-danger-soft bg-danger/10 p-2 text-danger">
-                          {planApplyErrors.map((e, i) => (
-                            <p key={i}>· {e}</p>
-                          ))}
-                        </div>
-                      )}
                       <Button
                         type="button"
                         variant="primary"
@@ -965,14 +1351,38 @@ export default function PreviewWizardPage() {
                 </div>
               )}
             </div>
-          </section>
+            </div>
+          </aside>
 
           <section className="rounded-panel border border-line bg-panel p-5">
-            <h2 className="mb-1 text-sm font-extrabold">실제 API로 미리 확인</h2>
-            <p className="mb-3 text-xs text-muted">
-              배포 전에 분석된 API에 직접 연결해 화면이 의도대로 동작하는지 확인할 수 있습니다. 대상 API가 이 브라우저
-              origin의 CORS를 허용하지 않으면 요청이 막힐 수 있습니다.
-            </p>
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="mb-1 text-sm font-extrabold">실제 API로 미리 확인</h2>
+                <p className="max-w-3xl text-xs text-muted">
+                  배포 전에 분석된 API에 직접 연결해 화면이 의도대로 동작하는지 확인할 수 있습니다. 대상 API가 이 브라우저
+                  origin의 CORS를 허용하지 않으면 요청이 막힐 수 있습니다.
+                </p>
+              </div>
+              <Button type="button" size="small" onClick={() => setAnalysisPanelOpen(true)}>
+                인식된 API
+                <span className="rounded-full bg-white/[0.07] px-1.5 py-0.5 text-[9px]">
+                  {result.capabilities.length}
+                </span>
+              </Button>
+            </div>
+            {planAppliedNotice && (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-[12px] border border-brand/25 bg-brand/[0.06] px-4 py-3 text-xs text-brand-strong">
+                <span>✓ {planAppliedNotice}</span>
+                <button
+                  type="button"
+                  className="shrink-0 text-base text-muted hover:text-foreground"
+                  onClick={() => setPlanAppliedNotice(null)}
+                  aria-label="알림 닫기"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <Field label="API 서버 주소" htmlFor="preview-api-base-url" className="mb-3">
               <Input
                 id="preview-api-base-url"
@@ -1114,7 +1524,7 @@ export default function PreviewWizardPage() {
 
       {/* 3단계 */}
       {step === 3 && result && (
-        <section className="rounded-panel border border-line bg-panel p-5">
+        <section className="max-w-[900px] rounded-panel border border-line bg-panel p-5">
           <Field label="배포 대상 이름" htmlFor="preview-target-name">
             <Input
               id="preview-target-name"

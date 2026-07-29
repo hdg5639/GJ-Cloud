@@ -632,6 +632,7 @@ export interface PreviewAnalysisResult {
   status: GenerationStatus;
   apiServerUrls: string[];
   capabilities: PreviewCapability[];
+  availableCapabilities: PreviewCapability[];
   pages: PreviewPageDraft[];
   pagePlans: PreviewPagePlan[];
   // RuleBasedFlowGenerator가 pagePlans로부터 만든 것 중 검증을 통과한 항목만 담긴다(실패분은
@@ -649,6 +650,11 @@ export interface PreviewAnalysisResult {
   previewMode: PreviewMode;
   scenarioPlanningSource: "LLM" | "RULE_BASED" | "OPERATION_ONLY";
   scenarioPromptVersion: string | null;
+  activeCapabilityIds: string[];
+  resolvedServiceDescription: string;
+  serviceContextSources: Array<
+    "USER_DESCRIPTION" | "SCENARIO_INTENT" | "DOCUMENTATION_PAGE" | "OPENAPI_INFO"
+  >;
 }
 
 // Scenario-first Auto Preview Runtime v3 — Backend ScenarioModels의 TypeScript mirror.

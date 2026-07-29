@@ -12,7 +12,7 @@ import java.util.List;
 // 추천한다. serviceDescription이 추천 근거이므로 함께 받는다. pagePlans가 있으면 그것을, 없으면 pages를
 // 쓰는 규칙은 /blocks와 동일하다.
 public record PreviewPartSuggestRequest(
-        @Size(max = 2000) String serviceDescription,
+        @Size(max = 12000) String serviceDescription,
         PreviewAnalyzeRequest.Purpose purpose,
         @NotEmpty List<Capability> capabilities,
         @NotEmpty List<PageDraft> pages,

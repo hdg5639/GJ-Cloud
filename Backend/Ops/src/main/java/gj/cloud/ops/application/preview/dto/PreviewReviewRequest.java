@@ -11,7 +11,7 @@ import java.util.List;
 // 분석 결과를 세션/DB로 들고 있지 않고 매번 클라이언트가 최신 상태를 다시 보내는 방식
 // (DeploymentController의 ai-spec/review가 DeploymentSpec을 그대로 되돌려받는 것과 동일한 패턴).
 public record PreviewReviewRequest(
-        @Size(max = 2000) String serviceDescription,
+        @Size(max = 12000) String serviceDescription,
         @NotEmpty List<Capability> capabilities,
         @NotEmpty List<PageDraft> pages
 ) {

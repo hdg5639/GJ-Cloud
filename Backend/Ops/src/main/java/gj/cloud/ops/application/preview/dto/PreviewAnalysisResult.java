@@ -26,6 +26,8 @@ public record PreviewAnalysisResult(
         // 사용자가 그대로 쓸지 다른 주소로 바꿀지 확인할 수 있게 첫 번째 값만 넘기지 않고 전체를 넘긴다.
         List<String> apiServerUrls,
         List<Capability> capabilities,
+        // 재생성 태그를 다시 넓힐 수 있도록 문서에서 인식한 전체 목록을 별도로 유지한다.
+        List<Capability> availableCapabilities,
         List<PageDraft> pages,
         // 실행 가능한 페이지 계획의 정본. PageDraft는 FALLBACK_CRUD 및 구버전 요청 호환용으로 유지한다.
         List<PagePlan> pagePlans,
@@ -49,6 +51,10 @@ public record PreviewAnalysisResult(
         List<ScenarioDiagnostic> scenarioDiagnostics,
         PreviewMode previewMode,
         PlanningSource scenarioPlanningSource,
-        String scenarioPromptVersion
+        String scenarioPromptVersion,
+        // 분석에 사용된 전체 capability는 태그 재선택을 위해 유지하고, 실제 생성 범위는 별도로 노출한다.
+        List<String> activeCapabilityIds,
+        String resolvedServiceDescription,
+        List<String> serviceContextSources
 ) {
 }

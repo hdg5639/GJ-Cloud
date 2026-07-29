@@ -87,9 +87,9 @@ const STATUS_LABEL: Record<string, string> = {
   DELETED: "삭제됨",
 };
 
-// 툴바는 항상 같은 구성으로 고정한다(뷰포트 폭에 따라 실측 후 접는 방식은 카테고리 그룹으로 대체) —
-// 전원/콘솔/파일/삭제만 상시 노출하고 나머지는 전부 "더보기" 안에 카테고리별로 묶어서 보여준다.
-const TOOLBAR_MORE_GROUPS: {
+// 전원/콘솔/파일/삭제는 즉시 실행 영역으로 유지하고 나머지는 용도별 드롭다운으로 분리한다.
+// 하나의 "더보기"에 모든 기능이 몰리지 않으면서 모바일에서는 자연스럽게 여러 줄로 감긴다.
+const TOOLBAR_GROUPS: {
   label: string;
   items: {
     key: string;
@@ -200,16 +200,16 @@ export default function InstanceDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showPowerMenu, setShowPowerMenu] = useState(false);
   const powerMenuRef = useRef<HTMLDivElement>(null);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const [openToolbarGroup, setOpenToolbarGroup] = useState<string | null>(null);
+  const toolbarGroupsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (powerMenuRef.current && !powerMenuRef.current.contains(e.target as Node)) {
         setShowPowerMenu(false);
       }
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setShowMoreMenu(false);
+      if (toolbarGroupsRef.current && !toolbarGroupsRef.current.contains(e.target as Node)) {
+        setOpenToolbarGroup(null);
       }
     }
     document.addEventListener("mousedown", onClickOutside);
@@ -420,9 +420,9 @@ export default function InstanceDetailPage() {
       <Breadcrumb items={[{ label: backLabel, onClick: () => router.push(backPath) }, { label: vm.name }]} />
 
       <div className="mb-5">
-        <div className="relative flex w-full items-center rounded-panel border border-line bg-panel">
+        <div className="relative flex w-full flex-col rounded-panel border border-line bg-panel lg:flex-row lg:items-center">
           {/* 왼쪽: 이름 · 상태 · 새로고침 */}
-          <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
+          <div className="flex h-10 w-full shrink-0 items-center gap-2.5 pl-4 pr-3.5 lg:w-auto">
             <h1 className="max-w-[200px] truncate text-[15px] font-bold" title={vm.name}>{vm.name}</h1>
             <StatusBadge tone={isOnlineStatus(vm.status) ? "ok" : "off"} className="whitespace-nowrap">
               {STATUS_LABEL[vm.status] ?? vm.status}
@@ -438,12 +438,15 @@ export default function InstanceDetailPage() {
             </button>
           </div>
 
-          {/* 오른쪽: 전체 액션 영역 (margin-left: auto 로 우측 정렬) */}
-          <div className="ml-auto flex items-center h-10 shrink-0">
+          {/* 오른쪽: 좁은 화면에서는 여러 줄로 감기고, 넓은 화면에서는 우측 한 줄 정렬 */}
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-end border-t border-line lg:ml-auto lg:h-10 lg:w-auto lg:flex-nowrap lg:border-t-0">
             {/* 전원 */}
             <div className="relative" ref={powerMenuRef}>
               <button
-                onClick={() => setShowPowerMenu((v) => !v)}
+                onClick={() => {
+                  setOpenToolbarGroup(null);
+                  setShowPowerMenu((v) => !v);
+                }}
                 disabled={isTransitioning || vm.status === "DELETED"}
                 className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] disabled:opacity-40 disabled:hover:bg-transparent transition-colors ${
                   showPowerMenu ? "bg-white/[0.06]" : ""
@@ -498,58 +501,69 @@ export default function InstanceDetailPage() {
               파일
             </button>
 
-            <div className="w-px h-5 bg-line shrink-0" />
+            <div className="hidden h-5 w-px shrink-0 bg-line lg:block" />
 
-            {/* 더보기 — Docker/배포/Auto Preview/백업/성능/스펙 변경을 카테고리 박스로 묶어서 노출 */}
-            <div className="relative" ref={moreMenuRef}>
-              <button
-                onClick={() => setShowMoreMenu((v) => !v)}
-                className={`flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-muted hover:bg-white/[0.04] transition-colors ${
-                  showMoreMenu ? "bg-white/[0.06]" : ""
-                }`}
-              >
-                더보기
-                <svg className={`w-3 h-3 text-muted-soft transition-transform shrink-0 ${showMoreMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {showMoreMenu && (
-                <div className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-md border border-line bg-panel py-1.5 shadow-md">
-                  {TOOLBAR_MORE_GROUPS.map((group, groupIndex) => (
-                    <div key={group.label}>
-                      {groupIndex > 0 && <div className="my-1.5 h-px bg-line" />}
-                      <p className="px-4 pb-1 pt-1 text-[10px] font-extrabold uppercase tracking-[.08em] text-muted-soft">
-                        {group.label}
-                      </p>
-                      {group.items.map((item) => {
-                        const disabled = item.requiresRunning && !isRunning;
-                        return (
-                          <button
-                            key={item.key}
-                            onClick={() => {
-                              setShowMoreMenu(false);
-                              if (item.path) router.push(`/instances/${id}/${item.path}`);
-                              else setShowUpgradeModal(true);
-                            }}
-                            disabled={disabled}
-                            title={disabled ? "VM이 실행 중일 때만 이용할 수 있어요" : undefined}
-                            className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-foreground transition-colors hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-transparent whitespace-nowrap"
-                          >
-                            <span className="flex h-[15px] w-[15px] shrink-0 items-center justify-center text-muted-soft">
-                              {item.icon}
-                            </span>
-                            {item.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              )}
+            {/* 운영·모니터링·설정을 각각 독립된 드롭다운으로 노출 */}
+            <div className="contents" ref={toolbarGroupsRef}>
+              {TOOLBAR_GROUPS.map((group, groupIndex) => {
+                const open = openToolbarGroup === group.label;
+                return (
+                  <div className="relative" key={group.label}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPowerMenu(false);
+                        setOpenToolbarGroup(open ? null : group.label);
+                      }}
+                      className={`flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm text-muted transition-colors hover:bg-white/[0.04] sm:px-3.5 ${
+                        open ? "bg-white/[0.06] text-foreground" : ""
+                      }`}
+                      aria-expanded={open}
+                    >
+                      {group.label}
+                      <svg className={`h-3 w-3 shrink-0 text-muted-soft transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {open && (
+                      <div
+                        className={`absolute top-full z-30 mt-1 w-52 overflow-hidden rounded-md border border-line bg-panel py-1.5 shadow-xl ${
+                          groupIndex === TOOLBAR_GROUPS.length - 1 ? "right-0" : "left-0"
+                        }`}
+                      >
+                        <p className="px-4 pb-1 pt-1 text-[10px] font-extrabold uppercase tracking-[.08em] text-muted-soft">
+                          {group.label}
+                        </p>
+                        {group.items.map((item) => {
+                          const disabled = item.requiresRunning && !isRunning;
+                          return (
+                            <button
+                              key={item.key}
+                              onClick={() => {
+                                setOpenToolbarGroup(null);
+                                if (item.path) router.push(`/instances/${id}/${item.path}`);
+                                else setShowUpgradeModal(true);
+                              }}
+                              disabled={disabled}
+                              title={disabled ? "VM이 실행 중일 때만 이용할 수 있어요" : undefined}
+                              className="flex w-full items-center gap-2.5 whitespace-nowrap px-4 py-2 text-left text-sm text-foreground transition-colors hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-transparent"
+                            >
+                              <span className="flex h-[15px] w-[15px] shrink-0 items-center justify-center text-muted-soft">
+                                {item.icon}
+                              </span>
+                              {item.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* 삭제 */}
-            <div className="w-px h-5 bg-line shrink-0" />
+            <div className="hidden h-5 w-px shrink-0 bg-line lg:block" />
             <button
               onClick={() => setConfirmDelete(true)}
               className="flex items-center gap-1.5 text-sm px-3.5 h-10 whitespace-nowrap shrink-0 text-danger hover:bg-danger/10 rounded-r-panel transition-colors"

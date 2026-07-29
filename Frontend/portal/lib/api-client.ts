@@ -682,7 +682,8 @@ export const api = {
         vmId: string,
         deploymentId: string,
         onEvent: (event: DeploymentEventPayload) => void,
-        onError?: (err: Error) => void
+        onError?: (err: Error) => void,
+        onConnected?: () => void
       ): (() => void) => {
         let stopped = false;
         let lastSequence = 0;
@@ -703,6 +704,7 @@ export const api = {
               }
             );
             if (!res.ok || !res.body) throw new Error("배포 이벤트 스트림 연결에 실패했습니다");
+            onConnected?.();
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -781,8 +783,12 @@ export const api = {
       analyze: (
         accessToken: string,
         body: {
-          apiDocsUrl: string;
+          apiDocsUrl?: string;
+          apiDocsContent?: string;
+          documentationPageUrl?: string;
           serviceDescription?: string;
+          scenarioIntent?: string;
+          selectedCapabilityIds?: string[];
           purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
           previewMode?: "SCENARIO_PREVIEW" | "INFERRED_SCENARIO_PREVIEW" | "OPERATION_PREVIEW";
         }

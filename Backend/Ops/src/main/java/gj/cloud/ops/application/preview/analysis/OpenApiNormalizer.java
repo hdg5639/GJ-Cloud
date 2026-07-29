@@ -63,6 +63,25 @@ public class OpenApiNormalizer {
     public OpenApiEvidence normalize(String apiDocsUrl) {
         securityValidator.validate(apiDocsUrl);
         byte[] body = fetch(apiDocsUrl);
+        return normalizeBytes(body);
+    }
+
+    /**
+     * 사용자가 로컬에서 업로드한 OpenAPI JSON/YAML 원문을 URL fetch와 동일한 파서로 정규화한다.
+     * 원문은 저장하거나 로그에 남기지 않는다.
+     */
+    public OpenApiEvidence normalizeContent(String apiDocsContent) {
+        if (apiDocsContent == null || apiDocsContent.isBlank()) {
+            throw new OpsException(OpsErrorCode.API_DOCS_PARSE_FAILED);
+        }
+        byte[] body = apiDocsContent.getBytes(StandardCharsets.UTF_8);
+        if (body.length > maxDocumentBytes) {
+            throw new OpsException(OpsErrorCode.API_DOCS_TOO_LARGE);
+        }
+        return normalizeBytes(body);
+    }
+
+    private OpenApiEvidence normalizeBytes(byte[] body) {
         JsonNode root = parse(body);
         return extract(root);
     }
@@ -142,6 +161,7 @@ public class OpenApiNormalizer {
         }
 
         String title = root.path("info").path("title").asText(null);
+        String description = root.path("info").path("description").asText(null);
         String version = root.path("info").path("version").asText(null);
 
         List<String> serverUrls = new ArrayList<>();
@@ -181,7 +201,7 @@ public class OpenApiNormalizer {
             }
         }
 
-        return new OpenApiEvidence(title, version, serverUrls, securitySchemes, operations, skipped);
+        return new OpenApiEvidence(title, description, version, serverUrls, securitySchemes, operations, skipped);
     }
 
     private List<SecuritySchemeEvidence> extractSecuritySchemes(JsonNode root) {
