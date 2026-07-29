@@ -190,11 +190,17 @@ GitHub App으로 저장소를 연결하고 자동 배포를 켜면 지정 브랜
 ```
 OpenAPI 문서 URL 입력
     │
-    ▼  분석 (핵심 구조는 AI 미사용 — 결정론적 규칙 기반)
+    ▼  결정적 정규화
     │
-    서비스 유형·Actor·핵심 Entity·사용자 Goal 이해
-    → 목록/상세/생성/수정/삭제/명령/로그인 Capability 추론
+    목록/상세/생성/수정/삭제/명령/로그인 Capability 추론
     → 검색 파라미터·페이지네이션·인증 방식(Bearer/API Key)·목록 응답 구조 감지
+    │
+    ▼  AI 의미 계획 (실패·저신뢰 시 규칙 기반 fallback)
+    │
+    정규화된 Capability·operation 설명만 입력
+    → 서비스 유형·Actor·핵심 Entity·사용자 Goal 이해
+    → 소수의 고가치 다중 API Scenario를 구조화 출력으로 제안
+    → UI ID·HTTP path·operation binding은 AI 출력 스키마에서 배제
     │
     ▼  Scenario Compiler
     │
@@ -230,6 +236,8 @@ Blueprint Parts는 collection 38종, detail 32종, dashboard 36종, modal 41종,
 Journey Engine은 화면 상호작용을 기존 API Flow 실행 계층과 분리한다. 생성은 `입력 → 실행 → 완료`, 수정은 `입력 → 영향 검토 → 실행`, 삭제는 `영향 검토 → 대상명 타이핑 확인 → 실행`을 기본으로 하며, 위험도와 작업명에 따라 확인 단계를 추가하거나 환불·재고 이동·인시던트 승격·배포 승격 같은 도메인 모달을 자동 선택한다. Journey 정의는 실행 전에 중복 ID, 잘못된 연결, 순환, 도달 불가능 단계, EXECUTE/SUCCESS 누락을 검증한다.
 
 Scenario Runtime은 Journey보다 상위 계층에서 사용자 목표 전체를 소유한다. Scenario state와 화면 로컬 상태를 분리하고, API 응답에서 추출한 `authToken`, `selectedId`, `createdId`, 상태값을 명시적 binding으로 다음 단계에 넘긴다. 검증은 같은 호출의 성공 응답만 믿지 않고 상세 재조회·목록 포함 여부·상태 terminal value 같은 후속 관찰로 판정한다. 비밀번호·토큰·Authorization 값은 Inspector에서 마스킹한다.
+
+AI는 `scenario-planner-v1` 구조화 계약으로 서비스 의미와 semantic stage만 제안한다. 제안한 capability는 실제 catalog에 존재해야 하며, 상태 변경 COMMIT은 선행 REVIEW와 후속 VERIFY/TRACK이 없으면 거절된다. 그래프·state producer/consumer·응답 extraction을 만들 수 없는 출력도 실행 전에 제거된다. 모델 호출 실패, 유효한 시나리오 부재, 낮은 신뢰도에서는 같은 요청 안에서 규칙 기반 planner로 자동 대체되고 Operation Preview도 항상 남는다. AI 감사 로그에는 모델·토큰·성공 여부만 저장하며 프롬프트와 응답 원문은 저장하지 않는다.
 
 포털 프리뷰와 배포 앱은 같은 TypeScript Runtime 소스를 사용한다. Ops 빌드가 포털의 `preview-runtime`과 UI primitive를 리소스로 포함하고, 배포 시에는 React 구현을 Java 문자열로 다시 만들지 않고 Runtime 파일을 그대로 복사한 뒤 Scenario·Blueprint·Flow·Binding JSON만 주입한다. 이 덕분에 프리뷰에서 정상인 시나리오·모달·인증·응답 파싱 동작이 배포본에서 별도로 어긋나는 이중 구현 문제를 없앴다. 배포 시점의 구성은 배포 기록에 함께 저장돼 재분석 없이 조회할 수 있다.
 

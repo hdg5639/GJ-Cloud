@@ -5,6 +5,7 @@ import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioPlan;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioStagePlan;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.StageRole;
+import gj.cloud.ops.application.preview.analysis.RiskLevel;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -87,10 +88,73 @@ public final class ScenarioValidator {
                             + binding.to() + ")");
                 }
             }
+            if (stage.executableOperation()) {
+                Set<String> boundOutputs = stage.outputBindings().stream()
+                        .map(binding -> binding.to())
+                        .collect(java.util.stream.Collectors.toSet());
+                for (String output : stage.outputs()) {
+                    if (!boundOutputs.contains(output)) {
+                        errors.add(scenario.id() + "/" + stage.id()
+                                + ": API 응답에서 추출할 수 없는 stage output(" + output + ")");
+                    }
+                }
+            }
         }
         errors.addAll(validateGraph(scenario.id(), scenario.entryStageId(), stages,
                 stage -> stage.nextStageIds()));
+        errors.addAll(validateSafety(scenario, stages));
         return errors;
+    }
+
+    private static List<String> validateSafety(
+            CompiledScenario scenario,
+            Map<String, CompiledScenarioStage> stages
+    ) {
+        List<String> errors = new ArrayList<>();
+        if (blank(scenario.entryStageId()) || !stages.containsKey(scenario.entryStageId())) return errors;
+
+        record Traversal(String stageId, boolean reviewed) {
+        }
+        ArrayDeque<Traversal> queue = new ArrayDeque<>();
+        Set<String> visited = new HashSet<>();
+        queue.add(new Traversal(scenario.entryStageId(), false));
+        while (!queue.isEmpty()) {
+            Traversal current = queue.removeFirst();
+            String visitKey = current.stageId() + ":" + current.reviewed();
+            if (!visited.add(visitKey)) continue;
+            CompiledScenarioStage stage = stages.get(current.stageId());
+            if (stage == null) continue;
+            if (stage.role() == StageRole.COMMIT && stage.risk() != null && stage.risk() != RiskLevel.SAFE) {
+                if (!current.reviewed()) {
+                    errors.add(scenario.id() + "/" + stage.id()
+                            + ": 상태 변경 COMMIT 이전에 REVIEW가 보장되지 않음");
+                }
+                if (!canReachVerification(stage.id(), stages, new HashSet<>())) {
+                    errors.add(scenario.id() + "/" + stage.id()
+                            + ": 상태 변경 COMMIT 이후 VERIFY/TRACK stage가 없음");
+                }
+            }
+            boolean reviewed = current.reviewed() || stage.role() == StageRole.REVIEW;
+            for (String next : stage.nextStageIds()) queue.addLast(new Traversal(next, reviewed));
+        }
+        return errors.stream().distinct().toList();
+    }
+
+    private static boolean canReachVerification(
+            String stageId,
+            Map<String, CompiledScenarioStage> stages,
+            Set<String> visited
+    ) {
+        if (!visited.add(stageId)) return false;
+        CompiledScenarioStage stage = stages.get(stageId);
+        if (stage == null) return false;
+        for (String nextId : stage.nextStageIds()) {
+            CompiledScenarioStage next = stages.get(nextId);
+            if (next == null) continue;
+            if (next.role() == StageRole.VERIFY || next.role() == StageRole.TRACK) return true;
+            if (canReachVerification(nextId, stages, visited)) return true;
+        }
+        return false;
     }
 
     private static List<String> validateState(ScenarioPlan plan) {

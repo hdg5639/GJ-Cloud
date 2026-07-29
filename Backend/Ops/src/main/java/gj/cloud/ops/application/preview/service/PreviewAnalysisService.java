@@ -47,7 +47,7 @@ public class PreviewAnalysisService {
     private final PreviewBlockResolver blockResolver;
     private final ScenarioGenerationService scenarioGenerationService;
 
-    public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request) {
+    public PreviewAnalysisResult analyze(PreviewAnalyzeRequest request, String requesterUserId) {
         OpenApiEvidence evidence = openApiNormalizer.normalize(request.apiDocsUrl());
         List<Capability> capabilities = capabilityExtractor.extract(evidence);
 
@@ -122,7 +122,8 @@ public class PreviewAnalysisService {
         }
 
         ScenarioGenerationResult scenarioResult = scenarioGenerationService.generate(
-                evidence, request.serviceDescription(), request.purpose(), capabilities, request.previewMode());
+                requesterUserId, evidence, request.serviceDescription(), request.purpose(),
+                capabilities, request.previewMode());
         scenarioResult.diagnostics().forEach(diagnostic -> {
             if (diagnostic.status() != gj.cloud.ops.application.preview.scenario.ScenarioModels.DiagnosticStatus.SUPPORTED) {
                 warnings.add("Scenario " + (diagnostic.scenarioId() == null ? "" : diagnostic.scenarioId() + " ")
@@ -134,6 +135,7 @@ public class PreviewAnalysisService {
                 status, evidence.serverUrls(), capabilities, pages, pagePlans, flowResult.result().flows(),
                 flowResult.result().bindings(), unresolved, warnings, evidenceRefs, authStrategy, generationMode,
                 scenarioResult.serviceUnderstanding(), scenarioResult.scenarios(),
-                scenarioResult.diagnostics(), scenarioResult.previewMode());
+                scenarioResult.diagnostics(), scenarioResult.previewMode(),
+                scenarioResult.planningSource(), scenarioResult.promptVersion());
     }
 }

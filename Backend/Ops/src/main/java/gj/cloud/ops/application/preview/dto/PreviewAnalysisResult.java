@@ -11,6 +11,7 @@ import gj.cloud.ops.application.preview.flow.FlowBlueprint;
 import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.PlanningSource;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioDiagnostic;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.ServiceUnderstanding;
 
@@ -46,6 +47,8 @@ public record PreviewAnalysisResult(
         ServiceUnderstanding serviceUnderstanding,
         List<CompiledScenario> scenarios,
         List<ScenarioDiagnostic> scenarioDiagnostics,
-        PreviewMode previewMode
+        PreviewMode previewMode,
+        PlanningSource scenarioPlanningSource,
+        String scenarioPromptVersion
 ) {
 }

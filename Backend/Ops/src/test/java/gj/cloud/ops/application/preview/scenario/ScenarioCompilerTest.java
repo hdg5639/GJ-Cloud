@@ -100,6 +100,56 @@ class ScenarioCompilerTest {
                 diagnostic.message().contains("선언되지 않은 scenario state binding(tenantId)"));
     }
 
+    @Test
+    void rejectsStateChangingCommitWithoutReviewAndFollowUpVerification() {
+        Capability create = capability(
+                "projects.create", "projects", CapabilityType.CREATE, "createProject",
+                "/projects", "POST", List.of("name"), CapabilityKind.MUTATION);
+        ScenarioPlan unsafe = new ScenarioPlan(
+                "unsafe-create", "Unsafe create", "developer", "Safety gate", List.of(),
+                List.of(
+                        new ScenarioStagePlan("prepare", StageRole.PREPARE, "prepare", null,
+                                true, List.of(), List.of("name"), List.of("commit"), null),
+                        new ScenarioStagePlan("commit", StageRole.COMMIT, "commit", create.id(),
+                                true, List.of("name"), List.of(), List.of("complete"), null),
+                        new ScenarioStagePlan("complete", StageRole.COMPLETE, "done", null,
+                                true, List.of(), List.of(), List.of(), null)
+                ),
+                List.of("name"), 0.8, List.of()
+        );
+
+        ScenarioCompiler.CompilationResult result = compiler.compile(List.of(unsafe), List.of(create));
+
+        assertThat(result.scenarios().get(0).status()).isEqualTo(CompilationStatus.UNSUPPORTED);
+        assertThat(result.diagnostics())
+                .anyMatch(diagnostic -> diagnostic.message().contains("COMMIT 이전에 REVIEW"))
+                .anyMatch(diagnostic -> diagnostic.message().contains("VERIFY/TRACK stage가 없음"));
+    }
+
+    @Test
+    void rejectsAiStyleOutputNameThatRuntimeCannotExtract() {
+        Capability list = capability(
+                "projects.list", "projects", CapabilityType.LIST, "listProjects",
+                "/projects", "GET", List.of(), CapabilityKind.QUERY);
+        ScenarioPlan invalidOutput = new ScenarioPlan(
+                "invalid-output", "Invalid output", "developer", "Extraction gate", List.of(),
+                List.of(
+                        new ScenarioStagePlan("discover", StageRole.DISCOVER, "discover", list.id(),
+                                true, List.of(), List.of("projectRows"), List.of("complete"),
+                                ScenarioModels.VerificationType.RESPONSE_SCHEMA_VALID),
+                        new ScenarioStagePlan("complete", StageRole.COMPLETE, "done", null,
+                                true, List.of(), List.of(), List.of(), null)
+                ),
+                List.of("projectRows"), 0.8, List.of()
+        );
+
+        ScenarioCompiler.CompilationResult result = compiler.compile(List.of(invalidOutput), List.of(list));
+
+        assertThat(result.scenarios().get(0).status()).isEqualTo(CompilationStatus.UNSUPPORTED);
+        assertThat(result.diagnostics()).anyMatch(diagnostic ->
+                diagnostic.message().contains("추출할 수 없는 stage output(projectRows)"));
+    }
+
     private OpenApiEvidence evidence() {
         return new OpenApiEvidence("Project API", "1", List.of("https://api.example.com"),
                 List.of(), List.of(), 0);

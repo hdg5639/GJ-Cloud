@@ -53,10 +53,13 @@ public class PreviewController {
     private final AiPartAdvisor aiPartAdvisor;
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
 
-    @Operation(summary = "OpenAPI 문서 분석", description = "OpenAPI 3.x 문서를 결정론적으로 분석해 capability와 페이지 초안을 반환합니다. 배포는 수행하지 않습니다.")
+    @Operation(summary = "OpenAPI 문서 분석", description = "OpenAPI 3.x를 결정론적으로 정규화한 뒤 AI 의미 분석과 안전한 Scenario Compiler를 거쳐 프리뷰 계획을 반환합니다. 배포는 수행하지 않습니다.")
     @PostMapping("/analyze")
-    public ApiResponse<PreviewAnalysisResult> analyze(@Valid @RequestBody PreviewAnalyzeRequest request) {
-        return ApiResponse.ok(previewAnalysisService.analyze(request));
+    public ApiResponse<PreviewAnalysisResult> analyze(
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody PreviewAnalyzeRequest request
+    ) {
+        return ApiResponse.ok(previewAnalysisService.analyze(request, principal.userId()));
     }
 
     @Operation(summary = "페이지 Blueprint Block 계산", description = "현재 PagePlan을 실제 렌더링 Block으로 컴파일합니다. pagePlans가 없는 구버전 요청은 pages를 사용합니다.")

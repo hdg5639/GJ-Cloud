@@ -647,6 +647,8 @@ export interface PreviewAnalysisResult {
   scenarios: PreviewCompiledScenario[];
   scenarioDiagnostics: PreviewScenarioDiagnostic[];
   previewMode: PreviewMode;
+  scenarioPlanningSource: "LLM" | "RULE_BASED" | "OPERATION_ONLY";
+  scenarioPromptVersion: string | null;
 }
 
 // Scenario-first Auto Preview Runtime v3 — Backend ScenarioModels의 TypeScript mirror.

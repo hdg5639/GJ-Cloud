@@ -21,6 +21,12 @@ public final class ScenarioModels {
         OPERATION_PREVIEW
     }
 
+    public enum PlanningSource {
+        LLM,
+        RULE_BASED,
+        OPERATION_ONLY
+    }
+
     public enum StageRole {
         ENTRY,
         AUTHENTICATE,
@@ -245,7 +251,9 @@ public final class ScenarioModels {
             List<ScenarioPlan> plans,
             List<CompiledScenario> scenarios,
             List<ScenarioDiagnostic> diagnostics,
-            PreviewMode previewMode
+            PreviewMode previewMode,
+            PlanningSource planningSource,
+            String promptVersion
     ) {
         public ScenarioGenerationResult {
             plans = immutable(plans);

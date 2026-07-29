@@ -710,6 +710,13 @@ export default function PreviewWizardPage() {
                     ? "일부 시나리오는 제한된 기능으로 구성되었습니다."
                     : "실행 가능한 시나리오가 없어 엔드포인트 프리뷰로 전환했습니다."}
               </p>
+              <p className="mt-1 text-muted">
+                시나리오 계획: {result.scenarioPlanningSource === "LLM"
+                  ? `AI 의미 분석${result.scenarioPromptVersion ? ` · ${result.scenarioPromptVersion}` : ""}`
+                  : result.scenarioPlanningSource === "RULE_BASED"
+                    ? "결정적 규칙 기반 fallback"
+                    : "사용자 지정 Operation 모드"}
+              </p>
               {result.unresolved.length > 0 && (
                 <div className="mt-2 space-y-2">
                   {result.unresolved.map((field, i) => (

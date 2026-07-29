@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS ai_preview_generation_log (
     created_at          TIMESTAMP    NOT NULL DEFAULT now(),
 
     CONSTRAINT chk_ai_preview_generation_log_kind CHECK (
-        kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION')
+        kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION', 'SCENARIO_PLANNING')
     )
 );
 
@@ -221,7 +221,7 @@ ALTER TABLE ai_preview_generation_log
     DROP CONSTRAINT IF EXISTS chk_ai_preview_generation_log_kind;
 ALTER TABLE ai_preview_generation_log
     ADD CONSTRAINT chk_ai_preview_generation_log_kind
-    CHECK (kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION'));
+    CHECK (kind IN ('GENERATION', 'REVIEW', 'PLANNING', 'PART_SUGGESTION', 'SCENARIO_PLANNING'));
 
 CREATE INDEX IF NOT EXISTS idx_ai_preview_generation_log_requester ON ai_preview_generation_log(requester_user_id);
 
