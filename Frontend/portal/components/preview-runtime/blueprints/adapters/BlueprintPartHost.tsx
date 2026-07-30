@@ -240,8 +240,22 @@ export function BlueprintOverlayPart({
     onDeploy: callback,
     onPublish: callback,
     onInvite: callback,
-    onCopy: () => undefined,
-    onValidate: async () => ({ valid: 0, invalid: 0 }),
+    // 파트가 선언하는 나머지 상호작용 핸들러 — 백에 없으면 버튼이 죽는다. 오버레이에서는 대상 작업을
+    // 실행/제출하는 것이 기본 동작이다.
+    onAction: callback,
+    onSelect: callback,
+    onNavigate: onClose,
+    onPrimaryAction: callback,
+    onCardClick: callback,
+    onEventClick: callback,
+    onAddCard: callback,
+    onAcknowledge: callback,
+    onOpen: callback,
+    onPermissionChange: callback,
+    onStepClick: () => undefined,
+    onLabel: (value: unknown) => String(value ?? ""),
+    onCopy: (value: unknown) => { void navigator.clipboard?.writeText(String(value ?? targetId ?? capability.resourceName)); },
+    onValidate: async () => ({ valid: capability.fields.length, invalid: 0 }),
   };
   if (!open || !kind) return null;
   const rendered = renderBlueprintPart(componentId, props);

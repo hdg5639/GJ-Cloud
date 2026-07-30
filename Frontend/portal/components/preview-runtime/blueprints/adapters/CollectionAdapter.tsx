@@ -58,7 +58,7 @@ export function CollectionAdapter({
       ) : rows.length === 0 ? (
         feedbackComponentId ? <BlueprintFeedbackPart componentId={feedbackComponentId} details="데이터가 없습니다." /> : <p className="py-8 text-center text-sm text-muted-soft">데이터가 없습니다</p>
       ) : (
-        renderCollectionPart(componentId, { rows, onRowClick })
+        renderCollectionPart(componentId, { rows, onRowClick, onCreateClick })
       )}
     </div>
   );
