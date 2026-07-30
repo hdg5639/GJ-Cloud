@@ -10,8 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/field";
-import { isPasswordLikeField } from "../api";
+import { PreviewFormFields } from "../formFields";
 import {
   partDescriptor,
   renderBlueprintPart,
@@ -99,24 +98,14 @@ function JourneyForm({
       <form id={`journey-form-${step.id}`} onSubmit={submit}>
         {fields.length === 0 ? (
           <JourneySummary values={initialValues} emptyMessage="추가 입력 없이 다음 단계로 진행할 수 있습니다." />
-        ) : fields.map((field) => (
-          <Field key={field} label={humanize(field)} htmlFor={`journey-${step.id}-${field}`}>
-            {/(description|reason|note|message|content|body)/i.test(field) ? (
-              <Textarea
-                id={`journey-${step.id}-${field}`}
-                value={values[field] ?? ""}
-                onChange={(event) => setValues((current) => ({ ...current, [field]: event.target.value }))}
-              />
-            ) : (
-              <Input
-                id={`journey-${step.id}-${field}`}
-                type={isPasswordLikeField(field) ? "password" : "text"}
-                value={values[field] ?? ""}
-                onChange={(event) => setValues((current) => ({ ...current, [field]: event.target.value }))}
-              />
-            )}
-          </Field>
-        ))}
+        ) : (
+          <PreviewFormFields
+            fields={fields}
+            values={values}
+            idPrefix={`journey-${step.id}`}
+            onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))}
+          />
+        )}
       </form>
     </BlueprintModalFrame>
   );
@@ -363,8 +352,22 @@ function GeneratedJourneyStep({
     onDeploy: advance(),
     onPublish: advance(),
     onInvite: advance(),
-    onCopy: () => undefined,
-    onValidate: async () => ({ valid: 0, invalid: 0 }),
+    // 파트가 선언하는 나머지 상호작용 핸들러 — 예전엔 백에 없어 버튼이 죽어 있었다. 저니에서는 값을
+    // 스냅샷에 담아 다음 단계로 진행하는 것이 자연스러운 기본 동작이다.
+    onAction: advance(["action"]),
+    onSelect: advance(["selected"]),
+    onNavigate: advance(),
+    onPrimaryAction: advance(),
+    onCardClick: advance(["selected"]),
+    onEventClick: advance(["selected"]),
+    onAddCard: advance(),
+    onAcknowledge: advance(),
+    onOpen: advance(["selected"]),
+    onPermissionChange: advance(["permissions"]),
+    onStepClick: () => undefined,
+    onLabel: (value: unknown) => String(value ?? ""),
+    onCopy: (value: unknown) => { void navigator.clipboard?.writeText(String(value ?? targetName)); },
+    onValidate: async () => ({ valid: session.capability.fields.length, invalid: 0 }),
   };
   const rendered = renderBlueprintPart(componentId, props);
   if (partDescriptor(componentId)?.overlayPresentation === "SELF_HOSTED") return <>{rendered}</>;

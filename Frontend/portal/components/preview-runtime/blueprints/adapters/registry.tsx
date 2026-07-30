@@ -67,6 +67,7 @@ export type BlueprintPartKind =
 export interface CollectionRenderCtx {
   rows: BlueprintRecord[];
   onRowClick?: (row: BlueprintRecord) => void;
+  onCreateClick?: () => void;
 }
 export interface DetailRenderCtx {
   record: BlueprintRecord;
@@ -95,13 +96,14 @@ const CUSTOM_RENDERERS = {
   },
   "kanban-collection": {
     kind: "collection",
-    render: ({ rows, onRowClick }) => (
+    render: ({ rows, onRowClick, onCreateClick }) => (
       <KanbanCollection
         columns={toKanbanColumns(rows)}
         onCardClick={(card) => {
           const row = rowById(rows, card.id);
           if (row) onRowClick?.(row);
         }}
+        onAddCard={onCreateClick ? () => onCreateClick() : undefined}
       />
     ),
   },
@@ -120,7 +122,11 @@ const CUSTOM_RENDERERS = {
   "commerce-product-grid": {
     kind: "collection",
     render: ({ rows, onRowClick }) => (
-      <CommerceProductGrid products={rows} onSelect={(product) => onRowClick?.(product)} />
+      <CommerceProductGrid
+        products={rows}
+        onSelect={(product) => onRowClick?.(product)}
+        onPrimaryAction={(product) => onRowClick?.(product)}
+      />
     ),
   },
   "infrastructure-resource-detail": {
@@ -145,6 +151,10 @@ const CUSTOM_RENDERERS = {
       <AlertInbox
         alerts={toAlerts(rows)}
         onOpen={(alert) => {
+          const row = rowById(rows, alert.id);
+          if (row) onRowClick?.(row);
+        }}
+        onAcknowledge={(alert) => {
           const row = rowById(rows, alert.id);
           if (row) onRowClick?.(row);
         }}

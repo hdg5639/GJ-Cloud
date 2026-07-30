@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Modal } from "@/components/ui/modal";
-import { Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
-import { callCapability, isPasswordLikeField, rowId } from "./api";
+import { callCapability, rowId } from "./api";
+import { BlueprintModalFrame } from "./blueprints/modals";
+import { PreviewFormFields, humanizeFieldLabel } from "./formFields";
 import type { PreviewCapability, PreviewRuntimeConfig } from "./types";
 
 export function CreateEditModal({
@@ -38,6 +38,9 @@ export function CreateEditModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isCreate = capability.type === "CREATE";
+  const resource = humanizeFieldLabel(capability.resourceName || "항목");
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -63,34 +66,40 @@ export function CreateEditModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose}>
-      <div className="mx-auto w-[420px] rounded-panel bg-panel p-6">
-        <h2 className="mb-4 text-base font-bold">{capability.type === "CREATE" ? "생성" : "수정"}</h2>
-        <form onSubmit={handleSubmit}>
-          {fields.length === 0 && (
-            <p className="mb-3 text-xs text-muted-soft">이 API의 요청 필드를 확인하지 못했습니다.</p>
-          )}
-          {fields.map((field) => (
-            <Field key={field} label={field} htmlFor={`preview-field-${field}`}>
-              <Input
-                id={`preview-field-${field}`}
-                type={isPasswordLikeField(field) ? "password" : "text"}
-                value={values[field] ?? ""}
-                onChange={(e) => setValues((prev) => ({ ...prev, [field]: e.target.value }))}
-              />
-            </Field>
-          ))}
-          {error && <p className="mb-3 text-xs text-danger">{error}</p>}
-          <div className="mt-1 flex gap-2">
-            <Button type="button" onClick={onClose} className="flex-1">
-              취소
-            </Button>
-            <Button type="submit" variant="primary" disabled={loading} className="flex-1">
-              {loading ? "저장 중..." : "저장"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </Modal>
+    <BlueprintModalFrame
+      open={open}
+      onClose={onClose}
+      eyebrow={resource}
+      title={isCreate ? `새 ${resource} 만들기` : `${resource} 수정`}
+      description={isCreate ? "필요한 정보를 입력하고 저장하세요." : "값을 수정한 뒤 저장하세요."}
+      footer={(
+        <>
+          <Button type="button" onClick={onClose}>취소</Button>
+          <Button type="submit" form="preview-create-edit-form" variant="primary" disabled={loading}>
+            {loading ? "저장 중..." : "저장"}
+          </Button>
+        </>
+      )}
+    >
+      <form id="preview-create-edit-form" onSubmit={handleSubmit}>
+        {fields.length === 0 ? (
+          <p className="rounded-[12px] border border-line bg-panel p-4 text-sm text-muted-soft">
+            이 API의 요청 필드를 확인하지 못했습니다. 추가 입력 없이 저장할 수 있습니다.
+          </p>
+        ) : (
+          <PreviewFormFields
+            fields={fields}
+            values={values}
+            idPrefix="preview-field"
+            onChange={(field, value) => setValues((prev) => ({ ...prev, [field]: value }))}
+          />
+        )}
+        {error && (
+          <p className="mt-2 rounded-[10px] border border-danger-soft bg-danger/10 px-3 py-2 text-xs font-semibold text-danger">
+            {error}
+          </p>
+        )}
+      </form>
+    </BlueprintModalFrame>
   );
 }
