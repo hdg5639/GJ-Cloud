@@ -237,6 +237,8 @@ function RouteModeRows({
   disabled,
   onOverrideChange,
   onDomainSubdomainChange,
+  excludedServices = [],
+  onToggleExpose,
 }: {
   routes: ComposeRouterRoute[];
   overrides: Record<string, ComposeRouterRouteOverride>;
@@ -245,8 +247,13 @@ function RouteModeRows({
   disabled: boolean;
   onOverrideChange: (service: string, override: ComposeRouterRouteOverride) => void;
   onDomainSubdomainChange: (service: string, value: string) => void;
+  // 제공하면 서비스별 '공개' 토글을 표시한다(배포 직전 화면). 끈 서비스는 라우팅에서 빠지고 아래 목록에 남는다.
+  excludedServices?: string[];
+  onToggleExpose?: (service: string, exposed: boolean) => void;
 }) {
-  if (routes.length === 0) return null;
+  const showToggle = Boolean(onToggleExpose);
+  const hiddenServices = excludedServices.filter((name) => !routes.some((route) => route.serviceName === name));
+  if (routes.length === 0 && hiddenServices.length === 0) return null;
   const isPro = planType === "PRO";
   return (
     <div className="mb-4 overflow-hidden rounded-[10px] border border-line">
@@ -264,6 +271,17 @@ function RouteModeRows({
           >
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
+                {showToggle && (
+                  <label className="flex items-center gap-1.5" title={route.root ? "루트 서비스는 항상 공개됩니다" : "공개 여부"}>
+                    <input
+                      type="checkbox"
+                      checked
+                      disabled={disabled || route.root}
+                      onChange={() => onToggleExpose?.(route.serviceName, false)}
+                      className="accent-brand"
+                    />
+                  </label>
+                )}
                 <span className="font-mono font-bold text-foreground">{route.serviceName}</span>
                 {!route.root && !isDomain && (
                   <>
@@ -392,6 +410,21 @@ function RouteModeRows({
           </div>
         );
       })}
+      {hiddenServices.map((service) => (
+        <div key={service} className="flex items-center gap-2 border-b border-line bg-black/10 px-3 py-3 text-xs last:border-b-0">
+          {showToggle && (
+            <input
+              type="checkbox"
+              checked={false}
+              disabled={disabled}
+              onChange={() => onToggleExpose?.(service, true)}
+              className="accent-brand"
+            />
+          )}
+          <span className="font-mono font-bold text-muted-soft line-through">{service}</span>
+          <span className="text-[10px] text-muted-soft">비공개 — 컨테이너는 뜨지만 외부로 노출하지 않습니다</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -411,6 +444,7 @@ function ComposeRouterPlanCard({
   onDomainSubdomainChange,
   onReplan,
   onApply,
+  showRouteEditor = true,
 }: {
   plan: ComposeRouterPlanResult;
   planning: boolean;
@@ -426,6 +460,8 @@ function ComposeRouterPlanCard({
   onDomainSubdomainChange: (service: string, value: string) => void;
   onReplan: () => void;
   onApply: () => void;
+  // 배포 직전 화면으로 서비스별 노출/CNAME 편집을 이관했으므로, 라우팅(step3) 카드에선 편집기를 숨긴다.
+  showRouteEditor?: boolean;
 }) {
   const lowConfidenceRoutes = plan.routes.filter((route) => route.confidence === "LOW");
 
@@ -519,15 +555,17 @@ function ComposeRouterPlanCard({
         ))}
       </div>
 
-      <RouteModeRows
-        routes={plan.routes}
-        overrides={routeOverrides}
-        planType={planType}
-        subdomainCheck={subdomainCheck}
-        disabled={applied}
-        onOverrideChange={onRouteOverrideChange}
-        onDomainSubdomainChange={onDomainSubdomainChange}
-      />
+      {showRouteEditor && (
+        <RouteModeRows
+          routes={plan.routes}
+          overrides={routeOverrides}
+          planType={planType}
+          subdomainCheck={subdomainCheck}
+          disabled={applied}
+          onOverrideChange={onRouteOverrideChange}
+          onDomainSubdomainChange={onDomainSubdomainChange}
+        />
+      )}
 
       {plan.routerConfig && (
         <details className="mb-4 rounded-[10px] border border-line bg-black/10">
@@ -864,6 +902,9 @@ export default function DeploymentsPage() {
   const [routerHostPort, setRouterHostPort] = useState(18080);
   const [routerServicePorts, setRouterServicePorts] = useState<Record<string, number>>({});
   const [routerRouteOverrides, setRouterRouteOverrides] = useState<Record<string, ComposeRouterRouteOverride>>({});
+  // 라우터 보강 전 원본 compose(재-플랜 기준) + 배포 직전 화면에서 '공개 안 함'으로 끈 서비스 목록.
+  const [baseComposeContent, setBaseComposeContent] = useState("");
+  const [excludedServices, setExcludedServices] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [envFiles, setEnvFiles] = useState<EnvironmentFile[]>([]);
   const [routes, setRoutes] = useState<ExposedRoute[]>([]);
@@ -1330,6 +1371,8 @@ export default function DeploymentsPage() {
     setRouterHostPort(18080);
     setRouterServicePorts({});
     setRouterRouteOverrides({});
+    setBaseComposeContent("");
+    setExcludedServices([]);
     setInstallPath("");
     setNetworkMode("create");
     setExistingNetworkName("");
@@ -1563,9 +1606,14 @@ export default function DeploymentsPage() {
   async function handlePlanComposeRouter(
     content: string,
     autoApply: boolean,
-    forcePort?: number
+    forcePort?: number,
+    excluded: string[] = excludedServices
   ): Promise<ComposeRouterPlanResult | null> {
     if (!accessToken || !content.trim()) return null;
+    // 재-플랜은 항상 라우터 보강 전 '원본' compose 기준이어야 한다 — 보강된 compose로 다시 돌리면
+    // gamjabox-router가 중복 감지돼 ALREADY_CONFIGURED로 빠진다.
+    const base = content.includes("gamjabox-router") ? (baseComposeContent || content) : content;
+    if (!content.includes("gamjabox-router")) setBaseComposeContent(content);
     const occupied = new Set(deploymentPorts.map((port) => port.port));
     const requestedPort = forcePort
       ?? (routerHostPort >= 1 && routerHostPort <= 65535 && !occupied.has(routerHostPort)
@@ -1575,44 +1623,37 @@ export default function DeploymentsPage() {
     setPlanningRouter(true);
     setError(null);
     try {
-      const planned = await api.ops.deployments.planComposeRouter(accessToken, vmId, {
-        composeContent: content,
+      const plan = await api.ops.deployments.planComposeRouter(accessToken, vmId, {
+        composeContent: base,
         routerHostPort: requestedPort,
         servicePorts: Object.fromEntries(
           Object.entries(routerServicePorts).filter(([, port]) => port >= 1 && port <= 65535)
         ),
         routeOverrides: Object.keys(routerRouteOverrides).length > 0 ? routerRouteOverrides : undefined,
+        excludedServices: excluded.length > 0 ? excluded : undefined,
       });
-      let plan = planned;
-      if (planned.status === "ADDED") {
-        const routedServices = new Set(planned.routes.map((route) => route.serviceName));
-        const distinctCustomSubdomains = Array.from(new Set(
-          routes
-            .filter((route) => routedServices.has(route.serviceName))
-            .map((route) => route.customSubdomain?.trim())
-            .filter((value): value is string => Boolean(value))
-        ));
-        if (distinctCustomSubdomains.length > 1) {
-          plan = {
-            ...planned,
-            status: "NEEDS_INPUT",
-            enhancedComposeContent: content,
-            unresolvedServices: [{
-              serviceName: "공개 HTTP 라우트",
-              reason: "서로 다른 커스텀 서브도메인은 하나의 Caddy 진입점으로 합칠 수 없습니다. 하나의 도메인으로 통일하거나 기존 개별 노출을 유지하세요.",
-              portRequired: false,
-            }],
-            warnings: [
-              ...planned.warnings,
-              "커스텀 서브도메인 설정을 보호하기 위해 Compose를 자동 변경하지 않았습니다.",
-            ],
-          };
-        }
-      }
       setRouterPlan(plan);
       setRouterApplied(false);
-      if (autoApply && plan.status === "ADDED") {
-        applyRouterPlan(plan);
+      if (autoApply) {
+        if (plan.status === "ADDED") {
+          applyRouterPlan(plan);
+        } else if (plan.status === "NOT_REQUIRED") {
+          // 제외로 공개 서비스가 1개만 남으면 Caddy가 불필요 — 원본 compose를 쓰고 그 서비스만 직접 노출한다.
+          setComposeContent(base);
+          const direct = plan.routes[0];
+          if (direct) {
+            setRoutes([{
+              serviceName: direct.serviceName,
+              port: direct.hostPort ?? direct.containerPort,
+              protocol: "HTTP",
+              visibility: "PUBLIC",
+              nickname: uniqueNicknameFor(direct.serviceName, new Set()),
+              customSubdomain: deploymentCustomSubdomain || "",
+            }]);
+          } else {
+            setRoutes([]);
+          }
+        }
       }
       return plan;
     } catch (err) {
@@ -1627,7 +1668,9 @@ export default function DeploymentsPage() {
 
   async function applyDetectedCompose(file: DetectedComposeFile) {
     let content = file.content;
-    const plan = await handlePlanComposeRouter(file.content, false);
+    setBaseComposeContent(file.content);
+    setExcludedServices([]);
+    const plan = await handlePlanComposeRouter(file.content, false, undefined, []);
     if (plan?.status === "ADDED") {
       applyRouterPlan(plan);
       content = plan.enhancedComposeContent;
@@ -1643,6 +1686,19 @@ export default function DeploymentsPage() {
       compose: Math.max(prev.compose, 3) as CreateStep,
     }));
     invalidateAiGeneration();
+  }
+
+  // 배포 직전 화면(compose 흐름) — 서비스 공개 토글/라우팅 보정 후 원본 compose 기준으로 다시 계획·적용한다.
+  async function handleToggleServiceExpose(service: string, exposed: boolean) {
+    const next = exposed
+      ? excludedServices.filter((name) => name !== service)
+      : Array.from(new Set([...excludedServices, service]));
+    setExcludedServices(next);
+    await handlePlanComposeRouter(baseComposeContent || composeContent, true, undefined, next);
+  }
+
+  async function handleRegenerateComposeRouting() {
+    await handlePlanComposeRouter(baseComposeContent || composeContent, true);
   }
 
   async function handleDetectCompose(force = false): Promise<ComposeDetectionResult | null> {
@@ -1911,6 +1967,30 @@ export default function DeploymentsPage() {
       ?? renderedSpec.exposedRoutes[0];
     return publicRoute ? { endpoint: publicRoute, throughCaddy: false } : null;
   })();
+
+  // AI 흐름의 공개 여부는 spec.services[].expose.enabled로 관리한다. 배포 직전 화면에서 서비스를 끄면
+  // enabled=false로 두고 '라우팅 다시 생성'으로 재렌더하면 라우팅/CNAME에서 빠진다.
+  const aiSpecParsed: DeploymentSpec | null = (() => {
+    if (!generatedSpec) return null;
+    try { return JSON.parse(generatedSpec) as DeploymentSpec; } catch { return null; }
+  })();
+  const aiExcludedServices = (aiSpecParsed?.services ?? [])
+    .filter((service) => service.expose && service.expose.protocol?.toLowerCase() === "http" && service.expose.enabled === false)
+    .map((service) => service.name);
+
+  function handleToggleAiServiceExpose(service: string, exposed: boolean) {
+    if (!aiSpecParsed) return;
+    const next: DeploymentSpec = {
+      ...aiSpecParsed,
+      services: aiSpecParsed.services.map((candidate) => (
+        candidate.name === service && candidate.expose
+          ? { ...candidate, expose: { ...candidate.expose, enabled: exposed } }
+          : candidate
+      )),
+    };
+    setGeneratedSpec(JSON.stringify(next, null, 2));
+    setRenderedSpec(null);
+  }
 
   // AI 흐름에서 서비스별 Prefix를 보정한 뒤 최종 Compose를 다시 렌더링한다 — 보정값을 스펙에 반영하고 재렌더.
   async function handleRegenerateAiRouting() {
@@ -2690,17 +2770,7 @@ export default function DeploymentsPage() {
                       onDomainSubdomainChange={handleDomainSubdomainChange}
                       onReplan={() => { void handlePlanComposeRouter(composeContent, false, routerHostPort); }}
                       onApply={() => applyRouterPlan(routerPlan)}
-                    />
-                  )}
-
-                  {composePublicEndpoint && (
-                    <PublicEndpointCnameCard
-                      endpoint={composePublicEndpoint.endpoint}
-                      throughCaddy={composePublicEndpoint.throughCaddy}
-                      planType={planType}
-                      customSubdomain={deploymentCustomSubdomain}
-                      check={deploymentSubdomainCheck}
-                      onChange={handleDeploymentCustomSubdomainChange}
+                      showRouteEditor={false}
                     />
                   )}
 
@@ -2754,6 +2824,47 @@ export default function DeploymentsPage() {
                           <dd className="font-mono text-foreground">{installPath.trim() || "자동 관리 경로"}</dd>
                         </div>
                       </dl>
+
+                      {routerPlan && routerPlan.routes.length > 0 && (
+                        <div className="mt-4 rounded-md border border-[#75a9ff]/25 bg-white/[0.02] p-3">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-bold text-foreground">공개 설정</p>
+                              <p className="mt-0.5 text-[11px] text-muted-soft">
+                                인식된 서비스별로 공개 여부와 노출 방식(공용 도메인 경로 vs 전용 서브도메인)을 고르세요.
+                              </p>
+                            </div>
+                            <Button type="button" onClick={handleRegenerateComposeRouting} disabled={planningRouter}>
+                              {planningRouter ? "다시 생성 중..." : "라우팅 다시 생성"}
+                            </Button>
+                          </div>
+                          <RouteModeRows
+                            routes={routerPlan.routes}
+                            overrides={routerRouteOverrides}
+                            planType={planType}
+                            subdomainCheck={domainSubdomainCheck}
+                            disabled={planningRouter}
+                            excludedServices={excludedServices}
+                            onToggleExpose={(service, exposed) => { void handleToggleServiceExpose(service, exposed); }}
+                            onOverrideChange={(service, override) => {
+                              setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }));
+                              setRouterApplied(false);
+                            }}
+                            onDomainSubdomainChange={handleDomainSubdomainChange}
+                          />
+                          {composePublicEndpoint && (
+                            <PublicEndpointCnameCard
+                              endpoint={composePublicEndpoint.endpoint}
+                              throughCaddy={composePublicEndpoint.throughCaddy}
+                              planType={planType}
+                              customSubdomain={deploymentCustomSubdomain}
+                              check={deploymentSubdomainCheck}
+                              onChange={handleDeploymentCustomSubdomainChange}
+                            />
+                          )}
+                        </div>
+                      )}
+
                       <div className="mt-4">
                         <div className="mb-2 flex items-center justify-between">
                           <p className="text-xs font-bold">docker-compose.yaml</p>
@@ -3050,17 +3161,17 @@ export default function DeploymentsPage() {
                           </div>
                         )}
                         {aiRouterPlan
-                          && (aiThroughCaddy || aiRouterPlan.status === "NEEDS_INPUT")
-                          && aiRouterPlan.routes.some((route) => !route.root) && (
+                          && (aiThroughCaddy || aiRouterPlan.status === "NEEDS_INPUT" || aiExcludedServices.length > 0)
+                          && (aiRouterPlan.routes.some((route) => !route.root) || aiExcludedServices.length > 0) && (
                           <div className="rounded-md border border-[#75a9ff]/25 bg-white/[0.02] p-3">
                             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-xs font-bold text-foreground">서비스별 노출 방식</p>
+                              <p className="text-xs font-bold text-foreground">공개 설정</p>
                               <Button type="button" onClick={handleRegenerateAiRouting} disabled={renderingSpec}>
                                 {renderingSpec ? "다시 생성 중..." : "라우팅 다시 생성"}
                               </Button>
                             </div>
                             <p className="mb-2 text-[11px] text-muted-soft">
-                              각 서비스를 공용 도메인 아래 경로(Prefix)로 둘지, 전용 서브도메인(도메인)으로 노출할지 고른 뒤 라우팅을 다시 생성하세요.
+                              인식된 서비스별로 공개 여부와 노출 방식(공용 도메인 경로 vs 전용 서브도메인)을 고른 뒤 라우팅을 다시 생성하세요.
                             </p>
                             {aiRouterPlan.unresolvedServices.length > 0 && (
                               <div className="mb-2 space-y-1 rounded border border-[#e8b657]/25 bg-[#e8b657]/[0.06] p-2 text-[11px] text-[#e8b657]">
@@ -3075,6 +3186,8 @@ export default function DeploymentsPage() {
                               planType={planType}
                               subdomainCheck={domainSubdomainCheck}
                               disabled={renderingSpec}
+                              excludedServices={aiExcludedServices}
+                              onToggleExpose={handleToggleAiServiceExpose}
                               onOverrideChange={(service, override) =>
                                 setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }))
                               }

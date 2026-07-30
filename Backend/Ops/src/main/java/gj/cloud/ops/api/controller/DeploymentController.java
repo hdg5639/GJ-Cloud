@@ -286,7 +286,8 @@ public class DeploymentController {
         String bearerToken = extractToken(request);
         requireDeployPermission(bearerToken, vmId.toString());
         return ApiResponse.ok(composeRouterPlanner.plan(
-                body.composeContent(), body.routerHostPort(), body.servicePorts(), body.routeOverrides()));
+                body.composeContent(), body.routerHostPort(), body.servicePorts(),
+                body.routeOverrides(), body.excludedServices()));
     }
 
     @Operation(summary = "배포 이력 조회")

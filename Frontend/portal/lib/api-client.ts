@@ -696,6 +696,7 @@ export const api = {
           routerHostPort?: number;
           servicePorts?: Record<string, number>;
           routeOverrides?: Record<string, ComposeRouterRouteOverride>;
+          excludedServices?: string[];
         }
       ) =>
         request<ComposeRouterPlanResult>("ops", `/ops/${vmId}/deployments/compose/router/plan`, {
