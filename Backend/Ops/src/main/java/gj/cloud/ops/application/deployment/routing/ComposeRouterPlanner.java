@@ -61,6 +61,17 @@ public class ComposeRouterPlanner {
             Map<String, Integer> servicePortOverrides,
             Map<String, ComposeRouterRouteOverride> routeOverrides
     ) {
+        return plan(composeContent, requestedRouterHostPort, servicePortOverrides, routeOverrides, Set.of());
+    }
+
+    public ComposeRouterPlanResult plan(
+            String composeContent,
+            Integer requestedRouterHostPort,
+            Map<String, Integer> servicePortOverrides,
+            Map<String, ComposeRouterRouteOverride> routeOverrides,
+            Collection<String> excludedServices
+    ) {
+        Set<String> excluded = excludedServices == null ? Set.of() : new LinkedHashSet<>(excludedServices);
         Map<String, Object> root = parse(composeContent);
         Map<String, Object> services = map(root.get("services"));
         if (services == null || services.isEmpty()) {
@@ -101,7 +112,10 @@ public class ComposeRouterPlanner {
         for (Map.Entry<String, Object> entry : services.entrySet()) {
             String serviceName = entry.getKey();
             Map<String, Object> service = map(entry.getValue());
-            if (service == null || isInfrastructure(serviceName, service) || !isRoutingEnabled(service)) {
+            // 사용자가 배포 직전 화면에서 '공개 안 함'으로 끈 서비스는 라우팅 후보에서 제외한다.
+            // 서비스 정의는 그대로 두므로(내부 expose 유지) 컨테이너는 뜨지만 외부로는 노출되지 않는다.
+            if (service == null || excluded.contains(serviceName)
+                    || isInfrastructure(serviceName, service) || !isRoutingEnabled(service)) {
                 continue;
             }
             if (!SAFE_SERVICE_NAME.matcher(serviceName).matches()) {

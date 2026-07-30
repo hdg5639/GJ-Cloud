@@ -154,6 +154,28 @@ class ComposeRouterPlannerTest {
     }
 
     @Test
+    void excludesServiceFromRoutingWhenNotPublic() {
+        String compose = """
+                services:
+                  web:
+                    ports: ["3000:3000"]
+                  api:
+                    ports: ["8080:8080"]
+                  internal:
+                    ports: ["9000:9000"]
+                """;
+
+        ComposeRouterPlanResult result = planner.plan(
+                compose, null, Map.of(), Map.of(), java.util.List.of("internal"));
+
+        assertThat(result.status()).isEqualTo(ComposeRouterPlanResult.STATUS_ADDED);
+        // 공개 안 함으로 끈 서비스는 라우팅/Caddy에서 빠진다.
+        assertThat(result.routes()).extracting(ComposeRouterRoute::serviceName)
+                .doesNotContain("internal");
+        assertThat(result.routerConfig()).doesNotContain("internal:9000");
+    }
+
+    @Test
     void createsUniquePathsWhenServiceSlugsWouldCollide() {
         String compose = """
                 services:
