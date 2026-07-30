@@ -280,7 +280,14 @@ public class DeploymentExecutor {
         List<HealthCheck> healthChecks = entity.getHealthChecksJson() != null
                 ? readJsonList(entity.getHealthChecksJson(), HealthCheck.class)
                 : List.of();
-        return new ComposeSpecResponse(composeContent, environmentFiles, exposedRoutes, healthChecks, entity.getContext(), entity.getInstallPath());
+        return new ComposeSpecResponse(
+                composeContent,
+                environmentFiles,
+                exposedRoutes,
+                healthChecks,
+                entity.getContext(),
+                entity.getInstallPath(),
+                null);
     }
 
     // Auto Preview 배포 시점의 blueprint 스냅샷을 저장한다 — Patch·재분석 없이 나중에 무엇을

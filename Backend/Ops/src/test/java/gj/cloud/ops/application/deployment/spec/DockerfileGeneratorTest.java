@@ -14,7 +14,7 @@ class DockerfileGeneratorTest {
                 new BuildSpec(RuntimeKind.NONE, null, BuildRunStrategy.NONE, null),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                ".", new ExposeSpec(true, "http", "/", null));
+                ".", new ExposeSpec(true, "http", "/", null, null, null, null));
 
         String dockerfile = generator.generate(service);
 
@@ -30,7 +30,7 @@ class DockerfileGeneratorTest {
                 new BuildSpec(RuntimeKind.NODEJS, "20", BuildRunStrategy.NPM_BUILD, "dist"),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "dist"),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                ".", new ExposeSpec(true, "http", "/", null));
+                ".", new ExposeSpec(true, "http", "/", null, null, null, null));
 
         String dockerfile = generator.generate(service);
 

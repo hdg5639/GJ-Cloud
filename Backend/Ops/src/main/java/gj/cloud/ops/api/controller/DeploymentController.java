@@ -5,6 +5,9 @@ import gj.cloud.ops.application.deployment.ai.AiGenerationResult;
 import gj.cloud.ops.application.deployment.ai.AiSpecGeneratorClient;
 import gj.cloud.ops.application.deployment.ai.ComposeReviewFinding;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
+import gj.cloud.ops.application.deployment.dto.ComposeDetectionRequest;
+import gj.cloud.ops.application.deployment.dto.ComposeReviewRequest;
+import gj.cloud.ops.application.deployment.dto.ComposeRouterPlanRequest;
 import gj.cloud.ops.application.deployment.dto.ComposeSpecResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentCreateRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentFromSpecRequest;
@@ -12,6 +15,10 @@ import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentTeardownRequest;
 import gj.cloud.ops.application.deployment.dto.GenerateDeploymentSpecRequest;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
+import gj.cloud.ops.application.deployment.repoanalysis.ComposeDetectionResult;
+import gj.cloud.ops.application.deployment.repoanalysis.RepositorySnapshotBuilder;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanResult;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanner;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
 import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
@@ -20,6 +27,7 @@ import gj.cloud.ops.application.github.service.GithubAppService;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecPolicyValidator;
+import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderResult;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderer;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
@@ -62,6 +70,8 @@ public class DeploymentController {
     private final DeploymentSpecRenderer deploymentSpecRenderer;
     private final AiSpecGeneratorClient aiSpecGeneratorClient;
     private final AiComposeReviewer aiComposeReviewer;
+    private final RepositorySnapshotBuilder repositorySnapshotBuilder;
+    private final ComposeRouterPlanner composeRouterPlanner;
     private final VmServiceClient vmServiceClient;
     private final DeploymentTargetService deploymentTargetService;
     private final GithubAppService githubAppService;
@@ -201,6 +211,82 @@ public class DeploymentController {
         ComposeArtifact artifact = deploymentSpecRenderer.render(spec);
         List<ComposeReviewFinding> findings = aiComposeReviewer.review(vmId.toString(), artifact.composeContent());
         return ApiResponse.ok(findings);
+    }
+
+    @Operation(summary = "배포 스펙 최종 Compose 렌더링",
+            description = "AI/규칙 기반 DeploymentSpec을 실제 배포 직전에 사용하는 Compose로 렌더링합니다. "
+                    + "다중 HTTP 서비스라면 Caddy 보강 결과와 최종 공개 라우트까지 함께 반환합니다.")
+    @PostMapping("/ai-spec/render")
+    public ApiResponse<ComposeSpecResponse> renderSpec(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody DeploymentSpec spec
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        deploymentSpecValidator.validate(spec);
+        deploymentSpecPolicyValidator.validate(spec);
+        DeploymentSpecRenderResult renderResult = deploymentSpecRenderer.renderWithAnalysis(spec);
+        ComposeArtifact artifact = renderResult.artifact();
+        return ApiResponse.ok(new ComposeSpecResponse(
+                artifact.composeContent(),
+                artifact.environmentFiles(),
+                artifact.exposedRoutes(),
+                artifact.healthChecks(),
+                null,
+                null,
+                renderResult.routerPlan()));
+    }
+
+    @Operation(summary = "저장소 Compose 파일 탐지",
+            description = "저장소를 임시로 얕게 클론해 저장소 전체의 Compose 파일을 탐지하고, "
+                    + "지정한 배포 디렉터리의 후보를 우선 정렬합니다. Compose가 없을 때 사용할 실행 가능 "
+                    + "멀티모듈 서비스 후보도 함께 반환하며 원문은 응답 후 서버에 남기지 않습니다.")
+    @PostMapping("/compose/detect")
+    public ApiResponse<ComposeDetectionResult> detectCompose(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody ComposeDetectionRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        ResolvedRepository repository = resolveRepository(
+                principal.userId(), body.repoUrl(), body.branch(), body.patToken(),
+                body.githubInstallationId(), body.githubRepositoryId());
+        ComposeDetectionResult result = repositorySnapshotBuilder.detectCompose(
+                repository.repoUrl(), repository.branch(), repository.token(), body.context());
+        return ApiResponse.ok(result);
+    }
+
+    @Operation(summary = "Raw Compose AI 검수",
+            description = "저장소에서 탐지했거나 사용자가 작성한 Compose 원문을 비차단 AI 검수합니다. "
+                    + "비밀값은 AI 전송 전에 마스킹되며, 검수 결과는 배포를 승인하거나 차단하지 않습니다.")
+    @PostMapping("/compose/review")
+    public ApiResponse<List<ComposeReviewFinding>> reviewCompose(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody ComposeReviewRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        return ApiResponse.ok(aiComposeReviewer.review(vmId.toString(), body.composeContent()));
+    }
+
+    @Operation(summary = "다중 서비스 Compose 라우터 보강안 생성",
+            description = "Compose의 애플리케이션 서비스와 내부 포트를 결정론적으로 분석해, "
+                    + "기존 Nginx/Caddy/Traefik 계열 라우터가 없을 때 Caddy 단일 진입점 보강안을 만듭니다. "
+                    + "포트를 확정할 수 없으면 원문을 변경하지 않고 NEEDS_INPUT으로 반환합니다.")
+    @PostMapping("/compose/router/plan")
+    public ApiResponse<ComposeRouterPlanResult> planComposeRouter(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody ComposeRouterPlanRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        return ApiResponse.ok(composeRouterPlanner.plan(
+                body.composeContent(), body.routerHostPort(), body.servicePorts(), body.routeOverrides()));
     }
 
     @Operation(summary = "배포 이력 조회")

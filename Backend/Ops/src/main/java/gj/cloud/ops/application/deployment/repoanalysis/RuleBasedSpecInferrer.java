@@ -125,7 +125,9 @@ public class RuleBasedSpecInferrer {
                                                ArtifactSpec artifact, RunSpec run, String detectedType,
                                                String confidence, List<String> positiveEvidence) {
         ExposeSpec expose = card.expose()
-                ? new ExposeSpec(true, "http", run.containerPort() != null ? "/" : null, card.customSubdomain())
+                ? new ExposeSpec(
+                        true, "http", run.containerPort() != null ? "/" : null,
+                        card.customSubdomain(), null, null, null)
                 : null;
         ServiceSpec spec = new ServiceSpec(card.name(), mode, build, artifact, run, card.context(), expose);
         return RuleBasedInferenceResult.resolved(spec, detectedType, confidence, positiveEvidence);

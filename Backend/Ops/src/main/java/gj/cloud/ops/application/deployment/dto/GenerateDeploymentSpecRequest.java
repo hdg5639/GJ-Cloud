@@ -2,7 +2,7 @@ package gj.cloud.ops.application.deployment.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
@@ -13,7 +13,8 @@ public record GenerateDeploymentSpecRequest(
         @NotBlank String repoUrl,
         @NotBlank String branch,
         String patToken,
-        @NotEmpty @Valid List<ServiceCard> services,
+        // 서비스 카드는 전체 목록이 아니라 선택적 힌트다. 비어 있어도 저장소의 실행 가능한 모듈을 자동 탐색한다.
+        @NotNull @Valid List<ServiceCard> services,
         @Valid List<InfraSelection> infrastructure,
         // 지정하면 새 네트워크를 만드는 대신 VM에 이미 존재하는 이 이름의 Docker 네트워크를 external로 재사용.
         // null/빈 값이면 기존과 동일하게 새 네트워크를 생성.

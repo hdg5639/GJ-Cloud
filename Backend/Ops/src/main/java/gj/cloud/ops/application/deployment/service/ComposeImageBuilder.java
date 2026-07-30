@@ -29,6 +29,9 @@ public class ComposeImageBuilder {
     // 컴포즈 YAML은 사용자가 제출한 값이므로, docker build 커맨드 문자열에 그대로 꽂아 넣기 전에
     // 셸 메타문자·따옴표·경로 탈출(..)을 반드시 걸러냄 (명령 인젝션/디렉토리 탈출 방지)
     private static final Pattern UNSAFE_PATH_SEGMENT = Pattern.compile("[;&`|$'\"\\\\]|\\.\\.");
+    // build.args 키는 셸 env 이름 규칙, 값은 단일 따옴표 래핑을 깨거나 명령을 탈출할 수 있는 문자를 차단
+    private static final Pattern SAFE_BUILD_ARG_KEY = Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
+    private static final Pattern UNSAFE_BUILD_ARG_VALUE = Pattern.compile("['\"`$;&|\\\\\\n\\r]");
     // OPS-SEC-003: serviceName은 ComposeValidator에서 이미 검증되지만, 이 클래스가 그 검증에 의존하지 않고
     // 자체적으로도 확인함 — 여기서 바로 docker build -t 셸 문자열에 꽂히기 때문
     private static final Pattern SAFE_SERVICE_NAME = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,62}$");
@@ -76,6 +79,10 @@ public class ComposeImageBuilder {
             StringBuilder buildCmd = new StringBuilder("docker build -t '").append(imageTag).append("'");
             if (dockerfile != null) {
                 buildCmd.append(" -f '").append(contextPath).append("/").append(dockerfile).append("'");
+            }
+            // build.args 전달 — 루트 Dockerfile이 ARG(예: MODULE)로 빌드 대상을 고르는 멀티모듈 구조 지원.
+            for (String buildArg : extractBuildArgs(buildObj)) {
+                buildCmd.append(" --build-arg '").append(buildArg).append("'");
             }
             buildCmd.append(" '").append(contextPath).append("'");
 
@@ -132,6 +139,41 @@ public class ComposeImageBuilder {
             return ctx != null ? String.valueOf(ctx) : ".";
         }
         return ".";
+    }
+
+    // compose build.args를 "KEY=VALUE" 목록으로 정규화. map({K: V})과 list(["K=V"]) 양쪽을 지원하며,
+    // 키/값에 셸 주입 가능 문자가 있으면 INVALID_COMPOSE로 거부한다(값은 단일 따옴표로 감싸 전달).
+    private java.util.List<String> extractBuildArgs(Object buildObj) {
+        if (!(buildObj instanceof Map<?, ?> m)) {
+            return java.util.List.of();
+        }
+        Object argsObj = m.get("args");
+        java.util.List<String> result = new java.util.ArrayList<>();
+        if (argsObj instanceof Map<?, ?> argsMap) {
+            for (Map.Entry<?, ?> entry : argsMap.entrySet()) {
+                String key = String.valueOf(entry.getKey());
+                String value = entry.getValue() == null ? "" : String.valueOf(entry.getValue());
+                result.add(validatedBuildArg(key, value));
+            }
+        } else if (argsObj instanceof Iterable<?> argsList) {
+            for (Object item : argsList) {
+                String entry = String.valueOf(item);
+                int eq = entry.indexOf('=');
+                // "KEY=VALUE"만 지원 — 값 없는 "KEY"(호스트 환경 참조)는 원격 빌더 환경에 없으므로 거부
+                if (eq <= 0) {
+                    throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+                }
+                result.add(validatedBuildArg(entry.substring(0, eq), entry.substring(eq + 1)));
+            }
+        }
+        return result;
+    }
+
+    private String validatedBuildArg(String key, String value) {
+        if (!SAFE_BUILD_ARG_KEY.matcher(key).matches() || UNSAFE_BUILD_ARG_VALUE.matcher(value).find()) {
+            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        }
+        return key + "=" + value;
     }
 
     private String extractDockerfile(Object buildObj) {

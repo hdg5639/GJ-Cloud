@@ -413,7 +413,10 @@ public class PortServiceImpl implements PortService {
                     if (count >= PORT_MAX_COUNT) {
                         return Mono.error(new VmException(VmErrorCode.PORT_LIMIT_EXCEEDED));
                     }
-                    return vmPortRepository.countByVmIdAndPort(vm.getId(), route.port());
+                    // 같은 배포의 도메인 라우트들은 하나의 Caddy router 포트를 공유할 수 있으므로,
+                    // 수동 포트나 다른 배포가 점유한 경우에만 충돌로 처리한다.
+                    return vmPortRepository.countByVmIdAndPortForOtherOwners(
+                            vm.getId(), route.port(), deploymentAppId);
                 })
                 .flatMap(existing -> {
                     if (existing > 0) {

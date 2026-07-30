@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -46,6 +47,8 @@ public class RepositorySnapshotBuilder {
     private final LocalCommandExecutor localCommandExecutor;
     private final ManifestParser manifestParser;
     private final GitCloneSecurityValidator gitCloneSecurityValidator;
+    private final ComposeFileDetector composeFileDetector;
+    private final RepositoryServiceDiscoverer repositoryServiceDiscoverer;
 
     @Value("${ops.repo-analysis.clone-timeout-ms:60000}")
     private long cloneTimeoutMs;
@@ -59,6 +62,40 @@ public class RepositorySnapshotBuilder {
     private long maxTotalSizeBytes;
 
     public Map<String, RepositoryEvidence> analyze(String repoUrl, String branch, String patToken, List<String> contexts) {
+        return withClonedRepository(repoUrl, branch, patToken, repositoryRoot -> {
+            Map<String, RepositoryEvidence> evidenceByContext = new LinkedHashMap<>();
+            for (String context : contexts) {
+                evidenceByContext.put(context, buildEvidence(repositoryRoot, context));
+            }
+            return evidenceByContext;
+        });
+    }
+
+    public ComposeDetectionResult detectCompose(String repoUrl, String branch, String patToken, String context) {
+        return withClonedRepository(repoUrl, branch, patToken, repositoryRoot -> {
+            ComposeDetectionResult detection = composeFileDetector.detect(repositoryRoot, context);
+            ServiceDiscoveryResult discovery = repositoryServiceDiscoverer.discover(repositoryRoot);
+            List<String> warnings = new ArrayList<>(detection.warnings());
+            warnings.addAll(discovery.warnings());
+            return new ComposeDetectionResult(
+                    detection.detected(),
+                    detection.searchedContext(),
+                    detection.files(),
+                    discovery.services(),
+                    List.copyOf(warnings));
+        });
+    }
+
+    public ServiceDiscoveryResult discoverServices(String repoUrl, String branch, String patToken) {
+        return withClonedRepository(repoUrl, branch, patToken, repositoryServiceDiscoverer::discover);
+    }
+
+    private <T> T withClonedRepository(
+            String repoUrl,
+            String branch,
+            String patToken,
+            Function<Path, T> operation
+    ) {
         validateRepoUrl(repoUrl);
         validateBranch(branch);
         gitCloneSecurityValidator.assertHostNotInternal(repoUrl);
@@ -86,11 +123,7 @@ public class RepositorySnapshotBuilder {
                 throw new OpsException(OpsErrorCode.REPOSITORY_CLONE_FAILED);
             }
 
-            Map<String, RepositoryEvidence> evidenceByContext = new LinkedHashMap<>();
-            for (String context : contexts) {
-                evidenceByContext.put(context, buildEvidence(tempDir, context));
-            }
-            return evidenceByContext;
+            return operation.apply(tempDir);
         } catch (IOException e) {
             throw new OpsException(OpsErrorCode.REPOSITORY_CLONE_FAILED);
         } finally {

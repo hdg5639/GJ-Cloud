@@ -29,6 +29,7 @@ import java.util.Optional;
 public class AiGenerationCache {
 
     private static final String KEY_PREFIX = "ai-gen-cache:";
+    private static final String CACHE_SCHEMA_VERSION = "auto-discovery-v2";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -64,7 +65,8 @@ public class AiGenerationCache {
 
     private String buildKey(GenerateDeploymentSpecRequest request) {
         StringBuilder raw = new StringBuilder();
-        raw.append(request.repoUrl()).append('|').append(request.branch()).append('|');
+        raw.append(CACHE_SCHEMA_VERSION).append('|')
+                .append(request.repoUrl()).append('|').append(request.branch()).append('|');
         for (ServiceCard card : request.services()) {
             raw.append(card.name()).append(':').append(card.runtime()).append(':').append(card.context())
                     .append(':').append(card.containerPort()).append(':').append(card.expose())

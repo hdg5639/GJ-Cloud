@@ -16,6 +16,12 @@ import type {
   GenerationStatus,
   UnresolvedField,
   ComposeReviewFinding,
+  ComposeDetectionResult,
+  DetectedComposeFile,
+  ComposeRouterPlanResult,
+  ComposeRouterRoute,
+  ComposeRouterRouteOverride,
+  DiscoveredService,
   NetworkInfo,
   DeploymentTargetResponse,
   GithubRepositoryResponse,
@@ -82,7 +88,7 @@ function retryStorageKey(vmId: string): string {
 const emptyExposedRoute = (): ExposedRoute => ({ serviceName: "", port: 80, protocol: "HTTP", visibility: "PUBLIC", nickname: "", customSubdomain: "" });
 const emptyHealthCheck = (): HealthCheck => ({ serviceName: "", path: "/", hostPort: undefined, containerPort: undefined });
 const emptyEnvFile = (): EnvironmentFile => ({ vmPath: ".env", content: "" });
-const emptyServiceCard = (): ServiceCard => ({ name: "", runtime: "docker", context: ".", containerPort: 3000, expose: true, customSubdomain: "" });
+const emptyServiceCard = (): ServiceCard => ({ name: "", runtime: "docker", context: ".", containerPort: 3000, expose: true });
 const emptyInfra = (): InfraSelection => ({ type: "postgres", version: "" });
 
 // 모달 내 섹션 하나가 어떤 역할인지 한눈에 보이도록 제목+설명을 통일된 형태로 감싸는 래퍼
@@ -94,6 +100,622 @@ function Section({ title, description, children }: { title: string; description:
       {children}
     </section>
   );
+}
+
+function ComposeReviewFindingsView({ findings }: { findings: ComposeReviewFinding[] | null }) {
+  if (!findings) return null;
+  return (
+    <div className="space-y-2 rounded-md border border-line bg-white/[0.03] p-3 text-xs text-foreground">
+      <p className="text-[11px] text-muted-soft">AI 검수는 참고용이며 배포를 막지 않습니다.</p>
+      {findings.length === 0 ? (
+        <p className="text-muted-soft">특이사항이 없습니다.</p>
+      ) : (
+        findings.map((finding, index) => (
+          <div
+            key={`${finding.code}-${index}`}
+            className="border-l-2 pl-2"
+            style={{
+              borderColor: finding.severity === "CRITICAL"
+                ? "#ff6b6b"
+                : finding.severity === "WARNING" ? "#e8b657" : "#9aa39a",
+            }}
+          >
+            <p className="font-bold text-foreground">
+              [{finding.severity}] {finding.service && <span className="font-mono">{finding.service}</span>} {finding.message}
+            </p>
+            {finding.remediation && <p className="mt-0.5 text-muted">→ {finding.remediation}</p>}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function ComposeDetectionCard({
+  result,
+  selectedPath,
+  detecting,
+  reviewing,
+  reviewFindings,
+  onSelect,
+  onApply,
+  onReview,
+  onRefresh,
+}: {
+  result: ComposeDetectionResult;
+  selectedPath: string;
+  detecting: boolean;
+  reviewing: boolean;
+  reviewFindings: ComposeReviewFinding[] | null;
+  onSelect: (path: string) => void;
+  onApply: (file: DetectedComposeFile) => void;
+  onReview: (file: DetectedComposeFile) => void;
+  onRefresh: () => void;
+}) {
+  const selected = result.files.find((file) => file.path === selectedPath) ?? result.files[0];
+  if (!selected) return null;
+
+  return (
+    <section className="rounded-panel border border-[#64d98b]/35 bg-[#64d98b]/[0.055] p-5">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#64d98b]/15 text-xs text-[#73e09a]">✓</span>
+            <h3 className="text-sm font-extrabold text-foreground">Compose 파일이 감지되었습니다</h3>
+          </div>
+          <p className="text-xs text-muted">
+            저장소의 실제 파일을 불러왔습니다. 내용을 확인하거나 AI 검수를 거친 뒤 그대로 배포에 사용할 수 있습니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={detecting || reviewing}
+          className="text-xs font-bold text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {detecting ? "탐지 중..." : "다시 탐지"}
+        </button>
+      </div>
+
+      {result.files.length > 1 ? (
+        <Select value={selected.path} onChange={(event) => onSelect(event.target.value)} className="mb-3">
+          {result.files.map((file) => (
+            <option key={file.path} value={file.path}>{file.path}</option>
+          ))}
+        </Select>
+      ) : (
+        <div className="mb-3 rounded-md border border-[#64d98b]/20 bg-black/10 px-3 py-2 font-mono text-xs text-[#8be5aa]">
+          {selected.path}
+        </div>
+      )}
+
+      <pre className="max-h-56 overflow-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
+        {selected.content}
+      </pre>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button type="button" variant="primary" onClick={() => onApply(selected)} disabled={detecting || reviewing}>
+          이 Compose로 배포
+        </Button>
+        <Button type="button" onClick={() => onReview(selected)} disabled={detecting || reviewing}>
+          {reviewing ? "AI 검수 중..." : "AI 검수"}
+        </Button>
+        <span className="text-[11px] text-muted-soft">
+          적용 시 배포 디렉터리도 <span className="font-mono">{selected.directory}</span>(으)로 맞춰집니다.
+        </span>
+      </div>
+      {result.warnings.length > 0 && (
+        <div className="mt-3 space-y-1 text-[11px] text-[#e8b657]">
+          {result.warnings.map((warning) => <p key={warning}>⚠ {warning}</p>)}
+        </div>
+      )}
+      <div className="mt-3">
+        <ComposeReviewFindingsView findings={reviewFindings} />
+      </div>
+    </section>
+  );
+}
+
+// 한 서비스의 현재 라우팅 보정값을 계산 — 사용자가 아직 손대지 않았으면 플래너가 추론한 route 값을 기본으로 쓴다.
+function effectiveRouteOverride(
+  route: ComposeRouterRoute,
+  overrides: Record<string, ComposeRouterRouteOverride>
+): ComposeRouterRouteOverride {
+  const existing = overrides[route.serviceName];
+  if (existing) return existing;
+  return route.mode === "DOMAIN"
+    ? { mode: "DOMAIN", routePath: null, stripPrefix: false, customSubdomain: route.customSubdomain ?? "" }
+    : { mode: "PREFIX", routePath: route.routePath ?? `/${route.serviceName}`, stripPrefix: route.stripPrefix, customSubdomain: null };
+}
+
+// 서비스별 라우팅 편집 행 — 각 서비스를 '경로(Prefix, 통합 도메인 아래 경로)' 또는 '도메인(전용 서브도메인,
+// 호스트 기반)' 중 하나로 지정한다. compose 흐름(ComposeRouterPlanCard)과 AI 분석 결과 흐름에서 재사용한다.
+function RouteModeRows({
+  routes,
+  overrides,
+  planType,
+  subdomainCheck,
+  disabled,
+  onOverrideChange,
+  onDomainSubdomainChange,
+}: {
+  routes: ComposeRouterRoute[];
+  overrides: Record<string, ComposeRouterRouteOverride>;
+  planType: string | null;
+  subdomainCheck: Record<string, SubdomainCheckStatus>;
+  disabled: boolean;
+  onOverrideChange: (service: string, override: ComposeRouterRouteOverride) => void;
+  onDomainSubdomainChange: (service: string, value: string) => void;
+}) {
+  if (routes.length === 0) return null;
+  const isPro = planType === "PRO";
+  return (
+    <div className="mb-4 overflow-hidden rounded-[10px] border border-line">
+      {routes.map((route: ComposeRouterRoute) => {
+        const override = effectiveRouteOverride(route, overrides);
+        const isDomain = override.mode === "DOMAIN";
+        const check = subdomainCheck[route.serviceName] ?? "idle";
+        return (
+          <div
+            key={route.serviceName}
+            className={cn(
+              "border-b border-line px-3 py-3 text-xs last:border-b-0",
+              !route.root && !isDomain && route.confidence === "LOW" && "bg-[#e8b657]/[0.045]"
+            )}
+          >
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-foreground">{route.serviceName}</span>
+                {!route.root && !isDomain && (
+                  <>
+                    <span className={cn(
+                      "rounded-full border px-1.5 py-0.5 text-[9px] font-extrabold",
+                      route.confidence === "LOW"
+                        ? "border-[#e8b657]/30 bg-[#e8b657]/10 text-[#e8b657]"
+                        : "border-[#64d98b]/25 bg-[#64d98b]/10 text-[#8be5aa]"
+                    )}>
+                      {route.confidence === "LOW" ? "낮은 신뢰도" : "자동 인식"}
+                    </span>
+                    <span className="text-[10px] text-muted-soft">
+                      {route.source === "HEALTHCHECK" && "healthcheck 근거"}
+                      {route.source === "SERVICE_NAME" && "서비스명 추정"}
+                      {route.source === "USER" && "사용자 지정"}
+                      {route.source === "ROOT_DEFAULT" && "루트 진입점"}
+                    </span>
+                  </>
+                )}
+              </div>
+              <span className="font-mono text-[11px] text-muted">→ {route.upstream}</span>
+            </div>
+            {route.root ? (
+              <div className="rounded border border-line bg-black/10 px-2.5 py-2 font-mono text-foreground">
+                / <span className="ml-2 font-sans text-[10px] text-muted-soft">루트 서비스는 기본 진입점(공용 도메인)을 담당합니다.</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="inline-flex overflow-hidden rounded border border-line-strong text-[11px]">
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onOverrideChange(route.serviceName, {
+                      mode: "PREFIX",
+                      routePath: override.routePath ?? route.routePath ?? `/${route.serviceName}`,
+                      stripPrefix: override.stripPrefix,
+                      customSubdomain: null,
+                    })}
+                    className={cn("px-2.5 py-1 font-bold", !isDomain ? "bg-brand text-white" : "text-muted")}
+                  >
+                    경로(Prefix)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onOverrideChange(route.serviceName, {
+                      mode: "DOMAIN",
+                      routePath: null,
+                      stripPrefix: false,
+                      customSubdomain: override.customSubdomain ?? route.customSubdomain ?? "",
+                    })}
+                    className={cn("border-l border-line-strong px-2.5 py-1 font-bold", isDomain ? "bg-brand text-white" : "text-muted")}
+                  >
+                    도메인
+                  </button>
+                </div>
+                {isDomain ? (
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className={cn(
+                        "flex h-9 min-w-[220px] flex-1 items-center overflow-hidden rounded border border-line-strong",
+                        isPro ? "bg-background" : "bg-black/10"
+                      )}>
+                        <input
+                          value={override.customSubdomain ?? ""}
+                          disabled={disabled || !isPro}
+                          onChange={(event) => onDomainSubdomainChange(route.serviceName, event.target.value)}
+                          placeholder="예: community"
+                          maxLength={30}
+                          className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-xs outline-none disabled:cursor-not-allowed disabled:text-muted-soft"
+                        />
+                        <span className="shrink-0 border-l border-line-strong px-2.5 text-[11px] text-muted-soft">.gamjabox.cloud</span>
+                      </div>
+                      {isPro && override.customSubdomain && (
+                        <span className={cn(
+                          "shrink-0 text-[10px]",
+                          check === "available" ? "text-brand-strong" : check === "checking" ? "text-muted-soft" : "text-danger"
+                        )}>
+                          {check === "checking" && "확인 중..."}
+                          {check === "available" && "✓ 사용 가능"}
+                          {check === "taken" && "이미 사용 중"}
+                          {check === "reserved" && "예약된 이름"}
+                          {check === "pro-only" && "PRO 전용"}
+                        </span>
+                      )}
+                    </div>
+                    <p className={cn("mt-1 text-[10px]", isPro ? "text-muted-soft" : "font-medium text-[#e8b657]")}>
+                      {isPro
+                        ? "이 서비스는 전용 서브도메인으로 노출되고 Caddy가 Host로 라우팅합니다."
+                        : "도메인 모드(전용 서브도메인)는 PRO 플랜에서 사용할 수 있습니다."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <Input
+                      value={override.routePath ?? ""}
+                      disabled={disabled}
+                      onChange={(event) => onOverrideChange(route.serviceName, {
+                        mode: "PREFIX",
+                        routePath: event.target.value,
+                        stripPrefix: override.stripPrefix,
+                        customSubdomain: null,
+                      })}
+                      placeholder="/api/service"
+                      className="font-mono"
+                    />
+                    <label className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
+                      <input
+                        type="checkbox"
+                        checked={override.stripPrefix}
+                        disabled={disabled}
+                        onChange={(event) => onOverrideChange(route.serviceName, {
+                          mode: "PREFIX",
+                          routePath: override.routePath ?? route.routePath ?? `/${route.serviceName}`,
+                          stripPrefix: event.target.checked,
+                          customSubdomain: null,
+                        })}
+                        className="accent-brand"
+                      />
+                      전달 전 Prefix 제거
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ComposeRouterPlanCard({
+  plan,
+  planning,
+  applied,
+  hostPort,
+  servicePorts,
+  routeOverrides,
+  planType,
+  subdomainCheck,
+  onHostPortChange,
+  onServicePortChange,
+  onRouteOverrideChange,
+  onDomainSubdomainChange,
+  onReplan,
+  onApply,
+}: {
+  plan: ComposeRouterPlanResult;
+  planning: boolean;
+  applied: boolean;
+  hostPort: number;
+  servicePorts: Record<string, number>;
+  routeOverrides: Record<string, ComposeRouterRouteOverride>;
+  planType: string | null;
+  subdomainCheck: Record<string, SubdomainCheckStatus>;
+  onHostPortChange: (port: number) => void;
+  onServicePortChange: (service: string, port: number) => void;
+  onRouteOverrideChange: (service: string, override: ComposeRouterRouteOverride) => void;
+  onDomainSubdomainChange: (service: string, value: string) => void;
+  onReplan: () => void;
+  onApply: () => void;
+}) {
+  const lowConfidenceRoutes = plan.routes.filter((route) => route.confidence === "LOW");
+
+  if (plan.status === "ALREADY_CONFIGURED") {
+    return (
+      <div className="rounded-panel border border-[#64d98b]/30 bg-[#64d98b]/[0.05] p-4 text-xs text-muted">
+        <p className="font-bold text-[#8be5aa]">기존 라우터 설정을 감지했습니다</p>
+        <p className="mt-1">
+          <span className="font-mono text-foreground">{plan.routerServiceName}</span> 서비스를 그대로 유지하며 자동 변경하지 않습니다.
+        </p>
+      </div>
+    );
+  }
+
+  if (plan.status === "NOT_REQUIRED") {
+    const direct = plan.routes[0];
+    return (
+      <div className="rounded-panel border border-line bg-white/[0.025] p-4 text-xs text-muted">
+        <p className="font-bold text-foreground">단일 서비스 직접 연결</p>
+        <p className="mt-1">
+          별도 Caddy 없이 <span className="font-mono text-foreground">{direct?.serviceName ?? "서비스"}</span>
+          {direct?.hostPort ? `의 호스트 ${direct.hostPort}번 포트` : " 포트"}로 직접 연결합니다.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <section className={cn(
+      "rounded-panel border p-5",
+      plan.status === "NEEDS_INPUT"
+        ? "border-[#e8b657]/30 bg-[#e8b657]/[0.055]"
+        : "border-[#75a9ff]/30 bg-[#75a9ff]/[0.045]"
+    )}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-extrabold text-foreground">
+            {plan.status === "NEEDS_INPUT"
+              ? "Caddy 라우터 구성에 추가 정보가 필요합니다"
+              : lowConfidenceRoutes.length > 0
+                ? "Caddy Prefix 확인이 필요합니다"
+                : "Caddy 다중 서비스 라우터"}
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            서비스 직접 노출을 내부 네트워크로 전환하고 하나의 공개 진입점에서 경로별로 전달합니다.
+          </p>
+        </div>
+        {applied && (
+          <span className="rounded-full border border-[#64d98b]/25 bg-[#64d98b]/10 px-2.5 py-1 text-[10px] font-extrabold text-[#8be5aa]">
+            Compose에 자동 적용됨
+          </span>
+        )}
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <Field label="Caddy 호스트 진입 포트" htmlFor="router-host-port">
+          <Input
+            id="router-host-port"
+            type="number"
+            min={1}
+            max={65535}
+            value={hostPort}
+            disabled={applied}
+            onChange={(event) => onHostPortChange(Number(event.target.value))}
+          />
+        </Field>
+        {plan.unresolvedServices.map((service) => (
+          service.portRequired ? (
+            <Field
+              key={service.serviceName}
+              label={`${service.serviceName} 컨테이너 포트`}
+              htmlFor={`router-service-${service.serviceName}`}
+            >
+              <Input
+                id={`router-service-${service.serviceName}`}
+                type="number"
+                min={1}
+                max={65535}
+                value={servicePorts[service.serviceName] || ""}
+                placeholder="예: 3000"
+                onChange={(event) => onServicePortChange(service.serviceName, Number(event.target.value))}
+              />
+              <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">{service.reason}</p>
+            </Field>
+          ) : (
+            <div key={service.serviceName} className="rounded-md border border-[#e8b657]/20 bg-black/10 p-3 text-xs text-[#e8b657]">
+              <p className="font-bold">{service.serviceName}</p>
+              <p className="mt-1 text-[11px]">{service.reason} Compose에서 해당 옵션을 정리한 뒤 다시 분석하세요.</p>
+            </div>
+          )
+        ))}
+      </div>
+
+      <RouteModeRows
+        routes={plan.routes}
+        overrides={routeOverrides}
+        planType={planType}
+        subdomainCheck={subdomainCheck}
+        disabled={applied}
+        onOverrideChange={onRouteOverrideChange}
+        onDomainSubdomainChange={onDomainSubdomainChange}
+      />
+
+      {plan.routerConfig && (
+        <details className="mb-4 rounded-[10px] border border-line bg-black/10">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-muted">생성될 Caddyfile 보기</summary>
+          <pre className="max-h-56 overflow-auto border-t border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
+            {plan.routerConfig}
+          </pre>
+        </details>
+      )}
+
+      {plan.warnings.length > 0 && (
+        <div className="mb-4 space-y-1 text-[11px] text-[#e8b657]">
+          {plan.warnings.map((warning) => <p key={warning}>⚠ {warning}</p>)}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {!applied && (
+          <Button type="button" onClick={onReplan} disabled={planning}>
+            {planning ? "라우터 분석 중..." : "설정 다시 계산"}
+          </Button>
+        )}
+        {plan.status === "ADDED" && !applied && (
+          <Button type="button" variant="primary" onClick={onApply} disabled={planning}>
+            Compose에 적용
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PublicEndpointCnameCard({
+  endpoint,
+  throughCaddy,
+  planType,
+  customSubdomain,
+  check,
+  onChange,
+}: {
+  endpoint: ExposedRoute | null;
+  throughCaddy: boolean;
+  planType: string | null;
+  customSubdomain: string;
+  check: SubdomainCheckStatus;
+  onChange: (value: string) => void;
+}) {
+  if (!endpoint) return null;
+  const isPro = planType === "PRO";
+  return (
+    <section className="rounded-panel border border-[#75a9ff]/30 bg-[#75a9ff]/[0.045] p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold text-[#a9c8ff]">최종 공개 진입점</p>
+          <h3 className="mt-1 text-sm font-extrabold text-foreground">
+            {throughCaddy ? "Caddy 통합 라우터" : "단일 서비스 직접 연결"}
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            <span className="font-mono text-foreground">{endpoint.serviceName}</span>
+            <span className="mx-1.5">·</span>
+            호스트 <span className="font-mono text-foreground">{endpoint.port}</span>번 포트
+          </p>
+        </div>
+        <span className="rounded-full border border-[#64d98b]/25 bg-[#64d98b]/10 px-2.5 py-1 text-[10px] font-extrabold text-[#8be5aa]">
+          {throughCaddy ? "멀티 서비스" : "단일 서비스"}
+        </span>
+      </div>
+
+      <div className={cn(
+        "rounded-md border p-3",
+        isPro ? "border-line-strong bg-white/[0.025]" : "border-[#e8b657]/25 bg-[#e8b657]/[0.045]"
+      )}>
+        <div className="mb-2 flex items-center gap-1.5">
+          <span className="text-xs font-bold text-foreground">커스텀 CNAME</span>
+          {!isPro ? (
+            <span className="rounded border border-[#e8b657]/30 bg-[#e8b657]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#e8b657]">
+              PRO에서 잠금 해제
+            </span>
+          ) : (
+            <span className="text-[10px] text-accent">PRO</span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className={cn(
+            "flex h-9 min-w-[240px] flex-1 items-center overflow-hidden rounded border border-line-strong",
+            isPro ? "bg-background" : "bg-black/10"
+          )}>
+            <input
+              value={customSubdomain}
+              onChange={(event) => onChange(event.target.value)}
+              placeholder="예: portfolio"
+              maxLength={30}
+              pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
+              disabled={!isPro}
+              className="h-full min-w-0 flex-1 bg-transparent px-2.5 text-xs outline-none disabled:cursor-not-allowed disabled:text-muted-soft"
+            />
+            <span className="shrink-0 border-l border-line-strong px-2.5 text-[11px] text-muted-soft">
+              .gamjabox.cloud
+            </span>
+          </div>
+          {isPro && customSubdomain && (
+            <span className={cn(
+              "shrink-0 text-[10px]",
+              check === "available"
+                ? "text-brand-strong"
+                : check === "checking" ? "text-muted-soft" : "text-danger"
+            )}>
+              {check === "checking" && "확인 중..."}
+              {check === "available" && "✓ 사용 가능"}
+              {check === "taken" && "이미 사용 중"}
+              {check === "reserved" && "예약된 이름"}
+              {check === "pro-only" && "PRO 전용"}
+            </span>
+          )}
+        </div>
+        <p className={cn("mt-2 text-[10px]", isPro ? "text-muted-soft" : "font-medium text-[#e8b657]")}>
+          {isPro
+            ? "비워두면 VM 식별자가 포함된 기본 주소를 자동 생성합니다."
+            : "PRO 플랜에서는 자동 식별자 없이 원하는 주소를 최종 공개 진입점에 연결할 수 있습니다."}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function discoveredServiceCard(service: DiscoveredService): ServiceCard {
+  return {
+    name: service.name,
+    runtime: service.runtime,
+    context: service.context,
+    containerPort: service.containerPort,
+    javaVersion: service.runtime === "java" ? 21 : undefined,
+    buildTool: service.runtime === "java" ? "maven" : undefined,
+    nodeVersion: service.runtime === "node" ? 22 : undefined,
+    pythonVersion: service.runtime === "python" ? "3.11" : undefined,
+    expose: service.expose,
+  };
+}
+
+function normalizeServiceContext(context: string | undefined): string {
+  const normalized = (context || ".").trim().replaceAll("\\", "/").replace(/^\.\/+/, "").replace(/\/+$/, "");
+  return normalized || ".";
+}
+
+function mergeDiscoveredServiceCards(
+  previous: ServiceCard[],
+  discovered: DiscoveredService[]
+): ServiceCard[] {
+  if (discovered.length === 0) return previous;
+  const consumed = new Set<number>();
+  const merged = discovered.map((service) => {
+    const hintIndex = previous.findIndex((hint, index) => (
+      !consumed.has(index)
+      && (
+        normalizeServiceContext(hint.context) === normalizeServiceContext(service.context)
+        || (hint.name && hint.name.toLowerCase() === service.name.toLowerCase())
+      )
+    ));
+    if (hintIndex < 0) return discoveredServiceCard(service);
+    consumed.add(hintIndex);
+    const hint = previous[hintIndex];
+    return {
+      ...discoveredServiceCard(service),
+      ...hint,
+      context: service.context,
+    };
+  });
+  const hasSubmodules = discovered.some((service) => normalizeServiceContext(service.context) !== ".");
+  previous.forEach((hint, index) => {
+    if (consumed.has(index) || !hint.name.trim()) return;
+    if (hasSubmodules && normalizeServiceContext(hint.context) === ".") return;
+    merged.push(hint);
+  });
+  return merged;
+}
+
+function resolveServiceContext(
+  rootContext: string,
+  serviceContext: string,
+  discovered: DiscoveredService[] | undefined
+): string {
+  const normalized = normalizeServiceContext(serviceContext);
+  const isRepositoryRelativeDiscovery = (discovered ?? []).some(
+    (service) => normalizeServiceContext(service.context) === normalized
+  );
+  return isRepositoryRelativeDiscovery
+    ? normalized
+    : joinRepositoryContext(rootContext, serviceContext);
 }
 
 function DeploymentWizardProgress({
@@ -229,22 +851,38 @@ export default function DeploymentsPage() {
   // Raw Compose
   const [composeContent, setComposeContent] = useState("");
   const [context, setContext] = useState("");
+  const [composeDetection, setComposeDetection] = useState<ComposeDetectionResult | null>(null);
+  const [selectedDetectedComposePath, setSelectedDetectedComposePath] = useState("");
+  const [lastComposeDetectionKey, setLastComposeDetectionKey] = useState("");
+  const [composeDetectionError, setComposeDetectionError] = useState<string | null>(null);
+  const [detectingCompose, setDetectingCompose] = useState(false);
+  const [composeReviewFindings, setComposeReviewFindings] = useState<ComposeReviewFinding[] | null>(null);
+  const [reviewingCompose, setReviewingCompose] = useState(false);
+  const [routerPlan, setRouterPlan] = useState<ComposeRouterPlanResult | null>(null);
+  const [planningRouter, setPlanningRouter] = useState(false);
+  const [routerApplied, setRouterApplied] = useState(false);
+  const [routerHostPort, setRouterHostPort] = useState(18080);
+  const [routerServicePorts, setRouterServicePorts] = useState<Record<string, number>>({});
+  const [routerRouteOverrides, setRouterRouteOverrides] = useState<Record<string, ComposeRouterRouteOverride>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [envFiles, setEnvFiles] = useState<EnvironmentFile[]>([]);
   const [routes, setRoutes] = useState<ExposedRoute[]>([]);
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
-  // PRO 전용 커스텀 CNAME — 라우트별로 가용성 체크 상태를 따로 들고 있어야 함(여러 서비스 노출 가능)
   const [planType, setPlanType] = useState<string | null>(null);
-  const [routeSubdomainCheck, setRouteSubdomainCheck] = useState<Record<number, SubdomainCheckStatus>>({});
-  const routeSubdomainTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const [deploymentCustomSubdomain, setDeploymentCustomSubdomain] = useState("");
+  const [deploymentSubdomainCheck, setDeploymentSubdomainCheck] = useState<SubdomainCheckStatus>("idle");
+  const deploymentSubdomainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 도메인 모드 서비스별 서브도메인 가용성 — 여러 서비스가 각자 전용 도메인을 가질 수 있어 서비스명으로 구분한다.
+  const [domainSubdomainCheck, setDomainSubdomainCheck] = useState<Record<string, SubdomainCheckStatus>>({});
+  const domainSubdomainTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // AI 자동생성
   const [serviceCards, setServiceCards] = useState<ServiceCard[]>([emptyServiceCard()]);
-  const [serviceSubdomainCheck, setServiceSubdomainCheck] = useState<Record<number, SubdomainCheckStatus>>({});
-  const serviceSubdomainTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const [infraSelections, setInfraSelections] = useState<InfraSelection[]>([]);
   const [generatedSpec, setGeneratedSpec] = useState<string>("");
+  const [renderedSpec, setRenderedSpec] = useState<ComposeSpecResponse | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [renderingSpec, setRenderingSpec] = useState(false);
   const [reviewFindings, setReviewFindings] = useState<ComposeReviewFinding[] | null>(null);
   const [reviewing, setReviewing] = useState(false);
   // 결정론적 저장소 분석 + 명시적 불확실성 상태 — status가 READY가 아니면 generatedSpec은 비어있고
@@ -257,7 +895,7 @@ export default function DeploymentsPage() {
   const furthestCreateStep = furthestStepByTab[createTab];
 
   function visitCreateStep(step: CreateStep) {
-    if (generating || submitting || reviewing) return;
+    if (generating || submitting || reviewing || detectingCompose || reviewingCompose || planningRouter) return;
     if (step <= furthestCreateStep) setCreateStep(step);
   }
 
@@ -271,6 +909,7 @@ export default function DeploymentsPage() {
 
   function invalidateAiGeneration() {
     setGeneratedSpec("");
+    setRenderedSpec(null);
     setReviewFindings(null);
     setGenerationStatus(null);
     setUnresolvedFields([]);
@@ -282,8 +921,20 @@ export default function DeploymentsPage() {
     }));
   }
 
+  function invalidateComposeDetection() {
+    setComposeDetection(null);
+    setSelectedDetectedComposePath("");
+    setLastComposeDetectionKey("");
+    setComposeDetectionError(null);
+    setComposeReviewFindings(null);
+    setRouterPlan(null);
+    setRouterApplied(false);
+    setRouterServicePorts({});
+  }
+
   function handleRepoUrlChange(value: string) {
     setManualRepoUrl(value);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
@@ -293,22 +944,26 @@ export default function DeploymentsPage() {
     } else {
       setManualBranch(value);
     }
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
   function handleRepositorySourceChange(source: RepositorySource) {
     if (source === repositorySource) return;
     setRepositorySource(source);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
   function handlePatTokenChange(value: string) {
     setPatToken(value);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
   function handleRepositoryContextChange(value: string) {
     setContext(value);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
@@ -326,15 +981,6 @@ export default function DeploymentsPage() {
 
   function removeServiceCard(index: number) {
     setServiceCards((prev) => prev.filter((_, serviceIndex) => serviceIndex !== index));
-    setServiceSubdomainCheck((prev) => {
-      const next: Record<number, SubdomainCheckStatus> = {};
-      Object.entries(prev).forEach(([key, value]) => {
-        const currentIndex = Number(key);
-        if (currentIndex < index) next[currentIndex] = value;
-        if (currentIndex > index) next[currentIndex - 1] = value;
-      });
-      return next;
-    });
     invalidateAiGeneration();
   }
 
@@ -366,59 +1012,143 @@ export default function DeploymentsPage() {
     invalidateAiGeneration();
   }
 
-  function handleRouteCustomSubdomainChange(index: number, value: string) {
+  // 마지막 렌더 결과의 라우터 계획에서 기본 진입점(루트) 서비스명을 찾는다. 게이트웨이 도메인(공용 CNAME)은
+  // 이 루트 서비스의 expose.customSubdomain으로 전달된다(백엔드 렌더러가 그렇게 읽음).
+  function aiRootServiceName(): string | null {
+    return renderedSpec?.routerPlan?.routes.find((route) => route.root)?.serviceName ?? null;
+  }
+
+  function applyRoutingSettingsToSpec(
+    spec: DeploymentSpec,
+    overrides = routerRouteOverrides,
+    gatewaySubdomain = deploymentCustomSubdomain,
+    rootServiceName = aiRootServiceName()
+  ): DeploymentSpec {
+    return {
+      ...spec,
+      services: spec.services.map((service) => {
+        if (!service.expose?.enabled || service.expose.protocol?.toLowerCase() !== "http") {
+          return service;
+        }
+        // 루트/기본 진입점 서비스: 항상 PREFIX '/', 공용 게이트웨이 도메인(CNAME)을 사용.
+        if (rootServiceName && service.name === rootServiceName) {
+          return {
+            ...service,
+            expose: {
+              ...service.expose,
+              routeMode: "PREFIX",
+              routePath: "/",
+              stripPrefix: false,
+              customSubdomain: gatewaySubdomain || null,
+            },
+          };
+        }
+        const override = overrides[service.name];
+        if (!override) return service;
+        if (override.mode === "DOMAIN") {
+          return {
+            ...service,
+            expose: {
+              ...service.expose,
+              routeMode: "DOMAIN",
+              customSubdomain: override.customSubdomain || null,
+              routePath: null,
+              stripPrefix: null,
+            },
+          };
+        }
+        return {
+          ...service,
+          expose: {
+            ...service.expose,
+            routeMode: "PREFIX",
+            routePath: override.routePath ?? service.expose.routePath ?? null,
+            stripPrefix: override.stripPrefix,
+            customSubdomain: null,
+          },
+        };
+      }),
+    };
+  }
+
+  // 기본 진입점(게이트웨이) 공용 도메인 CNAME — 루트/Prefix 서비스가 공유한다.
+  function handleDeploymentCustomSubdomainChange(value: string) {
     const lower = value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30);
-    setRoutes((prev) => prev.map((x, xi) => (xi === index ? { ...x, customSubdomain: lower } : x)));
-    setRouteSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
-    if (routeSubdomainTimers.current[index]) clearTimeout(routeSubdomainTimers.current[index]);
+    setDeploymentCustomSubdomain(lower);
+    setDeploymentSubdomainCheck("idle");
+    const gatewayName = routerPlan?.routerServiceName;
+    setRoutes((previous) => previous.map((route) => {
+      if (route.protocol !== "HTTP" || route.visibility !== "PUBLIC") return route;
+      // 게이트웨이 라우트가 있으면 그 라우트에만, 없으면(단일 서비스) 공개 HTTP 라우트에 적용.
+      if (gatewayName && route.serviceName !== gatewayName) return route;
+      return { ...route, customSubdomain: lower };
+    }));
+    setGeneratedSpec((previous) => {
+      if (!previous) return previous;
+      try {
+        return JSON.stringify(
+          applyRoutingSettingsToSpec(JSON.parse(previous) as DeploymentSpec, routerRouteOverrides, lower),
+          null,
+          2
+        );
+      } catch {
+        return previous;
+      }
+    });
+    if (deploymentSubdomainTimer.current) clearTimeout(deploymentSubdomainTimer.current);
     if (!lower || !accessToken) return;
-    setRouteSubdomainCheck((prev) => ({ ...prev, [index]: "checking" }));
-    routeSubdomainTimers.current[index] = setTimeout(async () => {
+    setDeploymentSubdomainCheck("checking");
+    deploymentSubdomainTimer.current = setTimeout(async () => {
       try {
         const result = await api.vm.checkSubdomain(accessToken, vmId, lower);
-        setRouteSubdomainCheck((prev) => ({
-          ...prev,
-          [index]: result.available ? "available" : ((result.reason as "taken" | "reserved" | "pro-only") ?? "taken"),
-        }));
+        setDeploymentSubdomainCheck(
+          result.available
+            ? "available"
+            : ((result.reason as "taken" | "reserved" | "pro-only") ?? "taken")
+        );
       } catch {
-        setRouteSubdomainCheck((prev) => ({ ...prev, [index]: "taken" }));
+        setDeploymentSubdomainCheck("taken");
       }
     }, 500);
   }
 
-  function handleServiceCustomSubdomainChange(index: number, value: string) {
+  // 도메인 모드 서비스의 전용 서브도메인 입력 — override에 반영하고 가용성을 서비스별로 확인한다.
+  function handleDomainSubdomainChange(service: string, value: string) {
     const lower = value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30);
-    setServiceCards((prev) => prev.map((x, xi) => (xi === index ? { ...x, customSubdomain: lower } : x)));
-    setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
-    invalidateAiGeneration();
-    if (serviceSubdomainTimers.current[index]) clearTimeout(serviceSubdomainTimers.current[index]);
+    setRouterRouteOverrides((previous) => ({
+      ...previous,
+      [service]: { mode: "DOMAIN", routePath: null, stripPrefix: false, customSubdomain: lower },
+    }));
+    setRouterApplied(false);
+    setDomainSubdomainCheck((previous) => ({ ...previous, [service]: "idle" }));
+    if (domainSubdomainTimers.current[service]) clearTimeout(domainSubdomainTimers.current[service]);
     if (!lower || !accessToken) return;
-    setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "checking" }));
-    serviceSubdomainTimers.current[index] = setTimeout(async () => {
+    setDomainSubdomainCheck((previous) => ({ ...previous, [service]: "checking" }));
+    domainSubdomainTimers.current[service] = setTimeout(async () => {
       try {
         const result = await api.vm.checkSubdomain(accessToken, vmId, lower);
-        setServiceSubdomainCheck((prev) => ({
-          ...prev,
-          [index]: result.available ? "available" : ((result.reason as Exclude<SubdomainCheckStatus, "idle" | "checking" | "available">) ?? "taken"),
+        setDomainSubdomainCheck((previous) => ({
+          ...previous,
+          [service]: result.available
+            ? "available"
+            : ((result.reason as "taken" | "reserved" | "pro-only") ?? "taken"),
         }));
       } catch {
-        setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "taken" }));
+        setDomainSubdomainCheck((previous) => ({ ...previous, [service]: "taken" }));
       }
     }, 500);
   }
 
   function handleServiceExposureChange(index: number, expose: boolean) {
     setServiceCards((prev) => prev.map((x, xi) => (
-      xi === index ? { ...x, expose, customSubdomain: expose ? x.customSubdomain : "" } : x
+      xi === index ? { ...x, expose } : x
     )));
-    setServiceSubdomainCheck((prev) => ({ ...prev, [index]: "idle" }));
-    if (serviceSubdomainTimers.current[index]) clearTimeout(serviceSubdomainTimers.current[index]);
     invalidateAiGeneration();
   }
 
   useEffect(() => () => {
-    Object.values(routeSubdomainTimers.current).forEach(clearTimeout);
-    Object.values(serviceSubdomainTimers.current).forEach(clearTimeout);
+    if (deploymentSubdomainTimer.current) clearTimeout(deploymentSubdomainTimer.current);
+    Object.values(domainSubdomainTimers.current).forEach(clearTimeout);
   }, []);
 
   const load = useCallback(async () => {
@@ -523,6 +1253,7 @@ export default function DeploymentsPage() {
   function applyComposeSpec(spec: ComposeSpecResponse) {
     setComposeContent(spec.composeContent);
     setContext(spec.context ?? "");
+    invalidateComposeDetection();
     setInstallPath(spec.installPath ?? "");
     setRepositorySource("url");
     setSelectedGithubRepositoryKey("");
@@ -586,18 +1317,34 @@ export default function DeploymentsPage() {
     setSelectedGithubRepositoryKey("");
     setComposeContent("");
     setContext("");
+    setComposeDetection(null);
+    setSelectedDetectedComposePath("");
+    setLastComposeDetectionKey("");
+    setComposeDetectionError(null);
+    setDetectingCompose(false);
+    setComposeReviewFindings(null);
+    setReviewingCompose(false);
+    setRouterPlan(null);
+    setPlanningRouter(false);
+    setRouterApplied(false);
+    setRouterHostPort(18080);
+    setRouterServicePorts({});
+    setRouterRouteOverrides({});
     setInstallPath("");
     setNetworkMode("create");
     setExistingNetworkName("");
     setShowAdvanced(false);
     setEnvFiles([]);
     setRoutes([]);
-    setRouteSubdomainCheck({});
+    setDeploymentCustomSubdomain("");
+    setDeploymentSubdomainCheck("idle");
+    setDomainSubdomainCheck({});
     setHealthChecks([]);
     setServiceCards([emptyServiceCard()]);
-    setServiceSubdomainCheck({});
     setInfraSelections([]);
     setGeneratedSpec("");
+    setRenderedSpec(null);
+    setRenderingSpec(false);
     setReviewFindings(null);
     setGenerationStatus(null);
     setUnresolvedFields([]);
@@ -609,6 +1356,7 @@ export default function DeploymentsPage() {
   }
 
   function closeCreate() {
+    if (submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter) return;
     setShowCreate(false);
     setError(null);
     resetCreateForm();
@@ -651,6 +1399,7 @@ export default function DeploymentsPage() {
 
   function handleGithubRepositoryChange(key: string) {
     setSelectedGithubRepositoryKey(key);
+    invalidateComposeDetection();
     const repository = githubRepositories.find((item) => `${item.installationId}:${item.id}` === key);
     if (!repository) {
       setGithubBranch("main");
@@ -713,12 +1462,258 @@ export default function DeploymentsPage() {
     }
   }
 
+  function nextAvailableRouterPort(): number {
+    const occupied = new Set(deploymentPorts.map((port) => port.port));
+    for (let port = 18080; port <= 18999; port += 1) {
+      if (!occupied.has(port)) return port;
+    }
+    return 19080;
+  }
+
+  function routerNickname(): string {
+    const normalized = (targetName || "gateway")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 20)
+      .replace(/-+$/g, "");
+    return normalized || "gateway";
+  }
+
+  function applyRouterPlan(plan: ComposeRouterPlanResult) {
+    if (plan.status !== "ADDED" || !plan.routerHostPort) return;
+    setComposeContent(plan.enhancedComposeContent);
+    setRouterPlan(plan);
+    setRouterApplied(true);
+    setRouterHostPort(plan.routerHostPort);
+    setComposeReviewFindings(null);
+
+    const routedServices = new Set(plan.routes.map((route) => route.serviceName));
+    const domainRoutes = plan.routes.filter((route) => route.mode === "DOMAIN");
+    setRoutes((previous) => {
+      const replacedRoutes = previous.filter((route) => routedServices.has(route.serviceName));
+      const preservedRoutes = previous.filter(
+        (route) => !routedServices.has(route.serviceName) && route.serviceName !== plan.routerServiceName
+      );
+      const inheritedCustomSubdomain = replacedRoutes
+        .map((route) => route.customSubdomain)
+        .find((value) => Boolean(value));
+      const usedNicknames = new Set(preservedRoutes.map((route) => route.nickname));
+      let gatewayNickname = routerNickname();
+      if (usedNicknames.has(gatewayNickname)) gatewayNickname = "gateway";
+      while (usedNicknames.has(gatewayNickname)) gatewayNickname = `${gatewayNickname}-2`;
+      usedNicknames.add(gatewayNickname);
+      // 도메인 모드 서비스는 각자 전용 서브도메인으로 같은 router 포트를 통해 노출된다.
+      const domainExposedRoutes: ExposedRoute[] = domainRoutes.map((route) => ({
+        serviceName: route.serviceName,
+        port: plan.routerHostPort!,
+        protocol: "HTTP",
+        visibility: "PUBLIC",
+        nickname: uniqueNicknameFor(route.serviceName, usedNicknames),
+        customSubdomain: route.customSubdomain ?? "",
+      }));
+      return [
+        {
+          serviceName: plan.routerServiceName,
+          port: plan.routerHostPort!,
+          protocol: "HTTP",
+          visibility: "PUBLIC",
+          nickname: gatewayNickname,
+          customSubdomain: deploymentCustomSubdomain || inheritedCustomSubdomain || "",
+        },
+        ...domainExposedRoutes,
+        ...preservedRoutes,
+      ];
+    });
+    const routeByService = new Map(plan.routes.map((route) => [route.serviceName, route]));
+    setHealthChecks((previous) => previous.map((check) => {
+      const route = routeByService.get(check.serviceName);
+      if (!route) return check;
+      const originalPath = check.path?.startsWith("/") ? check.path : `/${check.path || ""}`;
+      // 루트/도메인 라우트는 자기 도메인 루트에서 그대로 서비스되므로 경로를 접두하지 않는다.
+      return {
+        serviceName: plan.routerServiceName,
+        path: (route.root || route.mode === "DOMAIN") ? originalPath : `${route.routePath}${originalPath}`,
+        hostPort: plan.routerHostPort!,
+        containerPort: undefined,
+      };
+    }));
+    setShowAdvanced(true);
+  }
+
+  // ExposedRoute.nickname 제약(소문자/숫자/하이픈, 최대 20자) + 이번 배포 내 유일성을 만족하는 닉네임 생성.
+  function uniqueNicknameFor(base: string, used: Set<string>): string {
+    let slug = base.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
+    if (!slug) slug = "svc";
+    if (slug.length > 20) slug = slug.slice(0, 20).replace(/-+$/g, "");
+    let candidate = slug;
+    let suffix = 2;
+    while (used.has(candidate)) {
+      const suffixPart = `-${suffix}`;
+      const trimmed = slug.length + suffixPart.length > 20
+        ? slug.slice(0, 20 - suffixPart.length).replace(/-+$/g, "")
+        : slug;
+      candidate = `${trimmed}${suffixPart}`;
+      suffix += 1;
+    }
+    used.add(candidate);
+    return candidate;
+  }
+
+  async function handlePlanComposeRouter(
+    content: string,
+    autoApply: boolean,
+    forcePort?: number
+  ): Promise<ComposeRouterPlanResult | null> {
+    if (!accessToken || !content.trim()) return null;
+    const occupied = new Set(deploymentPorts.map((port) => port.port));
+    const requestedPort = forcePort
+      ?? (routerHostPort >= 1 && routerHostPort <= 65535 && !occupied.has(routerHostPort)
+        ? routerHostPort
+        : nextAvailableRouterPort());
+    setRouterHostPort(requestedPort);
+    setPlanningRouter(true);
+    setError(null);
+    try {
+      const planned = await api.ops.deployments.planComposeRouter(accessToken, vmId, {
+        composeContent: content,
+        routerHostPort: requestedPort,
+        servicePorts: Object.fromEntries(
+          Object.entries(routerServicePorts).filter(([, port]) => port >= 1 && port <= 65535)
+        ),
+        routeOverrides: Object.keys(routerRouteOverrides).length > 0 ? routerRouteOverrides : undefined,
+      });
+      let plan = planned;
+      if (planned.status === "ADDED") {
+        const routedServices = new Set(planned.routes.map((route) => route.serviceName));
+        const distinctCustomSubdomains = Array.from(new Set(
+          routes
+            .filter((route) => routedServices.has(route.serviceName))
+            .map((route) => route.customSubdomain?.trim())
+            .filter((value): value is string => Boolean(value))
+        ));
+        if (distinctCustomSubdomains.length > 1) {
+          plan = {
+            ...planned,
+            status: "NEEDS_INPUT",
+            enhancedComposeContent: content,
+            unresolvedServices: [{
+              serviceName: "공개 HTTP 라우트",
+              reason: "서로 다른 커스텀 서브도메인은 하나의 Caddy 진입점으로 합칠 수 없습니다. 하나의 도메인으로 통일하거나 기존 개별 노출을 유지하세요.",
+              portRequired: false,
+            }],
+            warnings: [
+              ...planned.warnings,
+              "커스텀 서브도메인 설정을 보호하기 위해 Compose를 자동 변경하지 않았습니다.",
+            ],
+          };
+        }
+      }
+      setRouterPlan(plan);
+      setRouterApplied(false);
+      if (autoApply && plan.status === "ADDED") {
+        applyRouterPlan(plan);
+      }
+      return plan;
+    } catch (err) {
+      setRouterPlan(null);
+      setRouterApplied(false);
+      setError(err instanceof Error ? err.message : "Compose 라우터 구성을 분석하지 못했습니다.");
+      return null;
+    } finally {
+      setPlanningRouter(false);
+    }
+  }
+
+  async function applyDetectedCompose(file: DetectedComposeFile) {
+    let content = file.content;
+    const plan = await handlePlanComposeRouter(file.content, false);
+    if (plan?.status === "ADDED") {
+      applyRouterPlan(plan);
+      content = plan.enhancedComposeContent;
+    } else {
+      setComposeContent(content);
+    }
+    setContext(file.directory === "." ? "" : file.directory);
+    setSelectedDetectedComposePath(file.path);
+    setCreateTab("compose");
+    setCreateStep(3);
+    setFurthestStepByTab((prev) => ({
+      ...prev,
+      compose: Math.max(prev.compose, 3) as CreateStep,
+    }));
+    invalidateAiGeneration();
+  }
+
+  async function handleDetectCompose(force = false): Promise<ComposeDetectionResult | null> {
+    if (!accessToken || !repoUrl || !branch) return null;
+    const detectionKey = JSON.stringify([
+      repoUrl,
+      branch,
+      context.trim() || ".",
+      activeGithubRepository?.installationId ?? null,
+      activeGithubRepository?.id ?? null,
+    ]);
+    if (!force && detectionKey === lastComposeDetectionKey && composeDetection) {
+      return composeDetection;
+    }
+
+    setDetectingCompose(true);
+    setComposeDetectionError(null);
+    setComposeReviewFindings(null);
+    try {
+      const result = await api.ops.deployments.detectCompose(accessToken, vmId, {
+        repoUrl,
+        branch,
+        patToken: repositorySource === "url" ? patToken || undefined : undefined,
+        context: context.trim() || undefined,
+        githubInstallationId: activeGithubRepository?.installationId,
+        githubRepositoryId: activeGithubRepository?.id,
+      });
+      setComposeDetection(result);
+      setLastComposeDetectionKey(detectionKey);
+      const primary = result.files.find((file) => file.primary) ?? result.files[0];
+      setSelectedDetectedComposePath(primary?.path ?? "");
+      const discoveredServices = result.discoveredServices ?? [];
+      if (!result.detected && createTab === "ai" && discoveredServices.length > 0) {
+        setServiceCards((previous) => mergeDiscoveredServiceCards(previous, discoveredServices));
+        invalidateAiGeneration();
+      }
+      if (primary && createTab === "compose" && !composeContent.trim()) {
+        setComposeContent(primary.content);
+        setContext(primary.directory === "." ? "" : primary.directory);
+        await handlePlanComposeRouter(primary.content, true);
+      }
+      return result;
+    } catch (err) {
+      setComposeDetection(null);
+      setSelectedDetectedComposePath("");
+      setComposeDetectionError(
+        err instanceof Error ? err.message : "저장소의 Compose 파일을 확인하지 못했습니다."
+      );
+      return null;
+    } finally {
+      setDetectingCompose(false);
+    }
+  }
+
+  async function handleReviewCompose(content: string) {
+    if (!accessToken || !content.trim()) return;
+    setReviewingCompose(true);
+    setComposeReviewFindings(null);
+    setError(null);
+    try {
+      setComposeReviewFindings(await api.ops.deployments.reviewCompose(accessToken, vmId, content));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Compose AI 검수에 실패했습니다.");
+    } finally {
+      setReviewingCompose(false);
+    }
+  }
+
   async function handleCreateFromCompose() {
     if (!accessToken || !repoUrl || !branch || !composeContent) return;
-    const hasUncheckedCustomSubdomain = routes.some(
-      (r, i) => r.customSubdomain && routeSubdomainCheck[i] !== "available"
-    );
-    if (hasUncheckedCustomSubdomain) return;
+    if (!routingSubdomainsReady) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -749,7 +1744,6 @@ export default function DeploymentsPage() {
 
   async function handleGenerateSpec() {
     if (!accessToken || !repoUrl || !branch) return false;
-    if (serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")) return false;
     setGenerating(true);
     setError(null);
     setReviewFindings(null);
@@ -768,7 +1762,11 @@ export default function DeploymentsPage() {
           .filter((s) => s.name && s.runtime && s.context)
           .map((service) => ({
             ...service,
-            context: joinRepositoryContext(context, service.context),
+            context: resolveServiceContext(
+              context,
+              service.context,
+              composeDetection?.discoveredServices
+            ),
           })),
         infrastructure: infraSelections.filter((i) => i.type),
         existingNetworkName: networkMode === "reuse" ? existingNetworkName || undefined : undefined,
@@ -778,6 +1776,11 @@ export default function DeploymentsPage() {
       setGenerationWarnings(result.warnings);
       setUnresolvedFields(result.unresolved);
       setGeneratedSpec(result.status === "READY" && result.spec ? JSON.stringify(result.spec, null, 2) : "");
+      if (result.status === "READY" && result.spec) {
+        setRenderedSpec(await api.ops.deployments.renderSpec(accessToken, vmId, result.spec));
+      } else {
+        setRenderedSpec(null);
+      }
       advanceCreateStep(4);
       return true;
     } catch (err) {
@@ -803,13 +1806,29 @@ export default function DeploymentsPage() {
     }
   }
 
-  async function handleCreateFromSpec() {
-    if (!accessToken || !repoUrl || !branch || !generatedSpec) return;
-    if (serviceCards.some((s, i) => s.expose && s.customSubdomain && serviceSubdomainCheck[i] !== "available")) return;
-    setSubmitting(true);
+  async function handleRenderSpec() {
+    if (!accessToken || !generatedSpec) return;
+    setRenderingSpec(true);
     setError(null);
     try {
       const spec: DeploymentSpec = JSON.parse(generatedSpec);
+      setRenderedSpec(await api.ops.deployments.renderSpec(accessToken, vmId, spec));
+    } catch (err) {
+      setRenderedSpec(null);
+      setError(err instanceof Error ? err.message : "최종 Compose를 생성하지 못했습니다.");
+    } finally {
+      setRenderingSpec(false);
+    }
+  }
+
+  async function handleCreateFromSpec() {
+    if (!accessToken || !repoUrl || !branch || !generatedSpec) return;
+    if (!routingSubdomainsReady) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      // 분석 결과 단계에서 지정한 공개 진입점 CNAME과 서비스별 Prefix 보정을 배포 직전에 스펙에 반영한다.
+      const spec: DeploymentSpec = applyRoutingSettingsToSpec(JSON.parse(generatedSpec));
       const deployment = await api.ops.deployments.createFromSpec(accessToken, vmId, {
         repoUrl,
         branch,
@@ -835,12 +1854,79 @@ export default function DeploymentsPage() {
     repoUrl.trim() && branch.trim() && (retryNotice || targetName.trim())
   );
   const composeStepReady = Boolean(composeContent.trim());
-  const aiHintsStepReady = serviceCards.some((service) => (
-    service.name.trim() && service.runtime.trim() && service.context.trim()
-  )) && (networkMode === "create" || Boolean(existingNetworkName));
-  const aiSubdomainsReady = !serviceCards.some((service, index) => (
-    service.expose && service.customSubdomain && serviceSubdomainCheck[index] !== "available"
+  const aiHintsStepReady = (
+    Boolean(composeDetection?.discoveredServices?.length)
+    || serviceCards.some((service) => (
+      service.name.trim() && service.runtime.trim() && service.context.trim()
+    ))
+  ) && (networkMode === "create" || Boolean(existingNetworkName));
+  // 공개 진입점 CNAME은 분석 결과 단계(step 4)에서 단일 값으로 지정한다. 값이 없으면 자동 주소를 쓰므로
+  // 통과, 값이 있으면 가용성 확인이 끝나야 배포를 진행한다.
+  const deploymentSubdomainReady = !deploymentCustomSubdomain || deploymentSubdomainCheck === "available";
+  // 도메인 모드로 지정한 서비스는 전용 서브도메인이 채워지고 가용성 확인이 끝나야 배포할 수 있다.
+  const domainSubdomainsReady = Object.entries(routerRouteOverrides).every(([service, override]) => (
+    override.mode !== "DOMAIN"
+    || (Boolean(override.customSubdomain) && domainSubdomainCheck[service] === "available")
   ));
+  const routingSubdomainsReady = deploymentSubdomainReady && domainSubdomainsReady;
+
+  // 최종 공개 진입점 도출 — 단일 서비스면 그 서비스 포트, 다중 서비스면 Caddy 진입점 하나가 CNAME 대상이다.
+  // compose 흐름은 라우터 적용 후 routes에 남는 공개 HTTP 라우트를, AI 흐름은 렌더 결과의 routerPlan을 근거로 한다.
+  const composePublicEndpoint: { endpoint: ExposedRoute; throughCaddy: boolean } | null = (() => {
+    // 다중 서비스 라우터가 필요한데 아직 Compose에 적용하지 않았다면 진입점이 확정되지 않았으므로 숨긴다.
+    if (routerPlan && (routerPlan.status === "ADDED" || routerPlan.status === "NEEDS_INPUT") && !routerApplied) {
+      return null;
+    }
+    const publicHttp = routes.filter((route) => route.visibility === "PUBLIC" && route.protocol === "HTTP");
+    if (publicHttp.length === 0) return null;
+    const routerName = routerPlan?.routerServiceName;
+    const throughCaddy = Boolean(routerApplied && routerName && publicHttp.some((route) => route.serviceName === routerName));
+    const endpoint = throughCaddy
+      ? publicHttp.find((route) => route.serviceName === routerName)!
+      : publicHttp[0];
+    return { endpoint, throughCaddy };
+  })();
+
+  const aiRouterPlan = renderedSpec?.routerPlan ?? null;
+  const aiThroughCaddy = Boolean(
+    aiRouterPlan
+    && (aiRouterPlan.status === "ADDED" || aiRouterPlan.status === "ALREADY_CONFIGURED")
+    && aiRouterPlan.routerHostPort
+  );
+  const aiPublicEndpoint: { endpoint: ExposedRoute; throughCaddy: boolean } | null = (() => {
+    if (!renderedSpec) return null;
+    if (aiThroughCaddy && aiRouterPlan?.routerHostPort) {
+      return {
+        endpoint: {
+          serviceName: aiRouterPlan.routerServiceName,
+          port: aiRouterPlan.routerHostPort,
+          protocol: "HTTP",
+          visibility: "PUBLIC",
+          nickname: "",
+        },
+        throughCaddy: true,
+      };
+    }
+    const publicRoute = renderedSpec.exposedRoutes.find((route) => route.protocol?.toUpperCase() === "HTTP")
+      ?? renderedSpec.exposedRoutes[0];
+    return publicRoute ? { endpoint: publicRoute, throughCaddy: false } : null;
+  })();
+
+  // AI 흐름에서 서비스별 Prefix를 보정한 뒤 최종 Compose를 다시 렌더링한다 — 보정값을 스펙에 반영하고 재렌더.
+  async function handleRegenerateAiRouting() {
+    if (!accessToken || !generatedSpec) return;
+    setRenderingSpec(true);
+    setError(null);
+    try {
+      const spec = applyRoutingSettingsToSpec(JSON.parse(generatedSpec) as DeploymentSpec);
+      setGeneratedSpec(JSON.stringify(spec, null, 2));
+      setRenderedSpec(await api.ops.deployments.renderSpec(accessToken, vmId, spec));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "라우팅을 다시 생성하지 못했습니다.");
+    } finally {
+      setRenderingSpec(false);
+    }
+  }
 
   async function handleNextCreateStep() {
     if (createStep === 1) {
@@ -848,14 +1934,31 @@ export default function DeploymentsPage() {
       return;
     }
     if (createStep === 2 && repositoryStepReady) {
+      const detection = await handleDetectCompose();
+      if (createTab === "ai" && detection?.detected) {
+        const primary = detection.files.find((file) => file.primary) ?? detection.files[0];
+        if (primary) {
+          await applyDetectedCompose(primary);
+          return;
+        }
+      }
       advanceCreateStep(3);
       return;
     }
     if (createStep === 3 && createTab === "compose" && composeStepReady) {
+      let effectivePlan = routerPlan;
+      if (!effectivePlan) {
+        effectivePlan = await handlePlanComposeRouter(composeContent, true);
+      } else if (effectivePlan.status === "ADDED" && !routerApplied) {
+        applyRouterPlan(effectivePlan);
+      }
+      if (!effectivePlan || effectivePlan.status === "NEEDS_INPUT") {
+        return;
+      }
       advanceCreateStep(4);
       return;
     }
-    if (createStep === 3 && createTab === "ai" && aiHintsStepReady && aiSubdomainsReady) {
+    if (createStep === 3 && createTab === "ai" && aiHintsStepReady) {
       if (generationStatus) {
         advanceCreateStep(4);
       } else {
@@ -1419,20 +2522,64 @@ export default function DeploymentsPage() {
 
               {createTab === "compose" ? (
                 createStep === 3 ? (
-                <div className="wizard-step-enter">
+                <div className="wizard-step-enter space-y-4">
+                  {composeDetection?.detected && (
+                    <ComposeDetectionCard
+                      result={composeDetection}
+                      selectedPath={selectedDetectedComposePath}
+                      detecting={detectingCompose || planningRouter}
+                      reviewing={reviewingCompose}
+                      reviewFindings={composeReviewFindings}
+                      onSelect={(path) => {
+                        setSelectedDetectedComposePath(path);
+                        setComposeReviewFindings(null);
+                      }}
+                      onApply={applyDetectedCompose}
+                      onReview={(file) => handleReviewCompose(file.content)}
+                      onRefresh={() => { void handleDetectCompose(true); }}
+                    />
+                  )}
+                  {composeDetection && !composeDetection.detected && (
+                    <div className="rounded-md border border-line bg-white/[0.025] px-4 py-3 text-xs text-muted">
+                      <p>지정한 배포 디렉터리에서 Compose 파일을 찾지 못했습니다. 아래 편집기에 직접 작성하면 됩니다.</p>
+                      {composeDetection.warnings.map((warning) => (
+                        <p key={warning} className="mt-1 text-[#e8b657]">⚠ {warning}</p>
+                      ))}
+                    </div>
+                  )}
+                  {composeDetectionError && (
+                    <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] px-4 py-3 text-xs text-[#e8b657]">
+                      Compose 자동 탐지는 완료하지 못했습니다: {composeDetectionError} 직접 작성은 계속할 수 있습니다.
+                    </div>
+                  )}
                   <Section title="Compose 작성" description="저장소(또는 위에서 지정한 디렉토리)에서 실행할 서비스를 docker-compose.yaml 형식으로 작성하세요.">
                     <Field label="docker-compose.yaml" htmlFor="deploy-compose">
                       <Textarea
                         id="deploy-compose"
                         name="deploy-compose"
                         value={composeContent}
-                        onChange={(e) => setComposeContent(e.target.value)}
+                        onChange={(e) => {
+                          setComposeContent(e.target.value);
+                          setComposeReviewFindings(null);
+                          setRouterPlan(null);
+                          setRouterApplied(false);
+                          setRouterServicePorts({});
+                        }}
                         rows={10}
                         spellCheck={false}
                         placeholder={"services:\n  web:\n    build: .\n    ports:\n      - \"3000:3000\""}
                         className="font-mono resize-none"
                       />
                     </Field>
+                    <Button
+                      type="button"
+                      onClick={() => { void handlePlanComposeRouter(composeContent, true); }}
+                      disabled={!composeContent.trim() || planningRouter || routerApplied}
+                    >
+                      {routerApplied
+                        ? "Caddy 라우팅 적용 완료"
+                        : planningRouter ? "다중 서비스 라우팅 분석 중..." : "다중 서비스 라우팅 자동 구성"}
+                    </Button>
 
                     <button
                       type="button"
@@ -1478,71 +2625,23 @@ export default function DeploymentsPage() {
                             <p className="text-xs font-bold text-foreground">라우트 노출</p>
                             <button type="button" onClick={() => setRoutes((prev) => [...prev, emptyExposedRoute()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
                           </div>
-                          <p className="mb-1.5 text-[11px] text-muted-soft">외부에서 접근 가능하게 노출할 서비스 포트를 지정합니다.</p>
-                          {routes.map((r, i) => {
-                            const check = routeSubdomainCheck[i] ?? "idle";
-                            const isPro = planType === "PRO";
-                            return (
-                              <div key={i} className="mb-2">
-                                <div className="grid grid-cols-6 gap-1.5 items-center">
-                                  <input value={r.serviceName} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                                  <input type="number" value={r.port} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, port: Number(e.target.value) } : x)))} placeholder="포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                                  <select value={r.protocol} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, protocol: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
-                                    <option value="HTTP">HTTP</option>
-                                    <option value="TCP">TCP</option>
-                                  </select>
-                                  <select value={r.visibility} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, visibility: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
-                                    <option value="PUBLIC">공개</option>
-                                    <option value="PRIVATE">비공개</option>
-                                  </select>
-                                  <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
-                                  <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
-                                </div>
-                                <div className={cn(
-                                  "mt-1.5 rounded border p-2",
-                                  isPro ? "border-line-strong bg-white/[0.02]" : "border-[#e8b657]/25 bg-[#e8b657]/[0.045]"
-                                )}>
-                                  <div className="mb-1 flex items-center gap-1.5">
-                                    <span className="text-[10px] font-bold text-muted">커스텀 서브도메인</span>
-                                    {!isPro ? (
-                                      <span className="shrink-0 rounded border border-[#e8b657]/30 bg-[#e8b657]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#e8b657]">PRO에서 잠금 해제</span>
-                                    ) : (
-                                      <span className="text-[10px] text-accent">PRO</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <input
-                                      value={r.customSubdomain ?? ""}
-                                      onChange={(e) => handleRouteCustomSubdomainChange(i, e.target.value)}
-                                      placeholder="예: myservice (선착순 점유, 미입력 시 자동 생성)"
-                                      disabled={!isPro}
-                                      title={!isPro ? "PRO 플랜에서 자동 식별자 없는 커스텀 CNAME을 사용할 수 있습니다." : undefined}
-                                      className="h-7 flex-1 rounded border border-line-strong px-2 text-xs disabled:cursor-not-allowed disabled:bg-black/10 disabled:text-muted-soft"
-                                    />
-                                    {isPro && r.customSubdomain && (
-                                      <span className={cn(
-                                        "shrink-0 text-[10px]",
-                                        check === "available" ? "text-brand-strong" : check === "checking" ? "text-muted-soft" : "text-danger"
-                                      )}>
-                                        {check === "checking" && "확인 중..."}
-                                        {check === "available" && "✓ 사용 가능"}
-                                        {check === "taken" && "이미 사용 중"}
-                                        {check === "reserved" && "예약된 이름"}
-                                        {check === "pro-only" && "PRO 전용"}
-                                      </span>
-                                    )}
-                                  </div>
-                                  {!r.customSubdomain && (
-                                    <p className="mt-1 text-[10px] text-muted-soft">
-                                      {!isPro
-                                        ? "PRO 플랜에서는 자동 식별자 없이 원하는 주소를 선점할 수 있습니다."
-                                        : `미입력 시 자동 생성됩니다${r.nickname ? ` (${r.nickname} 닉네임 기준)` : ""}.`}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                          <p className="mb-1.5 text-[11px] text-muted-soft">외부에서 접근 가능하게 노출할 서비스 포트를 지정합니다. 공개 주소(CNAME)는 아래 라우팅 분석 결과에서 진입점 단위로 지정합니다.</p>
+                          {routes.map((r, i) => (
+                            <div key={i} className="mb-2 grid grid-cols-6 gap-1.5 items-center">
+                              <input value={r.serviceName} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <input type="number" value={r.port} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, port: Number(e.target.value) } : x)))} placeholder="포트" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <select value={r.protocol} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, protocol: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
+                                <option value="HTTP">HTTP</option>
+                                <option value="TCP">TCP</option>
+                              </select>
+                              <select value={r.visibility} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, visibility: e.target.value } : x)))} className="h-8 px-1 border border-line-strong rounded text-xs col-span-1">
+                                <option value="PUBLIC">공개</option>
+                                <option value="PRIVATE">비공개</option>
+                              </select>
+                              <input value={r.nickname} onChange={(e) => setRoutes((prev) => prev.map((x, xi) => (xi === i ? { ...x, nickname: e.target.value } : x)))} placeholder="닉네임" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
+                              <button type="button" onClick={() => setRoutes((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger col-span-1">✕</button>
+                            </div>
+                          ))}
                         </div>
 
                         {/* 헬스체크 */}
@@ -1565,6 +2664,45 @@ export default function DeploymentsPage() {
                       </div>
                     )}
                   </Section>
+
+                  {routerPlan && (
+                    <ComposeRouterPlanCard
+                      plan={routerPlan}
+                      planning={planningRouter}
+                      applied={routerApplied}
+                      hostPort={routerHostPort}
+                      servicePorts={routerServicePorts}
+                      routeOverrides={routerRouteOverrides}
+                      planType={planType}
+                      subdomainCheck={domainSubdomainCheck}
+                      onHostPortChange={(port) => {
+                        setRouterHostPort(port);
+                        setRouterApplied(false);
+                      }}
+                      onServicePortChange={(service, port) => {
+                        setRouterServicePorts((previous) => ({ ...previous, [service]: port }));
+                        setRouterApplied(false);
+                      }}
+                      onRouteOverrideChange={(service, override) => {
+                        setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }));
+                        setRouterApplied(false);
+                      }}
+                      onDomainSubdomainChange={handleDomainSubdomainChange}
+                      onReplan={() => { void handlePlanComposeRouter(composeContent, false, routerHostPort); }}
+                      onApply={() => applyRouterPlan(routerPlan)}
+                    />
+                  )}
+
+                  {composePublicEndpoint && (
+                    <PublicEndpointCnameCard
+                      endpoint={composePublicEndpoint.endpoint}
+                      throughCaddy={composePublicEndpoint.throughCaddy}
+                      planType={planType}
+                      customSubdomain={deploymentCustomSubdomain}
+                      check={deploymentSubdomainCheck}
+                      onChange={handleDeploymentCustomSubdomainChange}
+                    />
+                  )}
 
                   <Section title="Docker 네트워크" description="VM에 이미 존재하는 네트워크를 재사용하려면 compose 파일에 아래처럼 external 네트워크로 선언하세요.">
                     {dockerNetworks.length === 0 ? (
@@ -1626,14 +2764,64 @@ export default function DeploymentsPage() {
                         <pre className="max-h-64 overflow-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
                           {composeContent}
                         </pre>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => handleReviewCompose(composeContent)}
+                            disabled={reviewingCompose}
+                          >
+                            {reviewingCompose ? "AI 검수 중..." : "AI 검수 요청"}
+                          </Button>
+                          <span className="text-[11px] text-muted-soft">
+                            비밀값은 전송 전에 마스킹되며 검수 결과는 배포를 차단하지 않습니다.
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <ComposeReviewFindingsView findings={composeReviewFindings} />
+                        </div>
                       </div>
                     </Section>
                   </div>
                 ) : null
               ) : (
                 <>
-                  {createStep === 3 && <div className="wizard-step-enter">
-                  <Section title="서비스 힌트" description="분석할 서비스의 위치와 실행 환경을 알려주세요. 저장소 배포 디렉토리를 입력했다면 아래 경로는 그 디렉토리를 기준으로 계산됩니다.">
+                  {createStep === 3 && <div className="wizard-step-enter space-y-4">
+                  {composeDetection?.detected && (
+                    <ComposeDetectionCard
+                      result={composeDetection}
+                      selectedPath={selectedDetectedComposePath}
+                      detecting={detectingCompose || planningRouter}
+                      reviewing={reviewingCompose}
+                      reviewFindings={composeReviewFindings}
+                      onSelect={(path) => {
+                        setSelectedDetectedComposePath(path);
+                        setComposeReviewFindings(null);
+                      }}
+                      onApply={applyDetectedCompose}
+                      onReview={(file) => handleReviewCompose(file.content)}
+                      onRefresh={() => { void handleDetectCompose(true); }}
+                    />
+                  )}
+                  {composeDetectionError && (
+                    <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] px-4 py-3 text-xs text-[#e8b657]">
+                      Compose 자동 탐지는 완료하지 못했습니다: {composeDetectionError} AI 자동 생성은 계속할 수 있습니다.
+                    </div>
+                  )}
+                  {composeDetection && !composeDetection.detected && Boolean(composeDetection.discoveredServices?.length) && (
+                    <div className="rounded-md border border-[#75a9ff]/25 bg-[#75a9ff]/[0.055] px-4 py-3 text-xs text-[#a9c8ff]">
+                      <p className="font-bold text-foreground">
+                        실행 가능한 서비스 {composeDetection.discoveredServices?.length ?? 0}개를 저장소에서 자동 발견했습니다
+                      </p>
+                      <p className="mt-1">
+                        {(composeDetection.discoveredServices ?? []).map((service) => service.context).join(", ")}
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted">
+                        아래 항목은 발견 결과를 바탕으로 채워졌습니다. 서비스 힌트는 전체 목록을 직접 작성하는 곳이 아니라,
+                        자동 인식이 틀렸거나 추가 정보가 필요할 때만 보완하면 됩니다.
+                      </p>
+                    </div>
+                  )}
+                  <Section title="서비스 힌트" description="저장소에서 실행 가능한 모듈을 자동 인식합니다. 아래 값은 자동 인식 결과를 확인하거나 포트·실행 환경을 보완할 때만 수정하세요.">
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-1.5">
                         <p className="text-xs font-bold text-foreground">서비스</p>
@@ -1648,12 +2836,15 @@ export default function DeploymentsPage() {
                               <option value="java">Java</option>
                               <option value="node">Node.js</option>
                               <option value="python">Python</option>
+                              <option value="static">정적 사이트</option>
                             </select>
                             <input value={s.context} onChange={(e) => updateServiceCard(i, { context: e.target.value })} placeholder={context.trim() ? "기준 디렉토리 내부 경로 (예: api)" : "저장소 내부 경로 (예: .)"} className="h-8 px-2 border border-line-strong rounded text-xs" />
                           </div>
                           {context.trim() && (
                             <p className="text-[10px] text-muted-soft">
-                              실제 분석·빌드 경로: <span className="font-mono text-muted">{joinRepositoryContext(context, s.context)}</span>
+                              실제 분석·빌드 경로: <span className="font-mono text-muted">
+                                {resolveServiceContext(context, s.context, composeDetection?.discoveredServices)}
+                              </span>
                             </p>
                           )}
                           <div className="grid grid-cols-3 gap-2">
@@ -1668,60 +2859,6 @@ export default function DeploymentsPage() {
                             </label>
                             <button type="button" onClick={() => removeServiceCard(i)} className="text-xs text-muted-soft hover:text-danger">삭제</button>
                           </div>
-                          {s.expose && (() => {
-                            const isPro = planType === "PRO";
-                            const check = serviceSubdomainCheck[i] ?? "idle";
-                            return (
-                              <div className={cn(
-                                "rounded-md border p-2.5",
-                                isPro ? "border-line-strong bg-white/[0.02]" : "border-[#e8b657]/25 bg-[#e8b657]/[0.045]"
-                              )}>
-                                <div className="mb-1.5 flex items-center gap-1.5">
-                                  <span className="text-[11px] font-bold text-foreground">커스텀 CNAME</span>
-                                  {!isPro ? (
-                                    <span className="rounded border border-[#e8b657]/30 bg-[#e8b657]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#e8b657]">PRO에서 잠금 해제</span>
-                                  ) : (
-                                    <span className="text-[10px] text-accent">PRO</span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <div className={cn(
-                                    "flex h-8 flex-1 items-center overflow-hidden rounded border border-line-strong",
-                                    isPro ? "bg-background" : "bg-black/10"
-                                  )}>
-                                    <input
-                                      value={s.customSubdomain ?? ""}
-                                      onChange={(e) => handleServiceCustomSubdomainChange(i, e.target.value)}
-                                      placeholder="예: portfolio"
-                                      maxLength={30}
-                                      pattern="^[a-z0-9]+(-[a-z0-9]+)*$"
-                                      disabled={!isPro}
-                                      title={!isPro ? "PRO 플랜에서 자동 식별자 없는 커스텀 CNAME을 사용할 수 있습니다." : undefined}
-                                      className="h-full min-w-0 flex-1 bg-transparent px-2 text-xs outline-none disabled:cursor-not-allowed disabled:text-muted-soft"
-                                    />
-                                    <span className="shrink-0 border-l border-line-strong px-2 text-[11px] text-muted-soft">.gamjabox.cloud</span>
-                                  </div>
-                                  {isPro && s.customSubdomain && (
-                                    <span className={cn(
-                                      "shrink-0 text-[10px]",
-                                      check === "available" ? "text-brand-strong" : check === "checking" ? "text-muted-soft" : "text-danger"
-                                    )}>
-                                      {check === "checking" && "확인 중..."}
-                                      {check === "available" && "✓ 사용 가능"}
-                                      {check === "taken" && "이미 사용 중"}
-                                      {check === "reserved" && "예약된 이름"}
-                                      {check === "pro-only" && "PRO 전용"}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className={cn("mt-1.5 text-[10px]", isPro ? "text-muted-soft" : "font-medium text-[#e8b657]")}>
-                                  {isPro
-                                    ? "비워두면 VM 식별자가 포함된 주소가 자동 생성됩니다. 입력하면 접미사 없는 주소를 사용합니다."
-                                    : "PRO 플랜에서는 portfolio.gamjabox.cloud처럼 자동 식별자 없는 주소를 선점할 수 있습니다."}
-                                </p>
-                              </div>
-                            );
-                          })()}
                         </div>
                       ))}
                     </div>
@@ -1849,6 +2986,16 @@ export default function DeploymentsPage() {
                     </div>
                   )}
 
+                  {serviceCards.filter((service) => service.expose).length >= 2 && (
+                    <div className="rounded-md border border-[#75a9ff]/25 bg-[#75a9ff]/[0.055] p-3 text-xs text-[#a9c8ff]">
+                      <p className="font-bold text-foreground">다중 HTTP 서비스 라우팅 자동 보강</p>
+                      <p className="mt-1">
+                        배포 시 Caddy 단일 진입점과 서비스별 경로 라우팅을 Compose에 자동 렌더링합니다.
+                        AI 검수도 최종 Caddy 구성이 포함된 Compose를 기준으로 실행됩니다.
+                      </p>
+                    </div>
+                  )}
+
                   {/* 근거 부족/충돌 등으로 확정하지 못한 경우 — 억지로 스펙을 만들어내지 않고 사유를 그대로 보여줌 */}
                   {generationStatus && generationStatus !== "READY" && (
                     <div className="rounded-md border border-danger-soft bg-danger/10 p-3 text-xs text-danger space-y-1.5">
@@ -1873,15 +3020,78 @@ export default function DeploymentsPage() {
                           value={generatedSpec}
                           onChange={(e) => {
                             setGeneratedSpec(e.target.value);
+                            setRenderedSpec(null);
                             setReviewFindings(null);
                           }}
                           rows={12}
                           spellCheck={false}
                           className="font-mono resize-none"
                         />
-                        <Button type="button" onClick={handleReviewSpec} disabled={reviewing}>
-                          {reviewing ? "AI 검수 중..." : "AI 검수 요청 (선택 — 결과가 배포를 막지 않습니다)"}
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" onClick={handleRenderSpec} disabled={renderingSpec}>
+                            {renderingSpec ? "최종 Compose 생성 중..." : "최종 Compose 다시 생성"}
+                          </Button>
+                          <Button type="button" onClick={handleReviewSpec} disabled={reviewing}>
+                            {reviewing ? "AI 검수 중..." : "AI 검수 요청 (선택 — 결과가 배포를 막지 않습니다)"}
+                          </Button>
+                        </div>
+                        {renderedSpec && (
+                          <div className="rounded-md border border-[#75a9ff]/25 bg-[#75a9ff]/[0.045] p-3">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-bold text-foreground">실제 배포될 최종 docker-compose.yaml</p>
+                              <span className="text-[11px] text-[#a9c8ff]">
+                                공개 라우트 {renderedSpec.exposedRoutes.length}개
+                                {renderedSpec.composeContent.includes("gamjabox-router") && " · Caddy 자동 보강됨"}
+                              </span>
+                            </div>
+                            <pre className="max-h-80 overflow-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
+                              {renderedSpec.composeContent}
+                            </pre>
+                          </div>
+                        )}
+                        {aiRouterPlan
+                          && (aiThroughCaddy || aiRouterPlan.status === "NEEDS_INPUT")
+                          && aiRouterPlan.routes.some((route) => !route.root) && (
+                          <div className="rounded-md border border-[#75a9ff]/25 bg-white/[0.02] p-3">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-bold text-foreground">서비스별 노출 방식</p>
+                              <Button type="button" onClick={handleRegenerateAiRouting} disabled={renderingSpec}>
+                                {renderingSpec ? "다시 생성 중..." : "라우팅 다시 생성"}
+                              </Button>
+                            </div>
+                            <p className="mb-2 text-[11px] text-muted-soft">
+                              각 서비스를 공용 도메인 아래 경로(Prefix)로 둘지, 전용 서브도메인(도메인)으로 노출할지 고른 뒤 라우팅을 다시 생성하세요.
+                            </p>
+                            {aiRouterPlan.unresolvedServices.length > 0 && (
+                              <div className="mb-2 space-y-1 rounded border border-[#e8b657]/25 bg-[#e8b657]/[0.06] p-2 text-[11px] text-[#e8b657]">
+                                {aiRouterPlan.unresolvedServices.map((service) => (
+                                  <p key={service.serviceName}>· [{service.serviceName}] {service.reason}</p>
+                                ))}
+                              </div>
+                            )}
+                            <RouteModeRows
+                              routes={aiRouterPlan.routes}
+                              overrides={routerRouteOverrides}
+                              planType={planType}
+                              subdomainCheck={domainSubdomainCheck}
+                              disabled={renderingSpec}
+                              onOverrideChange={(service, override) =>
+                                setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }))
+                              }
+                              onDomainSubdomainChange={handleDomainSubdomainChange}
+                            />
+                          </div>
+                        )}
+                        {aiPublicEndpoint && (
+                          <PublicEndpointCnameCard
+                            endpoint={aiPublicEndpoint.endpoint}
+                            throughCaddy={aiPublicEndpoint.throughCaddy}
+                            planType={planType}
+                            customSubdomain={deploymentCustomSubdomain}
+                            check={deploymentSubdomainCheck}
+                            onChange={handleDeploymentCustomSubdomainChange}
+                          />
+                        )}
                         {reviewFindings && (
                           <div className="rounded-md border border-line bg-white/[0.03] p-3 text-xs text-foreground space-y-2">
                             <p className="text-[11px] text-muted-soft">AI 검수는 참고용이며 배포를 막지 않습니다.</p>
@@ -1915,9 +3125,14 @@ export default function DeploymentsPage() {
             <span className="flex-1 text-xs text-muted-soft">
               {createStep}/4 단계 · 이전 단계로 돌아가도 이 창을 닫기 전까지 입력 내용이 유지됩니다.
             </span>
-            <Button onClick={closeCreate}>취소</Button>
+            <Button
+              onClick={closeCreate}
+              disabled={submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter}
+            >
+              취소
+            </Button>
             {createStep > 1 && (
-              <Button type="button" onClick={handlePreviousCreateStep} disabled={submitting || generating || reviewing}>
+              <Button type="button" onClick={handlePreviousCreateStep} disabled={submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter}>
                 이전
               </Button>
             )}
@@ -1928,16 +3143,20 @@ export default function DeploymentsPage() {
                 onClick={handleNextCreateStep}
                 disabled={
                   generating ||
+                  detectingCompose ||
+                  reviewingCompose ||
+                  planningRouter ||
                   (createStep === 2 && !repositoryStepReady) ||
-                  (createStep === 3 && createTab === "compose" && (
-                    !composeStepReady ||
-                    routes.some((route, index) => route.customSubdomain && routeSubdomainCheck[index] !== "available")
-                  )) ||
-                  (createStep === 3 && createTab === "ai" && (!aiHintsStepReady || !aiSubdomainsReady))
+                  (createStep === 3 && createTab === "compose" && !composeStepReady) ||
+                  (createStep === 3 && createTab === "ai" && !aiHintsStepReady)
                 }
               >
                 {createStep === 1 && "저장소 설정"}
-                {createStep === 2 && (createTab === "ai" ? "서비스 힌트 입력" : "Compose 작성")}
+                {createStep === 2 && (
+                  detectingCompose
+                    ? "Compose 파일 탐지 중..."
+                    : (createTab === "ai" ? "서비스 힌트 입력" : "Compose 작성")
+                )}
                 {createStep === 3 && createTab === "compose" && "검토로 이동"}
                 {createStep === 3 && createTab === "ai" && (
                   generating ? "저장소 분석 + AI 생성 중..." : generationStatus ? "분석 결과 보기" : "AI 스펙 생성"
@@ -1950,8 +3169,8 @@ export default function DeploymentsPage() {
                 variant="primary"
                 onClick={handleCreateFromCompose}
                 disabled={
-                  submitting || !repositoryStepReady || !composeStepReady ||
-                  routes.some((route, index) => route.customSubdomain && routeSubdomainCheck[index] !== "available")
+                  submitting || reviewingCompose || planningRouter || !repositoryStepReady || !composeStepReady ||
+                  !routingSubdomainsReady
                 }
               >
                 {submitting ? "배포 시작 중..." : "배포 시작"}
@@ -1967,7 +3186,7 @@ export default function DeploymentsPage() {
                   variant="primary"
                   onClick={handleCreateFromSpec}
                   disabled={
-                    submitting || !repositoryStepReady || !aiSubdomainsReady
+                    submitting || !repositoryStepReady || !routingSubdomainsReady
                   }
                 >
                   {submitting ? "배포 시작 중..." : "이 스펙으로 배포 시작"}

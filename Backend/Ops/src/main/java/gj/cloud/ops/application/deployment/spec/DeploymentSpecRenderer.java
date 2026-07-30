@@ -5,6 +5,10 @@ import gj.cloud.ops.application.deployment.dto.EnvironmentFile;
 import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.dto.HealthCheck;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanResult;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanner;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterRoute;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterRouteOverride;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
@@ -18,8 +22,11 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 // DeploymentSpec(JSON) → ComposeArtifact 렌더링. D-1(폼 입력)과 D-3(AI 생성)이 이 렌더러를 공유함 (F절 7·9단계).
@@ -33,6 +40,7 @@ public class DeploymentSpecRenderer {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final DockerfileGenerator dockerfileGenerator;
+    private final ComposeRouterPlanner composeRouterPlanner;
 
     // DEP-002: 이전에는 모든 배포가 동일한 고정 비밀번호("gamjabox")를 사용했고, infra.expose.enabled=true를
     // 사용자가 직접 요청하면 그 고정 비밀번호 그대로 호스트에 노출되는 경로도 있었음 — expose 여부와 무관하게
@@ -45,6 +53,10 @@ public class DeploymentSpecRenderer {
     }
 
     public ComposeArtifact render(DeploymentSpec spec) {
+        return renderWithAnalysis(spec).artifact();
+    }
+
+    public DeploymentSpecRenderResult renderWithAnalysis(DeploymentSpec spec) {
         Map<String, Object> services = new LinkedHashMap<>();
         List<UploadedFile> uploadedFiles = new ArrayList<>();
         List<ExposedRoute> exposedRoutes = new ArrayList<>();
@@ -72,6 +84,8 @@ public class DeploymentSpecRenderer {
             serviceBlock.put("networks", List.of(spec.network()));
 
             boolean exposed = service.expose() != null && service.expose().enabled();
+            boolean httpExposed = exposed && "http".equalsIgnoreCase(service.expose().protocol());
+            serviceBlock.put("labels", Map.of("gamjabox.router.enabled", httpExposed));
             if (exposed) {
                 // Cloudflare Tunnel이 VM 호스트에서 붙으므로 외부 노출 대상은 호스트 포트 바인딩이 필요함
                 serviceBlock.put("ports", List.of(effectivePort + ":" + effectivePort));
@@ -121,7 +135,137 @@ public class DeploymentSpecRenderer {
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         String composeContent = new Yaml(options).dump(root);
 
-        return new ComposeArtifact(composeContent, environmentFiles, uploadedFiles, exposedRoutes, healthChecks, SourceType.TEMPLATE_SPEC);
+        // 서비스별 라우팅 보정값(모드/경로/서브도메인)을 스펙에서 조립한다. DOMAIN 모드는 서비스 전용
+        // 서브도메인으로, PREFIX 모드는 공개 경로로 통합 Caddy 라우터에 반영된다.
+        Map<String, ComposeRouterRouteOverride> routeOverrides = spec.services().stream()
+                .filter(service -> service.expose() != null
+                        && service.expose().enabled()
+                        && "http".equalsIgnoreCase(service.expose().protocol()))
+                .filter(service -> service.expose().isDomainRouting()
+                        || (service.expose().routePath() != null && !service.expose().routePath().isBlank()))
+                .collect(java.util.stream.Collectors.toMap(
+                        ServiceSpec::name,
+                        service -> {
+                            ExposeSpec expose = service.expose();
+                            return expose.isDomainRouting()
+                                    ? new ComposeRouterRouteOverride(
+                                            "DOMAIN", null, false, expose.customSubdomain())
+                                    : new ComposeRouterRouteOverride(
+                                            "PREFIX", expose.routePath(),
+                                            Boolean.TRUE.equals(expose.stripPrefix()), null);
+                        },
+                        (first, ignored) -> first,
+                        LinkedHashMap::new));
+        ComposeRouterPlanResult routerPlan =
+                composeRouterPlanner.plan(composeContent, null, Map.of(), routeOverrides);
+        if (ComposeRouterPlanResult.STATUS_ADDED.equals(routerPlan.status())) {
+            composeContent = routerPlan.enhancedComposeContent();
+            Map<String, ComposeRouterRoute> routeByService = routerPlan.routes().stream()
+                    .collect(java.util.stream.Collectors.toMap(ComposeRouterRoute::serviceName, route -> route,
+                            (first, ignored) -> first, LinkedHashMap::new));
+            Set<String> routedServices = routeByService.keySet();
+            int routerHostPort = routerPlan.routerHostPort();
+
+            // 기본 진입점(게이트웨이) 도메인: 루트/PREFIX 서비스가 공유한다. 루트 서비스에 customSubdomain이
+            // 지정돼 있으면 그 값을 기본 도메인으로 사용하고, 없으면 VM 기본 서브도메인을 자동 생성한다.
+            String rootServiceName = routerPlan.routes().stream()
+                    .filter(ComposeRouterRoute::root)
+                    .map(ComposeRouterRoute::serviceName)
+                    .findFirst()
+                    .orElse(null);
+            String gatewaySubdomain = spec.services().stream()
+                    .filter(service -> service.name().equals(rootServiceName) && service.expose() != null)
+                    .map(service -> service.expose().customSubdomain())
+                    .filter(value -> value != null && !value.isBlank())
+                    .findFirst()
+                    .orElse(null);
+
+            // Caddy가 흡수하지 않은 라우트(TCP 등)는 그대로 유지한다.
+            List<ExposedRoute> preservedRoutes = exposedRoutes.stream()
+                    .filter(route -> !routedServices.contains(route.serviceName()))
+                    .toList();
+
+            Set<String> usedNicknames = new LinkedHashSet<>();
+            preservedRoutes.forEach(route -> usedNicknames.add(route.nickname()));
+
+            List<ExposedRoute> enhancedRoutes = new ArrayList<>();
+            // 도메인 모드 서비스: 각자 자기 서브도메인으로 같은 router 포트를 통해 노출된다(호스트 기반 라우팅).
+            for (ComposeRouterRoute route : routerPlan.routes()) {
+                if (!route.isDomain()) {
+                    continue;
+                }
+                String nickname = uniqueNickname(route.serviceName(), usedNicknames);
+                enhancedRoutes.add(new ExposedRoute(
+                        route.serviceName(), routerHostPort, "HTTP", "PUBLIC",
+                        nickname, route.customSubdomain()));
+            }
+            // 기본 진입점(게이트웨이): 루트/PREFIX 서비스들의 공용 도메인.
+            String gatewayNickname = uniqueNickname("gateway", usedNicknames);
+            enhancedRoutes.add(0, new ExposedRoute(
+                    ComposeRouterPlanner.ROUTER_SERVICE_NAME,
+                    routerHostPort, "HTTP", "PUBLIC",
+                    gatewayNickname, gatewaySubdomain));
+            enhancedRoutes.addAll(preservedRoutes);
+            exposedRoutes = enhancedRoutes;
+
+            healthChecks = healthChecks.stream()
+                    .map(check -> remapHealthCheck(check, routeByService, routerHostPort))
+                    .toList();
+        }
+
+        ComposeArtifact artifact = new ComposeArtifact(
+                composeContent,
+                environmentFiles,
+                uploadedFiles,
+                exposedRoutes,
+                healthChecks,
+                SourceType.TEMPLATE_SPEC);
+        return new DeploymentSpecRenderResult(artifact, routerPlan);
+    }
+
+    // ExposedRoute.nickname 제약(^[a-z0-9]([a-z0-9-]*[a-z0-9])?$, 최대 20자) + VM(vm_ports) 내 유일성을 만족하는
+    // 닉네임을 만든다. 닉네임은 배포 라우트 동기화의 매칭 키이므로 서비스별로 안정적이고 고유해야 한다.
+    private String uniqueNickname(String base, Set<String> used) {
+        String slug = base.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9-]", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^-+|-+$", "");
+        if (slug.isBlank()) {
+            slug = "svc";
+        }
+        if (slug.length() > 20) {
+            slug = slug.substring(0, 20).replaceAll("-+$", "");
+        }
+        String candidate = slug;
+        int suffix = 2;
+        while (!used.add(candidate)) {
+            String suffixPart = "-" + suffix;
+            String trimmed = slug.length() + suffixPart.length() > 20
+                    ? slug.substring(0, 20 - suffixPart.length()).replaceAll("-+$", "")
+                    : slug;
+            candidate = trimmed + suffixPart;
+            suffix += 1;
+        }
+        return candidate;
+    }
+
+    private HealthCheck remapHealthCheck(
+            HealthCheck check,
+            Map<String, ComposeRouterRoute> routeByService,
+            int routerHostPort
+    ) {
+        ComposeRouterRoute route = routeByService.get(check.serviceName());
+        if (route == null) return check;
+        String originalPath = check.path() == null || check.path().isBlank() ? "/" : check.path();
+        // 루트/도메인 라우트는 자기 도메인 루트에서 그대로 서비스되므로 경로를 접두하지 않는다.
+        String routedPath = (route.root() || route.isDomain())
+                ? originalPath
+                : route.routePath() + (originalPath.startsWith("/") ? originalPath : "/" + originalPath);
+        return new HealthCheck(
+                ComposeRouterPlanner.ROUTER_SERVICE_NAME,
+                routedPath,
+                routerHostPort,
+                null);
     }
 
     private void renderInfrastructure(InfrastructureSpec infra, String network, String volumeSuffix,

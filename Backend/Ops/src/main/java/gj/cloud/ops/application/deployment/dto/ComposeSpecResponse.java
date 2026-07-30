@@ -1,5 +1,7 @@
 package gj.cloud.ops.application.deployment.dto;
 
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanResult;
+
 import java.util.List;
 
 // 재시도/수정 후 재배포용 — 기존 배포에 저장된 compose 원문 및 환경변수/라우트/헬스체크 설정을 복호화해 반환.
@@ -10,6 +12,7 @@ public record ComposeSpecResponse(
         List<ExposedRoute> exposedRoutes,
         List<HealthCheck> healthChecks,
         String context,
-        String installPath
+        String installPath,
+        ComposeRouterPlanResult routerPlan
 ) {
 }

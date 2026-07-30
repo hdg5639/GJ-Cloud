@@ -137,6 +137,11 @@ public class DeploymentSpecValidator {
                         "expose.enabled=false인데 customSubdomain이 지정돼 있습니다 (service=" + svc + ")",
                         "customSubdomain is set while expose.enabled=false (service=" + svc + ")"));
             }
+            if (!expose.enabled() && expose.routePath() != null && !expose.routePath().isBlank()) {
+                errors.add(new ValidationError(
+                        "expose.enabled=false인데 routePath가 지정돼 있습니다 (service=" + svc + ")",
+                        "routePath is set while expose.enabled=false (service=" + svc + ")"));
+            }
             if (expose.customSubdomain() != null && !expose.customSubdomain().isBlank()
                     && (expose.customSubdomain().length() > 30
                     || !CUSTOM_SUBDOMAIN_PATTERN.matcher(expose.customSubdomain()).matches())) {
@@ -149,6 +154,19 @@ public class DeploymentSpecValidator {
                 errors.add(new ValidationError(
                         "HTTP가 아닌 노출에는 healthCheckPath를 지정할 수 없습니다 (service=" + svc + ")",
                         "healthCheckPath cannot be set for non-HTTP exposure (service=" + svc + ")"));
+            }
+            if (expose.enabled() && !"http".equalsIgnoreCase(expose.protocol())
+                    && expose.routePath() != null && !expose.routePath().isBlank()) {
+                errors.add(new ValidationError(
+                        "HTTP가 아닌 노출에는 routePath를 지정할 수 없습니다 (service=" + svc + ")",
+                        "routePath cannot be set for non-HTTP exposure (service=" + svc + ")"));
+            }
+            if (expose.routePath() != null
+                    && ("/__gamjabox_router_health".equals(expose.routePath())
+                    || expose.routePath().startsWith("/__gamjabox_router_health/"))) {
+                errors.add(new ValidationError(
+                        "라우터 헬스체크 예약 경로를 routePath로 사용할 수 없습니다 (service=" + svc + ")",
+                        "The reserved router health path cannot be used as routePath (service=" + svc + ")"));
             }
             if (expose.enabled() && service.run().containerPort() == null) {
                 errors.add(new ValidationError(

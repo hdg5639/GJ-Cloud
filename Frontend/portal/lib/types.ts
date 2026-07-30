@@ -377,8 +377,6 @@ export interface ServiceCard {
   pythonVersion?: string;
   pythonFramework?: string;
   expose: boolean;
-  // PRO 플랜 전용 — 외부 노출 시 자동 접미사 없는 CNAME을 사용
-  customSubdomain?: string;
 }
 
 export interface InfraSelection {
@@ -390,10 +388,33 @@ export interface InfraSelection {
 // 생성된 JSON을 그대로 보여주고 편집 후 그대로 되돌려보내는 용도로만 사용함
 export interface DeploymentSpec {
   schemaVersion: string;
-  services: unknown[];
+  services: DeploymentSpecService[];
   infrastructure?: unknown[];
   network: string;
   externalNetwork?: boolean;
+}
+
+export interface DeploymentSpecService {
+  name: string;
+  deploymentMode: string;
+  build: unknown;
+  artifact: unknown;
+  run: {
+    runtime?: string;
+    strategy?: string;
+    containerPort?: number;
+  };
+  context: string;
+  expose?: {
+    enabled: boolean;
+    protocol?: string | null;
+    healthCheckPath?: string | null;
+    customSubdomain?: string | null;
+    routePath?: string | null;
+    stripPrefix?: boolean | null;
+    // 통합 Caddy 라우팅에서 이 서비스의 노출 방식. "PREFIX"(경로) | "DOMAIN"(전용 서브도메인).
+    routeMode?: "PREFIX" | "DOMAIN" | null;
+  } | null;
 }
 
 // AI 자동생성 파이프라인 개선(결정론적 저장소 분석 + 명시적 불확실성 상태) — 생성 결과가 항상
@@ -423,6 +444,78 @@ export interface ComposeReviewFinding {
   remediation: string;
   confidence: "LOW" | "MEDIUM" | "HIGH";
   evidence: string;
+}
+
+export interface DetectedComposeFile {
+  path: string;
+  directory: string;
+  content: string;
+  sizeBytes: number;
+  primary: boolean;
+}
+
+export interface ComposeDetectionResult {
+  detected: boolean;
+  searchedContext: string;
+  files: DetectedComposeFile[];
+  discoveredServices?: DiscoveredService[];
+  warnings: string[];
+}
+
+export interface DiscoveredService {
+  name: string;
+  context: string;
+  runtime: string;
+  containerPort: number;
+  expose: boolean;
+  confidence: string;
+  evidence: string[];
+}
+
+export type ComposeRouterPlanStatus =
+  | "ADDED"
+  | "ALREADY_CONFIGURED"
+  | "NOT_REQUIRED"
+  | "NEEDS_INPUT";
+
+export interface ComposeRouterRoute {
+  serviceName: string;
+  routePath: string | null;
+  upstream: string;
+  containerPort: number;
+  hostPort: number | null;
+  root: boolean;
+  stripPrefix: boolean;
+  source: "USER" | "HEALTHCHECK" | "SERVICE_NAME" | "ROOT_DEFAULT" | "DIRECT" | "EXISTING_ROUTER";
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  // "PREFIX"(경로 기반) | "DOMAIN"(호스트 기반). DOMAIN이면 customSubdomain으로 노출된다.
+  mode: "PREFIX" | "DOMAIN";
+  customSubdomain: string | null;
+}
+
+export interface ComposeRouterRouteOverride {
+  mode: "PREFIX" | "DOMAIN";
+  routePath?: string | null;
+  stripPrefix: boolean;
+  customSubdomain?: string | null;
+}
+
+export interface ComposeRouterUnresolvedService {
+  serviceName: string;
+  reason: string;
+  portRequired: boolean;
+}
+
+export interface ComposeRouterPlanResult {
+  status: ComposeRouterPlanStatus;
+  enhancedComposeContent: string;
+  routerConfig: string;
+  routerServiceName: string;
+  routerHostPort: number | null;
+  routerContainerPort: number | null;
+  routes: ComposeRouterRoute[];
+  unresolvedServices: ComposeRouterUnresolvedService[];
+  warnings: string[];
 }
 
 // Auto Preview (GamjaBox_2.0_Key_Features.md 1단계) — Backend/Ops의
@@ -1034,6 +1127,7 @@ export interface ComposeSpecResponse {
   healthChecks: HealthCheck[];
   context: string | null;
   installPath: string | null;
+  routerPlan?: ComposeRouterPlanResult | null;
 }
 
 // 11절 수동 DB 백업 — 덤프 파일은 VM 파일시스템에 저장되고 다운로드는 파일 브라우저 API를 재사용함
