@@ -41,6 +41,7 @@ import type {
   ComposeReviewFinding,
   ComposeDetectionResult,
   ComposeRouterPlanResult,
+  ComposeRouterRouteOverride,
   DbBackupResponse,
   DeploymentTargetResponse,
   GithubInstallationResponse,
@@ -658,6 +659,12 @@ export const api = {
           body: JSON.stringify(spec),
           accessToken,
         }),
+      renderSpec: (accessToken: string, vmId: string, spec: DeploymentSpec) =>
+        request<ComposeSpecResponse>("ops", `/ops/${vmId}/deployments/ai-spec/render`, {
+          method: "POST",
+          body: JSON.stringify(spec),
+          accessToken,
+        }),
       detectCompose: (
         accessToken: string,
         vmId: string,
@@ -688,6 +695,7 @@ export const api = {
           composeContent: string;
           routerHostPort?: number;
           servicePorts?: Record<string, number>;
+          routeOverrides?: Record<string, ComposeRouterRouteOverride>;
         }
       ) =>
         request<ComposeRouterPlanResult>("ops", `/ops/${vmId}/deployments/compose/router/plan`, {

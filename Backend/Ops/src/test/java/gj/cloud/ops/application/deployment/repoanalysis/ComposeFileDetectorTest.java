@@ -35,17 +35,40 @@ class ComposeFileDetectorTest {
     }
 
     @Test
-    void limitsSearchToSelectedDeploymentContext() throws IOException {
+    void searchesWholeRepositoryButPrioritizesSelectedDeploymentContext() throws IOException {
         Files.writeString(repositoryRoot.resolve("compose.yaml"), "services: {}\n");
         Files.createDirectories(repositoryRoot.resolve("apps/api"));
         Files.writeString(repositoryRoot.resolve("apps/api/docker-compose.yaml"), "services:\n  api: {}\n");
 
         ComposeDetectionResult result = detector.detect(repositoryRoot, "apps/api");
 
-        assertThat(result.files()).hasSize(1);
+        assertThat(result.files()).hasSize(2);
         assertThat(result.files().get(0).path()).isEqualTo("apps/api/docker-compose.yaml");
         assertThat(result.files().get(0).directory()).isEqualTo("apps/api");
+        assertThat(result.files().get(1).path()).isEqualTo("compose.yaml");
         assertThat(result.searchedContext()).isEqualTo("apps/api");
+    }
+
+    @Test
+    void findsEnvironmentSpecificComposeFileNames() throws IOException {
+        Files.writeString(repositoryRoot.resolve("compose.prod.yml"), "services:\n  app: {}\n");
+        Files.writeString(repositoryRoot.resolve("docker-compose.local.yaml"), "services:\n  local: {}\n");
+
+        ComposeDetectionResult result = detector.detect(repositoryRoot, null);
+
+        assertThat(result.files()).extracting(DetectedComposeFile::path)
+                .containsExactly("compose.prod.yml", "docker-compose.local.yaml");
+    }
+
+    @Test
+    void fallsBackToRepositoryRootWhenPreferredContextDoesNotExist() throws IOException {
+        Files.writeString(repositoryRoot.resolve("docker-compose.yml"), "services:\n  app: {}\n");
+
+        ComposeDetectionResult result = detector.detect(repositoryRoot, "missing/module");
+
+        assertThat(result.detected()).isTrue();
+        assertThat(result.files().get(0).path()).isEqualTo("docker-compose.yml");
+        assertThat(result.warnings()).anyMatch(warning -> warning.contains("저장소 전체"));
     }
 
     @Test

@@ -8,6 +8,7 @@ import gj.cloud.ops.application.deployment.dto.UploadedFile;
 import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanResult;
 import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanner;
 import gj.cloud.ops.application.deployment.routing.ComposeRouterRoute;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterRouteOverride;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
@@ -23,6 +24,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -51,6 +53,10 @@ public class DeploymentSpecRenderer {
     }
 
     public ComposeArtifact render(DeploymentSpec spec) {
+        return renderWithAnalysis(spec).artifact();
+    }
+
+    public DeploymentSpecRenderResult renderWithAnalysis(DeploymentSpec spec) {
         Map<String, Object> services = new LinkedHashMap<>();
         List<UploadedFile> uploadedFiles = new ArrayList<>();
         List<ExposedRoute> exposedRoutes = new ArrayList<>();
@@ -129,51 +135,118 @@ public class DeploymentSpecRenderer {
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         String composeContent = new Yaml(options).dump(root);
 
-        long distinctCustomSubdomains = exposedRoutes.stream()
-                .filter(route -> "HTTP".equalsIgnoreCase(route.protocol()))
-                .map(ExposedRoute::customSubdomain)
-                .filter(value -> value != null && !value.isBlank())
-                .distinct()
-                .count();
-        if (distinctCustomSubdomains <= 1) {
-            ComposeRouterPlanResult routerPlan = composeRouterPlanner.plan(composeContent, null, Map.of());
-            if (ComposeRouterPlanResult.STATUS_ADDED.equals(routerPlan.status())) {
-                composeContent = routerPlan.enhancedComposeContent();
-                Set<String> routedServices = routerPlan.routes().stream()
-                        .map(ComposeRouterRoute::serviceName)
-                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-                String customSubdomain = exposedRoutes.stream()
-                        .filter(route -> routedServices.contains(route.serviceName()))
-                        .map(ExposedRoute::customSubdomain)
-                        .filter(value -> value != null && !value.isBlank())
-                        .findFirst()
-                        .orElse(null);
-                List<ExposedRoute> preservedRoutes = exposedRoutes.stream()
-                        .filter(route -> !routedServices.contains(route.serviceName()))
-                        .toList();
-                String gatewayNickname = preservedRoutes.stream()
-                        .anyMatch(route -> "gateway".equals(route.nickname()))
-                        ? "http-gateway"
-                        : "gateway";
-                List<ExposedRoute> enhancedRoutes = new ArrayList<>();
+        // 서비스별 라우팅 보정값(모드/경로/서브도메인)을 스펙에서 조립한다. DOMAIN 모드는 서비스 전용
+        // 서브도메인으로, PREFIX 모드는 공개 경로로 통합 Caddy 라우터에 반영된다.
+        Map<String, ComposeRouterRouteOverride> routeOverrides = spec.services().stream()
+                .filter(service -> service.expose() != null
+                        && service.expose().enabled()
+                        && "http".equalsIgnoreCase(service.expose().protocol()))
+                .filter(service -> service.expose().isDomainRouting()
+                        || (service.expose().routePath() != null && !service.expose().routePath().isBlank()))
+                .collect(java.util.stream.Collectors.toMap(
+                        ServiceSpec::name,
+                        service -> {
+                            ExposeSpec expose = service.expose();
+                            return expose.isDomainRouting()
+                                    ? new ComposeRouterRouteOverride(
+                                            "DOMAIN", null, false, expose.customSubdomain())
+                                    : new ComposeRouterRouteOverride(
+                                            "PREFIX", expose.routePath(),
+                                            Boolean.TRUE.equals(expose.stripPrefix()), null);
+                        },
+                        (first, ignored) -> first,
+                        LinkedHashMap::new));
+        ComposeRouterPlanResult routerPlan =
+                composeRouterPlanner.plan(composeContent, null, Map.of(), routeOverrides);
+        if (ComposeRouterPlanResult.STATUS_ADDED.equals(routerPlan.status())) {
+            composeContent = routerPlan.enhancedComposeContent();
+            Map<String, ComposeRouterRoute> routeByService = routerPlan.routes().stream()
+                    .collect(java.util.stream.Collectors.toMap(ComposeRouterRoute::serviceName, route -> route,
+                            (first, ignored) -> first, LinkedHashMap::new));
+            Set<String> routedServices = routeByService.keySet();
+            int routerHostPort = routerPlan.routerHostPort();
+
+            // 기본 진입점(게이트웨이) 도메인: 루트/PREFIX 서비스가 공유한다. 루트 서비스에 customSubdomain이
+            // 지정돼 있으면 그 값을 기본 도메인으로 사용하고, 없으면 VM 기본 서브도메인을 자동 생성한다.
+            String rootServiceName = routerPlan.routes().stream()
+                    .filter(ComposeRouterRoute::root)
+                    .map(ComposeRouterRoute::serviceName)
+                    .findFirst()
+                    .orElse(null);
+            String gatewaySubdomain = spec.services().stream()
+                    .filter(service -> service.name().equals(rootServiceName) && service.expose() != null)
+                    .map(service -> service.expose().customSubdomain())
+                    .filter(value -> value != null && !value.isBlank())
+                    .findFirst()
+                    .orElse(null);
+
+            // Caddy가 흡수하지 않은 라우트(TCP 등)는 그대로 유지한다.
+            List<ExposedRoute> preservedRoutes = exposedRoutes.stream()
+                    .filter(route -> !routedServices.contains(route.serviceName()))
+                    .toList();
+
+            Set<String> usedNicknames = new LinkedHashSet<>();
+            preservedRoutes.forEach(route -> usedNicknames.add(route.nickname()));
+
+            List<ExposedRoute> enhancedRoutes = new ArrayList<>();
+            // 도메인 모드 서비스: 각자 자기 서브도메인으로 같은 router 포트를 통해 노출된다(호스트 기반 라우팅).
+            for (ComposeRouterRoute route : routerPlan.routes()) {
+                if (!route.isDomain()) {
+                    continue;
+                }
+                String nickname = uniqueNickname(route.serviceName(), usedNicknames);
                 enhancedRoutes.add(new ExposedRoute(
-                        ComposeRouterPlanner.ROUTER_SERVICE_NAME,
-                        routerPlan.routerHostPort(),
-                        "HTTP",
-                        "PUBLIC",
-                        gatewayNickname,
-                        customSubdomain));
-                enhancedRoutes.addAll(preservedRoutes);
-                exposedRoutes = enhancedRoutes;
-                Map<String, ComposeRouterRoute> routeByService = routerPlan.routes().stream()
-                        .collect(java.util.stream.Collectors.toMap(ComposeRouterRoute::serviceName, route -> route));
-                healthChecks = healthChecks.stream()
-                        .map(check -> remapHealthCheck(check, routeByService, routerPlan.routerHostPort()))
-                        .toList();
+                        route.serviceName(), routerHostPort, "HTTP", "PUBLIC",
+                        nickname, route.customSubdomain()));
             }
+            // 기본 진입점(게이트웨이): 루트/PREFIX 서비스들의 공용 도메인.
+            String gatewayNickname = uniqueNickname("gateway", usedNicknames);
+            enhancedRoutes.add(0, new ExposedRoute(
+                    ComposeRouterPlanner.ROUTER_SERVICE_NAME,
+                    routerHostPort, "HTTP", "PUBLIC",
+                    gatewayNickname, gatewaySubdomain));
+            enhancedRoutes.addAll(preservedRoutes);
+            exposedRoutes = enhancedRoutes;
+
+            healthChecks = healthChecks.stream()
+                    .map(check -> remapHealthCheck(check, routeByService, routerHostPort))
+                    .toList();
         }
 
-        return new ComposeArtifact(composeContent, environmentFiles, uploadedFiles, exposedRoutes, healthChecks, SourceType.TEMPLATE_SPEC);
+        ComposeArtifact artifact = new ComposeArtifact(
+                composeContent,
+                environmentFiles,
+                uploadedFiles,
+                exposedRoutes,
+                healthChecks,
+                SourceType.TEMPLATE_SPEC);
+        return new DeploymentSpecRenderResult(artifact, routerPlan);
+    }
+
+    // ExposedRoute.nickname 제약(^[a-z0-9]([a-z0-9-]*[a-z0-9])?$, 최대 20자) + VM(vm_ports) 내 유일성을 만족하는
+    // 닉네임을 만든다. 닉네임은 배포 라우트 동기화의 매칭 키이므로 서비스별로 안정적이고 고유해야 한다.
+    private String uniqueNickname(String base, Set<String> used) {
+        String slug = base.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9-]", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^-+|-+$", "");
+        if (slug.isBlank()) {
+            slug = "svc";
+        }
+        if (slug.length() > 20) {
+            slug = slug.substring(0, 20).replaceAll("-+$", "");
+        }
+        String candidate = slug;
+        int suffix = 2;
+        while (!used.add(candidate)) {
+            String suffixPart = "-" + suffix;
+            String trimmed = slug.length() + suffixPart.length() > 20
+                    ? slug.substring(0, 20 - suffixPart.length()).replaceAll("-+$", "")
+                    : slug;
+            candidate = trimmed + suffixPart;
+            suffix += 1;
+        }
+        return candidate;
     }
 
     private HealthCheck remapHealthCheck(
@@ -184,7 +257,8 @@ public class DeploymentSpecRenderer {
         ComposeRouterRoute route = routeByService.get(check.serviceName());
         if (route == null) return check;
         String originalPath = check.path() == null || check.path().isBlank() ? "/" : check.path();
-        String routedPath = route.root()
+        // 루트/도메인 라우트는 자기 도메인 루트에서 그대로 서비스되므로 경로를 접두하지 않는다.
+        String routedPath = (route.root() || route.isDomain())
                 ? originalPath
                 : route.routePath() + (originalPath.startsWith("/") ? originalPath : "/" + originalPath);
         return new HealthCheck(

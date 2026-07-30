@@ -13,13 +13,15 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @Component
 public class ComposeFileDetector {
 
-    private static final Set<String> COMPOSE_FILE_NAMES = Set.of(
-            "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml");
+    private static final Pattern COMPOSE_FILE_NAME = Pattern.compile(
+            "^(?:docker-)?compose(?:[._-][a-z0-9][a-z0-9._-]*)?\\.ya?ml$",
+            Pattern.CASE_INSENSITIVE);
     private static final Map<String, Integer> NAME_PRIORITY = Map.of(
             "compose.yaml", 0,
             "compose.yml", 1,
@@ -27,34 +29,36 @@ public class ComposeFileDetector {
             "docker-compose.yml", 3);
     private static final Set<String> EXCLUDED_DIR_NAMES = Set.of(
             ".git", "node_modules", "dist", "build", "target", ".gradle", ".idea", ".vscode", "coverage");
-    private static final int MAX_SEARCH_DEPTH = 6;
+    private static final int MAX_SEARCH_DEPTH = 12;
     private static final int MAX_FILES = 20;
     private static final long MAX_COMPOSE_SIZE_BYTES = 1_048_576;
 
     public ComposeDetectionResult detect(Path repositoryRoot, String context) {
-        Path searchRoot = resolveSearchRoot(repositoryRoot, context);
         String searchedContext = normalizeContext(context);
-        if (!Files.isDirectory(searchRoot)) {
-            return new ComposeDetectionResult(false, searchedContext, List.of(),
-                    List.of("배포 디렉토리를 찾을 수 없습니다: " + searchedContext));
+        Path preferredRoot = resolveSearchRoot(repositoryRoot, context);
+        List<String> warnings = new ArrayList<>();
+        if (!Files.isDirectory(preferredRoot)) {
+            warnings.add("배포 디렉토리를 찾을 수 없어 저장소 전체에서 탐색했습니다: " + searchedContext);
+            preferredRoot = null;
+        } else {
+            assertRealPathContained(repositoryRoot, preferredRoot);
         }
-        assertRealPathContained(repositoryRoot, searchRoot);
 
         List<Path> candidates;
-        try (Stream<Path> stream = Files.walk(searchRoot, MAX_SEARCH_DEPTH)) {
+        Path preferred = preferredRoot;
+        try (Stream<Path> stream = Files.walk(repositoryRoot, MAX_SEARCH_DEPTH)) {
             candidates = stream
                     .filter(Files::isRegularFile)
                     .filter(path -> !Files.isSymbolicLink(path))
-                    .filter(path -> COMPOSE_FILE_NAMES.contains(path.getFileName().toString()))
-                    .filter(path -> !isExcluded(searchRoot, path))
-                    .sorted(candidateComparator(searchRoot))
+                    .filter(path -> COMPOSE_FILE_NAME.matcher(path.getFileName().toString()).matches())
+                    .filter(path -> !isExcluded(repositoryRoot, path))
+                    .sorted(candidateComparator(repositoryRoot, preferred))
                     .limit(MAX_FILES + 1L)
                     .toList();
         } catch (IOException e) {
             throw new OpsException(OpsErrorCode.REPOSITORY_CLONE_FAILED);
         }
 
-        List<String> warnings = new ArrayList<>();
         List<DetectedComposeFile> files = new ArrayList<>();
         boolean truncated = candidates.size() > MAX_FILES;
         for (Path candidate : candidates.stream().limit(MAX_FILES).toList()) {
@@ -84,7 +88,8 @@ public class ComposeFileDetector {
         if (truncated) {
             warnings.add("Compose 후보가 많아 상위 20개만 표시합니다.");
         }
-        return new ComposeDetectionResult(!files.isEmpty(), searchedContext, List.copyOf(files), List.copyOf(warnings));
+        return new ComposeDetectionResult(
+                !files.isEmpty(), searchedContext, List.copyOf(files), List.of(), List.copyOf(warnings));
     }
 
     private void assertRealPathContained(Path repositoryRoot, Path searchRoot) {
@@ -123,11 +128,21 @@ public class ComposeFileDetector {
         return normalized.replaceAll("/+$", "");
     }
 
-    private Comparator<Path> candidateComparator(Path searchRoot) {
+    private Comparator<Path> candidateComparator(Path repositoryRoot, Path preferredRoot) {
         return Comparator
-                .comparingInt((Path path) -> searchRoot.relativize(path).getNameCount())
+                .comparingInt((Path path) -> candidateGroup(repositoryRoot, preferredRoot, path))
+                .thenComparingInt(path -> repositoryRoot.relativize(path).getNameCount())
                 .thenComparingInt(path -> NAME_PRIORITY.getOrDefault(path.getFileName().toString(), 99))
-                .thenComparing(path -> unixPath(searchRoot.relativize(path)));
+                .thenComparing(path -> unixPath(repositoryRoot.relativize(path)));
+    }
+
+    private int candidateGroup(Path repositoryRoot, Path preferredRoot, Path path) {
+        if (preferredRoot != null) {
+            if (path.getParent().equals(preferredRoot)) return 0;
+            if (path.startsWith(preferredRoot)) return 1;
+        }
+        if (path.getParent().equals(repositoryRoot)) return 2;
+        return 3;
     }
 
     private boolean isExcluded(Path root, Path path) {

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
@@ -39,11 +40,26 @@ public class ComposeRouterPlanner {
             "(?i).*(api|backend|server|gateway).*");
     private static final Pattern SAFE_SERVICE_NAME = Pattern.compile(
             "^[a-z0-9][a-z0-9_-]{0,62}$");
+    private static final Pattern HEALTHCHECK_URL_PATH = Pattern.compile(
+            "https?://[^/\\s\"']+(/[^\\s\"'\\],}]*)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SAFE_ROUTE_PATH = Pattern.compile(
+            "^/(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$");
+    private static final String RESERVED_HEALTH_PATH = "/__gamjabox_router_health";
 
     public ComposeRouterPlanResult plan(
             String composeContent,
             Integer requestedRouterHostPort,
             Map<String, Integer> servicePortOverrides
+    ) {
+        return plan(composeContent, requestedRouterHostPort, servicePortOverrides, Map.of());
+    }
+
+    public ComposeRouterPlanResult plan(
+            String composeContent,
+            Integer requestedRouterHostPort,
+            Map<String, Integer> servicePortOverrides,
+            Map<String, ComposeRouterRouteOverride> routeOverrides
     ) {
         Map<String, Object> root = parse(composeContent);
         Map<String, Object> services = map(root.get("services"));
@@ -53,13 +69,33 @@ public class ComposeRouterPlanner {
 
         String existingRouter = findExistingRouter(services);
         if (existingRouter != null) {
+            Map<String, Object> routerService = map(services.get(existingRouter));
+            PortInfo portInfo = routerService == null
+                    ? new PortInfo(null, null)
+                    : inferPort(routerService);
+            List<ComposeRouterRoute> existingRoute = portInfo.containerPort() == null
+                    ? List.of()
+                    : List.of(new ComposeRouterRoute(
+                            existingRouter,
+                            "/",
+                            existingRouter + ":" + portInfo.containerPort(),
+                            portInfo.containerPort(),
+                            portInfo.hostPort(),
+                            true,
+                            false,
+                            "EXISTING_ROUTER",
+                            "HIGH",
+                            ComposeRouterRoute.MODE_PREFIX,
+                            null));
             return new ComposeRouterPlanResult(
                     ComposeRouterPlanResult.STATUS_ALREADY_CONFIGURED,
                     composeContent, "", existingRouter, null, null,
-                    List.of(), List.of(), List.of("기존 라우터 서비스를 유지합니다."));
+                    existingRoute, List.of(), List.of("기존 라우터 서비스를 유지합니다."));
         }
 
         Map<String, Integer> overrides = servicePortOverrides == null ? Map.of() : servicePortOverrides;
+        Map<String, ComposeRouterRouteOverride> safeRouteOverrides =
+                routeOverrides == null ? Map.of() : routeOverrides;
         List<ServiceCandidate> candidates = new ArrayList<>();
         List<ComposeRouterUnresolvedService> unresolved = new ArrayList<>();
         for (Map.Entry<String, Object> entry : services.entrySet()) {
@@ -94,12 +130,6 @@ public class ComposeRouterPlanner {
             candidates.add(new ServiceCandidate(serviceName, service, portInfo));
         }
 
-        if (candidates.size() + unresolved.size() < 2) {
-            return new ComposeRouterPlanResult(
-                    ComposeRouterPlanResult.STATUS_NOT_REQUIRED,
-                    composeContent, "", ROUTER_SERVICE_NAME, null, null,
-                    List.of(), List.of(), List.of("라우팅할 애플리케이션 서비스가 2개 미만입니다."));
-        }
         if (!unresolved.isEmpty()) {
             return new ComposeRouterPlanResult(
                     ComposeRouterPlanResult.STATUS_NEEDS_INPUT,
@@ -107,9 +137,28 @@ public class ComposeRouterPlanner {
                     List.of(), List.copyOf(unresolved),
                     List.of("컨테이너 포트를 확정할 수 없는 서비스가 있어 Compose를 변경하지 않았습니다."));
         }
+        if (candidates.size() < 2) {
+            List<ComposeRouterRoute> directRoute = candidates.isEmpty()
+                    ? List.of()
+                    : List.of(directRoute(candidates.get(0)));
+            return new ComposeRouterPlanResult(
+                    ComposeRouterPlanResult.STATUS_NOT_REQUIRED,
+                    composeContent, "", candidates.isEmpty() ? ROUTER_SERVICE_NAME : candidates.get(0).name(),
+                    directRoute.isEmpty() ? null : directRoute.get(0).hostPort(),
+                    directRoute.isEmpty() ? null : directRoute.get(0).containerPort(),
+                    directRoute, List.of(),
+                    List.of("라우팅할 애플리케이션 서비스가 2개 미만이라 서비스 포트에 직접 연결합니다."));
+        }
 
-        ServiceCandidate rootService = chooseRootService(candidates);
-        List<ComposeRouterRoute> routes = buildRoutes(candidates, rootService);
+        ServiceCandidate rootService = chooseRootService(candidates, safeRouteOverrides);
+        RouteBuildResult routeBuild = buildRoutes(candidates, rootService, safeRouteOverrides);
+        if (!routeBuild.unresolved().isEmpty()) {
+            return new ComposeRouterPlanResult(
+                    ComposeRouterPlanResult.STATUS_NEEDS_INPUT,
+                    composeContent, "", ROUTER_SERVICE_NAME, requestedRouterHostPort, ROUTER_CONTAINER_PORT,
+                    routeBuild.routes(), routeBuild.unresolved(), routeBuild.warnings());
+        }
+        List<ComposeRouterRoute> routes = routeBuild.routes();
         RouterPortSelection routerPortSelection = chooseRouterHostPort(
                 services, candidates, requestedRouterHostPort);
         int routerHostPort = routerPortSelection.port();
@@ -127,6 +176,7 @@ public class ComposeRouterPlanner {
 
         List<String> warnings = new ArrayList<>();
         warnings.add("기존 YAML 주석과 서식은 정규화되므로 적용 전 변경 내용을 확인하세요.");
+        warnings.addAll(routeBuild.warnings());
         if (requestedRouterHostPort == null && candidates.stream().noneMatch(c -> c.portInfo().hostPort() != null)) {
             warnings.add("기존 호스트 포트가 없어 " + DEFAULT_ROUTER_HOST_PORT + "번을 기본 진입 포트로 선택했습니다.");
         }
@@ -296,43 +346,239 @@ public class ComposeRouterPlanner {
         return null;
     }
 
-    private ServiceCandidate chooseRootService(List<ServiceCandidate> candidates) {
+    private ServiceCandidate chooseRootService(
+            List<ServiceCandidate> candidates,
+            Map<String, ComposeRouterRouteOverride> overrides
+    ) {
+        // 도메인 모드로 지정된 서비스는 자기 서브도메인으로 노출되므로 기본 진입점(루트)으로는 피한다.
+        java.util.function.Predicate<ServiceCandidate> notDomain = candidate -> {
+            ComposeRouterRouteOverride override = overrides.get(candidate.name());
+            return override == null || !override.isDomain();
+        };
         return candidates.stream()
-                .filter(candidate -> ROOT_SERVICE_NAME.matcher(candidate.name()).matches())
+                .filter(candidate -> ROOT_SERVICE_NAME.matcher(candidate.name()).matches() && notDomain.test(candidate))
                 .findFirst()
                 .orElseGet(() -> candidates.stream()
-                        .filter(candidate -> candidate.portInfo().containerPort() == 80)
+                        .filter(candidate -> candidate.portInfo().containerPort() == 80 && notDomain.test(candidate))
                         .findFirst()
-                        .orElse(candidates.get(0)));
+                        .orElseGet(() -> candidates.stream()
+                                .filter(notDomain)
+                                .findFirst()
+                                .orElse(candidates.get(0))));
     }
 
-    private List<ComposeRouterRoute> buildRoutes(
+    private ComposeRouterRoute directRoute(ServiceCandidate candidate) {
+        return new ComposeRouterRoute(
+                candidate.name(),
+                "/",
+                upstream(candidate),
+                candidate.portInfo().containerPort(),
+                candidate.portInfo().hostPort(),
+                true,
+                false,
+                "DIRECT",
+                "HIGH",
+                ComposeRouterRoute.MODE_PREFIX,
+                null);
+    }
+
+    private RouteBuildResult buildRoutes(
             List<ServiceCandidate> candidates,
-            ServiceCandidate rootService
+            ServiceCandidate rootService,
+            Map<String, ComposeRouterRouteOverride> overrides
     ) {
         List<ComposeRouterRoute> routes = new ArrayList<>();
+        List<ComposeRouterUnresolvedService> unresolved = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         Set<String> usedRouteSlugs = new LinkedHashSet<>();
+
+        ComposeRouterRouteOverride rootOverride = overrides.get(rootService.name());
+        if (rootOverride != null && rootOverride.isDomain()) {
+            unresolved.add(new ComposeRouterUnresolvedService(
+                    rootService.name(),
+                    "루트 서비스는 기본 진입점이라 도메인 모드로 분리할 수 없습니다.",
+                    false));
+        } else if (rootOverride != null
+                && rootOverride.routePath() != null
+                && !rootOverride.routePath().isBlank()
+                && !"/".equals(normalizeRoutePath(rootOverride.routePath()))) {
+            unresolved.add(new ComposeRouterUnresolvedService(
+                    rootService.name(),
+                    "루트 서비스는 공개 Prefix '/'를 유지해야 합니다.",
+                    false));
+        }
         routes.add(new ComposeRouterRoute(
-                rootService.name(), "/", upstream(rootService), rootService.portInfo().containerPort(), true));
+                rootService.name(),
+                "/",
+                upstream(rootService),
+                rootService.portInfo().containerPort(),
+                rootService.portInfo().hostPort(),
+                true,
+                false,
+                rootOverride == null ? "ROOT_DEFAULT" : "USER",
+                "HIGH",
+                ComposeRouterRoute.MODE_PREFIX,
+                null));
         candidates.stream()
                 .filter(candidate -> candidate != rootService)
                 .sorted(Comparator.comparing(ServiceCandidate::name))
                 .forEach(candidate -> {
-                    String baseSlug = routeSlug(candidate.name());
-                    String uniqueSlug = baseSlug;
-                    int suffix = 2;
-                    while (!usedRouteSlugs.add(uniqueSlug)) {
-                        uniqueSlug = baseSlug + "-" + suffix;
-                        suffix += 1;
+                    ComposeRouterRouteOverride override = overrides.get(candidate.name());
+                    // DOMAIN 모드 — 서비스 전용 서브도메인으로 노출한다(호스트 기반 라우팅).
+                    if (override != null && override.isDomain()) {
+                        String subdomain = override.customSubdomain();
+                        if (subdomain == null || subdomain.isBlank()) {
+                            unresolved.add(new ComposeRouterUnresolvedService(
+                                    candidate.name(),
+                                    "도메인 모드는 서비스 전용 서브도메인이 필요합니다.",
+                                    false));
+                            return;
+                        }
+                        routes.add(new ComposeRouterRoute(
+                                candidate.name(),
+                                null,
+                                upstream(candidate),
+                                candidate.portInfo().containerPort(),
+                                candidate.portInfo().hostPort(),
+                                false,
+                                false,
+                                "USER",
+                                "HIGH",
+                                ComposeRouterRoute.MODE_DOMAIN,
+                                subdomain));
+                        return;
+                    }
+                    // PREFIX 모드 — 하나의 공개 도메인 아래 경로로 라우팅한다.
+                    String routePath;
+                    boolean stripPrefix;
+                    String source;
+                    String confidence;
+                    if (override != null) {
+                        routePath = normalizeRoutePath(override.routePath());
+                        stripPrefix = override.stripPrefix();
+                        source = "USER";
+                        confidence = "HIGH";
+                        if ("/".equals(routePath)) {
+                            unresolved.add(new ComposeRouterUnresolvedService(
+                                    candidate.name(),
+                                    "루트 Prefix '/'는 하나만 사용할 수 있습니다.",
+                                    false));
+                        } else if (RESERVED_HEALTH_PATH.equals(routePath)
+                                || routePath.startsWith(RESERVED_HEALTH_PATH + "/")) {
+                            unresolved.add(new ComposeRouterUnresolvedService(
+                                    candidate.name(),
+                                    RESERVED_HEALTH_PATH + " 경로는 라우터 헬스체크용으로 예약되어 있습니다.",
+                                    false));
+                        }
+                    } else {
+                        String inferredPath = inferRoutePath(candidate.service());
+                        String baseSlug = inferredPath != null
+                                ? inferredPath.substring(1)
+                                : routeSlug(candidate.name());
+                        String uniqueSlug = baseSlug;
+                        int suffix = 2;
+                        while (!usedRouteSlugs.add(uniqueSlug)) {
+                            uniqueSlug = baseSlug + "-" + suffix;
+                            suffix += 1;
+                        }
+                        routePath = "/" + uniqueSlug;
+                        stripPrefix = inferredPath == null
+                                && !PRESERVE_PREFIX_NAME.matcher(candidate.name()).matches();
+                        source = inferredPath == null ? "SERVICE_NAME" : "HEALTHCHECK";
+                        confidence = inferredPath == null ? "LOW" : "HIGH";
                     }
                     routes.add(new ComposeRouterRoute(
                             candidate.name(),
-                            "/" + uniqueSlug,
+                            routePath,
                             upstream(candidate),
                             candidate.portInfo().containerPort(),
-                            false));
+                            candidate.portInfo().hostPort(),
+                            false,
+                            stripPrefix,
+                            source,
+                            confidence,
+                            ComposeRouterRoute.MODE_PREFIX,
+                            null));
                 });
-        return routes;
+
+        // PREFIX 라우트는 경로 중복을, DOMAIN 라우트는 서브도메인 중복을 각각 검사한다.
+        Map<String, List<String>> servicesByPath = new LinkedHashMap<>();
+        routes.stream()
+                .filter(route -> !route.isDomain())
+                .forEach(route -> servicesByPath
+                        .computeIfAbsent(route.routePath(), ignored -> new ArrayList<>())
+                        .add(route.serviceName()));
+        servicesByPath.forEach((path, services) -> {
+            if (services.size() > 1) {
+                services.forEach(service -> unresolved.add(new ComposeRouterUnresolvedService(
+                        service,
+                        "다른 서비스와 공개 Prefix '" + path + "'가 중복됩니다.",
+                        false)));
+            }
+        });
+        Map<String, List<String>> servicesBySubdomain = new LinkedHashMap<>();
+        routes.stream()
+                .filter(ComposeRouterRoute::isDomain)
+                .forEach(route -> servicesBySubdomain
+                        .computeIfAbsent(route.customSubdomain().toLowerCase(Locale.ROOT), ignored -> new ArrayList<>())
+                        .add(route.serviceName()));
+        servicesBySubdomain.forEach((subdomain, services) -> {
+            if (services.size() > 1) {
+                services.forEach(service -> unresolved.add(new ComposeRouterUnresolvedService(
+                        service,
+                        "다른 서비스와 서브도메인 '" + subdomain + "'가 중복됩니다.",
+                        false)));
+            }
+        });
+
+        List<ComposeRouterRoute> nonRootPrefix = routes.stream()
+                .filter(route -> !route.root() && !route.isDomain())
+                .toList();
+        for (int left = 0; left < nonRootPrefix.size(); left += 1) {
+            for (int right = left + 1; right < nonRootPrefix.size(); right += 1) {
+                String leftPath = nonRootPrefix.get(left).routePath();
+                String rightPath = nonRootPrefix.get(right).routePath();
+                if (leftPath.startsWith(rightPath + "/") || rightPath.startsWith(leftPath + "/")) {
+                    warnings.add("Prefix " + leftPath + "와 " + rightPath
+                            + "가 중첩되어 더 구체적인 경로를 먼저 매칭합니다.");
+                }
+            }
+        }
+        routes.stream()
+                .filter(route -> !route.isDomain() && "LOW".equals(route.confidence()))
+                .forEach(route -> warnings.add(route.serviceName()
+                        + "의 Prefix " + route.routePath()
+                        + "는 서비스명으로 추정했습니다. 분석 결과에서 확인하거나 수정하세요."));
+        return new RouteBuildResult(
+                List.copyOf(routes),
+                List.copyOf(unresolved),
+                warnings.stream().distinct().toList());
+    }
+
+    private String normalizeRoutePath(String value) {
+        if (value == null || value.isBlank()) {
+            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        }
+        String normalized = value.trim().replaceAll("/+$", "");
+        if (normalized.isBlank()) normalized = "/";
+        if (!SAFE_ROUTE_PATH.matcher(normalized).matches()) {
+            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        }
+        return normalized;
+    }
+
+    private String inferRoutePath(Map<String, Object> service) {
+        Object healthcheck = service.get("healthcheck");
+        if (healthcheck == null) return null;
+        Matcher matcher = HEALTHCHECK_URL_PATH.matcher(String.valueOf(healthcheck));
+        if (!matcher.find()) return null;
+        String path = matcher.group(1).split("[?#]", 2)[0];
+        path = path.replaceFirst(
+                "(?i)/(?:actuator/)?(?:health|healthz|ready|readiness|live|liveness)/?$",
+                "");
+        path = path.replaceAll("/+$", "");
+        if (path.isBlank() || !SAFE_ROUTE_PATH.matcher(path).matches()) return null;
+        return path;
     }
 
     private String buildCaddyfile(List<ComposeRouterRoute> routes) {
@@ -346,14 +592,34 @@ public class ComposeRouterPlanner {
                 .append("  @gamjabox_health path /__gamjabox_router_health\n")
                 .append("  respond @gamjabox_health 200\n\n");
 
-        for (ComposeRouterRoute route : routes) {
-            if (route.root()) continue;
+        int matcherIndex = 0;
+        // 도메인(호스트 기반) 라우트를 먼저 매칭 — cloudflared가 전달한 Host 헤더의 첫 라벨로 구분한다.
+        // Ops는 zone을 모르므로 '^<라벨>\.' 정규식으로 라벨 경계까지만 매칭한다(실제 zone 결합은 VM 서비스).
+        List<ComposeRouterRoute> domainRoutes = routes.stream()
+                .filter(ComposeRouterRoute::isDomain)
+                .toList();
+        for (ComposeRouterRoute route : domainRoutes) {
+            String matcher = "host_"
+                    + route.customSubdomain().replaceAll("[^A-Za-z0-9_]", "_")
+                    + "_" + matcherIndex++;
+            config.append("  @").append(matcher)
+                    .append(" host_regexp ^").append(route.customSubdomain()).append("\\.\n")
+                    .append("  handle @").append(matcher).append(" {\n")
+                    .append("    reverse_proxy ").append(route.upstream()).append("\n")
+                    .append("  }\n\n");
+        }
+        List<ComposeRouterRoute> orderedRoutes = routes.stream()
+                .filter(route -> !route.root() && !route.isDomain())
+                .sorted(Comparator.comparingInt((ComposeRouterRoute route) -> route.routePath().length()).reversed())
+                .toList();
+        for (ComposeRouterRoute route : orderedRoutes) {
             String matcher = "route_"
-                    + route.routePath().substring(1).replace("-", "_");
+                    + route.routePath().substring(1).replaceAll("[^A-Za-z0-9_]", "_")
+                    + "_" + matcherIndex++;
             config.append("  @").append(matcher)
                     .append(" path ").append(route.routePath()).append(" ").append(route.routePath()).append("/*\n")
                     .append("  handle @").append(matcher).append(" {\n");
-            if (!PRESERVE_PREFIX_NAME.matcher(route.serviceName()).matches()) {
+            if (route.stripPrefix()) {
                 config.append("    uri strip_prefix ").append(route.routePath()).append("\n");
             }
             config.append("    reverse_proxy ").append(route.upstream()).append("\n")
@@ -539,6 +805,13 @@ public class ComposeRouterPlanner {
     }
 
     private record ServiceCandidate(String name, Map<String, Object> service, PortInfo portInfo) {
+    }
+
+    private record RouteBuildResult(
+            List<ComposeRouterRoute> routes,
+            List<ComposeRouterUnresolvedService> unresolved,
+            List<String> warnings
+    ) {
     }
 
     private record RouterPortSelection(int port, boolean adjusted) {

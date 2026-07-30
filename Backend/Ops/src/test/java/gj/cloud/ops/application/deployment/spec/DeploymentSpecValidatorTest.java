@@ -15,7 +15,7 @@ class DeploymentSpecValidatorTest {
                 new BuildSpec(RuntimeKind.NONE, null, BuildRunStrategy.NONE, null),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                ".", expose ? new ExposeSpec(true, "http", "/", null) : null);
+                ".", expose ? new ExposeSpec(true, "http", "/", null, null, null, null) : null);
     }
 
     @Test
@@ -36,7 +36,7 @@ class DeploymentSpecValidatorTest {
                 new BuildSpec(RuntimeKind.NODEJS, null, BuildRunStrategy.NONE, null),
                 new ArtifactSpec(ArtifactType.CONTAINER_IMAGE, "."),
                 new RunSpec(RuntimeKind.NODEJS, BuildRunStrategy.NPM_START, null),
-                ".", new ExposeSpec(true, "http", "/", null));
+                ".", new ExposeSpec(true, "http", "/", null, null, null, null));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("containerPort"));
     }
@@ -47,7 +47,7 @@ class DeploymentSpecValidatorTest {
                 new BuildSpec(RuntimeKind.NONE, null, BuildRunStrategy.NONE, null),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                ".", new ExposeSpec(false, "http", "/health", null));
+                ".", new ExposeSpec(false, "http", "/health", null, null, null, null));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("healthCheckPath"));
     }
@@ -70,7 +70,7 @@ class DeploymentSpecValidatorTest {
                 new BuildSpec(RuntimeKind.NONE, null, BuildRunStrategy.NONE, null),
                 new ArtifactSpec(ArtifactType.STATIC_DIRECTORY, "."),
                 new RunSpec(RuntimeKind.STATIC_SERVER, BuildRunStrategy.STATIC_SERVER, 80),
-                ".", new ExposeSpec(true, "http", "/", "Invalid Domain"));
+                ".", new ExposeSpec(true, "http", "/", "Invalid Domain", null, null, null));
         DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
 
         assertThat(validator.collectErrors(spec)).anyMatch(e -> e.userMessage().contains("customSubdomain"));

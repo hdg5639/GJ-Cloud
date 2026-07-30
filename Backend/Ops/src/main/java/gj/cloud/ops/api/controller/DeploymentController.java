@@ -27,6 +27,7 @@ import gj.cloud.ops.application.github.service.GithubAppService;
 import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecPolicyValidator;
+import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderResult;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecRenderer;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpecValidator;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
@@ -212,9 +213,35 @@ public class DeploymentController {
         return ApiResponse.ok(findings);
     }
 
+    @Operation(summary = "배포 스펙 최종 Compose 렌더링",
+            description = "AI/규칙 기반 DeploymentSpec을 실제 배포 직전에 사용하는 Compose로 렌더링합니다. "
+                    + "다중 HTTP 서비스라면 Caddy 보강 결과와 최종 공개 라우트까지 함께 반환합니다.")
+    @PostMapping("/ai-spec/render")
+    public ApiResponse<ComposeSpecResponse> renderSpec(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody DeploymentSpec spec
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        deploymentSpecValidator.validate(spec);
+        deploymentSpecPolicyValidator.validate(spec);
+        DeploymentSpecRenderResult renderResult = deploymentSpecRenderer.renderWithAnalysis(spec);
+        ComposeArtifact artifact = renderResult.artifact();
+        return ApiResponse.ok(new ComposeSpecResponse(
+                artifact.composeContent(),
+                artifact.environmentFiles(),
+                artifact.exposedRoutes(),
+                artifact.healthChecks(),
+                null,
+                null,
+                renderResult.routerPlan()));
+    }
+
     @Operation(summary = "저장소 Compose 파일 탐지",
-            description = "저장소를 임시로 얕게 클론해 배포 디렉터리 아래의 compose.yaml/yml 또는 "
-                    + "docker-compose.yaml/yml을 탐지합니다. 원문은 응답 후 서버에 남기지 않습니다.")
+            description = "저장소를 임시로 얕게 클론해 저장소 전체의 Compose 파일을 탐지하고, "
+                    + "지정한 배포 디렉터리의 후보를 우선 정렬합니다. Compose가 없을 때 사용할 실행 가능 "
+                    + "멀티모듈 서비스 후보도 함께 반환하며 원문은 응답 후 서버에 남기지 않습니다.")
     @PostMapping("/compose/detect")
     public ApiResponse<ComposeDetectionResult> detectCompose(
             HttpServletRequest request,
@@ -259,7 +286,7 @@ public class DeploymentController {
         String bearerToken = extractToken(request);
         requireDeployPermission(bearerToken, vmId.toString());
         return ApiResponse.ok(composeRouterPlanner.plan(
-                body.composeContent(), body.routerHostPort(), body.servicePorts()));
+                body.composeContent(), body.routerHostPort(), body.servicePorts(), body.routeOverrides()));
     }
 
     @Operation(summary = "배포 이력 조회")

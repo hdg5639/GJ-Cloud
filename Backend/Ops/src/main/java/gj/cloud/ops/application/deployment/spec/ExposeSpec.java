@@ -11,6 +11,17 @@ public record ExposeSpec(
         // PRO 전용. null이면 VM 기본 서브도메인+서비스명 조합을 사용한다.
         @Size(max = 30)
         @Pattern(regexp = "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
-        String customSubdomain
+        String customSubdomain,
+        // 다중 서비스 Caddy 라우팅 보정값. null이면 저장소 근거로 자동 추론한다.
+        @Pattern(regexp = "^$|^/(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$")
+        String routePath,
+        Boolean stripPrefix,
+        // 통합 Caddy 라우팅에서 이 서비스의 노출 방식. "PREFIX"(기본, 경로 기반) | "DOMAIN"(호스트 기반, customSubdomain 사용).
+        // null이면 PREFIX로 취급한다.
+        @Pattern(regexp = "^$|^(PREFIX|DOMAIN)$")
+        String routeMode
 ) {
+    public boolean isDomainRouting() {
+        return "DOMAIN".equalsIgnoreCase(routeMode);
+    }
 }

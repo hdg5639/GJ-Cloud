@@ -12,6 +12,8 @@ import gj.cloud.ops.application.deployment.dto.InfraSelection;
 import gj.cloud.ops.application.deployment.dto.ServiceCard;
 import gj.cloud.ops.application.deployment.repoanalysis.RepositoryEvidence;
 import gj.cloud.ops.application.deployment.repoanalysis.RepositorySnapshotBuilder;
+import gj.cloud.ops.application.deployment.repoanalysis.DiscoveredService;
+import gj.cloud.ops.application.deployment.repoanalysis.ServiceDiscoveryResult;
 import gj.cloud.ops.application.deployment.repoanalysis.RuleBasedSpecInferrer;
 import gj.cloud.ops.application.deployment.repoanalysis.RuleBasedSpecInferrer.RuleBasedInferenceResult;
 import gj.cloud.ops.application.deployment.spec.DeploymentSpec;
@@ -35,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 // D-3 AI 자동생성 — AI-Deployment-Pipeline.md 3~11절 반영판.
 // 흐름이 완전히 바뀜: (1) 저장소를 실제로 얕게 클론해 결정론적 증거를 수집 → (2) 규칙 기반으로 최대한 확정
@@ -117,16 +120,29 @@ public class AiSpecGeneratorClient {
     }
 
     public AiGenerationResult generate(String vmId, GenerateDeploymentSpecRequest request) {
-        Optional<AiGenerationResult> cached = generationCache.get(request);
+        ServiceDiscoveryResult discovery = repositorySnapshotBuilder.discoverServices(
+                request.repoUrl(), request.branch(), request.patToken());
+        List<ServiceCard> effectiveServices = mergeDiscoveredServices(request.services(), discovery.services());
+        GenerateDeploymentSpecRequest effectiveRequest = new GenerateDeploymentSpecRequest(
+                request.repoUrl(),
+                request.branch(),
+                request.patToken(),
+                effectiveServices,
+                request.infrastructure(),
+                request.existingNetworkName(),
+                request.githubInstallationId(),
+                request.githubRepositoryId());
+
+        Optional<AiGenerationResult> cached = generationCache.get(effectiveRequest);
         if (cached.isPresent()) {
             logRepository.save(AiSpecGenerationLogEntity.create(vmId, AiCallKind.GENERATION, "cache-hit",
                     0, 0, 0, true, false, null, true));
-            return cached.get();
+            return appendWarnings(cached.get(), discovery.warnings());
         }
 
-        List<String> contexts = request.services().stream().map(ServiceCard::context).distinct().toList();
+        List<String> contexts = effectiveServices.stream().map(ServiceCard::context).distinct().toList();
         Map<String, RepositoryEvidence> evidenceByContext = repositorySnapshotBuilder.analyze(
-                request.repoUrl(), request.branch(), request.patToken(), contexts);
+                effectiveRequest.repoUrl(), effectiveRequest.branch(), effectiveRequest.patToken(), contexts);
 
         List<ServiceSpec> resolvedSpecs = new ArrayList<>();
         List<String> evidenceRefs = new ArrayList<>();
@@ -134,7 +150,7 @@ public class AiSpecGeneratorClient {
         List<ServiceCard> aiCards = new ArrayList<>();
         Map<String, RepositoryEvidence> aiEvidence = new LinkedHashMap<>();
 
-        for (ServiceCard card : request.services()) {
+        for (ServiceCard card : effectiveServices) {
             RepositoryEvidence evidence = evidenceByContext.get(card.context());
             RuleBasedInferenceResult inference = ruleBasedSpecInferrer.infer(evidence, card);
             if (inference.resolved()) {
@@ -149,15 +165,94 @@ public class AiSpecGeneratorClient {
             }
         }
 
-        boolean externalNetwork = request.existingNetworkName() != null && !request.existingNetworkName().isBlank();
-        String networkName = externalNetwork ? request.existingNetworkName() : NETWORK_NAME;
+        boolean externalNetwork = effectiveRequest.existingNetworkName() != null
+                && !effectiveRequest.existingNetworkName().isBlank();
+        String networkName = externalNetwork ? effectiveRequest.existingNetworkName() : NETWORK_NAME;
 
         AiGenerationResult result = aiCards.isEmpty()
                 // 전부 결정론적으로 확정 — AI 호출 0회 (신고된 오분류 버그의 핵심 방지책)
-                ? finalizeDeterministic(vmId, resolvedSpecs, request.infrastructure(), evidenceRefs, networkName, externalNetwork)
-                : generateWithAi(vmId, request, resolvedSpecs, aiCards, aiEvidence, evidenceRefs, earlyUnresolved, networkName, externalNetwork);
-        generationCache.put(request, result);
+                ? finalizeDeterministic(vmId, resolvedSpecs, effectiveRequest.infrastructure(), evidenceRefs, networkName, externalNetwork)
+                : generateWithAi(vmId, effectiveRequest, resolvedSpecs, aiCards, aiEvidence, evidenceRefs,
+                        earlyUnresolved, networkName, externalNetwork);
+        result = appendWarnings(result, discovery.warnings());
+        generationCache.put(effectiveRequest, result);
         return result;
+    }
+
+    List<ServiceCard> mergeDiscoveredServices(
+            List<ServiceCard> hints,
+            List<DiscoveredService> discovered
+    ) {
+        List<ServiceCard> safeHints = hints == null ? List.of() : hints;
+        if (discovered == null || discovered.isEmpty()) return safeHints;
+
+        List<ServiceCard> merged = new ArrayList<>();
+        Set<ServiceCard> consumedHints = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (DiscoveredService service : discovered) {
+            ServiceCard matchingHint = safeHints.stream()
+                    .filter(hint -> normalizeContext(hint.context()).equals(normalizeContext(service.context()))
+                            || hint.name().equalsIgnoreCase(service.name()))
+                    .findFirst()
+                    .orElse(null);
+            if (matchingHint != null) {
+                consumedHints.add(matchingHint);
+                merged.add(new ServiceCard(
+                        matchingHint.name(),
+                        matchingHint.runtime(),
+                        service.context(),
+                        matchingHint.containerPort(),
+                        matchingHint.javaVersion(),
+                        matchingHint.buildTool(),
+                        matchingHint.nodeVersion(),
+                        matchingHint.buildCommand(),
+                        matchingHint.startCommand(),
+                        matchingHint.pythonVersion(),
+                        matchingHint.pythonFramework(),
+                        matchingHint.expose(),
+                        matchingHint.customSubdomain()));
+            } else {
+                merged.add(toServiceCard(service));
+            }
+        }
+        boolean discoveredSubmodules = discovered.stream()
+                .anyMatch(service -> !".".equals(normalizeContext(service.context())));
+        safeHints.stream()
+                .filter(hint -> !consumedHints.contains(hint))
+                .filter(hint -> !(discoveredSubmodules && ".".equals(normalizeContext(hint.context()))))
+                .forEach(merged::add);
+        return List.copyOf(merged);
+    }
+
+    private ServiceCard toServiceCard(DiscoveredService service) {
+        return new ServiceCard(
+                service.name(),
+                service.runtime(),
+                service.context(),
+                service.containerPort(),
+                "java".equals(service.runtime()) ? 21 : null,
+                "java".equals(service.runtime()) ? "maven" : null,
+                "node".equals(service.runtime()) ? 22 : null,
+                null,
+                null,
+                "python".equals(service.runtime()) ? "3.11" : null,
+                null,
+                service.expose(),
+                null);
+    }
+
+    private String normalizeContext(String context) {
+        if (context == null || context.isBlank() || ".".equals(context.trim())) return ".";
+        String normalized = context.trim().replace('\\', '/');
+        while (normalized.startsWith("./")) normalized = normalized.substring(2);
+        return normalized.replaceAll("/+$", "");
+    }
+
+    private AiGenerationResult appendWarnings(AiGenerationResult result, List<String> additionalWarnings) {
+        if (additionalWarnings == null || additionalWarnings.isEmpty()) return result;
+        List<String> warnings = new ArrayList<>(result.warnings());
+        additionalWarnings.stream().filter(warning -> !warnings.contains(warning)).forEach(warnings::add);
+        return new AiGenerationResult(
+                result.status(), result.spec(), result.unresolved(), List.copyOf(warnings), result.evidenceRefs());
     }
 
     private AiGenerationResult finalizeDeterministic(String vmId, List<ServiceSpec> resolvedSpecs,
@@ -224,7 +319,7 @@ public class AiSpecGeneratorClient {
             }
 
             List<ServiceSpec> allServices = new ArrayList<>(resolvedSpecs);
-            allServices.addAll(applyRequestedCustomSubdomains(output.services(), aiCards));
+            allServices.addAll(applyRequestedExposure(output.services(), aiCards));
             DeploymentSpec spec = assembleSpec(allServices, request.infrastructure(), networkName, externalNetwork);
             List<ValidationError> specErrors = collectAllErrors(spec);
             if (!specErrors.isEmpty()) {
@@ -245,24 +340,32 @@ public class AiSpecGeneratorClient {
         List<InfrastructureSpec> infra = infrastructure == null ? List.of() : infrastructure.stream()
                 .map(i -> new InfrastructureSpec(i.type(),
                         i.version() != null && !i.version().isBlank() ? i.version() : defaultInfraVersion(i.type()),
-                        new ExposeSpec(false, null, null, null)))
+                        new ExposeSpec(false, null, null, null, null, null, null)))
                 .toList();
         return new DeploymentSpec(SCHEMA_VERSION, services, infra, networkName, externalNetwork);
     }
 
     // 커스텀 CNAME은 저장소 분석이나 AI 추론 대상이 아니라 사용자가 명시적으로 고른 값이다. AI가 null로
     // 누락하거나 다른 문자열을 반환해도 요청 카드의 값을 최종 스펙에 덮어써서 배포 라우트까지 보존한다.
-    private List<ServiceSpec> applyRequestedCustomSubdomains(List<ServiceSpec> services, List<ServiceCard> cards) {
+    List<ServiceSpec> applyRequestedExposure(List<ServiceSpec> services, List<ServiceCard> cards) {
         Map<String, ServiceCard> cardsByName = cards.stream()
                 .collect(java.util.stream.Collectors.toMap(ServiceCard::name, card -> card, (first, ignored) -> first));
         return services.stream().map(service -> {
             ServiceCard card = cardsByName.get(service.name());
-            if (card == null || !card.expose() || service.expose() == null) {
+            if (card == null) {
                 return service;
             }
             ExposeSpec current = service.expose();
-            ExposeSpec exposure = new ExposeSpec(current.enabled(), current.protocol(), current.healthCheckPath(),
-                    card.customSubdomain());
+            ExposeSpec exposure = card.expose()
+                    ? new ExposeSpec(
+                            true,
+                            current != null && current.protocol() != null ? current.protocol() : "http",
+                            current != null && current.healthCheckPath() != null ? current.healthCheckPath() : "/",
+                            card.customSubdomain(),
+                            current != null ? current.routePath() : null,
+                            current != null ? current.stripPrefix() : null,
+                            current != null ? current.routeMode() : null)
+                    : null;
             return new ServiceSpec(service.name(), service.deploymentMode(), service.build(), service.artifact(),
                     service.run(), service.context(), exposure);
         }).toList();
@@ -325,7 +428,7 @@ public class AiSpecGeneratorClient {
                 }
                 // 사용자 설정인 customSubdomain은 모델 응답을 신뢰하지 않고 덮어쓴 상태로 검증한다.
                 DeploymentSpec probe = assembleSpec(
-                        applyRequestedCustomSubdomains(output.services(), requestedCards),
+                        applyRequestedExposure(output.services(), requestedCards),
                         List.of(), NETWORK_NAME, false);
                 errors.addAll(deploymentSpecValidator.collectErrors(probe));
             }

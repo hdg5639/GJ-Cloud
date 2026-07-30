@@ -104,6 +104,56 @@ class ComposeRouterPlannerTest {
     }
 
     @Test
+    void routesDomainModeServiceByHostAndKeepsSingleRouterPort() {
+        String compose = """
+                services:
+                  web:
+                    ports: ["3000:3000"]
+                  api:
+                    ports: ["8080:8080"]
+                  community:
+                    ports: ["8082:8082"]
+                """;
+
+        Map<String, ComposeRouterRouteOverride> overrides = Map.of(
+                "community", new ComposeRouterRouteOverride("DOMAIN", null, false, "community"));
+
+        ComposeRouterPlanResult result = planner.plan(compose, null, Map.of(), overrides);
+
+        assertThat(result.status()).isEqualTo(ComposeRouterPlanResult.STATUS_ADDED);
+        // 도메인 모드 서비스는 Host 헤더로 라우팅되고, 나머지는 기본 도메인 아래 경로로 통합된다.
+        assertThat(result.routerConfig())
+                .contains("host_regexp ^community\\.")
+                .contains("reverse_proxy community:8082");
+        ComposeRouterRoute communityRoute = result.routes().stream()
+                .filter(route -> route.serviceName().equals("community"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(communityRoute.isDomain()).isTrue();
+        assertThat(communityRoute.customSubdomain()).isEqualTo("community");
+    }
+
+    @Test
+    void reportsUnresolvedWhenDomainModeMissingSubdomain() {
+        String compose = """
+                services:
+                  web:
+                    ports: ["3000:3000"]
+                  api:
+                    ports: ["8080:8080"]
+                """;
+
+        Map<String, ComposeRouterRouteOverride> overrides = Map.of(
+                "api", new ComposeRouterRouteOverride("DOMAIN", null, false, ""));
+
+        ComposeRouterPlanResult result = planner.plan(compose, null, Map.of(), overrides);
+
+        assertThat(result.status()).isEqualTo(ComposeRouterPlanResult.STATUS_NEEDS_INPUT);
+        assertThat(result.unresolvedServices()).extracting(ComposeRouterUnresolvedService::serviceName)
+                .contains("api");
+    }
+
+    @Test
     void createsUniquePathsWhenServiceSlugsWouldCollide() {
         String compose = """
                 services:
@@ -119,9 +169,10 @@ class ComposeRouterPlannerTest {
 
         assertThat(result.routes()).extracting(ComposeRouterRoute::routePath)
                 .containsExactly("/", "/foo-bar", "/foo-bar-2");
+        // matcher 이름의 인덱스는 정렬 순서에 따른 내부 구현 세부사항이므로 경로 매칭 자체만 검증한다.
         assertThat(result.routerConfig())
-                .contains("@route_foo_bar path /foo-bar /foo-bar/*")
-                .contains("@route_foo_bar_2 path /foo-bar-2 /foo-bar-2/*");
+                .contains("path /foo-bar /foo-bar/*")
+                .contains("path /foo-bar-2 /foo-bar-2/*");
     }
 
     @Test
@@ -201,5 +252,39 @@ class ComposeRouterPlannerTest {
         ComposeRouterPlanResult result = planner.plan(compose, null, Map.of());
 
         assertThat(result.status()).isEqualTo(ComposeRouterPlanResult.STATUS_NOT_REQUIRED);
+    }
+
+    @Test
+    void infersMultiModuleRoutePrefixesFromServiceHealthChecks() {
+        String compose = """
+                services:
+                  events-api:
+                    build: .
+                    ports: ["18080:8080"]
+                    healthcheck:
+                      test: ["CMD", "wget", "-qO-", "http://localhost:8080/zoo/events/actuator/health"]
+                  commerce-api:
+                    build: .
+                    ports: ["18081:8080"]
+                    healthcheck:
+                      test: ["CMD", "wget", "-qO-", "http://localhost:8080/zoo/commerce/actuator/health"]
+                  media-api:
+                    build: .
+                    ports: ["18084:8080"]
+                    healthcheck:
+                      test: ["CMD", "wget", "-qO-", "http://localhost:8080/zoo/media/actuator/health"]
+                """;
+
+        ComposeRouterPlanResult result = planner.plan(compose, null, Map.of());
+
+        assertThat(result.status()).isEqualTo(ComposeRouterPlanResult.STATUS_ADDED);
+        assertThat(result.routes()).extracting(ComposeRouterRoute::routePath)
+                .containsExactly("/", "/zoo/commerce", "/zoo/media");
+        assertThat(result.routes().stream().filter(route -> !route.root()))
+                .allSatisfy(route -> assertThat(route.stripPrefix()).isFalse());
+        assertThat(result.routerConfig())
+                .contains("path /zoo/commerce /zoo/commerce/*")
+                .contains("@route_zoo_commerce_0")
+                .doesNotContain("strip_prefix /zoo/commerce");
     }
 }

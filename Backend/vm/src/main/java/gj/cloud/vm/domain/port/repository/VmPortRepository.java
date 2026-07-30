@@ -23,6 +23,12 @@ public interface VmPortRepository extends ReactiveCrudRepository<VmPortEntity, U
     @Query("SELECT COUNT(*) FROM vm_ports WHERE vm_id = :vmId AND port = :port")
     Mono<Long> countByVmIdAndPort(UUID vmId, int port);
 
+    // 단일 진입 포트 호스트 라우팅 — 같은 배포(deploymentAppId)의 여러 도메인 라우트는 하나의 router 포트를
+    // 공유할 수 있어야 한다. 수동 포트(deployment_app_id IS NULL)나 다른 배포가 점유한 경우만 충돌로 본다.
+    @Query("SELECT COUNT(*) FROM vm_ports WHERE vm_id = :vmId AND port = :port "
+            + "AND (deployment_app_id IS NULL OR deployment_app_id <> :deploymentAppId)")
+    Mono<Long> countByVmIdAndPortForOtherOwners(UUID vmId, int port, String deploymentAppId);
+
     @Query("SELECT COUNT(*) FROM vm_ports WHERE vm_id = :vmId AND nickname = :nickname")
     Mono<Long> countByVmIdAndNickname(UUID vmId, String nickname);
 
