@@ -5,6 +5,9 @@ import gj.cloud.ops.application.deployment.ai.AiGenerationResult;
 import gj.cloud.ops.application.deployment.ai.AiSpecGeneratorClient;
 import gj.cloud.ops.application.deployment.ai.ComposeReviewFinding;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
+import gj.cloud.ops.application.deployment.dto.ComposeDetectionRequest;
+import gj.cloud.ops.application.deployment.dto.ComposeReviewRequest;
+import gj.cloud.ops.application.deployment.dto.ComposeRouterPlanRequest;
 import gj.cloud.ops.application.deployment.dto.ComposeSpecResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentCreateRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentFromSpecRequest;
@@ -12,6 +15,10 @@ import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentTeardownRequest;
 import gj.cloud.ops.application.deployment.dto.GenerateDeploymentSpecRequest;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
+import gj.cloud.ops.application.deployment.repoanalysis.ComposeDetectionResult;
+import gj.cloud.ops.application.deployment.repoanalysis.RepositorySnapshotBuilder;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanResult;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanner;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
 import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
@@ -62,6 +69,8 @@ public class DeploymentController {
     private final DeploymentSpecRenderer deploymentSpecRenderer;
     private final AiSpecGeneratorClient aiSpecGeneratorClient;
     private final AiComposeReviewer aiComposeReviewer;
+    private final RepositorySnapshotBuilder repositorySnapshotBuilder;
+    private final ComposeRouterPlanner composeRouterPlanner;
     private final VmServiceClient vmServiceClient;
     private final DeploymentTargetService deploymentTargetService;
     private final GithubAppService githubAppService;
@@ -201,6 +210,56 @@ public class DeploymentController {
         ComposeArtifact artifact = deploymentSpecRenderer.render(spec);
         List<ComposeReviewFinding> findings = aiComposeReviewer.review(vmId.toString(), artifact.composeContent());
         return ApiResponse.ok(findings);
+    }
+
+    @Operation(summary = "저장소 Compose 파일 탐지",
+            description = "저장소를 임시로 얕게 클론해 배포 디렉터리 아래의 compose.yaml/yml 또는 "
+                    + "docker-compose.yaml/yml을 탐지합니다. 원문은 응답 후 서버에 남기지 않습니다.")
+    @PostMapping("/compose/detect")
+    public ApiResponse<ComposeDetectionResult> detectCompose(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody ComposeDetectionRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        ResolvedRepository repository = resolveRepository(
+                principal.userId(), body.repoUrl(), body.branch(), body.patToken(),
+                body.githubInstallationId(), body.githubRepositoryId());
+        ComposeDetectionResult result = repositorySnapshotBuilder.detectCompose(
+                repository.repoUrl(), repository.branch(), repository.token(), body.context());
+        return ApiResponse.ok(result);
+    }
+
+    @Operation(summary = "Raw Compose AI 검수",
+            description = "저장소에서 탐지했거나 사용자가 작성한 Compose 원문을 비차단 AI 검수합니다. "
+                    + "비밀값은 AI 전송 전에 마스킹되며, 검수 결과는 배포를 승인하거나 차단하지 않습니다.")
+    @PostMapping("/compose/review")
+    public ApiResponse<List<ComposeReviewFinding>> reviewCompose(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody ComposeReviewRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        return ApiResponse.ok(aiComposeReviewer.review(vmId.toString(), body.composeContent()));
+    }
+
+    @Operation(summary = "다중 서비스 Compose 라우터 보강안 생성",
+            description = "Compose의 애플리케이션 서비스와 내부 포트를 결정론적으로 분석해, "
+                    + "기존 Nginx/Caddy/Traefik 계열 라우터가 없을 때 Caddy 단일 진입점 보강안을 만듭니다. "
+                    + "포트를 확정할 수 없으면 원문을 변경하지 않고 NEEDS_INPUT으로 반환합니다.")
+    @PostMapping("/compose/router/plan")
+    public ApiResponse<ComposeRouterPlanResult> planComposeRouter(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @Valid @RequestBody ComposeRouterPlanRequest body
+    ) {
+        String bearerToken = extractToken(request);
+        requireDeployPermission(bearerToken, vmId.toString());
+        return ApiResponse.ok(composeRouterPlanner.plan(
+                body.composeContent(), body.routerHostPort(), body.servicePorts()));
     }
 
     @Operation(summary = "배포 이력 조회")

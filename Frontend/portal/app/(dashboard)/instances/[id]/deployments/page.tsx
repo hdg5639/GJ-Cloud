@@ -16,6 +16,10 @@ import type {
   GenerationStatus,
   UnresolvedField,
   ComposeReviewFinding,
+  ComposeDetectionResult,
+  DetectedComposeFile,
+  ComposeRouterPlanResult,
+  ComposeRouterRoute,
   NetworkInfo,
   DeploymentTargetResponse,
   GithubRepositoryResponse,
@@ -92,6 +96,263 @@ function Section({ title, description, children }: { title: string; description:
       <h3 className="mb-1 text-sm font-extrabold">{title}</h3>
       <p className="mb-4 text-xs text-muted">{description}</p>
       {children}
+    </section>
+  );
+}
+
+function ComposeReviewFindingsView({ findings }: { findings: ComposeReviewFinding[] | null }) {
+  if (!findings) return null;
+  return (
+    <div className="space-y-2 rounded-md border border-line bg-white/[0.03] p-3 text-xs text-foreground">
+      <p className="text-[11px] text-muted-soft">AI 검수는 참고용이며 배포를 막지 않습니다.</p>
+      {findings.length === 0 ? (
+        <p className="text-muted-soft">특이사항이 없습니다.</p>
+      ) : (
+        findings.map((finding, index) => (
+          <div
+            key={`${finding.code}-${index}`}
+            className="border-l-2 pl-2"
+            style={{
+              borderColor: finding.severity === "CRITICAL"
+                ? "#ff6b6b"
+                : finding.severity === "WARNING" ? "#e8b657" : "#9aa39a",
+            }}
+          >
+            <p className="font-bold text-foreground">
+              [{finding.severity}] {finding.service && <span className="font-mono">{finding.service}</span>} {finding.message}
+            </p>
+            {finding.remediation && <p className="mt-0.5 text-muted">→ {finding.remediation}</p>}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function ComposeDetectionCard({
+  result,
+  selectedPath,
+  detecting,
+  reviewing,
+  reviewFindings,
+  onSelect,
+  onApply,
+  onReview,
+  onRefresh,
+}: {
+  result: ComposeDetectionResult;
+  selectedPath: string;
+  detecting: boolean;
+  reviewing: boolean;
+  reviewFindings: ComposeReviewFinding[] | null;
+  onSelect: (path: string) => void;
+  onApply: (file: DetectedComposeFile) => void;
+  onReview: (file: DetectedComposeFile) => void;
+  onRefresh: () => void;
+}) {
+  const selected = result.files.find((file) => file.path === selectedPath) ?? result.files[0];
+  if (!selected) return null;
+
+  return (
+    <section className="rounded-panel border border-[#64d98b]/35 bg-[#64d98b]/[0.055] p-5">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#64d98b]/15 text-xs text-[#73e09a]">✓</span>
+            <h3 className="text-sm font-extrabold text-foreground">Compose 파일이 감지되었습니다</h3>
+          </div>
+          <p className="text-xs text-muted">
+            저장소의 실제 파일을 불러왔습니다. 내용을 확인하거나 AI 검수를 거친 뒤 그대로 배포에 사용할 수 있습니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={detecting || reviewing}
+          className="text-xs font-bold text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {detecting ? "탐지 중..." : "다시 탐지"}
+        </button>
+      </div>
+
+      {result.files.length > 1 ? (
+        <Select value={selected.path} onChange={(event) => onSelect(event.target.value)} className="mb-3">
+          {result.files.map((file) => (
+            <option key={file.path} value={file.path}>{file.path}</option>
+          ))}
+        </Select>
+      ) : (
+        <div className="mb-3 rounded-md border border-[#64d98b]/20 bg-black/10 px-3 py-2 font-mono text-xs text-[#8be5aa]">
+          {selected.path}
+        </div>
+      )}
+
+      <pre className="max-h-56 overflow-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
+        {selected.content}
+      </pre>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button type="button" variant="primary" onClick={() => onApply(selected)} disabled={detecting || reviewing}>
+          이 Compose로 배포
+        </Button>
+        <Button type="button" onClick={() => onReview(selected)} disabled={detecting || reviewing}>
+          {reviewing ? "AI 검수 중..." : "AI 검수"}
+        </Button>
+        <span className="text-[11px] text-muted-soft">
+          적용 시 배포 디렉터리도 <span className="font-mono">{selected.directory}</span>(으)로 맞춰집니다.
+        </span>
+      </div>
+      {result.warnings.length > 0 && (
+        <div className="mt-3 space-y-1 text-[11px] text-[#e8b657]">
+          {result.warnings.map((warning) => <p key={warning}>⚠ {warning}</p>)}
+        </div>
+      )}
+      <div className="mt-3">
+        <ComposeReviewFindingsView findings={reviewFindings} />
+      </div>
+    </section>
+  );
+}
+
+function ComposeRouterPlanCard({
+  plan,
+  planning,
+  applied,
+  hostPort,
+  servicePorts,
+  onHostPortChange,
+  onServicePortChange,
+  onReplan,
+  onApply,
+}: {
+  plan: ComposeRouterPlanResult;
+  planning: boolean;
+  applied: boolean;
+  hostPort: number;
+  servicePorts: Record<string, number>;
+  onHostPortChange: (port: number) => void;
+  onServicePortChange: (service: string, port: number) => void;
+  onReplan: () => void;
+  onApply: () => void;
+}) {
+  if (plan.status === "ALREADY_CONFIGURED") {
+    return (
+      <div className="rounded-panel border border-[#64d98b]/30 bg-[#64d98b]/[0.05] p-4 text-xs text-muted">
+        <p className="font-bold text-[#8be5aa]">기존 라우터 설정을 감지했습니다</p>
+        <p className="mt-1">
+          <span className="font-mono text-foreground">{plan.routerServiceName}</span> 서비스를 그대로 유지하며 자동 변경하지 않습니다.
+        </p>
+      </div>
+    );
+  }
+
+  if (plan.status === "NOT_REQUIRED") {
+    return (
+      <div className="rounded-panel border border-line bg-white/[0.025] p-4 text-xs text-muted">
+        라우팅할 애플리케이션 서비스가 2개 미만이라 별도 Caddy 진입점이 필요하지 않습니다.
+      </div>
+    );
+  }
+
+  return (
+    <section className={cn(
+      "rounded-panel border p-5",
+      plan.status === "NEEDS_INPUT"
+        ? "border-[#e8b657]/30 bg-[#e8b657]/[0.055]"
+        : "border-[#75a9ff]/30 bg-[#75a9ff]/[0.045]"
+    )}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-extrabold text-foreground">
+            {plan.status === "NEEDS_INPUT" ? "Caddy 라우터 구성에 포트 정보가 필요합니다" : "Caddy 다중 서비스 라우터"}
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            서비스 직접 노출을 내부 네트워크로 전환하고 하나의 공개 진입점에서 경로별로 전달합니다.
+          </p>
+        </div>
+        {applied && (
+          <span className="rounded-full border border-[#64d98b]/25 bg-[#64d98b]/10 px-2.5 py-1 text-[10px] font-extrabold text-[#8be5aa]">
+            Compose에 자동 적용됨
+          </span>
+        )}
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <Field label="Caddy 호스트 진입 포트" htmlFor="router-host-port">
+          <Input
+            id="router-host-port"
+            type="number"
+            min={1}
+            max={65535}
+            value={hostPort}
+            disabled={applied}
+            onChange={(event) => onHostPortChange(Number(event.target.value))}
+          />
+        </Field>
+        {plan.unresolvedServices.map((service) => (
+          service.portRequired ? (
+            <Field
+              key={service.serviceName}
+              label={`${service.serviceName} 컨테이너 포트`}
+              htmlFor={`router-service-${service.serviceName}`}
+            >
+              <Input
+                id={`router-service-${service.serviceName}`}
+                type="number"
+                min={1}
+                max={65535}
+                value={servicePorts[service.serviceName] || ""}
+                placeholder="예: 3000"
+                onChange={(event) => onServicePortChange(service.serviceName, Number(event.target.value))}
+              />
+              <p className="mt-1 text-[11px] font-normal normal-case text-muted-soft">{service.reason}</p>
+            </Field>
+          ) : (
+            <div key={service.serviceName} className="rounded-md border border-[#e8b657]/20 bg-black/10 p-3 text-xs text-[#e8b657]">
+              <p className="font-bold">{service.serviceName}</p>
+              <p className="mt-1 text-[11px]">{service.reason} Compose에서 해당 옵션을 정리한 뒤 다시 분석하세요.</p>
+            </div>
+          )
+        ))}
+      </div>
+
+      {plan.routes.length > 0 && (
+        <div className="mb-4 overflow-hidden rounded-[10px] border border-line">
+          {plan.routes.map((route: ComposeRouterRoute) => (
+            <div key={route.serviceName} className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-line px-3 py-2.5 text-xs last:border-b-0">
+              <span className="font-mono font-bold text-foreground">{route.routePath}</span>
+              <span className="font-mono text-muted">→ {route.upstream}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {plan.routerConfig && (
+        <details className="mb-4 rounded-[10px] border border-line bg-black/10">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-muted">생성될 Caddyfile 보기</summary>
+          <pre className="max-h-56 overflow-auto border-t border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
+            {plan.routerConfig}
+          </pre>
+        </details>
+      )}
+
+      {plan.warnings.length > 0 && (
+        <div className="mb-4 space-y-1 text-[11px] text-[#e8b657]">
+          {plan.warnings.map((warning) => <p key={warning}>⚠ {warning}</p>)}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {!applied && (
+          <Button type="button" onClick={onReplan} disabled={planning}>
+            {planning ? "라우터 분석 중..." : "설정 다시 계산"}
+          </Button>
+        )}
+        {plan.status === "ADDED" && !applied && (
+          <Button type="button" variant="primary" onClick={onApply} disabled={planning}>
+            Compose에 적용
+          </Button>
+        )}
+      </div>
     </section>
   );
 }
@@ -229,6 +490,18 @@ export default function DeploymentsPage() {
   // Raw Compose
   const [composeContent, setComposeContent] = useState("");
   const [context, setContext] = useState("");
+  const [composeDetection, setComposeDetection] = useState<ComposeDetectionResult | null>(null);
+  const [selectedDetectedComposePath, setSelectedDetectedComposePath] = useState("");
+  const [lastComposeDetectionKey, setLastComposeDetectionKey] = useState("");
+  const [composeDetectionError, setComposeDetectionError] = useState<string | null>(null);
+  const [detectingCompose, setDetectingCompose] = useState(false);
+  const [composeReviewFindings, setComposeReviewFindings] = useState<ComposeReviewFinding[] | null>(null);
+  const [reviewingCompose, setReviewingCompose] = useState(false);
+  const [routerPlan, setRouterPlan] = useState<ComposeRouterPlanResult | null>(null);
+  const [planningRouter, setPlanningRouter] = useState(false);
+  const [routerApplied, setRouterApplied] = useState(false);
+  const [routerHostPort, setRouterHostPort] = useState(18080);
+  const [routerServicePorts, setRouterServicePorts] = useState<Record<string, number>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [envFiles, setEnvFiles] = useState<EnvironmentFile[]>([]);
   const [routes, setRoutes] = useState<ExposedRoute[]>([]);
@@ -257,7 +530,7 @@ export default function DeploymentsPage() {
   const furthestCreateStep = furthestStepByTab[createTab];
 
   function visitCreateStep(step: CreateStep) {
-    if (generating || submitting || reviewing) return;
+    if (generating || submitting || reviewing || detectingCompose || reviewingCompose || planningRouter) return;
     if (step <= furthestCreateStep) setCreateStep(step);
   }
 
@@ -282,8 +555,20 @@ export default function DeploymentsPage() {
     }));
   }
 
+  function invalidateComposeDetection() {
+    setComposeDetection(null);
+    setSelectedDetectedComposePath("");
+    setLastComposeDetectionKey("");
+    setComposeDetectionError(null);
+    setComposeReviewFindings(null);
+    setRouterPlan(null);
+    setRouterApplied(false);
+    setRouterServicePorts({});
+  }
+
   function handleRepoUrlChange(value: string) {
     setManualRepoUrl(value);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
@@ -293,22 +578,26 @@ export default function DeploymentsPage() {
     } else {
       setManualBranch(value);
     }
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
   function handleRepositorySourceChange(source: RepositorySource) {
     if (source === repositorySource) return;
     setRepositorySource(source);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
   function handlePatTokenChange(value: string) {
     setPatToken(value);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
   function handleRepositoryContextChange(value: string) {
     setContext(value);
+    invalidateComposeDetection();
     invalidateAiGeneration();
   }
 
@@ -523,6 +812,7 @@ export default function DeploymentsPage() {
   function applyComposeSpec(spec: ComposeSpecResponse) {
     setComposeContent(spec.composeContent);
     setContext(spec.context ?? "");
+    invalidateComposeDetection();
     setInstallPath(spec.installPath ?? "");
     setRepositorySource("url");
     setSelectedGithubRepositoryKey("");
@@ -586,6 +876,18 @@ export default function DeploymentsPage() {
     setSelectedGithubRepositoryKey("");
     setComposeContent("");
     setContext("");
+    setComposeDetection(null);
+    setSelectedDetectedComposePath("");
+    setLastComposeDetectionKey("");
+    setComposeDetectionError(null);
+    setDetectingCompose(false);
+    setComposeReviewFindings(null);
+    setReviewingCompose(false);
+    setRouterPlan(null);
+    setPlanningRouter(false);
+    setRouterApplied(false);
+    setRouterHostPort(18080);
+    setRouterServicePorts({});
     setInstallPath("");
     setNetworkMode("create");
     setExistingNetworkName("");
@@ -609,6 +911,7 @@ export default function DeploymentsPage() {
   }
 
   function closeCreate() {
+    if (submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter) return;
     setShowCreate(false);
     setError(null);
     resetCreateForm();
@@ -651,6 +954,7 @@ export default function DeploymentsPage() {
 
   function handleGithubRepositoryChange(key: string) {
     setSelectedGithubRepositoryKey(key);
+    invalidateComposeDetection();
     const repository = githubRepositories.find((item) => `${item.installationId}:${item.id}` === key);
     if (!repository) {
       setGithubBranch("main");
@@ -710,6 +1014,217 @@ export default function DeploymentsPage() {
       setDeleteTargetError(err instanceof Error ? err.message : "배포 대상 삭제에 실패했습니다.");
     } finally {
       setDeletingTargetId(null);
+    }
+  }
+
+  function nextAvailableRouterPort(): number {
+    const occupied = new Set(deploymentPorts.map((port) => port.port));
+    for (let port = 18080; port <= 18999; port += 1) {
+      if (!occupied.has(port)) return port;
+    }
+    return 19080;
+  }
+
+  function routerNickname(): string {
+    const normalized = (targetName || "gateway")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 20)
+      .replace(/-+$/g, "");
+    return normalized || "gateway";
+  }
+
+  function applyRouterPlan(plan: ComposeRouterPlanResult) {
+    if (plan.status !== "ADDED" || !plan.routerHostPort) return;
+    setComposeContent(plan.enhancedComposeContent);
+    setRouterPlan(plan);
+    setRouterApplied(true);
+    setRouterHostPort(plan.routerHostPort);
+    setComposeReviewFindings(null);
+
+    const routedServices = new Set(plan.routes.map((route) => route.serviceName));
+    setRoutes((previous) => {
+      const replacedRoutes = previous.filter((route) => routedServices.has(route.serviceName));
+      const preservedRoutes = previous.filter(
+        (route) => !routedServices.has(route.serviceName) && route.serviceName !== plan.routerServiceName
+      );
+      const inheritedCustomSubdomain = replacedRoutes
+        .map((route) => route.customSubdomain)
+        .find((value) => Boolean(value));
+      let nickname = routerNickname();
+      if (preservedRoutes.some((route) => route.nickname === nickname)) {
+        nickname = "gateway";
+      }
+      return [
+        ...preservedRoutes,
+        {
+          serviceName: plan.routerServiceName,
+          port: plan.routerHostPort!,
+          protocol: "HTTP",
+          visibility: "PUBLIC",
+          nickname,
+          customSubdomain: inheritedCustomSubdomain ?? "",
+        },
+      ];
+    });
+    const routeByService = new Map(plan.routes.map((route) => [route.serviceName, route]));
+    setHealthChecks((previous) => previous.map((check) => {
+      const route = routeByService.get(check.serviceName);
+      if (!route) return check;
+      const originalPath = check.path?.startsWith("/") ? check.path : `/${check.path || ""}`;
+      return {
+        serviceName: plan.routerServiceName,
+        path: route.root ? originalPath : `${route.routePath}${originalPath}`,
+        hostPort: plan.routerHostPort!,
+        containerPort: undefined,
+      };
+    }));
+    setShowAdvanced(true);
+  }
+
+  async function handlePlanComposeRouter(
+    content: string,
+    autoApply: boolean,
+    forcePort?: number
+  ): Promise<ComposeRouterPlanResult | null> {
+    if (!accessToken || !content.trim()) return null;
+    const occupied = new Set(deploymentPorts.map((port) => port.port));
+    const requestedPort = forcePort
+      ?? (routerHostPort >= 1 && routerHostPort <= 65535 && !occupied.has(routerHostPort)
+        ? routerHostPort
+        : nextAvailableRouterPort());
+    setRouterHostPort(requestedPort);
+    setPlanningRouter(true);
+    setError(null);
+    try {
+      const planned = await api.ops.deployments.planComposeRouter(accessToken, vmId, {
+        composeContent: content,
+        routerHostPort: requestedPort,
+        servicePorts: Object.fromEntries(
+          Object.entries(routerServicePorts).filter(([, port]) => port >= 1 && port <= 65535)
+        ),
+      });
+      let plan = planned;
+      if (planned.status === "ADDED") {
+        const routedServices = new Set(planned.routes.map((route) => route.serviceName));
+        const distinctCustomSubdomains = Array.from(new Set(
+          routes
+            .filter((route) => routedServices.has(route.serviceName))
+            .map((route) => route.customSubdomain?.trim())
+            .filter((value): value is string => Boolean(value))
+        ));
+        if (distinctCustomSubdomains.length > 1) {
+          plan = {
+            ...planned,
+            status: "NEEDS_INPUT",
+            enhancedComposeContent: content,
+            unresolvedServices: [{
+              serviceName: "공개 HTTP 라우트",
+              reason: "서로 다른 커스텀 서브도메인은 하나의 Caddy 진입점으로 합칠 수 없습니다. 하나의 도메인으로 통일하거나 기존 개별 노출을 유지하세요.",
+              portRequired: false,
+            }],
+            warnings: [
+              ...planned.warnings,
+              "커스텀 서브도메인 설정을 보호하기 위해 Compose를 자동 변경하지 않았습니다.",
+            ],
+          };
+        }
+      }
+      setRouterPlan(plan);
+      setRouterApplied(false);
+      if (autoApply && plan.status === "ADDED") {
+        applyRouterPlan(plan);
+      }
+      return plan;
+    } catch (err) {
+      setRouterPlan(null);
+      setRouterApplied(false);
+      setError(err instanceof Error ? err.message : "Compose 라우터 구성을 분석하지 못했습니다.");
+      return null;
+    } finally {
+      setPlanningRouter(false);
+    }
+  }
+
+  async function applyDetectedCompose(file: DetectedComposeFile) {
+    let content = file.content;
+    const plan = await handlePlanComposeRouter(file.content, false);
+    if (plan?.status === "ADDED") {
+      applyRouterPlan(plan);
+      content = plan.enhancedComposeContent;
+    } else {
+      setComposeContent(content);
+    }
+    setContext(file.directory === "." ? "" : file.directory);
+    setSelectedDetectedComposePath(file.path);
+    setCreateTab("compose");
+    setCreateStep(3);
+    setFurthestStepByTab((prev) => ({
+      ...prev,
+      compose: Math.max(prev.compose, 3) as CreateStep,
+    }));
+    invalidateAiGeneration();
+  }
+
+  async function handleDetectCompose(force = false): Promise<ComposeDetectionResult | null> {
+    if (!accessToken || !repoUrl || !branch) return null;
+    const detectionKey = JSON.stringify([
+      repoUrl,
+      branch,
+      context.trim() || ".",
+      activeGithubRepository?.installationId ?? null,
+      activeGithubRepository?.id ?? null,
+    ]);
+    if (!force && detectionKey === lastComposeDetectionKey && composeDetection) {
+      return composeDetection;
+    }
+
+    setDetectingCompose(true);
+    setComposeDetectionError(null);
+    setComposeReviewFindings(null);
+    try {
+      const result = await api.ops.deployments.detectCompose(accessToken, vmId, {
+        repoUrl,
+        branch,
+        patToken: repositorySource === "url" ? patToken || undefined : undefined,
+        context: context.trim() || undefined,
+        githubInstallationId: activeGithubRepository?.installationId,
+        githubRepositoryId: activeGithubRepository?.id,
+      });
+      setComposeDetection(result);
+      setLastComposeDetectionKey(detectionKey);
+      const primary = result.files.find((file) => file.primary) ?? result.files[0];
+      setSelectedDetectedComposePath(primary?.path ?? "");
+      if (primary && createTab === "compose" && !composeContent.trim()) {
+        setComposeContent(primary.content);
+        setContext(primary.directory === "." ? "" : primary.directory);
+        await handlePlanComposeRouter(primary.content, true);
+      }
+      return result;
+    } catch (err) {
+      setComposeDetection(null);
+      setSelectedDetectedComposePath("");
+      setComposeDetectionError(
+        err instanceof Error ? err.message : "저장소의 Compose 파일을 확인하지 못했습니다."
+      );
+      return null;
+    } finally {
+      setDetectingCompose(false);
+    }
+  }
+
+  async function handleReviewCompose(content: string) {
+    if (!accessToken || !content.trim()) return;
+    setReviewingCompose(true);
+    setComposeReviewFindings(null);
+    setError(null);
+    try {
+      setComposeReviewFindings(await api.ops.deployments.reviewCompose(accessToken, vmId, content));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Compose AI 검수에 실패했습니다.");
+    } finally {
+      setReviewingCompose(false);
     }
   }
 
@@ -848,10 +1363,20 @@ export default function DeploymentsPage() {
       return;
     }
     if (createStep === 2 && repositoryStepReady) {
+      await handleDetectCompose();
       advanceCreateStep(3);
       return;
     }
     if (createStep === 3 && createTab === "compose" && composeStepReady) {
+      let effectivePlan = routerPlan;
+      if (!effectivePlan) {
+        effectivePlan = await handlePlanComposeRouter(composeContent, true);
+      } else if (effectivePlan.status === "ADDED" && !routerApplied) {
+        applyRouterPlan(effectivePlan);
+      }
+      if (!effectivePlan || effectivePlan.status === "NEEDS_INPUT") {
+        return;
+      }
       advanceCreateStep(4);
       return;
     }
@@ -1419,20 +1944,64 @@ export default function DeploymentsPage() {
 
               {createTab === "compose" ? (
                 createStep === 3 ? (
-                <div className="wizard-step-enter">
+                <div className="wizard-step-enter space-y-4">
+                  {composeDetection?.detected && (
+                    <ComposeDetectionCard
+                      result={composeDetection}
+                      selectedPath={selectedDetectedComposePath}
+                      detecting={detectingCompose || planningRouter}
+                      reviewing={reviewingCompose}
+                      reviewFindings={composeReviewFindings}
+                      onSelect={(path) => {
+                        setSelectedDetectedComposePath(path);
+                        setComposeReviewFindings(null);
+                      }}
+                      onApply={applyDetectedCompose}
+                      onReview={(file) => handleReviewCompose(file.content)}
+                      onRefresh={() => { void handleDetectCompose(true); }}
+                    />
+                  )}
+                  {composeDetection && !composeDetection.detected && (
+                    <div className="rounded-md border border-line bg-white/[0.025] px-4 py-3 text-xs text-muted">
+                      <p>지정한 배포 디렉터리에서 Compose 파일을 찾지 못했습니다. 아래 편집기에 직접 작성하면 됩니다.</p>
+                      {composeDetection.warnings.map((warning) => (
+                        <p key={warning} className="mt-1 text-[#e8b657]">⚠ {warning}</p>
+                      ))}
+                    </div>
+                  )}
+                  {composeDetectionError && (
+                    <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] px-4 py-3 text-xs text-[#e8b657]">
+                      Compose 자동 탐지는 완료하지 못했습니다: {composeDetectionError} 직접 작성은 계속할 수 있습니다.
+                    </div>
+                  )}
                   <Section title="Compose 작성" description="저장소(또는 위에서 지정한 디렉토리)에서 실행할 서비스를 docker-compose.yaml 형식으로 작성하세요.">
                     <Field label="docker-compose.yaml" htmlFor="deploy-compose">
                       <Textarea
                         id="deploy-compose"
                         name="deploy-compose"
                         value={composeContent}
-                        onChange={(e) => setComposeContent(e.target.value)}
+                        onChange={(e) => {
+                          setComposeContent(e.target.value);
+                          setComposeReviewFindings(null);
+                          setRouterPlan(null);
+                          setRouterApplied(false);
+                          setRouterServicePorts({});
+                        }}
                         rows={10}
                         spellCheck={false}
                         placeholder={"services:\n  web:\n    build: .\n    ports:\n      - \"3000:3000\""}
                         className="font-mono resize-none"
                       />
                     </Field>
+                    <Button
+                      type="button"
+                      onClick={() => { void handlePlanComposeRouter(composeContent, true); }}
+                      disabled={!composeContent.trim() || planningRouter || routerApplied}
+                    >
+                      {routerApplied
+                        ? "Caddy 라우팅 적용 완료"
+                        : planningRouter ? "다중 서비스 라우팅 분석 중..." : "다중 서비스 라우팅 자동 구성"}
+                    </Button>
 
                     <button
                       type="button"
@@ -1566,6 +2135,26 @@ export default function DeploymentsPage() {
                     )}
                   </Section>
 
+                  {routerPlan && (
+                    <ComposeRouterPlanCard
+                      plan={routerPlan}
+                      planning={planningRouter}
+                      applied={routerApplied}
+                      hostPort={routerHostPort}
+                      servicePorts={routerServicePorts}
+                      onHostPortChange={(port) => {
+                        setRouterHostPort(port);
+                        setRouterApplied(false);
+                      }}
+                      onServicePortChange={(service, port) => {
+                        setRouterServicePorts((previous) => ({ ...previous, [service]: port }));
+                        setRouterApplied(false);
+                      }}
+                      onReplan={() => { void handlePlanComposeRouter(composeContent, false, routerHostPort); }}
+                      onApply={() => applyRouterPlan(routerPlan)}
+                    />
+                  )}
+
                   <Section title="Docker 네트워크" description="VM에 이미 존재하는 네트워크를 재사용하려면 compose 파일에 아래처럼 external 네트워크로 선언하세요.">
                     {dockerNetworks.length === 0 ? (
                       <p className="text-xs text-muted-soft">이 VM에는 아직 조회 가능한 Docker 네트워크가 없습니다. (새로 생성하는 경우 무시해도 됩니다)</p>
@@ -1626,13 +2215,49 @@ export default function DeploymentsPage() {
                         <pre className="max-h-64 overflow-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
                           {composeContent}
                         </pre>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => handleReviewCompose(composeContent)}
+                            disabled={reviewingCompose}
+                          >
+                            {reviewingCompose ? "AI 검수 중..." : "AI 검수 요청"}
+                          </Button>
+                          <span className="text-[11px] text-muted-soft">
+                            비밀값은 전송 전에 마스킹되며 검수 결과는 배포를 차단하지 않습니다.
+                          </span>
+                        </div>
+                        <div className="mt-3">
+                          <ComposeReviewFindingsView findings={composeReviewFindings} />
+                        </div>
                       </div>
                     </Section>
                   </div>
                 ) : null
               ) : (
                 <>
-                  {createStep === 3 && <div className="wizard-step-enter">
+                  {createStep === 3 && <div className="wizard-step-enter space-y-4">
+                  {composeDetection?.detected && (
+                    <ComposeDetectionCard
+                      result={composeDetection}
+                      selectedPath={selectedDetectedComposePath}
+                      detecting={detectingCompose || planningRouter}
+                      reviewing={reviewingCompose}
+                      reviewFindings={composeReviewFindings}
+                      onSelect={(path) => {
+                        setSelectedDetectedComposePath(path);
+                        setComposeReviewFindings(null);
+                      }}
+                      onApply={applyDetectedCompose}
+                      onReview={(file) => handleReviewCompose(file.content)}
+                      onRefresh={() => { void handleDetectCompose(true); }}
+                    />
+                  )}
+                  {composeDetectionError && (
+                    <div className="rounded-md border border-[#e8b657]/25 bg-[#e8b657]/[0.06] px-4 py-3 text-xs text-[#e8b657]">
+                      Compose 자동 탐지는 완료하지 못했습니다: {composeDetectionError} AI 자동 생성은 계속할 수 있습니다.
+                    </div>
+                  )}
                   <Section title="서비스 힌트" description="분석할 서비스의 위치와 실행 환경을 알려주세요. 저장소 배포 디렉토리를 입력했다면 아래 경로는 그 디렉토리를 기준으로 계산됩니다.">
                     <div className="mb-4">
                       <div className="flex items-center justify-between mb-1.5">
@@ -1849,6 +2474,16 @@ export default function DeploymentsPage() {
                     </div>
                   )}
 
+                  {serviceCards.filter((service) => service.expose).length >= 2 && (
+                    <div className="rounded-md border border-[#75a9ff]/25 bg-[#75a9ff]/[0.055] p-3 text-xs text-[#a9c8ff]">
+                      <p className="font-bold text-foreground">다중 HTTP 서비스 라우팅 자동 보강</p>
+                      <p className="mt-1">
+                        배포 시 Caddy 단일 진입점과 서비스별 경로 라우팅을 Compose에 자동 렌더링합니다.
+                        AI 검수도 최종 Caddy 구성이 포함된 Compose를 기준으로 실행됩니다.
+                      </p>
+                    </div>
+                  )}
+
                   {/* 근거 부족/충돌 등으로 확정하지 못한 경우 — 억지로 스펙을 만들어내지 않고 사유를 그대로 보여줌 */}
                   {generationStatus && generationStatus !== "READY" && (
                     <div className="rounded-md border border-danger-soft bg-danger/10 p-3 text-xs text-danger space-y-1.5">
@@ -1915,9 +2550,14 @@ export default function DeploymentsPage() {
             <span className="flex-1 text-xs text-muted-soft">
               {createStep}/4 단계 · 이전 단계로 돌아가도 이 창을 닫기 전까지 입력 내용이 유지됩니다.
             </span>
-            <Button onClick={closeCreate}>취소</Button>
+            <Button
+              onClick={closeCreate}
+              disabled={submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter}
+            >
+              취소
+            </Button>
             {createStep > 1 && (
-              <Button type="button" onClick={handlePreviousCreateStep} disabled={submitting || generating || reviewing}>
+              <Button type="button" onClick={handlePreviousCreateStep} disabled={submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter}>
                 이전
               </Button>
             )}
@@ -1928,6 +2568,9 @@ export default function DeploymentsPage() {
                 onClick={handleNextCreateStep}
                 disabled={
                   generating ||
+                  detectingCompose ||
+                  reviewingCompose ||
+                  planningRouter ||
                   (createStep === 2 && !repositoryStepReady) ||
                   (createStep === 3 && createTab === "compose" && (
                     !composeStepReady ||
@@ -1937,7 +2580,11 @@ export default function DeploymentsPage() {
                 }
               >
                 {createStep === 1 && "저장소 설정"}
-                {createStep === 2 && (createTab === "ai" ? "서비스 힌트 입력" : "Compose 작성")}
+                {createStep === 2 && (
+                  detectingCompose
+                    ? "Compose 파일 탐지 중..."
+                    : (createTab === "ai" ? "서비스 힌트 입력" : "Compose 작성")
+                )}
                 {createStep === 3 && createTab === "compose" && "검토로 이동"}
                 {createStep === 3 && createTab === "ai" && (
                   generating ? "저장소 분석 + AI 생성 중..." : generationStatus ? "분석 결과 보기" : "AI 스펙 생성"
@@ -1950,7 +2597,7 @@ export default function DeploymentsPage() {
                 variant="primary"
                 onClick={handleCreateFromCompose}
                 disabled={
-                  submitting || !repositoryStepReady || !composeStepReady ||
+                  submitting || reviewingCompose || planningRouter || !repositoryStepReady || !composeStepReady ||
                   routes.some((route, index) => route.customSubdomain && routeSubdomainCheck[index] !== "available")
                 }
               >

@@ -425,6 +425,53 @@ export interface ComposeReviewFinding {
   evidence: string;
 }
 
+export interface DetectedComposeFile {
+  path: string;
+  directory: string;
+  content: string;
+  sizeBytes: number;
+  primary: boolean;
+}
+
+export interface ComposeDetectionResult {
+  detected: boolean;
+  searchedContext: string;
+  files: DetectedComposeFile[];
+  warnings: string[];
+}
+
+export type ComposeRouterPlanStatus =
+  | "ADDED"
+  | "ALREADY_CONFIGURED"
+  | "NOT_REQUIRED"
+  | "NEEDS_INPUT";
+
+export interface ComposeRouterRoute {
+  serviceName: string;
+  routePath: string;
+  upstream: string;
+  containerPort: number;
+  root: boolean;
+}
+
+export interface ComposeRouterUnresolvedService {
+  serviceName: string;
+  reason: string;
+  portRequired: boolean;
+}
+
+export interface ComposeRouterPlanResult {
+  status: ComposeRouterPlanStatus;
+  enhancedComposeContent: string;
+  routerConfig: string;
+  routerServiceName: string;
+  routerHostPort: number | null;
+  routerContainerPort: number | null;
+  routes: ComposeRouterRoute[];
+  unresolvedServices: ComposeRouterUnresolvedService[];
+  warnings: string[];
+}
+
 // Auto Preview (GamjaBox_2.0_Key_Features.md 1단계) — Backend/Ops의
 // application/preview/analysis 패키지 record와 필드명을 1:1로 맞춤.
 export type PreviewCapabilityType = "LIST" | "DETAIL" | "CREATE" | "UPDATE" | "DELETE" | "LOGIN";

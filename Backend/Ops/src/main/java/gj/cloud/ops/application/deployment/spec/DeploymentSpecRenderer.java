@@ -5,6 +5,9 @@ import gj.cloud.ops.application.deployment.dto.EnvironmentFile;
 import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.dto.HealthCheck;
 import gj.cloud.ops.application.deployment.dto.UploadedFile;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanResult;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanner;
+import gj.cloud.ops.application.deployment.routing.ComposeRouterRoute;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
@@ -18,8 +21,10 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 // DeploymentSpec(JSON) → ComposeArtifact 렌더링. D-1(폼 입력)과 D-3(AI 생성)이 이 렌더러를 공유함 (F절 7·9단계).
@@ -33,6 +38,7 @@ public class DeploymentSpecRenderer {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final DockerfileGenerator dockerfileGenerator;
+    private final ComposeRouterPlanner composeRouterPlanner;
 
     // DEP-002: 이전에는 모든 배포가 동일한 고정 비밀번호("gamjabox")를 사용했고, infra.expose.enabled=true를
     // 사용자가 직접 요청하면 그 고정 비밀번호 그대로 호스트에 노출되는 경로도 있었음 — expose 여부와 무관하게
@@ -72,6 +78,8 @@ public class DeploymentSpecRenderer {
             serviceBlock.put("networks", List.of(spec.network()));
 
             boolean exposed = service.expose() != null && service.expose().enabled();
+            boolean httpExposed = exposed && "http".equalsIgnoreCase(service.expose().protocol());
+            serviceBlock.put("labels", Map.of("gamjabox.router.enabled", httpExposed));
             if (exposed) {
                 // Cloudflare Tunnel이 VM 호스트에서 붙으므로 외부 노출 대상은 호스트 포트 바인딩이 필요함
                 serviceBlock.put("ports", List.of(effectivePort + ":" + effectivePort));
@@ -121,7 +129,69 @@ public class DeploymentSpecRenderer {
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         String composeContent = new Yaml(options).dump(root);
 
+        long distinctCustomSubdomains = exposedRoutes.stream()
+                .filter(route -> "HTTP".equalsIgnoreCase(route.protocol()))
+                .map(ExposedRoute::customSubdomain)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .count();
+        if (distinctCustomSubdomains <= 1) {
+            ComposeRouterPlanResult routerPlan = composeRouterPlanner.plan(composeContent, null, Map.of());
+            if (ComposeRouterPlanResult.STATUS_ADDED.equals(routerPlan.status())) {
+                composeContent = routerPlan.enhancedComposeContent();
+                Set<String> routedServices = routerPlan.routes().stream()
+                        .map(ComposeRouterRoute::serviceName)
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+                String customSubdomain = exposedRoutes.stream()
+                        .filter(route -> routedServices.contains(route.serviceName()))
+                        .map(ExposedRoute::customSubdomain)
+                        .filter(value -> value != null && !value.isBlank())
+                        .findFirst()
+                        .orElse(null);
+                List<ExposedRoute> preservedRoutes = exposedRoutes.stream()
+                        .filter(route -> !routedServices.contains(route.serviceName()))
+                        .toList();
+                String gatewayNickname = preservedRoutes.stream()
+                        .anyMatch(route -> "gateway".equals(route.nickname()))
+                        ? "http-gateway"
+                        : "gateway";
+                List<ExposedRoute> enhancedRoutes = new ArrayList<>();
+                enhancedRoutes.add(new ExposedRoute(
+                        ComposeRouterPlanner.ROUTER_SERVICE_NAME,
+                        routerPlan.routerHostPort(),
+                        "HTTP",
+                        "PUBLIC",
+                        gatewayNickname,
+                        customSubdomain));
+                enhancedRoutes.addAll(preservedRoutes);
+                exposedRoutes = enhancedRoutes;
+                Map<String, ComposeRouterRoute> routeByService = routerPlan.routes().stream()
+                        .collect(java.util.stream.Collectors.toMap(ComposeRouterRoute::serviceName, route -> route));
+                healthChecks = healthChecks.stream()
+                        .map(check -> remapHealthCheck(check, routeByService, routerPlan.routerHostPort()))
+                        .toList();
+            }
+        }
+
         return new ComposeArtifact(composeContent, environmentFiles, uploadedFiles, exposedRoutes, healthChecks, SourceType.TEMPLATE_SPEC);
+    }
+
+    private HealthCheck remapHealthCheck(
+            HealthCheck check,
+            Map<String, ComposeRouterRoute> routeByService,
+            int routerHostPort
+    ) {
+        ComposeRouterRoute route = routeByService.get(check.serviceName());
+        if (route == null) return check;
+        String originalPath = check.path() == null || check.path().isBlank() ? "/" : check.path();
+        String routedPath = route.root()
+                ? originalPath
+                : route.routePath() + (originalPath.startsWith("/") ? originalPath : "/" + originalPath);
+        return new HealthCheck(
+                ComposeRouterPlanner.ROUTER_SERVICE_NAME,
+                routedPath,
+                routerHostPort,
+                null);
     }
 
     private void renderInfrastructure(InfrastructureSpec infra, String network, String volumeSuffix,

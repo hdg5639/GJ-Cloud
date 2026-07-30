@@ -39,6 +39,8 @@ import type {
   ComposeSpecResponse,
   AiGenerationResult,
   ComposeReviewFinding,
+  ComposeDetectionResult,
+  ComposeRouterPlanResult,
   DbBackupResponse,
   DeploymentTargetResponse,
   GithubInstallationResponse,
@@ -654,6 +656,43 @@ export const api = {
         request<ComposeReviewFinding[]>("ops", `/ops/${vmId}/deployments/ai-spec/review`, {
           method: "POST",
           body: JSON.stringify(spec),
+          accessToken,
+        }),
+      detectCompose: (
+        accessToken: string,
+        vmId: string,
+        body: {
+          repoUrl: string;
+          branch: string;
+          patToken?: string;
+          context?: string;
+          githubInstallationId?: number;
+          githubRepositoryId?: number;
+        }
+      ) =>
+        request<ComposeDetectionResult>("ops", `/ops/${vmId}/deployments/compose/detect`, {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      reviewCompose: (accessToken: string, vmId: string, composeContent: string) =>
+        request<ComposeReviewFinding[]>("ops", `/ops/${vmId}/deployments/compose/review`, {
+          method: "POST",
+          body: JSON.stringify({ composeContent }),
+          accessToken,
+        }),
+      planComposeRouter: (
+        accessToken: string,
+        vmId: string,
+        body: {
+          composeContent: string;
+          routerHostPort?: number;
+          servicePorts?: Record<string, number>;
+        }
+      ) =>
+        request<ComposeRouterPlanResult>("ops", `/ops/${vmId}/deployments/compose/router/plan`, {
+          method: "POST",
+          body: JSON.stringify(body),
           accessToken,
         }),
       listTargets: (accessToken: string, vmId: string) =>
