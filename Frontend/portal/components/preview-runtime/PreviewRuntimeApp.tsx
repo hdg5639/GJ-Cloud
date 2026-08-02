@@ -196,6 +196,7 @@ export function PreviewRuntimeApp({
           {activePage && apiBaseUrl.trim() && (
             <PreviewPageRenderer
               page={activePage}
+              pages={pages}
               pagePlan={activePagePlan}
               capabilities={capabilities}
               blocks={pageBlocks[activePage.id] ?? []}

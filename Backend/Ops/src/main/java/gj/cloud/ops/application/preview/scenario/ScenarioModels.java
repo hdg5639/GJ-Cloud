@@ -13,7 +13,7 @@ import java.util.List;
 public final class ScenarioModels {
 
     public static final String SCHEMA_VERSION = "1.0";
-    public static final String RUNTIME_VERSION = "3.0.0";
+    public static final String RUNTIME_VERSION = "3.1.0";
 
     public enum PreviewMode {
         SCENARIO_PREVIEW,

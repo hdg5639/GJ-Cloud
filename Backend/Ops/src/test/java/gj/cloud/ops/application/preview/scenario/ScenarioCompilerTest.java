@@ -38,10 +38,42 @@ class ScenarioCompilerTest {
         assertThat(scenario.stages()).filteredOn(stage -> stage.id().equals("commit"))
                 .flatExtracting(stage -> stage.outputBindings())
                 .anyMatch(binding -> binding.to().equals("createdId"));
+        assertThat(scenario.stages()).filteredOn(stage -> stage.id().equals("commit"))
+                .flatExtracting(stage -> stage.outputBindings())
+                .flatExtracting(binding -> binding.fromCandidates())
+                .contains("data.projectId", "data.project.id");
         assertThat(scenario.stages()).filteredOn(stage -> stage.id().equals("verify"))
                 .flatExtracting(stage -> stage.inputBindings())
                 .anyMatch(binding -> binding.target().equals("projectId")
                         && binding.source().equals("$scenario.createdId"));
+    }
+
+    @Test
+    void followsGraphRootEvenWhenAiReturnsStagesOutOfArrayOrder() {
+        List<Capability> capabilities = sampleCapabilities();
+        ScenarioPlan shuffled = new ScenarioPlan(
+                "shuffled", "Shuffled", "developer", "Use graph order", List.of(),
+                List.of(
+                        new ScenarioStagePlan("complete", StageRole.COMPLETE, "done", null,
+                                true, List.of(), List.of(), List.of(), null),
+                        new ScenarioStagePlan("verify", StageRole.VERIFY, "verify", "projects.detail",
+                                true, List.of("createdId"), List.of("verifiedResource"), List.of("complete"),
+                                ScenarioModels.VerificationType.RESOURCE_EXISTS),
+                        new ScenarioStagePlan("prepare", StageRole.PREPARE, "prepare", null,
+                                true, List.of(), List.of("name"), List.of("review"), null),
+                        new ScenarioStagePlan("review", StageRole.REVIEW, "review", null,
+                                true, List.of("name"), List.of(), List.of("commit"), null),
+                        new ScenarioStagePlan("commit", StageRole.COMMIT, "create", "projects.create",
+                                true, List.of("name"), List.of("createdId"), List.of("verify"),
+                                ScenarioModels.VerificationType.OUTPUT_EXTRACTABLE)
+                ),
+                List.of("name", "createdId", "verifiedResource"), 0.8, List.of()
+        );
+
+        ScenarioCompiler.CompilationResult result = compiler.compile(List.of(shuffled), capabilities);
+
+        assertThat(result.scenarios().get(0).entryStageId()).isEqualTo("prepare");
+        assertThat(result.scenarios().get(0).status()).isEqualTo(CompilationStatus.EXECUTABLE);
     }
 
     @Test

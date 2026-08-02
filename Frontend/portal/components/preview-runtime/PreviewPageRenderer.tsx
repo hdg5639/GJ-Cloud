@@ -69,6 +69,7 @@ function asStringRecord(values: Record<string, unknown>): Record<string, string>
 
 export function PreviewPageRenderer({
   page,
+  pages = [],
   pagePlan,
   capabilities,
   blocks,
@@ -81,6 +82,7 @@ export function PreviewPageRenderer({
   bindings = [],
 }: {
   page: PreviewPage;
+  pages?: PreviewPage[];
   pagePlan?: PreviewPagePlan;
   capabilities: PreviewCapability[];
   blocks: Block[];
@@ -135,7 +137,7 @@ export function PreviewPageRenderer({
       <DashboardView capabilities={listCapabilities} config={config} />
     );
     return (
-      <BlueprintPageChrome blocks={blocks} page={page} capabilities={capabilities}>
+      <BlueprintPageChrome blocks={blocks} page={page} pages={pages} onNavigate={(pageId) => performNavigation(pageId, {}, "OPEN_PAGE")}>
         {dashboardContent}
       </BlueprintPageChrome>
     );
@@ -444,7 +446,7 @@ export function PreviewPageRenderer({
 
   return (
     <div className="flex flex-col gap-4">
-      <BlueprintPageChrome blocks={blocks} page={page} capabilities={capabilities}>
+      <BlueprintPageChrome blocks={blocks} page={page} pages={pages} onNavigate={(pageId) => performNavigation(pageId, {}, "OPEN_PAGE")}>
         {page.skeleton === "RESOURCE_DETAIL" && effectiveRow ? (
           renderDetail(effectiveRow, true)
         ) : selectedRow && detail && isFullDetailPage ? (

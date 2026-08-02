@@ -41,9 +41,13 @@ public final class ScenarioValidator {
                 errors.add(plan.id() + ": 중복 stage id(" + stage.id() + ")");
             }
         }
-        errors.addAll(validateGraph(plan.id(), plan.stages().isEmpty() ? null : plan.stages().get(0).id(),
-                stages, stage -> stage.nextStageIds()));
-        errors.addAll(validateState(plan));
+        List<String> entryCandidates = entryStageCandidates(plan.stages());
+        String entryStageId = resolveEntryStageId(plan.stages());
+        if (!plan.stages().isEmpty() && entryCandidates.size() != 1) {
+            errors.add(plan.id() + ": 진입 가능한 루트 stage를 하나로 확정할 수 없음");
+        }
+        errors.addAll(validateGraph(plan.id(), entryStageId, stages, stage -> stage.nextStageIds()));
+        errors.addAll(validateState(plan, entryStageId, stages));
         if (plan.stages().stream().noneMatch(stage -> stage.role() == StageRole.COMPLETE)) {
             errors.add(plan.id() + ": COMPLETE stage가 없음");
         }
@@ -102,8 +106,34 @@ public final class ScenarioValidator {
         }
         errors.addAll(validateGraph(scenario.id(), scenario.entryStageId(), stages,
                 stage -> stage.nextStageIds()));
+        errors.addAll(validateCompiledDataLineage(scenario, stages));
         errors.addAll(validateSafety(scenario, stages));
         return errors;
+    }
+
+    static String resolveEntryStageId(List<ScenarioStagePlan> stages) {
+        if (stages == null || stages.isEmpty()) return null;
+        List<String> roots = entryStageCandidates(stages);
+        if (roots.size() == 1) {
+            ScenarioStagePlan root = stages.stream()
+                    .filter(stage -> stage != null && roots.get(0).equals(stage.id()))
+                    .findFirst().orElse(null);
+            if (stages.size() == 1 || root == null || root.role() != StageRole.COMPLETE) return roots.get(0);
+        }
+        return stages.stream().filter(stage -> stage != null && !blank(stage.id()))
+                .map(ScenarioStagePlan::id).findFirst().orElse(null);
+    }
+
+    private static List<String> entryStageCandidates(List<ScenarioStagePlan> stages) {
+        if (stages == null || stages.isEmpty()) return List.of();
+        Set<String> ids = new HashSet<>();
+        Set<String> incoming = new HashSet<>();
+        for (ScenarioStagePlan stage : stages) {
+            if (stage == null || blank(stage.id())) continue;
+            ids.add(stage.id());
+            incoming.addAll(stage.nextStageIds());
+        }
+        return ids.stream().filter(id -> !incoming.contains(id)).toList();
     }
 
     private static List<String> validateSafety(
@@ -157,22 +187,29 @@ public final class ScenarioValidator {
         return false;
     }
 
-    private static List<String> validateState(ScenarioPlan plan) {
+    private static List<String> validateState(
+            ScenarioPlan plan,
+            String entryStageId,
+            Map<String, ScenarioStagePlan> stages
+    ) {
         List<String> errors = new ArrayList<>();
         Set<String> available = new HashSet<>(plan.scenarioState());
-        // scenarioState는 전체 계약이고, 실제 producer 검사는 순서대로 별도 집합에서 수행한다.
         Set<String> produced = new HashSet<>();
-        for (ScenarioStagePlan stage : plan.stages()) {
+        Set<String> visited = new HashSet<>();
+        String currentId = entryStageId;
+        while (currentId != null && visited.add(currentId)) {
+            ScenarioStagePlan stage = stages.get(currentId);
+            if (stage == null) break;
             for (String input : stage.inputs()) {
                 if (!available.contains(input)) {
                     errors.add(plan.id() + "/" + stage.id() + ": 선언되지 않은 state input(" + input + ")");
                 }
-                // PREPARE/SELECT/AUTHENTICATE는 사용자가 값을 생산하는 stage이므로 선행 producer 불필요.
+                // ENTRY/PREPARE/CONFIGURE/SELECT_CONTEXT는 사용자 입력을 받는 로컬 stage다.
                 if (!produced.contains(input)
                         && stage.role() != StageRole.PREPARE
-                        && stage.role() != StageRole.SELECT
+                        && stage.role() != StageRole.CONFIGURE
                         && stage.role() != StageRole.SELECT_CONTEXT
-                        && stage.role() != StageRole.AUTHENTICATE) {
+                        && stage.role() != StageRole.ENTRY) {
                     errors.add(plan.id() + "/" + stage.id() + ": 선행 producer가 없는 state input(" + input + ")");
                 }
             }
@@ -182,8 +219,52 @@ public final class ScenarioValidator {
                 }
                 produced.add(output);
             }
+            currentId = stage.nextStageIds().isEmpty() ? null : stage.nextStageIds().get(0);
         }
         return errors;
+    }
+
+    private static List<String> validateCompiledDataLineage(
+            CompiledScenario scenario,
+            Map<String, CompiledScenarioStage> stages
+    ) {
+        List<String> errors = new ArrayList<>();
+        Set<String> produced = new HashSet<>();
+        Set<String> visited = new HashSet<>();
+        String currentId = scenario.entryStageId();
+        while (currentId != null && visited.add(currentId)) {
+            CompiledScenarioStage stage = stages.get(currentId);
+            if (stage == null) break;
+            if (!stage.executableOperation() && !stage.outputs().isEmpty()
+                    && !supportsLocalOutput(stage.role())) {
+                errors.add(scenario.id() + "/" + stage.id()
+                        + ": 현재 런타임이 값을 생산할 수 없는 로컬 stage(" + stage.role() + ")");
+            }
+            boolean acceptsExternalInput = stage.role() == StageRole.ENTRY
+                    || stage.role() == StageRole.PREPARE
+                    || stage.role() == StageRole.CONFIGURE
+                    || stage.role() == StageRole.SELECT_CONTEXT;
+            for (var binding : stage.inputBindings()) {
+                if (!binding.required() || !binding.source().startsWith("$scenario.")) continue;
+                String stateKey = binding.source().substring("$scenario.".length()).split("\\.")[0];
+                if (!produced.contains(stateKey) && !acceptsExternalInput) {
+                    errors.add(scenario.id() + "/" + stage.id()
+                            + ": 실행 전에 값을 생산하는 선행 stage가 없음(" + stateKey + ")");
+                }
+            }
+            produced.addAll(stage.outputs());
+            stage.outputBindings().forEach(binding -> produced.add(binding.to()));
+            currentId = stage.nextStageIds().isEmpty() ? null : stage.nextStageIds().get(0);
+        }
+        return errors;
+    }
+
+    private static boolean supportsLocalOutput(StageRole role) {
+        return role == StageRole.ENTRY
+                || role == StageRole.PREPARE
+                || role == StageRole.CONFIGURE
+                || role == StageRole.SELECT_CONTEXT
+                || role == StageRole.SELECT;
     }
 
     private interface NextIds<T> {
@@ -202,7 +283,12 @@ public final class ScenarioValidator {
             return errors;
         }
         for (Map.Entry<String, T> entry : stages.entrySet()) {
-            for (String next : nextIds.get(entry.getValue())) {
+            List<String> nextStages = nextIds.get(entry.getValue());
+            if (nextStages.size() > 1) {
+                errors.add(scenarioId + ": 조건 계약 없는 다중 분기는 실행할 수 없음("
+                        + entry.getKey() + " -> " + String.join(", ", nextStages) + ")");
+            }
+            for (String next : nextStages) {
                 if (!stages.containsKey(next)) {
                     errors.add(scenarioId + ": 존재하지 않는 stage 연결(" + entry.getKey() + " -> " + next + ")");
                 }

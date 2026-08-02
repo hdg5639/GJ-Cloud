@@ -46,6 +46,24 @@ class ScenarioValidatorTest {
                 .anyMatch(error -> error.contains("도달 불가능 stage(complete)"));
     }
 
+    @Test
+    void rejectsBranchWithoutAConditionContract() {
+        ScenarioPlan plan = new ScenarioPlan(
+                "branch", "Branch", "developer", "Do not guess a branch", List.of(),
+                List.of(
+                        new ScenarioStagePlan("prepare", StageRole.PREPARE, "prepare", null, true,
+                                List.of(), List.of("selectedId"), List.of("left", "right"), null),
+                        stage("left", StageRole.INSPECT, List.of("selectedId"), List.of(), "complete"),
+                        stage("right", StageRole.INSPECT, List.of("selectedId"), List.of(), "complete"),
+                        stage("complete", StageRole.COMPLETE, List.of(), List.of(), null)
+                ),
+                List.of("selectedId"), 0.7, List.of()
+        );
+
+        assertThat(ScenarioValidator.validatePlan(plan))
+                .anyMatch(error -> error.contains("조건 계약 없는 다중 분기"));
+    }
+
     private ScenarioStagePlan stage(
             String id,
             StageRole role,

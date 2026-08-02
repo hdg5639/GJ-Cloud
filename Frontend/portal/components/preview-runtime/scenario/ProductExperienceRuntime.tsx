@@ -32,7 +32,10 @@ import {
   type ProductArchetype,
 } from "./productExperience";
 import {
+  buildScenarioExecutionPath,
   emptyExecution,
+  missingRequiredStageInputs,
+  preflightScenarioExecution,
   runApiStage,
   type ScenarioState,
 } from "./runtime";
@@ -46,6 +49,10 @@ type Row = Record<string, unknown>;
 
 const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 const CALENDAR_DATES = Array.from({ length: 35 }, (_, index) => index - 2);
+
+function executionTimestamp(): number {
+  return Date.now();
+}
 
 function textValue(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -271,7 +278,7 @@ function HomeScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => v
             <p className="text-xs font-bold text-[var(--px-muted)]">최근 항목</p>
             <h2 className="mt-1 text-xl font-black text-[var(--px-ink)]">다시 이어서 하기</h2>
           </div>
-          <button className="text-xs font-bold text-[var(--px-accent)]" type="button">모두 보기 →</button>
+          <span className="text-xs font-bold text-[var(--px-subtle)]">최근 {Math.min(rows.length, 3)}개</span>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {rows.slice(0, 3).map((row, index) => (
@@ -284,16 +291,18 @@ function HomeScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => v
 }
 
 function CalendarScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
+  const [monthOffset, setMonthOffset] = useState(0);
+  const visibleMonth = new Date(2026, 6 + monthOffset, 1);
   return (
     <section className="overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm">
       <div className="flex items-center justify-between border-b border-[var(--px-line)] px-6 py-5">
         <div>
-          <p className="text-xs font-bold text-[var(--px-muted)]">2026년</p>
-          <h2 className="mt-1 text-xl font-black text-[var(--px-ink)]">7월</h2>
+          <p className="text-xs font-bold text-[var(--px-muted)]">{visibleMonth.getFullYear()}년</p>
+          <h2 className="mt-1 text-xl font-black text-[var(--px-ink)]">{visibleMonth.getMonth() + 1}월</h2>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">‹</button>
-          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">›</button>
+          <button type="button" onClick={() => setMonthOffset((value) => value - 1)} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">‹</button>
+          <button type="button" onClick={() => setMonthOffset((value) => value + 1)} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">›</button>
         </div>
       </div>
       <div className="grid grid-cols-7 border-b border-[var(--px-line)] bg-[var(--px-surface-soft)]">
@@ -334,9 +343,9 @@ function FeedScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => v
       <div className="rounded-[22px] border border-[var(--px-line)] bg-[var(--px-surface)] p-4 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--px-tint-strong)] text-sm font-black text-[var(--px-accent)]">나</span>
-          <button type="button" className="h-11 flex-1 rounded-full bg-[var(--px-surface-soft)] px-5 text-left text-sm text-[var(--px-subtle)]">
-            무슨 생각을 하고 있나요?
-          </button>
+          <span className="flex h-11 flex-1 items-center rounded-full bg-[var(--px-surface-soft)] px-5 text-sm text-[var(--px-subtle)]">
+            새 글 작성은 상단의 실행 가능한 작업에서 시작할 수 있어요.
+          </span>
         </div>
       </div>
       {rows.map((row, index) => (
@@ -355,19 +364,53 @@ function FeedScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => v
             <p className="mt-2 text-sm leading-6 text-[var(--px-muted)]">{subtitleOf(row)}</p>
             <div className="mt-5 h-48 rounded-[18px]" style={{ background: index % 2 ? "linear-gradient(135deg,var(--px-visual-c),var(--px-visual-d))" : "linear-gradient(135deg,var(--px-visual-a),var(--px-visual-b))" }} />
           </button>
-          <div className="mt-4 flex items-center gap-5 border-t border-[var(--px-line)] pt-4 text-xs font-bold text-[var(--px-muted)]">
-            <button type="button">♡ 좋아요</button>
-            <button type="button">◯ 댓글</button>
-            <button type="button">↗ 공유</button>
-          </div>
+          <FeedEngagement row={row} />
         </article>
       ))}
     </div>
   );
 }
 
+function FeedEngagement({ row }: { row: Row }) {
+  const [liked, setLiked] = useState(false);
+  const [commenting, setCommenting] = useState(false);
+  const [shared, setShared] = useState(false);
+
+  async function share() {
+    try {
+      await navigator.clipboard?.writeText(`${titleOf(row)} — ${window.location.href}`);
+      setShared(true);
+      window.setTimeout(() => setShared(false), 1800);
+    } catch {
+      setShared(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-[var(--px-line)] pt-4 text-xs font-bold text-[var(--px-muted)]">
+      <div className="flex items-center gap-5">
+        <button type="button" onClick={() => setLiked((value) => !value)} className={liked ? "text-[var(--px-accent)]" : undefined}>
+          {liked ? "♥" : "♡"} 좋아요
+        </button>
+        <button type="button" onClick={() => setCommenting((value) => !value)}>◯ 댓글</button>
+        <button type="button" onClick={() => void share()}>{shared ? "✓ 복사됨" : "↗ 공유"}</button>
+      </div>
+      {commenting && <Input autoFocus className="mt-3 bg-[var(--px-surface-soft)] text-[var(--px-ink)]" placeholder="댓글을 입력하세요" />}
+    </div>
+  );
+}
+
 function InboxScreen({ rows, selected, onSelect }: { rows: Row[]; selected: Row | null; onSelect: (row: Row) => void }) {
   const active = selected ?? rows[0];
+  const [message, setMessage] = useState("");
+  const [sentMessages, setSentMessages] = useState<string[]>([]);
+
+  function sendMessage() {
+    const value = message.trim();
+    if (!value) return;
+    setSentMessages((current) => [...current, value]);
+    setMessage("");
+  }
   return (
     <section className="grid min-h-[560px] overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm md:grid-cols-[320px_1fr]">
       <div className="border-r border-[var(--px-line)]">
@@ -404,7 +447,7 @@ function InboxScreen({ rows, selected, onSelect }: { rows: Row[]; selected: Row 
             <strong className="text-sm text-[var(--px-ink)]">{titleOf(active)}</strong>
             <p className="text-[10px] text-[var(--px-muted)]">지금 대화 가능</p>
           </div>
-          <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">•••</button>
+          <span className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)] text-[var(--px-subtle)]" aria-hidden>•••</span>
         </header>
         <div className="flex flex-1 flex-col justify-end gap-3 bg-[var(--px-surface-soft)] p-6">
           <div className="max-w-[72%] rounded-[18px_18px_18px_4px] bg-[var(--px-surface)] p-4 text-sm leading-6 text-[var(--px-muted)] shadow-sm">
@@ -413,11 +456,18 @@ function InboxScreen({ rows, selected, onSelect }: { rows: Row[]; selected: Row 
           <div className="ml-auto max-w-[72%] rounded-[18px_18px_4px_18px] bg-[var(--px-accent)] p-4 text-sm leading-6 text-[var(--px-on-accent)]">
             확인했어요. 조금 더 자세한 내용을 알려드릴게요.
           </div>
+          {sentMessages.map((item, index) => (
+            <div key={`${item}-${index}`} className="ml-auto max-w-[72%] rounded-[18px_18px_4px_18px] bg-[var(--px-accent)] p-4 text-sm leading-6 text-[var(--px-on-accent)]">
+              {item}
+            </div>
+          ))}
         </div>
         <div className="border-t border-[var(--px-line)] bg-[var(--px-surface)] p-4">
           <div className="flex items-end gap-2 rounded-[18px] bg-[var(--px-surface-soft)] p-2 pl-4">
-            <textarea className="min-h-10 flex-1 resize-none bg-transparent py-2 text-sm text-[var(--px-ink)] outline-none" placeholder="메시지 입력" />
-            <button type="button" className="grid h-10 w-10 place-items-center rounded-full bg-[var(--px-accent)] text-[var(--px-on-accent)]">↑</button>
+            <textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); }
+            }} className="min-h-10 flex-1 resize-none bg-transparent py-2 text-sm text-[var(--px-ink)] outline-none" placeholder="메시지 입력" />
+            <button type="button" disabled={!message.trim()} onClick={sendMessage} className="grid h-10 w-10 place-items-center rounded-full bg-[var(--px-accent)] text-[var(--px-on-accent)] disabled:opacity-40">↑</button>
           </div>
         </div>
       </div>
@@ -426,6 +476,8 @@ function InboxScreen({ rows, selected, onSelect }: { rows: Row[]; selected: Row 
 }
 
 function EditorScreen() {
+  const [bold, setBold] = useState(false);
+  const [italic, setItalic] = useState(false);
   return (
     <section className="grid min-h-[580px] overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm lg:grid-cols-[1fr_280px]">
       <div className="p-7 md:p-10">
@@ -435,12 +487,13 @@ function EditorScreen() {
             className="w-full bg-transparent text-3xl font-black text-[var(--px-ink)] outline-none placeholder:text-[var(--px-subtle)]"
           />
           <div className="mt-5 flex items-center gap-3 border-b border-[var(--px-line)] pb-5 text-xs font-bold text-[var(--px-muted)]">
-            <button type="button">B</button><button type="button" className="italic">I</button>
+            <button type="button" aria-pressed={bold} onClick={() => setBold((value) => !value)} className={bold ? "text-[var(--px-accent)]" : undefined}>B</button>
+            <button type="button" aria-pressed={italic} onClick={() => setItalic((value) => !value)} className={italic ? "italic text-[var(--px-accent)]" : "italic"}>I</button>
             <span className="h-4 w-px bg-[var(--px-line-strong)]" />
-            <button type="button">링크</button><button type="button">이미지</button><button type="button">인용</button>
+            <span className="text-[var(--px-subtle)]">링크 · 이미지 · 인용은 API 작업에서 설정</span>
           </div>
           <textarea
-            className="mt-7 min-h-[390px] w-full resize-none bg-transparent text-base leading-8 text-[var(--px-muted)] outline-none"
+            className={`mt-7 min-h-[390px] w-full resize-none bg-transparent text-base leading-8 text-[var(--px-muted)] outline-none ${bold ? "font-bold" : ""} ${italic ? "italic" : ""}`}
             placeholder="당신의 이야기를 시작하세요..."
           />
         </div>
@@ -458,6 +511,7 @@ function EditorScreen() {
 }
 
 function FilesScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
+  const [view, setView] = useState<"GRID" | "LIST">("GRID");
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -465,11 +519,11 @@ function FilesScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => 
           <span>내 파일</span><span>/</span><span className="text-[var(--px-ink)]">모든 항목</span>
         </div>
         <div className="flex rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] p-1 text-xs font-bold">
-          <button type="button" className="rounded-full bg-[var(--px-tint)] px-3 py-1.5">격자</button>
-          <button type="button" className="px-3 py-1.5 text-[var(--px-muted)]">목록</button>
+          <button type="button" onClick={() => setView("GRID")} className={`rounded-full px-3 py-1.5 ${view === "GRID" ? "bg-[var(--px-tint)]" : "text-[var(--px-muted)]"}`}>격자</button>
+          <button type="button" onClick={() => setView("LIST")} className={`rounded-full px-3 py-1.5 ${view === "LIST" ? "bg-[var(--px-tint)]" : "text-[var(--px-muted)]"}`}>목록</button>
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={view === "GRID" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-4" : "space-y-2"}>
         {rows.map((row, index) => (
           <button
             key={rowId(row)}
@@ -491,6 +545,9 @@ function FilesScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => 
 
 function BookingScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
   const times = ["09:00", "10:30", "12:00", "13:30", "15:00", "16:30", "18:00"];
+  const dates = ["30", "31", "1"];
+  const [selectedDate, setSelectedDate] = useState(dates[0]);
+  const [selectedTime, setSelectedTime] = useState(times[3]);
   return (
     <div className="grid gap-5 lg:grid-cols-[.75fr_1.25fr]">
       <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
@@ -506,12 +563,12 @@ function BookingScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) =
       </div>
       <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
         <div className="flex items-center justify-between">
-          <div><p className="text-xs text-[var(--px-muted)]">7월 30일</p><h3 className="mt-1 text-lg font-black text-[var(--px-ink)]">가능한 시간</h3></div>
-          <div className="flex gap-1">{["30", "31", "1"].map((date, index) => <button key={date} type="button" className={`grid h-10 w-10 place-items-center rounded-full text-xs font-bold ${index === 0 ? "bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "bg-[var(--px-surface-soft)] text-[var(--px-muted)]"}`}>{date}</button>)}</div>
+          <div><p className="text-xs text-[var(--px-muted)]">선택한 날짜 · {selectedDate}일</p><h3 className="mt-1 text-lg font-black text-[var(--px-ink)]">가능한 시간</h3></div>
+          <div className="flex gap-1">{dates.map((date) => <button key={date} type="button" onClick={() => setSelectedDate(date)} className={`grid h-10 w-10 place-items-center rounded-full text-xs font-bold ${selectedDate === date ? "bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "bg-[var(--px-surface-soft)] text-[var(--px-muted)]"}`}>{date}</button>)}</div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {times.map((time, index) => (
-            <button key={time} type="button" className={`rounded-[14px] border px-4 py-4 text-sm font-bold transition-colors ${index === 3 ? "border-[var(--px-accent)] bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "border-[var(--px-line)] text-[var(--px-ink)] hover:bg-[var(--px-surface-soft)]"}`}>{time}</button>
+          {times.map((time) => (
+            <button key={time} type="button" onClick={() => setSelectedTime(time)} className={`rounded-[14px] border px-4 py-4 text-sm font-bold transition-colors ${selectedTime === time ? "border-[var(--px-accent)] bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "border-[var(--px-line)] text-[var(--px-ink)] hover:bg-[var(--px-surface-soft)]"}`}>{time}</button>
           ))}
         </div>
       </div>
@@ -529,7 +586,7 @@ function ProfileScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) =
             <h2 className="text-2xl font-black text-[var(--px-ink)]">나의 공간</h2>
             <p className="mt-1 text-sm text-[var(--px-muted)]">내 활동과 저장된 기록을 한곳에서 확인하세요.</p>
           </div>
-          <button type="button" className="rounded-full border border-[var(--px-line)] px-4 py-2 text-xs font-bold text-[var(--px-muted)]">프로필 편집</button>
+          <span className="rounded-full border border-[var(--px-line)] px-4 py-2 text-xs font-bold text-[var(--px-subtle)]">미리보기 프로필</span>
         </div>
         <div className="mt-7 grid grid-cols-3 gap-3 border-t border-[var(--px-line)] pt-6 text-center">
           {[["활동", rows.length], ["완료", Math.max(2, rows.length - 1)], ["저장됨", Math.max(3, rows.length + 2)]].map(([label, value]) => (
@@ -823,8 +880,10 @@ export function ProductExperienceRuntime({
     return graph.screens.some((screen) => screen.id === requested) ? requested! : graph.defaultScreenId;
   });
   const [rowsByCapability, setRowsByCapability] = useState<Record<string, Row[]>>({});
+  const [collectionErrors, setCollectionErrors] = useState<Record<string, string>>({});
   const [loadingCollections, setLoadingCollections] = useState(false);
   const [selected, setSelected] = useState<Row | null>(null);
+  const [selectedIsSynthetic, setSelectedIsSynthetic] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [lastActionId, setLastActionId] = useState<string | null>(null);
@@ -840,6 +899,8 @@ export function ProductExperienceRuntime({
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [screenQuery, setScreenQuery] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
   const listCapabilities = useMemo(
@@ -863,7 +924,15 @@ export function ProductExperienceRuntime({
           .map((result) => result.value)
           .filter(([, rows]) => rows.length > 0)
       );
-      if (!signal?.aborted) setRowsByCapability((current) => ({ ...current, ...next }));
+      const errors = Object.fromEntries(
+        settled.flatMap((result, index) => result.status === "rejected"
+          ? [[listCapabilities[index].id, result.reason instanceof Error ? result.reason.message : String(result.reason)]]
+          : [])
+      );
+      if (!signal?.aborted) {
+        setRowsByCapability(next);
+        setCollectionErrors(errors);
+      }
     } finally {
       if (!signal?.aborted) setLoadingCollections(false);
     }
@@ -894,7 +963,12 @@ export function ProductExperienceRuntime({
   const activeScreen = graph.screens.find((screen) => screen.id === activeScreenId)
     ?? graph.screens[0];
   const liveRows = activeScreen?.capabilityIds.flatMap((capabilityId) => rowsByCapability[capabilityId] ?? []) ?? [];
-  const rows = liveRows.length > 0 ? liveRows : seedRows(graph.archetype);
+  const usingSyntheticRows = liveRows.length === 0;
+  const visibleRows = usingSyntheticRows ? seedRows(graph.archetype) : liveRows;
+  const normalizedQuery = screenQuery.trim().toLowerCase();
+  const rows = normalizedQuery
+    ? visibleRows.filter((row, index) => `${titleOf(row, index)} ${subtitleOf(row)}`.toLowerCase().includes(normalizedQuery))
+    : visibleRows;
   const screenActions = graph.actions.filter((action) => action.screenId === activeScreen?.id);
   const activeAction = graph.actions.find((action) => action.id === activeActionId) ?? null;
   const activeScenario = scenarios.find((scenario) => scenario.id === activeAction?.scenarioId) ?? null;
@@ -915,18 +989,52 @@ export function ProductExperienceRuntime({
     query.set("experience", screenId);
     window.history.pushState(null, "", `${window.location.pathname}?${query.toString()}`);
     setActiveScreenId(screenId);
+    setSelected(null);
+    setSelectedIsSynthetic(false);
+    const nextState = { ...stateRef.current };
+    delete nextState.selectedId;
+    delete nextState.selectedRecord;
+    stateRef.current = nextState;
+    setScenarioState(nextState);
+    setScreenQuery("");
+    setSearchOpen(false);
     setDetailOpen(false);
   }
 
   function selectRow(row: Row, open = true) {
     setSelected(row);
-    const next = { ...stateRef.current, selectedId: rowId(row), selectedRecord: row };
+    setSelectedIsSynthetic(usingSyntheticRows);
+    const next = { ...stateRef.current };
+    if (usingSyntheticRows) {
+      delete next.selectedId;
+      delete next.selectedRecord;
+    } else {
+      next.selectedId = rowId(row);
+      next.selectedRecord = row;
+    }
     stateRef.current = next;
     setScenarioState(next);
     if (open && activeScreen.kind !== "INBOX") setDetailOpen(true);
   }
 
   function openAction(action: ExperienceAction) {
+    const scenario = scenarios.find((candidate) => candidate.id === action.scenarioId);
+    const allowedState = new Set([...(scenario?.scenarioState ?? []), "authToken"]);
+    const scopedState = Object.fromEntries(
+      Object.entries(stateRef.current).filter(([key]) => allowedState.has(key))
+    );
+    if (selected && !selectedIsSynthetic) {
+      const selectedId = rowId(selected);
+      scopedState.selectedId = selectedId;
+      scopedState.selectedRecord = selected;
+      const pathStateKeys = scenario?.stages.flatMap((stage) => stage.inputBindings)
+        .filter((binding) => binding.targetKind === "PATH" && binding.source.startsWith("$scenario."))
+        .map((binding) => binding.source.slice("$scenario.".length).split(".")[0])
+        .filter((key) => key && key !== "createdId") ?? [];
+      for (const key of pathStateKeys) scopedState[key] = selectedId;
+    }
+    stateRef.current = scopedState;
+    setScenarioState(scopedState);
     setDetailOpen(false);
     setActiveActionId(action.id);
     setLastActionId(action.id);
@@ -979,12 +1087,17 @@ export function ProductExperienceRuntime({
     const executionAction = activeAction ?? inspectedAction;
     const executionScenario = activeScenario ?? inspectedScenario;
     if (!executionAction || !executionScenario || busy) return;
+    const executionPath = buildScenarioExecutionPath(executionScenario, startStageId);
+    if (executionPath.error) {
+      setActionError(executionPath.error);
+      return;
+    }
     setBusy(true);
     setActionError(null);
     const controller = new AbortController();
     abortRef.current = controller;
     let nextState = { ...stateRef.current };
-    if (selected) {
+    if (selected && !selectedIsSynthetic) {
       nextState.selectedId = rowId(selected);
       nextState.selectedRecord = selected;
     }
@@ -992,27 +1105,37 @@ export function ProductExperienceRuntime({
       ...nextState,
       ...Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseValue(value)])),
     };
-    let reachedStart = !startStageId;
+    const preflightErrors = preflightScenarioExecution(executionPath.stages, nextState);
+    if (preflightErrors.length > 0) {
+      setActionError(`실행 전 검증 실패: ${preflightErrors.join(" ")}`);
+      setBusy(false);
+      abortRef.current = null;
+      return;
+    }
     let failedStage: PreviewCompiledScenarioStage | null = null;
     let failureRecorded = false;
     try {
-      for (const stage of executionScenario.stages) {
-        if (!reachedStart) {
-          reachedStart = stage.id === startStageId;
-          if (!reachedStart) continue;
-        }
+      for (const stage of executionPath.stages) {
         setCurrentStageId(stage.id);
         failedStage = stage;
         failureRecorded = false;
         if (controller.signal.aborted) throw new Error("작업을 취소했습니다.");
         if (stage.role === "PREPARE" || stage.role === "CONFIGURE" || stage.role === "SELECT_CONTEXT" || stage.role === "REVIEW") {
-          recordExecution({ ...emptyExecution(stage), status: "SUCCESS", durationMs: 0, completedAt: Date.now() });
+          recordExecution({ ...emptyExecution(stage), status: "SUCCESS", durationMs: 0, completedAt: executionTimestamp() });
           continue;
         }
         if (stage.role === "SELECT") {
           if (!nextState.selectedId) {
-            const firstRow = rows[0];
-            nextState.selectedId = rowId(firstRow);
+            const scenarioCollection = [nextState.collection, nextState.authenticatedCollection]
+              .find((value): value is Row[] => Array.isArray(value)
+                && value.length > 0
+                && value.every((item) => item && typeof item === "object" && !Array.isArray(item)));
+            const firstRow = scenarioCollection?.[0] ?? liveRows[0];
+            const firstRowId = firstRow ? rowId(firstRow) : "";
+            if (!firstRow || !firstRowId) {
+              throw new Error("실제 API에서 선택할 항목과 식별자를 얻지 못했습니다. 샘플 데이터는 API 요청에 사용할 수 없습니다.");
+            }
+            nextState.selectedId = firstRowId;
             nextState.selectedRecord = firstRow;
           }
           stateRef.current = nextState;
@@ -1022,16 +1145,20 @@ export function ProductExperienceRuntime({
             status: "SUCCESS",
             extractedOutputs: { selectedId: nextState.selectedId },
             durationMs: 0,
-            completedAt: Date.now(),
+            completedAt: executionTimestamp(),
           });
           continue;
         }
         if (stage.role === "COMPLETE" || !stage.capabilityId) {
-          recordExecution({ ...emptyExecution(stage), status: "SUCCESS", durationMs: 0, completedAt: Date.now() });
+          recordExecution({ ...emptyExecution(stage), status: "SUCCESS", durationMs: 0, completedAt: executionTimestamp() });
           continue;
         }
         const capability = capabilities.find((candidate) => candidate.id === stage.capabilityId);
         if (!capability) throw new Error("연결된 API 작업을 찾지 못했습니다.");
+        const missingInputs = missingRequiredStageInputs(stage, nextState);
+        if (missingInputs.length > 0) {
+          throw new Error(`필수 입력 연결이 준비되지 않았습니다: ${missingInputs.join(", ")}`);
+        }
         let requestOverride;
         const rawBody = rawBodyDrafts[stage.id];
         if (rawBody?.trim()) {
@@ -1041,12 +1168,16 @@ export function ProductExperienceRuntime({
           }
           requestOverride = { body: parsed as Record<string, unknown> };
         }
-        recordExecution({ ...emptyExecution(stage), status: "RUNNING", method: capability.method, startedAt: Date.now() });
+        recordExecution({ ...emptyExecution(stage), status: "RUNNING", method: capability.method, startedAt: executionTimestamp() });
+        const stageConfig: PreviewRuntimeConfig = {
+          ...config,
+          authToken: typeof nextState.authToken === "string" ? nextState.authToken : config.authToken,
+        };
         let result = await runApiStage({
           stage,
           capability,
           state: nextState,
-          config,
+          config: stageConfig,
           signal: controller.signal,
           requestOverride,
         });
@@ -1055,12 +1186,12 @@ export function ProductExperienceRuntime({
         if (stage.role === "TRACK" && result.execution.status === "FAILED") {
           for (let attempt = 0; attempt < 3 && result.execution.status === "FAILED"; attempt += 1) {
             await new Promise<void>((resolve) => window.setTimeout(resolve, 1500));
-            recordExecution({ ...emptyExecution(stage), status: "RUNNING", method: capability.method, startedAt: Date.now() });
+            recordExecution({ ...emptyExecution(stage), status: "RUNNING", method: capability.method, startedAt: executionTimestamp() });
             result = await runApiStage({
               stage,
               capability,
               state: nextState,
-              config,
+              config: stageConfig,
               signal: controller.signal,
               requestOverride,
             });
@@ -1096,14 +1227,15 @@ export function ProductExperienceRuntime({
       }
     } catch (cause) {
       if (!controller.signal.aborted) {
-        const message = cause instanceof Error ? cause.message : "작업을 완료하지 못했습니다.";
+        const detail = cause instanceof Error ? cause.message : "작업을 완료하지 못했습니다.";
+        const message = failedStage ? `${failedStage.intent}: ${detail}` : detail;
         setActionError(message);
         if (failedStage && !failureRecorded) {
           recordExecution({
             ...emptyExecution(failedStage),
             status: "FAILED",
             error: message,
-            completedAt: Date.now(),
+            completedAt: executionTimestamp(),
           });
         }
         const progressIndex = actionOverlays.findIndex((overlay) => overlay.kind === "PROGRESS_MODAL");
@@ -1164,10 +1296,19 @@ export function ProductExperienceRuntime({
             >
               테스트 Inspector
             </button>
-            <button type="button" className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] text-xs">⌕</button>
-            <button type="button" className="grid h-9 w-9 place-items-center rounded-full bg-[var(--px-tint-strong)] text-xs font-black text-[var(--px-accent)]">ME</button>
+            <button type="button" aria-label="화면 검색" aria-pressed={searchOpen} onClick={() => setSearchOpen((value) => !value)} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] text-xs">⌕</button>
+            <button type="button" aria-label="프로필 화면" onClick={() => {
+              const profile = graph.screens.find((screen) => screen.kind === "PROFILE");
+              if (profile) navigateScreen(profile.id);
+              else setToast("이 서비스 구성에는 별도 프로필 화면이 없습니다.");
+            }} className="grid h-9 w-9 place-items-center rounded-full bg-[var(--px-tint-strong)] text-xs font-black text-[var(--px-accent)]">ME</button>
           </div>
         </div>
+        {searchOpen && (
+          <div className="mx-auto max-w-[1380px] pb-4">
+            <Input autoFocus value={screenQuery} onChange={(event) => setScreenQuery(event.target.value)} className="border-[var(--px-line)] bg-[var(--px-surface)] text-[var(--px-ink)]" placeholder={`${activeScreen.label}에서 검색`} />
+          </div>
+        )}
       </header>
 
       <main className="mx-auto min-h-[680px] max-w-[1380px] px-5 py-8 md:px-8 md:py-10">
@@ -1199,12 +1340,35 @@ export function ProductExperienceRuntime({
           </div>
         )}
 
-        <ScreenContent
-          screen={activeScreen}
-          rows={rows}
-          selected={selected}
-          onSelect={selectRow}
-        />
+        {usingSyntheticRows && (
+          <div className="mb-5 rounded-[16px] border border-amber-400/35 bg-amber-400/10 p-4 text-xs leading-5 text-amber-700 dark:text-amber-200">
+            <strong className="block font-black">샘플 화면 모드</strong>
+            실제 목록 데이터를 가져오지 못해 화면용 샘플만 표시합니다. 이 항목의 ID는 API 요청에 절대 사용하지 않으며,
+            실제 데이터가 필요한 작업은 실행 전에 중단됩니다.
+            {Object.keys(collectionErrors).length > 0 && (
+              <span className="mt-1 block opacity-80">{Object.values(collectionErrors).slice(0, 2).join(" · ")}</span>
+            )}
+          </div>
+        )}
+
+        {!usingSyntheticRows && normalizedQuery && rows.length === 0 && (
+          <div className="mb-5 rounded-[16px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 text-sm text-[var(--px-muted)]">
+            “{screenQuery}”와 일치하는 항목이 없습니다.
+          </div>
+        )}
+
+        {rows.length > 0 ? (
+          <ScreenContent
+            screen={activeScreen}
+            rows={rows}
+            selected={selected}
+            onSelect={selectRow}
+          />
+        ) : (
+          <div className="grid min-h-72 place-items-center rounded-[24px] border border-dashed border-[var(--px-line)] bg-[var(--px-surface)] text-sm text-[var(--px-muted)]">
+            표시할 항목이 없습니다.
+          </div>
+        )}
       </main>
 
       <footer className="border-t border-[var(--px-line)] bg-[color-mix(in_srgb,var(--px-surface)_62%,transparent)] px-8 py-5">

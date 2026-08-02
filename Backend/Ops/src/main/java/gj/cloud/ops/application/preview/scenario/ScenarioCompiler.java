@@ -79,9 +79,10 @@ public class ScenarioCompiler {
             CompilationStatus status = requiredMissing
                     ? CompilationStatus.UNSUPPORTED
                     : partial ? CompilationStatus.PARTIALLY_SUPPORTED : CompilationStatus.EXECUTABLE;
+            String entryStageId = ScenarioValidator.resolveEntryStageId(plan.stages());
             CompiledScenario scenario = new CompiledScenario(
                     plan.id(), plan.name(), plan.actor(), plan.goal(),
-                    stages.isEmpty() ? null : stages.get(0).id(), stages, plan.scenarioState(), status,
+                    entryStageId, stages, plan.scenarioState(), status,
                     diagnostics, plan.confidence(), ScenarioModels.SCHEMA_VERSION, ScenarioModels.RUNTIME_VERSION
             );
             List<String> validationErrors = ScenarioValidator.validateCompiled(scenario, catalog.keySet());
@@ -151,7 +152,7 @@ public class ScenarioCompiler {
         }
         if (capability.type() == CapabilityType.CREATE && stage.outputs().contains("createdId")) {
             outputs.add(new StageOutputBinding(
-                    List.of("data.id", "result.id", "payload.id", "id"), "createdId", false));
+                    identifierCandidates(capability.resourceName()), "createdId", false));
         }
         if (stage.outputs().contains("collection") || stage.outputs().contains("authenticatedCollection")) {
             List<String> candidates = capability.collectionPath() == null
@@ -168,6 +169,32 @@ public class ScenarioCompiler {
             outputs.add(new StageOutputBinding(List.of(capability.pollHint().statusPath()), "trackedStatus", false));
         }
         return outputs;
+    }
+
+    private List<String> identifierCandidates(String resourceName) {
+        String resource = resourceName == null ? "resource" : resourceName.trim();
+        String singular = singularize(resource);
+        String idField = singular + "Id";
+        return List.of(
+                "data.id", "result.id", "payload.id", "id",
+                "data." + idField, "result." + idField, "payload." + idField, idField,
+                "data." + singular + ".id", "result." + singular + ".id", "payload." + singular + ".id",
+                "data.data.id", "data.result.id", "data.payload.id"
+        ).stream().distinct().toList();
+    }
+
+    private String singularize(String resource) {
+        String lower = resource.toLowerCase(Locale.ROOT);
+        if (lower.endsWith("ies") && resource.length() > 3) {
+            return resource.substring(0, resource.length() - 3) + "y";
+        }
+        if (lower.endsWith("ses") && resource.length() > 3) {
+            return resource.substring(0, resource.length() - 2);
+        }
+        if (lower.endsWith("s") && !lower.endsWith("ss") && resource.length() > 1) {
+            return resource.substring(0, resource.length() - 1);
+        }
+        return resource;
     }
 
     private VerificationContract verification(ScenarioStagePlan stage, Capability capability) {
