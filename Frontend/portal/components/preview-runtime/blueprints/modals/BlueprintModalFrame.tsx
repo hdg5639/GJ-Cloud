@@ -31,11 +31,11 @@ export function BlueprintModalFrame({
   return (
     <Modal open={open} onClose={onClose}>
       <section
-        className={cn("mx-auto max-h-[92vh] w-[min(96vw,1200px)] overflow-hidden rounded-[18px] border border-line bg-background text-foreground shadow-2xl", widthClass)}
+        className={cn("mx-auto flex max-h-[min(92dvh,920px)] min-h-0 w-[min(96vw,1200px)] flex-col overflow-hidden rounded-[18px] border border-line bg-background text-foreground shadow-2xl", widthClass)}
         style={style}
         data-blueprint-theme={themeId}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-line bg-panel px-5 py-4">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-line bg-panel px-5 py-4">
           <div>
             {eyebrow && <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-brand-strong">{eyebrow}</p>}
             <h2 className="mt-1 text-lg font-extrabold">{title}</h2>
@@ -43,8 +43,13 @@ export function BlueprintModalFrame({
           </div>
           <button type="button" onClick={onClose} className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] border border-line bg-white/[0.02] text-lg text-muted hover:text-foreground" aria-label="Close">×</button>
         </header>
-        <div className="max-h-[calc(92vh-150px)] overflow-auto p-5">{children}</div>
-        {footer && <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-panel px-5 py-4">{footer}</footer>}
+        <div
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]"
+          data-preview-scroll-region="modal"
+        >
+          {children}
+        </div>
+        {footer && <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line bg-panel px-5 py-4">{footer}</footer>}
       </section>
     </Modal>
   );
