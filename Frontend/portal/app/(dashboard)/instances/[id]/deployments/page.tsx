@@ -601,6 +601,7 @@ function ComposeRouterPlanCard({
 function PublicEndpointCnameCard({
   endpoint,
   throughCaddy,
+  vmSubdomain,
   planType,
   customSubdomain,
   check,
@@ -608,6 +609,7 @@ function PublicEndpointCnameCard({
 }: {
   endpoint: ExposedRoute | null;
   throughCaddy: boolean;
+  vmSubdomain: string;
   planType: string | null;
   customSubdomain: string;
   check: SubdomainCheckStatus;
@@ -615,6 +617,17 @@ function PublicEndpointCnameCard({
 }) {
   if (!endpoint) return null;
   const isPro = planType === "PRO";
+  const fallbackNickname = (throughCaddy ? "gateway" : endpoint.serviceName)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 20) || "service";
+  const automaticHostname = vmSubdomain
+    ? `${vmSubdomain}-${endpoint.nickname || fallbackNickname}.gamjabox.cloud`
+    : `VM-CNAME-${endpoint.nickname || fallbackNickname}.gamjabox.cloud`;
+  const selectedHostname = customSubdomain
+    ? `${customSubdomain}.gamjabox.cloud`
+    : automaticHostname;
   return (
     <section className="rounded-panel border border-[#75a9ff]/30 bg-[#75a9ff]/[0.045] p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -632,6 +645,20 @@ function PublicEndpointCnameCard({
         <span className="rounded-full border border-[#64d98b]/25 bg-[#64d98b]/10 px-2.5 py-1 text-[10px] font-extrabold text-[#8be5aa]">
           {throughCaddy ? "멀티 서비스" : "단일 서비스"}
         </span>
+      </div>
+
+      <div className="mb-3 rounded-md border border-line-strong bg-black/10 p-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-soft">
+          배포 후 연결될 공개 CNAME
+        </p>
+        <p className="mt-1 break-all font-mono text-xs font-bold text-foreground">
+          https://{selectedHostname}
+        </p>
+        {!customSubdomain && (
+          <p className="mt-1 text-[10px] text-muted-soft">
+            VM 식별자와 라우트 닉네임으로 자동 생성됩니다.
+          </p>
+        )}
       </div>
 
       <div className={cn(
@@ -836,6 +863,7 @@ export default function DeploymentsPage() {
   const [deployments, setDeployments] = useState<DeploymentResponse[]>([]);
   const [deploymentTargets, setDeploymentTargets] = useState<DeploymentTargetResponse[]>([]);
   const [deploymentPorts, setDeploymentPorts] = useState<PortResponse[]>([]);
+  const [vmSubdomain, setVmSubdomain] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [togglingTargetId, setTogglingTargetId] = useState<string | null>(null);
@@ -1197,14 +1225,16 @@ export default function DeploymentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [deploymentResult, targetResult, portResult] = await Promise.all([
+      const [deploymentResult, targetResult, portResult, vmResult] = await Promise.all([
         api.ops.deployments.list(accessToken, vmId),
         api.ops.deployments.listTargets(accessToken, vmId),
         api.vm.getPorts(accessToken, vmId).catch(() => []),
+        api.vm.get(accessToken, vmId).catch(() => null),
       ]);
       setDeployments(deploymentResult);
       setDeploymentTargets(targetResult);
       setDeploymentPorts(portResult);
+      setVmSubdomain(vmResult?.subdomain ?? "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "배포 이력 조회에 실패했습니다.");
     } finally {
@@ -1603,6 +1633,33 @@ export default function DeploymentsPage() {
     return candidate;
   }
 
+  // Caddy를 새로 만들지 않는 계획도 최종 공개 라우트 상태로 반영해야 step 4에서
+  // 자동 CNAME/PRO 커스텀 CNAME을 설정할 수 있다. 기존에는 NOT_REQUIRED 결과를
+  // 감지만 하고 routes에 옮기지 않는 경로가 있어 '공개 설정' 껍데기만 노출됐다.
+  function applyExistingPublicEndpointPlan(plan: ComposeRouterPlanResult, base: string) {
+    if (plan.status !== "NOT_REQUIRED" && plan.status !== "ALREADY_CONFIGURED") return;
+    setComposeContent(base);
+    setRouterPlan(plan);
+    setRouterApplied(plan.status === "ALREADY_CONFIGURED");
+    setComposeReviewFindings(null);
+
+    const endpoint = plan.routes.find((route) => route.root) ?? plan.routes[0];
+    if (!endpoint) {
+      setRoutes([]);
+      return;
+    }
+    const endpointPort = endpoint.hostPort ?? endpoint.containerPort;
+    setRoutes([{
+      serviceName: endpoint.serviceName,
+      port: endpointPort,
+      protocol: "HTTP",
+      visibility: "PUBLIC",
+      nickname: uniqueNicknameFor(endpoint.serviceName, new Set()),
+      customSubdomain: deploymentCustomSubdomain || "",
+    }]);
+    setShowAdvanced(true);
+  }
+
   async function handlePlanComposeRouter(
     content: string,
     autoApply: boolean,
@@ -1637,22 +1694,8 @@ export default function DeploymentsPage() {
       if (autoApply) {
         if (plan.status === "ADDED") {
           applyRouterPlan(plan);
-        } else if (plan.status === "NOT_REQUIRED") {
-          // 제외로 공개 서비스가 1개만 남으면 Caddy가 불필요 — 원본 compose를 쓰고 그 서비스만 직접 노출한다.
-          setComposeContent(base);
-          const direct = plan.routes[0];
-          if (direct) {
-            setRoutes([{
-              serviceName: direct.serviceName,
-              port: direct.hostPort ?? direct.containerPort,
-              protocol: "HTTP",
-              visibility: "PUBLIC",
-              nickname: uniqueNicknameFor(direct.serviceName, new Set()),
-              customSubdomain: deploymentCustomSubdomain || "",
-            }]);
-          } else {
-            setRoutes([]);
-          }
+        } else if (plan.status === "NOT_REQUIRED" || plan.status === "ALREADY_CONFIGURED") {
+          applyExistingPublicEndpointPlan(plan, base);
         }
       }
       return plan;
@@ -1674,6 +1717,8 @@ export default function DeploymentsPage() {
     if (plan?.status === "ADDED") {
       applyRouterPlan(plan);
       content = plan.enhancedComposeContent;
+    } else if (plan?.status === "NOT_REQUIRED" || plan?.status === "ALREADY_CONFIGURED") {
+      applyExistingPublicEndpointPlan(plan, file.content);
     } else {
       setComposeContent(content);
     }
@@ -1936,7 +1981,12 @@ export default function DeploymentsPage() {
     const publicHttp = routes.filter((route) => route.visibility === "PUBLIC" && route.protocol === "HTTP");
     if (publicHttp.length === 0) return null;
     const routerName = routerPlan?.routerServiceName;
-    const throughCaddy = Boolean(routerApplied && routerName && publicHttp.some((route) => route.serviceName === routerName));
+    const throughCaddy = Boolean(
+      routerApplied
+      && routerName
+      && (routerPlan?.status === "ADDED" || routerPlan?.status === "ALREADY_CONFIGURED")
+      && publicHttp.some((route) => route.serviceName === routerName)
+    );
     const endpoint = throughCaddy
       ? publicHttp.find((route) => route.serviceName === routerName)!
       : publicHttp[0];
@@ -1965,7 +2015,22 @@ export default function DeploymentsPage() {
     }
     const publicRoute = renderedSpec.exposedRoutes.find((route) => route.protocol?.toUpperCase() === "HTTP")
       ?? renderedSpec.exposedRoutes[0];
-    return publicRoute ? { endpoint: publicRoute, throughCaddy: false } : null;
+    if (publicRoute) return { endpoint: publicRoute, throughCaddy: false };
+
+    // 단일 서비스 계획은 라우터가 없어도 CNAME 대상이 존재한다. 구버전/부분 렌더 결과에서
+    // exposedRoutes가 비어 있더라도 분석된 직접 연결 포트를 사용해 설정 UI를 유지한다.
+    const direct = aiRouterPlan?.routes.find((route) => route.root) ?? aiRouterPlan?.routes[0];
+    const directPort = direct ? (direct.hostPort ?? direct.containerPort) : null;
+    return direct && directPort ? {
+      endpoint: {
+        serviceName: direct.serviceName,
+        port: directPort,
+        protocol: "HTTP",
+        visibility: "PUBLIC",
+        nickname: "",
+      },
+      throughCaddy: false,
+    } : null;
   })();
 
   // AI 흐름의 공개 여부는 spec.services[].expose.enabled로 관리한다. 배포 직전 화면에서 서비스를 끄면
@@ -2031,6 +2096,11 @@ export default function DeploymentsPage() {
         effectivePlan = await handlePlanComposeRouter(composeContent, true);
       } else if (effectivePlan.status === "ADDED" && !routerApplied) {
         applyRouterPlan(effectivePlan);
+      } else if (
+        (effectivePlan.status === "NOT_REQUIRED" || effectivePlan.status === "ALREADY_CONFIGURED")
+        && !routes.some((route) => route.visibility === "PUBLIC" && route.protocol === "HTTP")
+      ) {
+        applyExistingPublicEndpointPlan(effectivePlan, baseComposeContent || composeContent);
       }
       if (!effectivePlan || effectivePlan.status === "NEEDS_INPUT") {
         return;
@@ -2827,35 +2897,51 @@ export default function DeploymentsPage() {
 
                       {routerPlan && routerPlan.routes.length > 0 && (
                         <div className="mt-4 rounded-md border border-[#75a9ff]/25 bg-white/[0.02] p-3">
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <p className="text-xs font-bold text-foreground">공개 설정</p>
+                          {routerPlan.status === "ADDED" || routerPlan.status === "NEEDS_INPUT" ? (
+                            <>
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-xs font-bold text-foreground">서비스 공개·라우팅 설정</p>
+                                  <p className="mt-0.5 text-[11px] text-muted-soft">
+                                    서비스별 공개 여부와 노출 방식(공용 도메인 경로 vs 전용 서브도메인)을 고르세요.
+                                  </p>
+                                </div>
+                                <Button type="button" onClick={handleRegenerateComposeRouting} disabled={planningRouter}>
+                                  {planningRouter ? "다시 생성 중..." : "라우팅 다시 생성"}
+                                </Button>
+                              </div>
+                              <RouteModeRows
+                                routes={routerPlan.routes}
+                                overrides={routerRouteOverrides}
+                                planType={planType}
+                                subdomainCheck={domainSubdomainCheck}
+                                disabled={planningRouter}
+                                excludedServices={excludedServices}
+                                onToggleExpose={(service, exposed) => { void handleToggleServiceExpose(service, exposed); }}
+                                onOverrideChange={(service, override) => {
+                                  setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }));
+                                  setRouterApplied(false);
+                                }}
+                                onDomainSubdomainChange={handleDomainSubdomainChange}
+                              />
+                            </>
+                          ) : (
+                            <div className="mb-3 rounded-md border border-line bg-black/10 px-3 py-2.5">
+                              <p className="text-xs font-bold text-foreground">
+                                {routerPlan.status === "ALREADY_CONFIGURED" ? "기존 공개 라우터 연결" : "단일 서비스 공개 주소"}
+                              </p>
                               <p className="mt-0.5 text-[11px] text-muted-soft">
-                                인식된 서비스별로 공개 여부와 노출 방식(공용 도메인 경로 vs 전용 서브도메인)을 고르세요.
+                                {routerPlan.status === "ALREADY_CONFIGURED"
+                                  ? "저장소의 기존 라우터 진입점에 CNAME을 연결합니다."
+                                  : "별도 라우터 없이 인식된 서비스 포트에 CNAME을 직접 연결합니다."}
                               </p>
                             </div>
-                            <Button type="button" onClick={handleRegenerateComposeRouting} disabled={planningRouter}>
-                              {planningRouter ? "다시 생성 중..." : "라우팅 다시 생성"}
-                            </Button>
-                          </div>
-                          <RouteModeRows
-                            routes={routerPlan.routes}
-                            overrides={routerRouteOverrides}
-                            planType={planType}
-                            subdomainCheck={domainSubdomainCheck}
-                            disabled={planningRouter}
-                            excludedServices={excludedServices}
-                            onToggleExpose={(service, exposed) => { void handleToggleServiceExpose(service, exposed); }}
-                            onOverrideChange={(service, override) => {
-                              setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }));
-                              setRouterApplied(false);
-                            }}
-                            onDomainSubdomainChange={handleDomainSubdomainChange}
-                          />
+                          )}
                           {composePublicEndpoint && (
                             <PublicEndpointCnameCard
                               endpoint={composePublicEndpoint.endpoint}
                               throughCaddy={composePublicEndpoint.throughCaddy}
+                              vmSubdomain={vmSubdomain}
                               planType={planType}
                               customSubdomain={deploymentCustomSubdomain}
                               check={deploymentSubdomainCheck}
@@ -3199,6 +3285,7 @@ export default function DeploymentsPage() {
                           <PublicEndpointCnameCard
                             endpoint={aiPublicEndpoint.endpoint}
                             throughCaddy={aiPublicEndpoint.throughCaddy}
+                            vmSubdomain={vmSubdomain}
                             planType={planType}
                             customSubdomain={deploymentCustomSubdomain}
                             check={deploymentSubdomainCheck}
