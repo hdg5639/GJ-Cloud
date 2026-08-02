@@ -64,6 +64,11 @@ ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS deployment_app_id VARCHAR(36);
 UPDATE vm_ports SET deployment_app_id = vm_id::text
 WHERE deployment_id IS NOT NULL AND deployment_app_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_vm_ports_deployment_app_id ON vm_ports(vm_id, deployment_app_id);
+-- 사용자가 직접 만든 포트를 배포 대상 카드에 표시하기 위한 느슨한 연결.
+-- deployment_app_id는 자동 배포 라우트의 생명주기 소유권이므로 재사용하지 않는다.
+ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS linked_deployment_target_id VARCHAR(36);
+CREATE INDEX IF NOT EXISTS idx_vm_ports_linked_deployment_target_id
+    ON vm_ports(vm_id, linked_deployment_target_id);
 
 CREATE TABLE IF NOT EXISTS vm_port_access_emails (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

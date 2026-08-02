@@ -61,6 +61,10 @@ public class VmPortEntity implements Persistable<UUID> {
     @Column("deployment_app_id")
     private String deploymentAppId;
 
+    // 수동 등록 포트를 배포 대상 UI에 묶는 표시용 연결. 자동 배포 소유권/정리 기준과 분리한다.
+    @Column("linked_deployment_target_id")
+    private String linkedDeploymentTargetId;
+
     public static VmPortEntity createPublic(UUID vmId, int port, Protocol protocol,
                                             String nickname, String subdomain, String cfDnsRecordId) {
         return VmPortEntity.builder()
@@ -85,6 +89,12 @@ public class VmPortEntity implements Persistable<UUID> {
         return this.toBuilder()
                 .deploymentAppId(deploymentAppId)
                 .deploymentId(deploymentId)
+                .build();
+    }
+
+    public VmPortEntity withLinkedDeploymentTarget(String deploymentTargetId) {
+        return this.toBuilder()
+                .linkedDeploymentTargetId(deploymentTargetId)
                 .build();
     }
 }

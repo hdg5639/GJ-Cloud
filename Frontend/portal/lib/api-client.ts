@@ -712,6 +712,16 @@ export const api = {
           body: JSON.stringify({ enabled }),
           accessToken,
         }),
+      linkManualCname: (accessToken: string, vmId: string, targetId: string, portId: string) =>
+        request<void>("ops", `/ops/${vmId}/deployment-targets/${targetId}/ports/${portId}`, {
+          method: "PUT",
+          accessToken,
+        }),
+      unlinkManualCname: (accessToken: string, vmId: string, targetId: string, portId: string) =>
+        request<void>("ops", `/ops/${vmId}/deployment-targets/${targetId}/ports/${portId}`, {
+          method: "DELETE",
+          accessToken,
+        }),
       redeployTarget: (accessToken: string, vmId: string, targetId: string) =>
         request<DeploymentResponse>("ops", `/ops/${vmId}/deployment-targets/${targetId}/redeploy`, {
           method: "POST",
@@ -1155,6 +1165,8 @@ export interface PortResponse {
   deploymentId: string | null;
   // 재배포 후에도 유지되는 배포 대상 ID
   deploymentAppId: string | null;
+  // 수동 CNAME을 배포 대상 카드에 표시하기 위한 연결 ID(자동 배포 소유권과 별개)
+  linkedDeploymentTargetId: string | null;
 }
 
 export interface PortAddRequest {

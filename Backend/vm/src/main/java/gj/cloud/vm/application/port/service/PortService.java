@@ -25,4 +25,10 @@ public interface PortService {
     Mono<Void> syncDeploymentRoutesAutomation(String requesterId, String requesterEmail, UUID vmId,
                                                String deploymentAppId, String deploymentId,
                                                List<DeploymentRouteItem> routes);
+    Mono<Void> linkManualPortToDeploymentTarget(String requesterId, String requesterEmail, UUID vmId,
+                                                UUID portId, String deploymentTargetId);
+    Mono<Void> unlinkManualPortFromDeploymentTarget(String requesterId, String requesterEmail, UUID vmId,
+                                                    UUID portId, String deploymentTargetId);
+    Mono<Void> unlinkAllManualPortsFromDeploymentTarget(String requesterId, String requesterEmail, UUID vmId,
+                                                        String deploymentTargetId);
 }

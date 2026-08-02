@@ -870,6 +870,11 @@ export default function DeploymentsPage() {
   const [deletingTargetId, setDeletingTargetId] = useState<string | null>(null);
   const [targetPendingDeletion, setTargetPendingDeletion] = useState<DeploymentTargetResponse | null>(null);
   const [deleteTargetError, setDeleteTargetError] = useState<string | null>(null);
+  const [cnameTarget, setCnameTarget] = useState<DeploymentTargetResponse | null>(null);
+  const [selectedManualCnameIds, setSelectedManualCnameIds] = useState<string[]>([]);
+  const [savingCnameLinks, setSavingCnameLinks] = useState(false);
+  const [cnameLinkError, setCnameLinkError] = useState<string | null>(null);
+  const [redeployingTargetId, setRedeployingTargetId] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("compose");
@@ -1504,6 +1509,71 @@ export default function DeploymentsPage() {
       setError(err instanceof Error ? err.message : "자동 배포 설정을 변경하지 못했습니다.");
     } finally {
       setTogglingTargetId(null);
+    }
+  }
+
+  function openCnameManager(target: DeploymentTargetResponse) {
+    setCnameTarget(target);
+    setSelectedManualCnameIds(deploymentPorts
+      .filter((port) => port.deploymentAppId === null && port.linkedDeploymentTargetId === target.id)
+      .map((port) => port.id));
+    setCnameLinkError(null);
+  }
+
+  function closeCnameManager() {
+    if (savingCnameLinks) return;
+    setCnameTarget(null);
+    setSelectedManualCnameIds([]);
+    setCnameLinkError(null);
+  }
+
+  async function handleSaveCnameLinks() {
+    if (!accessToken || !cnameTarget) return;
+    const targetId = cnameTarget.id;
+    const current = new Set(deploymentPorts
+      .filter((port) => port.deploymentAppId === null && port.linkedDeploymentTargetId === targetId)
+      .map((port) => port.id));
+    const selected = new Set(selectedManualCnameIds);
+    const toLink = [...selected].filter((portId) => !current.has(portId));
+    const toUnlink = [...current].filter((portId) => !selected.has(portId));
+
+    setSavingCnameLinks(true);
+    setCnameLinkError(null);
+    try {
+      await Promise.all([
+        ...toLink.map((portId) => api.ops.deployments.linkManualCname(
+          accessToken, vmId, targetId, portId)),
+        ...toUnlink.map((portId) => api.ops.deployments.unlinkManualCname(
+          accessToken, vmId, targetId, portId)),
+      ]);
+      setDeploymentPorts(await api.vm.getPorts(accessToken, vmId));
+      setCnameTarget(null);
+      setSelectedManualCnameIds([]);
+      setCnameLinkError(null);
+    } catch (err) {
+      // 일부 요청이 먼저 반영됐을 수 있으므로 서버 상태를 다시 읽어 체크 목록과 실제 연결을 맞춘다.
+      const refreshed = await api.vm.getPorts(accessToken, vmId).catch(() => deploymentPorts);
+      setDeploymentPorts(refreshed);
+      setSelectedManualCnameIds(refreshed
+        .filter((port) => port.deploymentAppId === null && port.linkedDeploymentTargetId === targetId)
+        .map((port) => port.id));
+      setCnameLinkError(err instanceof Error ? err.message : "CNAME 연결을 저장하지 못했습니다.");
+    } finally {
+      setSavingCnameLinks(false);
+    }
+  }
+
+  async function handleRedeployTarget(target: DeploymentTargetResponse) {
+    if (!accessToken) return;
+    setRedeployingTargetId(target.id);
+    setError(null);
+    try {
+      const deployment = await api.ops.deployments.redeployTarget(accessToken, vmId, target.id);
+      router.push(`/instances/${vmId}/deployments/${deployment.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "재배포 요청에 실패했습니다.");
+    } finally {
+      setRedeployingTargetId(null);
     }
   }
 
@@ -2163,49 +2233,50 @@ export default function DeploymentsPage() {
         ) : (
           <>
             {deploymentTargets.length > 0 && (
-              <section className="rounded-panel border border-line bg-panel p-4">
-                <div className="mb-3">
-                  <h2 className="text-sm font-extrabold">배포 대상</h2>
-                  <p className="mt-0.5 text-xs text-muted">
-                    VM 하나에서 앱별 컨테이너·릴리스·라우트를 분리해 운영합니다.
-                  </p>
+              <section className="rounded-panel border border-line bg-panel p-5">
+                <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-strong">Applications</p>
+                    <h2 className="mt-1 text-base font-extrabold">운영 중인 배포</h2>
+                    <p className="mt-1 text-xs text-muted">
+                      앱별 배포 상태와 자동·수동 CNAME을 한곳에서 관리합니다.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-line-strong bg-white/[0.035] px-2.5 py-1 text-[11px] font-bold text-muted">
+                    {deploymentTargets.length}개 앱
+                  </span>
                 </div>
-                <div className="grid gap-2 lg:grid-cols-2">
+                <div className="grid gap-3 xl:grid-cols-2">
                   {deploymentTargets.map((target) => {
-                    const publicPorts = deploymentPorts.filter(
+                    const automaticPorts = deploymentPorts.filter(
                       (port) => port.deploymentAppId === target.id && port.visibility === "PUBLIC"
                     );
+                    const manualPorts = deploymentPorts.filter(
+                      (port) => port.deploymentAppId === null
+                        && port.linkedDeploymentTargetId === target.id
+                        && port.visibility === "PUBLIC"
+                    );
+                    const publicPorts = [...automaticPorts, ...manualPorts];
+                    const latestDeployment = deployments.find((deployment) => deployment.id === target.latestDeploymentId)
+                      ?? deployments.find((deployment) => deployment.deploymentTargetId === target.id);
                     return (
-                    <article key={target.id} className="rounded-[10px] border border-line-strong bg-white/[0.025] p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="truncate text-sm font-bold">{target.name}</h3>
-                            <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted">
-                              {SOURCE_TYPE_LABEL[target.sourceType] ?? target.sourceType}
-                            </span>
+                    <article key={target.id} className="overflow-hidden rounded-[12px] border border-line-strong bg-white/[0.025]">
+                      <div className="border-b border-line bg-white/[0.018] p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="truncate text-[15px] font-extrabold">{target.name}</h3>
+                              <StatusBadge tone={latestDeployment && STATUS_TONE[latestDeployment.status] === "ok" ? "ok" : "off"}>
+                                {latestDeployment?.status ?? "배포 대기"}
+                              </StatusBadge>
+                              <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted">
+                                {SOURCE_TYPE_LABEL[target.sourceType] ?? target.sourceType}
+                              </span>
+                            </div>
+                            <p className="mt-1.5 truncate font-mono text-[11px] text-muted-soft">
+                              {target.repositoryFullName ?? target.repositoryUrl}
+                            </p>
                           </div>
-                          <p className="mt-1 truncate font-mono text-[11px] text-muted-soft">
-                            {target.repositoryFullName ?? target.repositoryUrl} · {target.branch}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleAutoDeployToggle(target)}
-                            disabled={togglingTargetId === target.id || !target.repositoryFullName}
-                            className={cn(
-                              "rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-                              target.autoDeployEnabled
-                                ? "border-brand/35 bg-brand/10 text-brand-strong"
-                                : "border-line-strong text-muted"
-                            )}
-                            title={!target.repositoryFullName ? "GitHub App으로 연결된 대상만 자동 배포를 사용할 수 있습니다." : undefined}
-                          >
-                            {togglingTargetId === target.id
-                              ? "변경 중..."
-                              : target.autoDeployEnabled ? "자동 배포 ON" : "자동 배포 OFF"}
-                          </button>
                           <button
                             type="button"
                             onClick={() => openDeleteTargetModal(target)}
@@ -2223,36 +2294,61 @@ export default function DeploymentsPage() {
                             )}
                           </button>
                         </div>
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                        <div>
-                          <span className="text-muted-soft">최근 요청 </span>
-                          <span className="font-mono text-muted">
-                            {target.latestRequestedRevision?.slice(0, 10) ?? "—"}
-                          </span>
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">Branch</p>
+                            <p className="mt-1 truncate font-mono text-[11px] text-foreground">{target.branch}</p>
+                          </div>
+                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">Active</p>
+                            <p className="mt-1 font-mono text-[11px] text-foreground">
+                              {target.latestDeployedRevision?.slice(0, 8) ?? "—"}
+                            </p>
+                          </div>
+                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">Updated</p>
+                            <p className="mt-1 text-[11px] text-foreground">{formatDate(target.updatedAt).slice(5, 16)}</p>
+                          </div>
+                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
+                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">CNAME</p>
+                            <p className="mt-1 text-[11px] font-bold text-foreground">{publicPorts.length}개 연결</p>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-muted-soft">현재 활성 </span>
-                          <span className="font-mono text-muted">
-                            {target.latestDeployedRevision?.slice(0, 10) ?? "—"}
-                          </span>
-                        </div>
                       </div>
-                      {publicPorts.length > 0 && (
-                        <div className="mt-3 border-t border-line pt-3">
-                          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-soft">
-                            공개 CNAME
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
+
+                      <div className="p-4">
+                        <div className="mb-2.5 flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-soft">연결된 공개 CNAME</p>
+                            <p className="mt-0.5 text-[10px] text-muted-soft">자동 생성 주소와 수동 등록 주소를 함께 표시합니다.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openCnameManager(target)}
+                            className="shrink-0 rounded-md border border-brand/30 bg-brand/[0.07] px-2.5 py-1.5 text-[11px] font-bold text-brand-strong transition-colors hover:bg-brand/[0.13]"
+                          >
+                            ＋ CNAME 연결
+                          </button>
+                        </div>
+                        {publicPorts.length > 0 ? (
+                          <div className="space-y-1.5">
                             {publicPorts.map((port) => (
-                              port.protocol === "HTTP" ? (
+                              <div key={port.id} className="flex min-w-0 items-center gap-2 rounded-md border border-line bg-black/10 px-2.5 py-2">
+                                <span className={cn(
+                                  "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-extrabold",
+                                  port.deploymentAppId
+                                    ? "bg-brand/10 text-brand-strong"
+                                    : "bg-[#e8b657]/10 text-[#e8b657]"
+                                )}>
+                                  {port.deploymentAppId ? "자동" : "수동"}
+                                </span>
+                                {port.protocol === "HTTP" ? (
                                 <a
-                                  key={port.id}
                                   href={`https://${port.fullDomain}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title={`${port.nickname} · ${port.port} 포트를 새 창에서 열기`}
-                                  className="inline-flex max-w-full items-center gap-1 rounded-md border border-brand/25 bg-brand/[0.07] px-2 py-1 font-mono text-[11px] text-brand-strong transition-colors hover:border-brand/45 hover:bg-brand/[0.12]"
+                                  className="flex min-w-0 flex-1 items-center gap-1 font-mono text-[11px] text-foreground hover:text-brand-strong"
                                 >
                                   <span className="truncate">{port.fullDomain}</span>
                                   <svg aria-hidden className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2260,18 +2356,57 @@ export default function DeploymentsPage() {
                                   </svg>
                                 </a>
                               ) : (
-                                <span
-                                  key={port.id}
-                                  title={`${port.nickname} · TCP ${port.port} 포트`}
-                                  className="inline-flex max-w-full items-center rounded-md border border-line-strong bg-white/[0.03] px-2 py-1 font-mono text-[11px] text-muted"
-                                >
+                                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
                                   <span className="truncate">{port.fullDomain}</span>
                                 </span>
                               )
+                                }
+                                <span className="shrink-0 font-mono text-[10px] text-muted-soft">:{port.port}</span>
+                              </div>
                             ))}
                           </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openCnameManager(target)}
+                            className="flex w-full items-center justify-center rounded-md border border-dashed border-line-strong bg-black/5 py-4 text-xs text-muted-soft transition-colors hover:border-brand/30 hover:text-brand-strong"
+                          >
+                            연결된 CNAME이 없습니다 · 수동 CNAME 연결하기
+                          </button>
+                        )}
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                          <Button
+                            type="button"
+                            variant="primary"
+                            onClick={() => handleRedeployTarget(target)}
+                            disabled={redeployingTargetId === target.id}
+                          >
+                            {redeployingTargetId === target.id ? "재배포 요청 중..." : "지금 재배포"}
+                          </Button>
+                          {latestDeployment && (
+                            <Button type="button" onClick={() => router.push(`/instances/${vmId}/deployments/${latestDeployment.id}`)}>
+                              최근 배포 보기
+                            </Button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleAutoDeployToggle(target)}
+                            disabled={togglingTargetId === target.id || !target.repositoryFullName}
+                            className={cn(
+                              "ml-auto rounded-full border px-2.5 py-1.5 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                              target.autoDeployEnabled
+                                ? "border-brand/35 bg-brand/10 text-brand-strong"
+                                : "border-line-strong text-muted"
+                            )}
+                            title={!target.repositoryFullName ? "GitHub App으로 연결된 대상만 자동 배포를 사용할 수 있습니다." : undefined}
+                          >
+                            {togglingTargetId === target.id
+                              ? "변경 중..."
+                              : target.autoDeployEnabled ? "자동 배포 ON" : "자동 배포 OFF"}
+                          </button>
                         </div>
-                      )}
+                      </div>
                     </article>
                     );
                   })}
@@ -2348,6 +2483,89 @@ export default function DeploymentsPage() {
           </>
         )}
       </div>
+
+      <Modal open={Boolean(cnameTarget)} onClose={closeCnameManager}>
+        {cnameTarget && (() => {
+          const candidates = deploymentPorts.filter((port) => (
+            port.deploymentAppId === null
+            && port.visibility === "PUBLIC"
+            && (port.linkedDeploymentTargetId === null || port.linkedDeploymentTargetId === cnameTarget.id)
+          ));
+          return (
+            <div className="mx-auto w-full max-w-[560px] rounded-panel border border-line-strong bg-panel p-5">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-brand-strong">CNAME Library</p>
+                  <h2 className="mt-1 text-base font-extrabold">수동 CNAME 연결</h2>
+                  <p className="mt-1 text-xs text-muted">
+                    VM에 직접 등록한 공개 CNAME을 <span className="font-bold text-foreground">{cnameTarget.name}</span>에 묶어 표시합니다.
+                  </p>
+                </div>
+                <button type="button" onClick={closeCnameManager} disabled={savingCnameLinks} className="text-muted-soft hover:text-foreground disabled:opacity-40">✕</button>
+              </div>
+
+              <div className="mb-4 rounded-md border border-[#e8b657]/20 bg-[#e8b657]/[0.045] px-3 py-2 text-[11px] text-[#e8b657]">
+                이 연결은 목록 정리용입니다. 배포를 삭제해도 수동 CNAME과 Cloudflare 설정은 삭제되지 않습니다.
+              </div>
+
+              {candidates.length > 0 ? (
+                <div className="max-h-[360px] space-y-2 overflow-auto pr-1">
+                  {candidates.map((port) => {
+                    const selected = selectedManualCnameIds.includes(port.id);
+                    return (
+                      <label
+                        key={port.id}
+                        className={cn(
+                          "flex cursor-pointer items-center gap-3 rounded-[10px] border p-3 transition-colors",
+                          selected ? "border-brand/40 bg-brand/[0.075]" : "border-line-strong bg-white/[0.02] hover:bg-white/[0.04]"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={savingCnameLinks}
+                          onChange={() => setSelectedManualCnameIds((previous) => (
+                            selected ? previous.filter((id) => id !== port.id) : [...previous, port.id]
+                          ))}
+                          className="h-4 w-4 accent-brand"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-mono text-xs font-bold text-foreground">{port.fullDomain}</p>
+                          <p className="mt-1 text-[10px] text-muted-soft">
+                            {port.nickname} · {port.protocol} · 호스트 {port.port}번 포트
+                          </p>
+                        </div>
+                        <span className={cn(
+                          "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold",
+                          selected ? "border-brand/30 text-brand-strong" : "border-line text-muted-soft"
+                        )}>
+                          {selected ? "연결됨" : "연결 가능"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[10px] border border-dashed border-line-strong py-10 text-center">
+                  <p className="text-sm font-bold text-muted">연결 가능한 수동 공개 CNAME이 없습니다.</p>
+                  <p className="mt-1 text-xs text-muted-soft">VM 공개 포트 설정에서 CNAME을 먼저 추가해주세요.</p>
+                </div>
+              )}
+
+              {cnameLinkError && (
+                <p className="mt-3 rounded-md border border-danger-soft bg-danger/10 px-3 py-2 text-xs text-danger">{cnameLinkError}</p>
+              )}
+
+              <div className="mt-5 flex justify-end gap-2 border-t border-line pt-4">
+                <Button type="button" onClick={closeCnameManager} disabled={savingCnameLinks}>취소</Button>
+                <Button type="button" variant="primary" onClick={handleSaveCnameLinks} disabled={savingCnameLinks}>
+                  {savingCnameLinks ? "연결 저장 중..." : `${selectedManualCnameIds.length}개 CNAME 저장`}
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
 
       <Modal open={Boolean(targetPendingDeletion)} onClose={closeDeleteTargetModal}>
         {targetPendingDeletion && (
