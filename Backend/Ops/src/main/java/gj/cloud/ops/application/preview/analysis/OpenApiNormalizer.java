@@ -63,7 +63,7 @@ public class OpenApiNormalizer {
     public OpenApiEvidence normalize(String apiDocsUrl) {
         securityValidator.validate(apiDocsUrl);
         byte[] body = fetch(apiDocsUrl);
-        return normalizeBytes(body);
+        return normalizeBytes(body, URI.create(apiDocsUrl));
     }
 
     /**
@@ -78,12 +78,14 @@ public class OpenApiNormalizer {
         if (body.length > maxDocumentBytes) {
             throw new OpsException(OpsErrorCode.API_DOCS_TOO_LARGE);
         }
-        return normalizeBytes(body);
+        // 업로드 파일은 문서가 호스팅된 origin을 알 수 없으므로 상대 servers.url은 그대로 둔다.
+        // 분석 결과 화면에서 사용자가 절대 API 서버 주소를 지정할 수 있다.
+        return normalizeBytes(body, null);
     }
 
-    private OpenApiEvidence normalizeBytes(byte[] body) {
+    private OpenApiEvidence normalizeBytes(byte[] body, URI documentUri) {
         JsonNode root = parse(body);
-        return extract(root);
+        return extract(root, documentUri);
     }
 
     private byte[] fetch(String apiDocsUrl) {
@@ -155,6 +157,10 @@ public class OpenApiNormalizer {
     }
 
     OpenApiEvidence extract(JsonNode root) {
+        return extract(root, null);
+    }
+
+    OpenApiEvidence extract(JsonNode root, URI documentUri) {
         String openapiVersion = root.path("openapi").asText(null);
         if (openapiVersion == null || !openapiVersion.startsWith("3.")) {
             throw new OpsException(OpsErrorCode.API_DOCS_UNSUPPORTED_VERSION);
@@ -168,7 +174,7 @@ public class OpenApiNormalizer {
         for (JsonNode server : arrayOrEmpty(root.path("servers"))) {
             String url = server.path("url").asText(null);
             if (url != null && !url.isBlank()) {
-                serverUrls.add(url);
+                serverUrls.add(resolveServerUrl(url, documentUri));
             }
         }
 
@@ -202,6 +208,22 @@ public class OpenApiNormalizer {
         }
 
         return new OpenApiEvidence(title, description, version, serverUrls, securitySchemes, operations, skipped);
+    }
+
+    // OpenAPI 3 Server Object는 절대 URL뿐 아니라 `/api`, `../api` 같은 상대 URL도 허용한다.
+    // URL로 문서를 가져온 경우 RFC 3986 URI.resolve 규칙으로 문서 위치와 결합해야 브라우저가
+    // 실제 API origin으로 요청한다. 절대 URL과 업로드 파일의 상대 URL은 변경하지 않는다.
+    private String resolveServerUrl(String serverUrl, URI documentUri) {
+        String value = serverUrl.trim();
+        if (documentUri == null) return value;
+        try {
+            URI parsed = URI.create(value);
+            if (parsed.isAbsolute()) return parsed.normalize().toString();
+            return documentUri.resolve(parsed).normalize().toString();
+        } catch (IllegalArgumentException ignored) {
+            // 서버 변수({host}) 등 URI 문법으로 바로 해석할 수 없는 값은 사용자가 확인할 수 있게 보존한다.
+            return value;
+        }
     }
 
     private List<SecuritySchemeEvidence> extractSecuritySchemes(JsonNode root) {
