@@ -106,6 +106,7 @@ services:
       - "${USER_BIND_ADDRESS:-127.0.0.1}:${USER_HOST_PORT:-8081}:8080"
     volumes:
       - "${PROFILE_IMAGE_HOST_PATH:-/opt/gamjabox/data/profile-images}:${PROFILE_IMAGE_STORAGE_PATH:-/data/profile-images}"
+      - "${DOCS_IMAGE_HOST_PATH:-/opt/gamjabox/data/docs-images}:${DOCS_IMAGE_STORAGE_PATH:-/data/docs-images}"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       TZ: ${TZ:-Asia/Seoul}
@@ -117,6 +118,8 @@ services:
       OPS_SERVICE_URL: ${OPS_SERVICE_URL:-http://ops:8080}
       PROFILE_IMAGE_STORAGE_PATH: ${PROFILE_IMAGE_STORAGE_PATH:-/data/profile-images}
       PROFILE_IMAGE_PUBLIC_URL_PREFIX: ${PROFILE_IMAGE_PUBLIC_URL_PREFIX:?PROFILE_IMAGE_PUBLIC_URL_PREFIX is required}
+      DOCS_IMAGE_STORAGE_PATH: ${DOCS_IMAGE_STORAGE_PATH:-/data/docs-images}
+      DOCS_IMAGE_PUBLIC_URL_PREFIX: ${DOCS_IMAGE_PUBLIC_URL_PREFIX:-/users/docs/images}
       PORT: 8080
     depends_on:
       mysql:

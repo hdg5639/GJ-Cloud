@@ -1142,3 +1142,49 @@ export interface DbBackupResponse {
   errorMessage: string | null;
   createdAt: string;
 }
+
+export type DocsArticleStatus = "DRAFT" | "PUBLISHED";
+
+export interface DocsArticleSummary {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  category: string;
+  coverImageUrl: string | null;
+  tags: string[];
+  status: DocsArticleStatus;
+  featured: boolean;
+  sortOrder: number;
+  viewCount: number;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocsArticle extends DocsArticleSummary {
+  content: string;
+  authorId: string;
+}
+
+export interface DocsCategory {
+  name: string;
+  articleCount: number;
+}
+
+export interface DocsArticleInput {
+  slug?: string;
+  title: string;
+  summary: string;
+  category: string;
+  coverImageUrl?: string | null;
+  content: string;
+  tags: string[];
+  featured: boolean;
+  sortOrder: number;
+}
+
+export interface DocsImageUpload {
+  url: string;
+  filename: string;
+}

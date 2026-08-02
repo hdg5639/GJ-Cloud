@@ -25,7 +25,13 @@ public enum UserErrorCode {
     INVALID_IMAGE_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 이미지 형식입니다. (jpg/png/webp만 가능)"),
     IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "이미지 용량은 2MB를 초과할 수 없습니다."),
     IMAGE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "이미지 업로드에 실패했습니다."),
-    PROFILE_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "이미지를 찾을 수 없습니다.");
+    PROFILE_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "이미지를 찾을 수 없습니다."),
+    DOCS_ARTICLE_NOT_FOUND(HttpStatus.NOT_FOUND, "문서를 찾을 수 없습니다."),
+    DOCS_SLUG_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 문서 주소입니다."),
+    INVALID_DOCS_IMAGE_FORMAT(HttpStatus.BAD_REQUEST, "지원하지 않는 문서 이미지 형식입니다. (jpg/png/webp/gif만 가능)"),
+    DOCS_IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "문서 이미지는 8MB를 초과할 수 없습니다."),
+    DOCS_IMAGE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "문서 이미지 업로드에 실패했습니다."),
+    DOCS_IMAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "문서 이미지를 찾을 수 없습니다.");
 
     private final HttpStatus status;
     private final String message;
