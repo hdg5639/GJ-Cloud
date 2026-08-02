@@ -49,7 +49,7 @@ export function Modal({ open, onClose, children }: { open: boolean; onClose: () 
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[100] flex items-center justify-center p-4",
+        "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden overscroll-none p-3 sm:p-4",
         useDashboardMotion
           ? "transition-[background-color,backdrop-filter] duration-300 [transition-timing-function:cubic-bezier(.22,1,.36,1)]"
           : "bg-black/60 transition-opacity duration-200 ease-out",
@@ -63,7 +63,7 @@ export function Modal({ open, onClose, children }: { open: boolean; onClose: () 
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          "w-full will-change-[transform,opacity] transition-[transform,opacity]",
+          "flex max-h-[calc(100dvh-1.5rem)] min-h-0 w-full items-center justify-center will-change-[transform,opacity] transition-[transform,opacity] sm:max-h-[calc(100dvh-2rem)]",
           useDashboardMotion
             ? "duration-300 [transition-timing-function:cubic-bezier(.16,1,.3,1)]"
             : "duration-200 ease-out",

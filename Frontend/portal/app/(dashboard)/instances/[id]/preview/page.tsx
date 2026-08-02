@@ -932,27 +932,38 @@ export default function PreviewWizardPage() {
 
       {/* 2단계 */}
       {step === 2 && result && (
-        <div className="space-y-4">
+        <div
+          className={`grid min-h-0 gap-4 ${
+            analysisPanelOpen
+              ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)]"
+              : "grid-cols-1"
+          }`}
+        >
           {analysisPanelOpen && (
             <button
               type="button"
-              className="fixed inset-0 z-[220] bg-black/45 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[220] bg-black/45 backdrop-blur-[2px] xl:hidden"
               onClick={() => setAnalysisPanelOpen(false)}
+              onWheel={(event) => event.preventDefault()}
+              onTouchMove={(event) => event.preventDefault()}
               aria-label="인식된 API 패널 닫기"
             />
           )}
-          {/* 닫힌 패널을 translate로만 화면 밖에 두면 상위 레이아웃의 가로 overflow 조건에서
-              밀려난 패널이 노출될 수 있다. viewport 크기의 별도 clipping layer 안에서 이동시켜
-              닫힘 애니메이션은 유지하면서 화면 밖 내용과 그림자는 완전히 잘라낸다. */}
-          <div className="pointer-events-none fixed inset-0 z-[230] overflow-hidden">
-          <aside
-            className={`pointer-events-auto absolute bottom-2 right-2 top-2 flex w-[min(calc(100vw-16px),460px)] flex-col overflow-hidden rounded-[18px] border border-line-strong bg-panel shadow-[-18px_14px_64px_rgba(0,0,0,.42),0_1px_0_rgba(255,255,255,.035)_inset] ring-1 ring-black/20 transition-[transform,opacity] duration-300 ease-out sm:bottom-3 sm:right-3 sm:top-3 ${
-              analysisPanelOpen
-                ? "translate-x-0 opacity-100"
-                : "pointer-events-none translate-x-[calc(100%+16px)] opacity-0"
+          {/* 작은 화면에서는 viewport clipping layer 안에서 드로어로, 데스크톱에서는 메인 미리보기
+              옆의 sticky column으로 배치해 두 영역이 서로의 스크롤을 끌고 가지 않게 한다. */}
+          <div
+            className={`pointer-events-none fixed inset-0 z-[230] overflow-hidden xl:sticky xl:inset-auto xl:top-4 xl:col-start-2 xl:row-start-1 xl:h-[calc(100dvh-2rem)] xl:self-start xl:overflow-visible ${
+              analysisPanelOpen ? "xl:block" : "xl:hidden"
             }`}
-            aria-hidden={!analysisPanelOpen}
           >
+            <aside
+              className={`pointer-events-auto absolute bottom-2 right-2 top-2 flex w-[min(calc(100vw-16px),460px)] flex-col overflow-hidden rounded-[18px] border border-line-strong bg-panel shadow-[-18px_14px_64px_rgba(0,0,0,.42),0_1px_0_rgba(255,255,255,.035)_inset] ring-1 ring-black/20 transition-[transform,opacity] duration-300 ease-out sm:bottom-3 sm:right-3 sm:top-3 xl:relative xl:inset-auto xl:h-full xl:w-full xl:translate-x-0 xl:opacity-100 ${
+                analysisPanelOpen
+                  ? "translate-x-0 opacity-100"
+                  : "pointer-events-none translate-x-[calc(100%+16px)] opacity-0"
+              }`}
+              aria-hidden={!analysisPanelOpen}
+            >
             <header className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-4">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-brand-strong">Analysis</p>
@@ -970,7 +981,10 @@ export default function PreviewWizardPage() {
                 ×
               </button>
             </header>
-            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-5">
+            <div
+              className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]"
+              data-preview-scroll-region="analysis"
+            >
             <section className="mb-4 rounded-[14px] border border-brand/25 bg-brand/[0.045] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1382,10 +1396,18 @@ export default function PreviewWizardPage() {
               )}
             </div>
             </div>
-          </aside>
+            </aside>
           </div>
 
-          <section className="rounded-panel border border-line bg-panel p-5">
+          <div
+            className={`min-w-0 space-y-4 xl:col-start-1 xl:row-start-1 ${
+              analysisPanelOpen
+                ? "touch-pan-y xl:h-[calc(100dvh-2rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1 [scrollbar-gutter:stable]"
+                : ""
+            }`}
+            data-preview-scroll-region="workspace"
+          >
+            <section className="rounded-panel border border-line bg-panel p-5">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="mb-1 text-sm font-extrabold">실제 API로 미리 확인</h2>
@@ -1534,9 +1556,9 @@ export default function PreviewWizardPage() {
                 )}
               </ProductShell>
             )}
-          </section>
+            </section>
 
-          <section className="rounded-panel border border-line bg-panel p-5">
+            <section className="rounded-panel border border-line bg-panel p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-extrabold">요청·응답 확인</h2>
               {apiCallLog.length > 0 && (
@@ -1549,13 +1571,14 @@ export default function PreviewWizardPage() {
               위 미리보기에서 화면을 조작하면 실제로 보낸 요청과 받은 응답이 여기 쌓입니다. 각 항목을 눌러 펼쳐보세요.
             </p>
             <ApiCallLog entries={apiCallLog} />
-          </section>
+            </section>
 
-          <div className="flex justify-between">
-            <Button onClick={() => setStep(1)}>이전</Button>
-            <Button variant="primary" onClick={() => setStep(3)} disabled={result.status === "UNSUPPORTED"}>
-              다음
-            </Button>
+            <div className="flex justify-between">
+              <Button onClick={() => setStep(1)}>이전</Button>
+              <Button variant="primary" onClick={() => setStep(3)} disabled={result.status === "UNSUPPORTED"}>
+                다음
+              </Button>
+            </div>
           </div>
         </div>
       )}

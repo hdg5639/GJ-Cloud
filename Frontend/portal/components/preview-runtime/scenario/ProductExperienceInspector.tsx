@@ -124,7 +124,7 @@ export function ProductExperienceInspector({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[240]"
+      className="fixed inset-0 z-[240] overflow-hidden overscroll-none"
       style={theme.style}
       data-product-theme={theme.id}
       data-blueprint-theme={theme.blueprintThemeId}
@@ -135,8 +135,8 @@ export function ProductExperienceInspector({
         onClick={onClose}
         aria-label="Inspector 닫기"
       />
-      <aside className="absolute inset-y-0 right-0 flex w-[min(94vw,560px)] flex-col border-l border-white/10 bg-[var(--px-hero)] text-[var(--px-hero-ink)] shadow-[var(--px-shadow-lg)]">
-        <header className="border-b border-white/10 px-5 py-4">
+      <aside className="absolute bottom-2 right-2 top-2 flex w-[min(calc(100vw-16px),560px)] flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[var(--px-hero)] text-[var(--px-hero-ink)] shadow-[var(--px-shadow-lg)] sm:bottom-3 sm:right-3 sm:top-3">
+        <header className="shrink-0 border-b border-white/10 px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[.18em] text-[var(--px-hero-muted)]">Live test inspector</p>
@@ -170,7 +170,7 @@ export function ProductExperienceInspector({
           </div>
         </header>
 
-        <nav className="grid grid-cols-3 border-b border-white/10 px-4 pt-2">
+        <nav className="grid shrink-0 grid-cols-3 border-b border-white/10 px-4 pt-2">
           {([
             ["FLOW", "실행 흐름"],
             ["EVIDENCE", "요청·응답"],
@@ -189,7 +189,10 @@ export function ProductExperienceInspector({
           ))}
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div
+          className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain p-5 [scrollbar-gutter:stable]"
+          data-preview-scroll-region="inspector"
+        >
           {tab === "FLOW" && (
             <div className="space-y-5">
               <div>
