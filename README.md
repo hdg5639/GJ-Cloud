@@ -31,6 +31,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 | **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. PUBLIC / PRIVATE 구분, PRO 플랜의 자동 ID 없는 커스텀 CNAME 지원 |
 | **플랜 관리** | FREE / PRO 플랜 전환, 디스크 온라인 확장. 플랜 변경은 관리자 승인 후 반영 |
 | **협업 (Organization)** | 팀 단위로 VM 공유. 메모·공지·요청 게시판, 역할별 권한(OWNER / ADMIN / MEMBER) |
+| **사용 설명서 (Docs)** | 사용자 포털에서 기능별 가이드를 검색·카테고리별로 탐색. ControlBox에서 Markdown/GFM 문서, 이미지, 태그, 추천 노출과 발행 상태 관리 |
 | **실시간 메트릭** | CPU·메모리·네트워크·디스크 사용량을 Proxmox API로 수집, SSE 스트림으로 라이브 시각화 |
 | **웹 SSH 콘솔** | 브라우저에서 바로 VM 터미널 접속(WebSocket + xterm.js). 로그인 세션과 분리된 일회용 티켓으로 인증 |
 | **파일 브라우저** | VM 내부 파일 조회·업로드·다운로드·편집·삭제. 텍스트 편집, 이미지/오디오/비디오 미리보기(Range 스트리밍) 지원 |
@@ -39,6 +40,17 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 | **Auto Preview** | OpenAPI에서 서비스 의미와 사용자 목표를 해석해 다중 API 시나리오를 컴파일하고 실제 백엔드 상태로 실행·검증. 실행 가능한 시나리오가 없으면 Operation Preview로 안전하게 폴백하며, 281종 Blueprint Parts와 동일 Runtime으로 VM에 배포 |
 | **Docker 관리** | 비동기 단계별 설치와 진행 상태 폴링, VM 내부 컨테이너/이미지/네트워크/compose 스택 조회 및 제어 |
 | **DB 백업** | PostgreSQL/MySQL/MongoDB/Redis 온디맨드 덤프, 파일 브라우저로 다운로드 |
+
+<!-- README IMAGE SLOT
+파일: docs/images/readme/01-portal-overview.webp
+권장 장면: 로그인 후 인스턴스 목록과 GamjaBox 사이드바가 함께 보이는 사용자 포털 전체 화면
+권장 규격: 16:9, 1600×900 이상, 민감한 VM 주소·이메일·IP는 마스킹
+-->
+<p align="center">
+  <img src="docs/images/readme/01-portal-overview.webp" alt="GamjaBox 사용자 포털과 인스턴스 목록" width="100%">
+  <br>
+  <sub>인스턴스, 협업, SSH 키, 사용 설명서를 한곳에서 관리하는 GamjaBox 사용자 포털</sub>
+</p>
 
 ---
 
@@ -50,7 +62,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
     ▼  API 서버  [Caddy 역프록시 — CORS 포함 일괄 처리]
     │
     ├── Auth 서비스      — 회원가입/로그인/JWT 발급/Refresh Token 로테이션/서비스 간 인증
-    ├── User 서비스      — 프로필/SSH 키 관리/플랜 변경 요청
+    ├── User 서비스      — 프로필/SSH 키/플랜 변경 요청/사용 설명서 CMS
     ├── VM 서비스        — VM CRUD/전원제어/조직 관리/협업
     │       │
     │       ├── Proxmox API          (VM 생성·삭제·전원·리소스 변경·메트릭)
@@ -65,7 +77,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 
 내부 API는 호출 목적에 따라 인증 문맥을 나눈다. 관리 키 발급처럼 순수 서비스 신원이 필요한 작업은 client-credentials로 발급한 audience/scope 제한 토큰을 사용하고, 사용자별 리소스 조회처럼 최종 사용자 문맥이 필요한 작업은 `sub`를 보존한 위임 체인에서 별도로 검증한다.
 
-사용자 포털 외에, <img src="Frontend/portal/public/controlbox-symbol.svg" alt="ControlBox" width="18" height="18" align="absmiddle"> **ControlBox** — 플랜 변경 승인 등을 처리하는 별도 관리자 콘솔이 비공개 도메인으로 분리 운영된다.
+사용자 포털 외에, <img src="Frontend/portal/public/controlbox-symbol.svg" alt="ControlBox" width="18" height="18" align="absmiddle"> **ControlBox** — 플랜 변경 승인과 사용 설명서 작성·발행 등을 처리하는 별도 관리자 콘솔이 비공개 도메인으로 분리 운영된다.
 
 **데이터베이스**
 
@@ -99,7 +111,7 @@ Redis — 웹 콘솔/미디어 스트리밍 티켓, 배포 동시 실행 락, AI
 **Frontend**
 
 - Next.js 16 (App Router), TypeScript
-- Tailwind CSS
+- Tailwind CSS, React Markdown + remark-gfm(Docs 렌더링)
 - SSE (VM 상태·메트릭·배포 진행 로그 실시간 수신), WebSocket (웹 SSH 콘솔)
 
 **Infrastructure**
@@ -115,15 +127,17 @@ Redis — 웹 콘솔/미디어 스트리밍 티켓, 배포 동시 실행 락, AI
 ## 인증 흐름
 
 ```
-1. 로그인 → Access Token (JWT, 15분) + Refresh Token (httpOnly 쿠키, 7일)
-2. Access Token 만료 → /auth/refresh → Refresh Token Rotation (새 쌍 발급)
+1. 로그인 → Access Token (JWT, 15분) + Refresh Token (httpOnly 쿠키, 기본 7일 / 로그인 유지 30일)
+2. Access Token 만료 전 → /auth/token/refresh → Refresh Token Rotation (새 쌍 발급)
 3. 서비스 간 호출 → Token Exchange 또는 client-credentials → audience-scoped 단기 토큰 (Redis 캐시)
-4. 토큰 탈취 감지 → 이미 사용된 Refresh Token 재사용 시 해당 유저 전체 세션 강제 만료
+4. 토큰 탈취 감지 → 이미 사용된 Refresh Token 재사용 시 해당 token family만 폐기
 ```
 
 - `rememberMe` 옵션: ON → 30일 슬라이딩 갱신 / OFF → 고정 7일
 - 로그인 레이트 리밋: 이메일 5회 / IP 20회 초과 시 15분 잠금
 - 프론트엔드는 Access Token을 메모리(React state)에만 보관, localStorage 미사용
+- 네트워크 단절·429·5xx는 로그아웃으로 오판하지 않고 5→15→30→60초 간격으로 재시도. 실제 세션 무효 응답(400/401/403)에서만 로그인 화면으로 이동
+- 절전·백그라운드 탭 복귀와 온라인 전환 시 만료 임박 토큰을 복구하고, Web Locks + BroadcastChannel로 여러 탭의 Rotation 충돌과 세션 상태 불일치를 방지
 
 ---
 
@@ -146,6 +160,17 @@ POST /vms  →  PENDING (즉시 202 응답)
 
 SSH 준비 검사는 최대 10분 동안 재시도하며, 관리 키 인증과 사용자 공개키 반영까지 확인된 VM만 RUNNING으로 전환한다. 실패 시 FAILED로 전환되고 원인이 기록된다.
 
+<!-- README IMAGE SLOT
+파일: docs/images/readme/02-vm-create-progress.webp
+권장 장면: VM 생성 마법사 또는 생성 단계와 진행 상태가 보이는 화면
+권장 규격: 16:9, 1600×900 이상, VM 이름·공인 주소·이메일은 예시 값 사용
+-->
+<p align="center">
+  <img src="docs/images/readme/02-vm-create-progress.webp" alt="VM 생성 설정과 프로비저닝 진행 상태" width="100%">
+  <br>
+  <sub>VM 설정부터 cloud-init·SSH 키 검증·Cloudflare 연결까지 이어지는 프로비저닝 흐름</sub>
+</p>
+
 ---
 
 ## 배포 파이프라인 (Ops)
@@ -156,6 +181,17 @@ VM을 만든 뒤 그 안에 실제 서비스를 올리는 영역. 두 가지 스
 - **AI 보조 배포** — 저장소 URL만 주면 스펙을 자동 생성
 
 생성 화면은 `방식 선택 → 저장소 설정 → 서비스 힌트/Compose 작성 → 검토 및 배포`의 4단계로 구성된다. 방문한 단계는 앞뒤로 이동할 수 있고 입력 상태가 유지된다. Raw Compose와 AI 방식 모두 모노레포의 배포 기준 디렉토리와 VM 내부 install path를 지정할 수 있다.
+
+<!-- README IMAGE SLOT
+파일: docs/images/readme/03-deployment-wizard.webp
+권장 장면: 저장소 선택, Compose 감지/AI 생성 결과, 공개 CNAME 설정 중 정보가 가장 풍부한 배포 단계
+권장 규격: 16:9, 1600×900 이상, 저장소가 비공개라면 이름과 URL 마스킹
+-->
+<p align="center">
+  <img src="docs/images/readme/03-deployment-wizard.webp" alt="저장소 기반 단계별 배포 생성 화면" width="100%">
+  <br>
+  <sub>저장소 연결부터 Compose 분석, 서비스 공개 설정과 최종 검토까지 이어지는 배포 마법사</sub>
+</p>
 
 저장소도 두 방식 중 하나를 명시적으로 선택한다.
 
@@ -178,6 +214,17 @@ GitHub App으로 저장소를 연결하고 자동 배포를 켜면 지정 브랜
 배포 실행 중에는 이미지 빌드·태깅, DB 기반 SSE 실시간 로그(재접속 시 이벤트 재생), 헬스체크 실패 시 자동 롤백이 이뤄진다. 실패한 배포는 같은 스펙으로 재시도하거나 값을 수정 후 재배포할 수 있고, 과거 성공한 배포로 수동 롤백도 가능하다(재빌드 없이 해당 시점 이미지로 컨테이너만 재기동).
 
 외부 노출을 선택하면 생성된 모든 CNAME이 배포 대상 카드에 링크로 표시된다. 기본 주소는 VM·포트 식별자를 포함하고, PRO 사용자는 사용 가능한 이름을 검증받아 자동 ID가 붙지 않는 커스텀 CNAME을 지정할 수 있다.
+
+<!-- README IMAGE SLOT
+파일: docs/images/readme/04-deployment-targets.webp
+권장 장면: 여러 배포 대상 카드, 배포 상태, 자동 배포 토글과 CNAME 링크가 함께 보이는 화면
+권장 규격: 16:9, 1600×900 이상, 실제 운영 CNAME은 공개 가능한 주소만 사용
+-->
+<p align="center">
+  <img src="docs/images/readme/04-deployment-targets.webp" alt="배포 대상 카드와 공개 CNAME 목록" width="100%">
+  <br>
+  <sub>한 VM 안의 여러 배포 대상, 실행 상태, 자동 재배포와 공개 주소를 한 화면에서 관리</sub>
+</p>
 
 `내리기`와 `배포 대상 삭제`는 의도적으로 다르다. 내리기는 실행 중인 컨테이너와 해당 배포 이미지를 정리하되 대상을 유지한다. 대상 삭제는 VM이 RUNNING일 때 컨테이너, 대상이 만든 전체 이미지 이력, bare Git 저장소, release/current 디렉토리, install path 심볼릭 링크, Cloudflare 라우트를 제거하고 대상을 비활성화한다. 배포 이력은 감사 목적으로 남긴다.
 
@@ -231,6 +278,17 @@ OpenAPI는 다음 두 방식 중 정확히 하나로 입력한다.
 
 실행 가능한 시나리오가 하나라도 있으면 **서비스 화면**이 기본 탭으로 열린다. 시나리오 디버거나 엔드포인트 목록은 보조 도구이며, 사용자는 처음부터 실제 제품형 화면을 확인한다.
 
+<!-- README IMAGE SLOT
+파일: docs/images/readme/05-auto-preview-service.webp
+권장 장면: 생성된 제품형 서비스 화면과 오른쪽 API 분석 패널이 함께 보이는 Auto Preview 미리보기
+권장 규격: 16:9, 1920×1080 권장, 실제 API 응답의 개인정보는 마스킹
+-->
+<p align="center">
+  <img src="docs/images/readme/05-auto-preview-service.webp" alt="Auto Preview가 생성한 제품형 서비스 화면" width="100%">
+  <br>
+  <sub>OpenAPI와 서비스 문맥으로 조립한 실제 제품형 화면 및 독립 API 분석 패널</sub>
+</p>
+
 오른쪽의 독립 스크롤 분석 패널에서는 다음 정보를 볼 수 있다.
 
 - 엔진이 이해한 서비스 유형, 주요 Actor, Entity, 사용자 Goal
@@ -242,6 +300,17 @@ OpenAPI는 다음 두 방식 중 정확히 하나로 입력한다.
 사용자는 API 카테고리를 태그로 선택하고 “사용자가 상품을 비교한 뒤 장바구니에 넣고 결제 직전까지 이동”처럼 원하는 흐름을 자연어로 입력해 다시 생성할 수 있다. 재생성은 단순히 모달 하나만 바꾸는 작업이 아니다. 선택 범위에 맞춰 서비스 이해, Scenario, 페이지 경계, Flow, Blueprint Parts를 모두 다시 계산한다. 인증 Capability와 선택된 기능의 의존 Capability는 누락되지 않도록 자동으로 포함한다.
 
 AI 검수 결과는 읽기 전용 조언으로 끝나지 않는다. 검수 내용을 바탕으로 구조화된 Page Plan 수정안을 요청하고, 사용자가 적용할 항목을 선택한 뒤 검증된 patch만 현재 결과에 반영할 수 있다.
+
+<!-- README IMAGE SLOT
+파일: docs/images/readme/06-auto-preview-scenario.webp
+권장 장면: 여러 단계의 Flow, API 호출 로그, 성공/실패 검증이 보이는 시나리오 디버거
+권장 규격: 16:9, 1920×1080 권장, Authorization/API Key와 응답 개인정보는 반드시 마스킹
+-->
+<p align="center">
+  <img src="docs/images/readme/06-auto-preview-scenario.webp" alt="Auto Preview 시나리오 디버거와 API 실행 로그" width="100%">
+  <br>
+  <sub>다중 API Flow의 실행 순서, 입력 바인딩, 요청·응답과 검증 결과를 확인하는 시나리오 디버거</sub>
+</p>
 
 #### 3단계: VM 배포
 
@@ -610,6 +679,102 @@ Suite를 만들 때 참조하는 Scenario가 활성 상태이고 revision과 Ope
 
 ---
 
+## 사용자 설명서 (Docs CMS)
+
+기능이 늘어날수록 사용자가 화면만 보고 전체 흐름을 추측해야 하는 문제를 줄이기 위해, User 서비스와 포털에 자체 Docs CMS를 둔다. 문서는 초안과 발행 상태를 분리하며 발행된 문서만 사용자 포털에 노출된다. 포털과 ControlBox는 같은 Next.js 애플리케이션을 사용하지만 도메인·권한·레이아웃은 분리한다.
+
+<!-- README IMAGE SLOT
+파일: docs/images/readme/07-docs-portal.webp
+권장 장면: 추천 가이드, 검색창, 카테고리와 문서 카드가 함께 보이는 사용자 Docs 허브
+권장 규격: 16:9, 1600×900 이상, 샘플 문서는 실제 사용 흐름을 설명하는 제목 사용
+-->
+<p align="center">
+  <img src="docs/images/readme/07-docs-portal.webp" alt="사용자 포털의 사용 설명서 허브" width="100%">
+  <br>
+  <sub>추천 가이드와 카테고리·검색을 제공하는 사용자용 Docs 허브</sub>
+</p>
+
+<details>
+<summary><strong>📖 사용자 포털</strong> — 문서 탐색, 검색, 카테고리와 Markdown 상세 화면</summary>
+
+- 대시보드 사이드바의 **사용 설명서** 메뉴에서 Docs 허브로 진입
+- 제목·요약·카테고리·태그 통합 검색과 카테고리별 필터
+- 관리자가 지정한 추천 문서를 허브 상단에 우선 노출
+- 커버 이미지, 태그, 수정일, 조회 수, 예상 읽기 시간을 포함한 문서 상세 화면
+- 같은 카테고리의 다른 문서와 본문 제목 기반 목차를 데스크톱 사이드 영역에 표시
+- GFM 표·체크리스트·코드 블록·인용문·링크·이미지 렌더링
+- 320/375/768/1024/1440px 뷰포트에서 페이지 전체 가로 넘침 없이 동작하며, 넓은 표와 코드만 해당 블록 내부에서 가로 스크롤
+
+사용자 목록·상세 API는 인증된 사용자만 호출할 수 있다. 발행 취소되거나 삭제된 slug는 사용자 API에서 조회할 수 없으며 상세 조회 시 조회 수를 기록한다.
+
+<!-- README IMAGE SLOT
+파일: docs/images/readme/09-mobile-docs.webp
+권장 장면: 375px 전후 실제 모바일 폭의 Docs 상세 화면 또는 관리자 편집기
+권장 규격: 9:16, 750×1334 이상, 데스크톱 화면을 단순 축소하지 말고 모바일 레이아웃 상태로 촬영
+-->
+<p align="center">
+  <img src="docs/images/readme/09-mobile-docs.webp" alt="모바일 화면에 최적화된 GamjaBox Docs" width="360">
+  <br>
+  <sub>모바일 드로어와 좁은 화면용 문서 탐색·편집 인터페이스</sub>
+</p>
+
+</details>
+
+<details>
+<summary><strong>✍️ ControlBox 편집기</strong> — Markdown 작성, 이미지, 미리보기와 발행 관리</summary>
+
+- 전체 문서·발행됨·초안·카테고리 통계와 제목/카테고리/태그 검색
+- 문서 생성·수정·삭제, 초안 저장, 발행·발행 취소
+- 제목을 정규화한 slug 자동 생성 또는 관리자가 직접 URL slug 지정, 중복 slug 차단
+- 카테고리, 태그(최대 12개), 추천 여부, 정렬 순서, 커버 이미지 설정
+- H2/H3, 굵게, 기울임, 링크, 인용, 목록, 체크리스트, 코드, 표, 본문 이미지 도구 모음
+- 작성/분할/미리보기 모드와 `⌘/Ctrl + S` 저장 단축키
+- 모바일에서는 관리자 고정 사이드바를 드로어로 전환하고, 편집·미리보기·저장·발행 제어를 좁은 화면에 맞춰 재배치
+
+<!-- README IMAGE SLOT
+파일: docs/images/readme/08-docs-admin-editor.webp
+권장 장면: Markdown 작성 영역, 실시간 미리보기, 문서 설정 사이드 패널이 모두 보이는 ControlBox
+권장 규격: 16:9, 1920×1080 권장, 관리자 이메일은 마스킹
+-->
+<p align="center">
+  <img src="docs/images/readme/08-docs-admin-editor.webp" alt="ControlBox 사용 설명서 Markdown 편집기" width="100%">
+  <br>
+  <sub>Markdown 작성·미리보기, 이미지·태그·추천 설정과 발행 상태를 관리하는 ControlBox 편집기</sub>
+</p>
+
+`/admin/docs/**`는 User 서비스에서 `ADMIN` 역할만 허용한다. 관리자 UI가 숨겨져 있는지만 믿지 않고 API 보안 체인에서도 권한을 다시 검사한다.
+
+</details>
+
+<details>
+<summary><strong>🗄️ 저장 구조와 API</strong> — 문서 스키마, 이미지 검증과 운영 환경변수</summary>
+
+문서 본문은 Markdown 원문으로 MySQL `docs_articles` 테이블에 저장한다. 상태는 `DRAFT`/`PUBLISHED`로 제한하고 slug에 고유 인덱스를 둔다. 태그는 JSON으로 보존하며 작성자, 추천 여부, 정렬 순서, 조회 수, 발행·생성·수정 시각을 함께 기록한다.
+
+| 영역 | 엔드포인트 | 설명 |
+|---|---|---|
+| 사용자 | `GET /users/docs` | 발행 문서 목록, `query`·`category` 필터 |
+| 사용자 | `GET /users/docs/categories` | 발행 문서의 카테고리별 개수 |
+| 사용자 | `GET /users/docs/{slug}` | 발행 문서 상세 및 조회 수 기록 |
+| 관리자 | `GET/POST /admin/docs` | 전체 문서 목록·생성 |
+| 관리자 | `GET/PUT/DELETE /admin/docs/{id}` | 문서 상세·수정·삭제 |
+| 관리자 | `POST /admin/docs/{id}/publish` | 문서 발행 |
+| 관리자 | `POST /admin/docs/{id}/unpublish` | 문서 초안 전환 |
+| 관리자 | `POST /admin/docs/images` | 본문·커버 이미지 업로드 |
+| 공개 이미지 | `GET /users/docs/images/{filename}` | immutable 1년 캐시로 이미지 제공 |
+
+이미지는 확장자나 요청 Content-Type을 신뢰하지 않고 파일 시그니처를 읽어 JPEG/PNG/WebP/GIF만 허용한다. 기본 최대 크기는 8MB이며 UUID 파일명으로 저장하고 경로 순회 문자열을 거부한다. 컨테이너 재배포 후에도 유지되도록 호스트 볼륨을 연결한다.
+
+| 환경변수 | 기본값 | 용도 |
+|---|---|---|
+| `DOCS_IMAGE_HOST_PATH` | `/opt/gamjabox/data/docs-images` | 호스트 영속 저장 경로 |
+| `DOCS_IMAGE_STORAGE_PATH` | `/data/docs-images` | User 컨테이너 내부 저장 경로 |
+| `DOCS_IMAGE_PUBLIC_URL_PREFIX` | `/users/docs/images` | API 응답에 기록할 공개 URL prefix |
+
+</details>
+
+---
+
 ## 도메인 구조
 
 | 서브도메인 | 용도 |
@@ -621,7 +786,7 @@ Suite를 만들 때 참조하는 Scenario가 활성 상태이고 revision과 Ope
 | `{vm-prefix}-{shortId}-{portNickname}.*` | VM 추가 노출 포트 |
 | `{customSubdomain}.*` | PRO 플랜 커스텀 공개 포트·배포 라우트 |
 
-관리자 콘솔은 별도 비공개 도메인으로 분리되어 있으며 여기서는 다루지 않는다.
+관리자 콘솔은 별도 비공개 도메인으로 분리되며, 같은 Next.js 애플리케이션에서 호스트 기반으로 ControlBox 라우트에 연결된다.
 
 ---
 
@@ -632,13 +797,44 @@ GJ-Cloud/
 ├── .github/workflows/  develop·main 서비스별 배포 워크플로우
 ├── Backend/
 │   ├── Auth/    Spring MVC — 인증·JWT·Refresh Token·이메일 인증
-│   ├── User/    Spring MVC — 프로필·SSH 키·플랜
+│   ├── User/    Spring MVC — 프로필·SSH 키·플랜·사용 설명서 CMS
 │   ├── vm/      Spring WebFlux — VM·포트·조직·협업·메트릭
 │   └── Ops/     Spring MVC — 웹 SSH 콘솔·파일 브라우저·배포 파이프라인·AI 스펙 생성·DB 백업
 ├── Frontend/
 │   └── portal/  Next.js — 사용자 포털 + 관리자 콘솔(같은 앱, 도메인으로 분리)
 └── gamjabox-landing/  정적 마케팅 랜딩 페이지 (Vanilla HTML/CSS/JS)
 ```
+
+### 서비스별 개발 문서
+
+| 서비스 | 문서 | 주요 내용 |
+|---|---|---|
+| Auth | [Backend/Auth/README.md](Backend/Auth/README.md) | 인증 흐름, 토큰 회전, 메일·서비스 인증, 운영 주의점 |
+| User | [Backend/User/README.md](Backend/User/README.md) | 프로필, SSH 키, 플랜, Docs CMS와 이미지 저장 |
+| VM | [Backend/vm/README.md](Backend/vm/README.md) | Proxmox 프로비저닝, Cloudflare, 조직·협업, 메트릭 |
+| Ops | [Backend/Ops/README.md](Backend/Ops/README.md) | SSH 운영, Docker, 배포, GitHub App, Auto Preview |
+| Portal | [Frontend/portal/README.md](Frontend/portal/README.md) | 사용자·관리자 화면, 인증 복구, 환경변수, Preview Runtime |
+
+<details>
+<summary><strong>🖼️ README 이미지 파일 규격</strong> — 추가할 파일명과 권장 캡처 장면</summary>
+
+이미지는 모두 `docs/images/readme/`에 WebP로 넣으면 README에 즉시 표시된다. 브라우저 전체 프레임이나 불필요한 여백은 자르고, 같은 데스크톱 이미지는 가능하면 동일한 16:9 비율과 폭으로 맞춘다. 토큰, 이메일, IP, 저장소 URL, CNAME 등 운영 정보는 촬영 전에 샘플 값으로 바꾸거나 마스킹한다.
+
+| 파일 | 권장 장면 | 비율 |
+|---|---|---:|
+| `01-portal-overview.webp` | 사용자 포털·인스턴스 목록 전체 | 16:9 |
+| `02-vm-create-progress.webp` | VM 생성 설정 또는 프로비저닝 진행 상태 | 16:9 |
+| `03-deployment-wizard.webp` | 단계별 저장소·Compose·공개 설정 | 16:9 |
+| `04-deployment-targets.webp` | 배포 대상 카드와 CNAME 목록 | 16:9 |
+| `05-auto-preview-service.webp` | 생성된 서비스 화면과 API 분석 패널 | 16:9 |
+| `06-auto-preview-scenario.webp` | Flow·API 로그·검증 결과 | 16:9 |
+| `07-docs-portal.webp` | 사용자 Docs 허브 | 16:9 |
+| `08-docs-admin-editor.webp` | ControlBox Markdown 편집기 | 16:9 |
+| `09-mobile-docs.webp` | 실제 모바일 폭의 Docs 화면 | 9:16 |
+
+권장 파일 크기는 데스크톱 이미지당 500KB 이하, 모바일 이미지 300KB 이하이다. 텍스트가 흐려지지 않는 범위에서 WebP 품질 80~88 정도로 내보내면 GitHub README 로딩 속도와 가독성의 균형이 좋다.
+
+</details>
 
 ---
 
@@ -661,7 +857,9 @@ npm run build
 
 GitHub Actions는 서비스별 path filter로 필요한 워크플로우만 실행한다. `develop`은 `gamjabox-dev`, `main`은 `gamjabox-prod` 라벨의 self-hosted Linux/X64 runner를 사용하며, 모든 배포 명령은 서버의 `/home/ubuntu/GJ-Cloud`에서 실행된다. 백엔드와 포털 배포는 새 이미지를 기동한 뒤 컨테이너 내부 IP의 health endpoint를 확인하고, 실패하면 보존한 이전 이미지로 자동 롤백한다.
 
-루트와 각 서비스의 `compose.yaml`, `.env*`, 로컬 프록시 설정은 운영 자격증명을 포함할 수 있어 Git에서 제외한다. 공개 문서와 코드에는 환경변수 이름만 기록하고 실제 값은 서버 런타임 환경에서 관리한다.
+기본 `compose.yaml`과 `env.example`은 배포 구조와 환경변수 계약만 담아 Git으로 관리한다. 실제 값이 들어가는 `.env*`, 로컬 override·프록시 설정과 운영 자격증명은 Git에서 제외하고 서버 런타임 환경에서 관리한다.
+
+Docs 이미지는 User 컨테이너의 `/data/docs-images`에 저장하고 기본 호스트 경로 `/opt/gamjabox/data/docs-images`를 볼륨으로 연결한다. 운영 환경에서 경로를 바꾸려면 `DOCS_IMAGE_HOST_PATH`, `DOCS_IMAGE_STORAGE_PATH`, `DOCS_IMAGE_PUBLIC_URL_PREFIX`를 함께 설정한다. 로그인 유지 Refresh Token의 Sliding 만료는 기본 30일이며 `JWT_REMEMBER_ME_REFRESH_TOKEN_EXPIRY`에 밀리초 단위로 지정할 수 있다.
 
 Ops Blueprint 검색은 기본적으로 Registry fallback 상태다. Elasticsearch를 사용할 때만 `BLUEPRINT_SEARCH_ENABLED=true`, `ELASTICSEARCH_URL`, 필요 시 `ELASTICSEARCH_USERNAME`·`ELASTICSEARCH_PASSWORD`를 설정한다. `BLUEPRINT_SEARCH_REINDEX_ON_STARTUP=true`는 기동 시 전용 `BLUEPRINT_SEARCH_INDEX`를 Manifest 정본으로 재구축하므로 단일 Ops 인스턴스의 관리된 배포에서만 사용한다.
 
@@ -676,7 +874,8 @@ Ops Blueprint 검색은 기본적으로 Registry fallback 상태다. Elasticsear
 - Spring Security(MVC·WebFlux 둘 다)는 인증 실패 시 기본적으로 403을 반환 — API 클라이언트 입장에서 "인증 안 됨(401)"과 "권한 없음(403)"이 구분되지 않던 문제 → `AuthenticationEntryPoint`/`exceptionHandling`을 명시해 401로 통일 (Auth, VM 각각에서 별도로 발견)
 - WebFlux에서 `CorsWebFilter`에 순서를 지정하지 않으면 Spring Security 필터 체인보다 늦게 실행돼, 인증 실패(401) 응답에도 CORS 헤더가 안 붙어 브라우저가 진짜 에러 대신 CORS 에러로 표시하던 문제 → `HIGHEST_PRECEDENCE`로 고정. 이후 이런 종류의 문제를 근본적으로 없애기 위해 서버단 CORS 설정 자체를 제거하고 Caddy로 일원화
 - `EventSource`(SSE)는 커스텀 헤더를 못 보내 `Authorization` 헤더 기반 인증이 안 먹히는 문제 — VM 이벤트, 메트릭 SSE에서 각각 겪음 → 쿼리 파라미터 토큰 인증 경로를 별도로 추가
-- 프론트 Access Token 자동 갱신 로직이 React StrictMode의 이중 마운트로 동시에 두 번 실행되며 Refresh Token Rotation과 충돌(먼저 도착한 새 토큰 쌍이 나중 요청에 의해 무효화됨) → 갱신 중 플래그로 재진입 차단
+- 프론트 Access Token 자동 갱신 로직이 React StrictMode의 이중 마운트나 여러 탭에서 동시에 실행되며 Refresh Token Rotation과 충돌(먼저 소비된 토큰을 다른 요청이 재사용해 정상 세션 family까지 폐기) → 탭 내부 Promise 공유에 더해 Web Locks로 탭 간 요청을 직렬화하고 BroadcastChannel로 새 토큰·로그아웃 상태를 동기화
+- 로그인 유지 Refresh Token은 30일간 유효한데도 Access Token 갱신 중 순간적인 오프라인·절전 복귀·Auth 5xx를 전부 세션 만료로 처리해 로그인 화면으로 내보내던 문제 → 400/401/403만 실제 세션 무효로 처리하고 네트워크 오류·429·5xx는 기존 세션을 보존한 채 지수형 간격으로 재시도, 탭 활성화·온라인 복귀 시 만료 임박 토큰을 즉시 복구
 - 서비스 간 인증 설정(`auth.service-clients`)이 YAML 중첩 레벨 하나가 빠진 채로 작성돼 있어 실제로는 항상 빈 맵으로 바인딩 → VM→Auth 서비스 토큰 발급이 전부 401로 실패해 **VM 생성 자체가 막히던** 문제 (배포 후 실기 테스트에서 발견)
 - VM→Ops 내부 API(관리 키 발급/폐기)를 로그인 사용자의 토큰을 그대로 전달하는 방식으로 만들었다가, 임의의 로그인 사용자가 토큰 교환 API로 동일 오디언스 토큰을 스스로 발급받아 이 내부 API를 직접 호출할 수 있는 **권한 상승 취약점**을 자체 점검 중 발견 → client-credentials 기반 서비스 신원 인증(서비스 전용 토큰 발급 엔드포인트 + `token_type=service` 클레임 검증)으로 전환
 - 같은 보안 점검에서 한 번에 발견해 수정한 나머지 항목: 배포 조회/이벤트 엔드포인트 권한 체크 누락, compose 서비스명·git 브랜치명을 블랙리스트로만 걸러 셸 인젝션 여지가 남아있던 문제(허용목록 방식으로 전환), 폐기 대기 상태 관리 키의 재사용, 스트리밍 티켓을 발급 시점에만 검증하고 사용 시점엔 재검증하지 않던 문제, HTTP Range 요청 파서의 suffix-range/다중 range 처리 버그

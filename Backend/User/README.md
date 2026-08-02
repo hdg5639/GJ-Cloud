@@ -1,0 +1,104 @@
+# User Service
+
+GamjaBox 사용자 프로필, SSH 공개키, 플랜·사용량, 업그레이드 요청과 사용자 설명서 CMS를 담당하는 Spring Boot 서비스다.
+
+> 전체 시스템 구성은 [프로젝트 루트 README](../../README.md)를 참고한다.
+
+## 책임 범위
+
+- 닉네임과 프로필 이미지 관리
+- SSH 공개키 등록·생성·삭제와 VM 서비스용 내부 조회
+- FREE/PRO 플랜과 사용량 조회
+- 플랜 업그레이드 요청 및 관리자 승인
+- 사용자·관리자 계정 조회와 정지·활성화
+- Markdown/GFM 기반 Docs CMS와 문서 이미지 저장
+
+인증 자격 증명은 Auth가, VM과 조직 데이터는 VM 서비스가 소유한다. User는 JWT를 검증하고 필요한 경우 두 서비스의 내부 API를 호출한다.
+
+## 기능 흐름
+
+### 프로필과 SSH 키
+
+```text
+Auth 회원가입
+  → 서비스 토큰으로 POST /internal/profiles
+  → 기본 프로필 생성
+
+사용자 SSH 키 등록
+  → 공개키 포맷·fingerprint 검증
+  → VM 생성 시 VM 서비스가 내부 API로 키 조회
+```
+
+개인키를 직접 생성하는 API는 사용자에게 한 번만 반환해야 하며 서버가 평문 개인키를 장기 보관하지 않는 전제를 유지한다.
+
+### Docs CMS
+
+- 사용자는 발행된 문서만 목록·카테고리·상세 API로 조회한다.
+- 관리자는 초안 작성, 수정, 발행·발행 취소, 추천·정렬·태그를 관리한다.
+- 본문은 Markdown 원문으로 저장하고, 이미지는 JPEG/PNG/WebP/GIF 시그니처를 검증한다.
+- 이미지 파일은 컨테이너 재배포 후에도 유지되는 외부 볼륨에 저장한다.
+
+## API 영역
+
+| 영역 | 대표 경로 | 설명 |
+|---|---|---|
+| 프로필 | `/users/profile` | 조회·수정·프로필 이미지 업로드 |
+| SSH 키 | `/users/ssh-keys` | 목록·등록·생성·삭제 |
+| 사용량 | `/users/usage` | 사용자 플랜과 리소스 사용량 |
+| 플랜 요청 | `/users/{userId}/upgrade-requests` | 업그레이드 요청·조회·취소 |
+| 사용자 Docs | `/users/docs`, `/users/docs/{slug}` | 발행 문서 검색·카테고리·상세 |
+| Docs 이미지 | `/users/docs/images/{filename}` | 공개 문서 이미지 제공 |
+| 관리자 사용자 | `/admin/users/**` | 계정·플랜·상태 관리 |
+| 관리자 Docs | `/admin/docs/**` | 문서 CRUD, 발행, 이미지 업로드 |
+| 내부 API | `/internal/profiles`, `/internal/ssh-keys/**`, `/internal/automation/**` | 서비스 간 프로필·키·플랜 조회 |
+
+## 데이터와 보안
+
+- MySQL: 프로필, SSH 키, 플랜 요청, Docs 문서
+- 파일 저장소: 프로필 이미지와 Docs 이미지
+- 사용자 API: JWT 인증 필요
+- `/admin/**`: `ADMIN` 역할 필요
+- `/internal/**`: 목적별 service token과 audience/scope 검증
+- 업로드: 파일 크기, 확장자뿐 아니라 실제 파일 시그니처 검증
+
+## 환경변수
+
+| 분류 | 변수 | 용도 |
+|---|---|---|
+| DB | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | MySQL 연결 |
+| 인증 | `AUTH_SERVER_URL`, `USER_SERVICE_CLIENT_SECRET` | JWKS·Token Exchange와 서비스 신원 |
+| VM 연동 | `VM_SERVICE_URL` | 사용량과 VM 관련 내부 조회 |
+| 프로필 이미지 | `PROFILE_IMAGE_STORAGE_PATH`, `PROFILE_IMAGE_PUBLIC_URL_PREFIX` | 저장 경로와 공개 URL prefix |
+| Docs 이미지 | `DOCS_IMAGE_STORAGE_PATH`, `DOCS_IMAGE_PUBLIC_URL_PREFIX` | 저장 경로와 공개 URL prefix |
+
+운영 이미지 경로는 반드시 영속 볼륨에 연결한다. 공개 URL prefix와 Caddy 라우팅 경로가 다르면 업로드는 성공해도 브라우저 표시가 실패한다.
+
+## 로컬 실행과 검증
+
+요구사항은 JDK 17과 MySQL이다. Auth와 VM 연동 기능까지 확인하려면 두 서비스도 접근 가능해야 한다.
+
+```bash
+cd Backend/User
+SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+```
+
+```bash
+./gradlew test
+./gradlew clean build
+```
+
+서비스 상태는 `/actuator/health`에서 확인한다.
+
+## 배포
+
+- `develop`의 `Backend/User/**` 변경은 `deploy-user.yml`을 통해 개발 VM에 배포된다.
+- `main` 변경은 `deploy-main-user.yml`을 통해 운영 VM에 배포된다.
+- 배포 워크플로우는 새 이미지 헬스체크 실패 시 직전 이미지로 자동 롤백한다.
+- 이미지 저장 볼륨은 컨테이너 교체와 무관하게 보존해야 한다.
+
+## 운영 시 주의점
+
+- Auth 계정과 User 프로필의 생성·삭제는 분산 작업이므로 실패 재시도 상태를 함께 확인한다.
+- SSH 공개키 fingerprint 중복과 포맷 오류를 우회해 저장하지 않는다.
+- Docs Markdown은 신뢰되지 않은 입력으로 취급하고 포털 렌더링 정책을 함께 유지한다.
+- 관리자 UI가 숨겨져 있다는 사실은 권한 검증이 아니다. 관리자 API에서 역할을 반드시 재검사한다.

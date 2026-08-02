@@ -37,6 +37,7 @@ jwt:
   public-key: ${JWT_PUBLIC_KEY}
   access-token-expiry: 900000
   refresh-token-expiry: 604800000
+  remember-me-refresh-token-expiry: ${JWT_REMEMBER_ME_REFRESH_TOKEN_EXPIRY:2592000000}
   exchange-token-expiry: 900000
   service-token-expiry: 300000
 
