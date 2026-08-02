@@ -805,6 +805,16 @@ GJ-Cloud/
 └── gamjabox-landing/  정적 마케팅 랜딩 페이지 (Vanilla HTML/CSS/JS)
 ```
 
+### 서비스별 개발 문서
+
+| 서비스 | 문서 | 주요 내용 |
+|---|---|---|
+| Auth | [Backend/Auth/README.md](Backend/Auth/README.md) | 인증 흐름, 토큰 회전, 메일·서비스 인증, 운영 주의점 |
+| User | [Backend/User/README.md](Backend/User/README.md) | 프로필, SSH 키, 플랜, Docs CMS와 이미지 저장 |
+| VM | [Backend/vm/README.md](Backend/vm/README.md) | Proxmox 프로비저닝, Cloudflare, 조직·협업, 메트릭 |
+| Ops | [Backend/Ops/README.md](Backend/Ops/README.md) | SSH 운영, Docker, 배포, GitHub App, Auto Preview |
+| Portal | [Frontend/portal/README.md](Frontend/portal/README.md) | 사용자·관리자 화면, 인증 복구, 환경변수, Preview Runtime |
+
 <details>
 <summary><strong>🖼️ README 이미지 파일 규격</strong> — 추가할 파일명과 권장 캡처 장면</summary>
 
