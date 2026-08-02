@@ -66,6 +66,11 @@ import type {
   CustomScenarioExport,
   RegressionRunView,
   RegressionSuiteView,
+  DocsArticle,
+  DocsArticleSummary,
+  DocsCategory,
+  DocsArticleInput,
+  DocsImageUpload,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -390,6 +395,19 @@ export const api = {
         method: "DELETE",
         accessToken,
       }),
+  },
+  docs: {
+    list: (accessToken: string, filters?: { query?: string; category?: string }) => {
+      const params = new URLSearchParams();
+      if (filters?.query?.trim()) params.set("query", filters.query.trim());
+      if (filters?.category?.trim()) params.set("category", filters.category.trim());
+      const suffix = params.size > 0 ? `?${params.toString()}` : "";
+      return request<DocsArticleSummary[]>("user", `/users/docs${suffix}`, { accessToken });
+    },
+    categories: (accessToken: string) =>
+      request<DocsCategory[]>("user", "/users/docs/categories", { accessToken }),
+    get: (accessToken: string, slug: string) =>
+      request<DocsArticle>("user", `/users/docs/${encodeURIComponent(slug)}`, { accessToken }),
   },
   org: {
     list: (accessToken: string) =>
@@ -1110,6 +1128,39 @@ export const api = {
     },
   },
   admin: {
+    docs: {
+      list: (accessToken: string) =>
+        request<DocsArticleSummary[]>("adminUser", "/admin/docs", { accessToken }),
+      get: (accessToken: string, id: string) =>
+        request<DocsArticle>("adminUser", `/admin/docs/${id}`, { accessToken }),
+      create: (accessToken: string, body: DocsArticleInput) =>
+        request<DocsArticle>("adminUser", "/admin/docs", {
+          method: "POST",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      update: (accessToken: string, id: string, body: DocsArticleInput) =>
+        request<DocsArticle>("adminUser", `/admin/docs/${id}`, {
+          method: "PUT",
+          body: JSON.stringify(body),
+          accessToken,
+        }),
+      publish: (accessToken: string, id: string) =>
+        request<DocsArticle>("adminUser", `/admin/docs/${id}/publish`, { method: "POST", accessToken }),
+      unpublish: (accessToken: string, id: string) =>
+        request<DocsArticle>("adminUser", `/admin/docs/${id}/unpublish`, { method: "POST", accessToken }),
+      delete: (accessToken: string, id: string) =>
+        request<void>("adminUser", `/admin/docs/${id}`, { method: "DELETE", accessToken }),
+      uploadImage: (accessToken: string, file: File) => {
+        const form = new FormData();
+        form.append("file", file);
+        return request<DocsImageUpload>("adminUser", "/admin/docs/images", {
+          method: "POST",
+          body: form,
+          accessToken,
+        });
+      },
+    },
     users: {
       list: (accessToken: string) =>
         request<AdminUserResponse[]>("adminUser", "/admin/users", { accessToken }),

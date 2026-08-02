@@ -25,6 +25,9 @@ user:
   profile-image:
     storage-path: ${PROFILE_IMAGE_STORAGE_PATH}
     public-url-prefix: ${PROFILE_IMAGE_PUBLIC_URL_PREFIX}
+  docs-image:
+    storage-path: ${DOCS_IMAGE_STORAGE_PATH:/data/docs-images}
+    public-url-prefix: ${DOCS_IMAGE_PUBLIC_URL_PREFIX:/users/docs/images}
 
 server:
   port: 8080
