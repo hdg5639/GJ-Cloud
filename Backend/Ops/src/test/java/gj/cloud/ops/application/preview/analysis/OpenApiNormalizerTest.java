@@ -7,6 +7,7 @@ import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.net.URI;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,6 +107,41 @@ class OpenApiNormalizerTest {
         assertThat(evidence.title()).isEqualTo("vm-service");
         assertThat(evidence.operations()).hasSize(5);
         assertThat(evidence.serverUrls()).containsExactly("https://api.gamjabox.cloud");
+    }
+
+    @Test
+    void resolvesRootRelativeServerAgainstFetchedDocumentOrigin() {
+        String document = """
+                {
+                  "openapi": "3.0.1",
+                  "info": { "title": "commerce", "version": "1.0" },
+                  "servers": [{ "url": "/zoo/commerce" }],
+                  "paths": {}
+                }
+                """;
+
+        JsonNode root = normalizer.parse(document.getBytes(StandardCharsets.UTF_8));
+        OpenApiEvidence evidence = normalizer.extract(
+                root, URI.create("https://test-api.gamjabox.cloud/zoo/commerce/openapi"));
+
+        assertThat(evidence.serverUrls())
+                .containsExactly("https://test-api.gamjabox.cloud/zoo/commerce");
+    }
+
+    @Test
+    void preservesRelativeServerForUploadedDocumentWithoutKnownOrigin() {
+        String document = """
+                {
+                  "openapi": "3.0.1",
+                  "info": { "title": "commerce", "version": "1.0" },
+                  "servers": [{ "url": "/zoo/commerce" }],
+                  "paths": {}
+                }
+                """;
+
+        OpenApiEvidence evidence = normalizer.normalizeContent(document);
+
+        assertThat(evidence.serverUrls()).containsExactly("/zoo/commerce");
     }
 
     @Test

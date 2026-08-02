@@ -33,6 +33,27 @@ import type { Block } from "@/components/preview-runtime/blueprint";
 type Purpose = "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
 type ApiDocumentSource = "URL" | "FILE";
 
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+// 이전 Ops 버전이 상대 servers.url을 반환해도 URL 입력 분석이라면 문서 origin과 즉시 결합한다.
+// 파일 업로드는 기준 origin이 없으므로 상대 값을 보존하고 사용자가 절대 주소를 입력하게 한다.
+function resolveAnalyzedApiBaseUrl(serverUrl: string | undefined, documentUrl: string): string {
+  const value = serverUrl?.trim() ?? "";
+  if (!value || isAbsoluteHttpUrl(value) || !documentUrl.trim()) return value;
+  try {
+    return new URL(value, documentUrl.trim()).toString().replace(/\/$/, "");
+  } catch {
+    return value;
+  }
+}
+
 const PURPOSE_LABEL: Record<Purpose, string> = {
   API_TEST: "API 테스트 페이지",
   PRODUCT_LIKE: "실제 서비스 형태의 테스트 페이지",
@@ -333,7 +354,10 @@ export default function PreviewWizardPage() {
       setResult(data);
       setSelectedResourceNames(activeResourceNames(data));
       refreshBlocks(data.capabilities, data.pages, data.pagePlans, purpose);
-      setApiBaseUrl(data.apiServerUrls[0] ?? "");
+      setApiBaseUrl(resolveAnalyzedApiBaseUrl(
+        data.apiServerUrls[0],
+        apiDocumentSource === "URL" ? apiDocsUrl : ""
+      ));
       setPreviewPageId(data.pages[0]?.id ?? null);
       setPreviewAuthToken(null);
       setApiCallLog([]);
@@ -619,7 +643,7 @@ export default function PreviewWizardPage() {
   }
 
   async function handleDeploy() {
-    if (!accessToken || !result || !targetName.trim() || !apiBaseUrl.trim()) return;
+    if (!accessToken || !result || !targetName.trim() || !isAbsoluteHttpUrl(apiBaseUrl)) return;
     setDeploying(true);
     setDeployError(null);
     try {
@@ -1397,6 +1421,13 @@ export default function PreviewWizardPage() {
                 onChange={(e) => setApiBaseUrl(e.target.value)}
                 placeholder="https://api.example.com"
               />
+              {apiBaseUrl.trim() && !isAbsoluteHttpUrl(apiBaseUrl) && (
+                <p className="mt-1.5 text-[11px] text-[#e8b657]">
+                  상대 서버 주소만 감지되었습니다. 실제 요청을 보내려면
+                  <span className="mx-1 font-mono text-foreground">https://host.example.com{apiBaseUrl.startsWith("/") ? apiBaseUrl : `/${apiBaseUrl}`}</span>
+                  형태의 절대 주소를 입력해주세요.
+                </p>
+              )}
             </Field>
             {result.previewMode !== "OPERATION_PREVIEW"
               && result.scenarios.some((scenario) => scenario.status !== "UNSUPPORTED") && (
@@ -1447,7 +1478,7 @@ export default function PreviewWizardPage() {
             )}
             {previewSurface === "PRODUCT"
               && result.previewMode !== "OPERATION_PREVIEW"
-              && apiBaseUrl.trim() ? (
+              && isAbsoluteHttpUrl(apiBaseUrl) ? (
               <ProductExperienceRuntime
                 scenarios={result.scenarios}
                 capabilities={result.capabilities}
@@ -1462,7 +1493,7 @@ export default function PreviewWizardPage() {
               />
             ) : previewSurface === "SCENARIO"
               && result.previewMode !== "OPERATION_PREVIEW"
-              && apiBaseUrl.trim() ? (
+              && isAbsoluteHttpUrl(apiBaseUrl) ? (
               <ScenarioWorkbench
                 scenarios={result.scenarios}
                 capabilities={result.capabilities}
@@ -1477,7 +1508,7 @@ export default function PreviewWizardPage() {
               />
             ) : result.pages.length > 0 && (
               <ProductShell purpose={purpose} pages={result.pages} activePageId={previewPageId} onSelectPage={setPreviewPageId}>
-                {previewPageId && apiBaseUrl.trim() && (
+                {previewPageId && isAbsoluteHttpUrl(apiBaseUrl) && (
                   <div className="rounded-md border border-line-strong bg-white/[0.02] p-4">
                     <PreviewPageRenderer
                       page={result.pages.find((p) => p.id === previewPageId)!}
@@ -1565,7 +1596,7 @@ export default function PreviewWizardPage() {
             <Button
               variant="primary"
               onClick={handleDeploy}
-              disabled={deploying || !targetName.trim() || !apiBaseUrl.trim()}
+              disabled={deploying || !targetName.trim() || !isAbsoluteHttpUrl(apiBaseUrl)}
             >
               {deploying ? "배포 요청 중..." : "배포"}
             </Button>

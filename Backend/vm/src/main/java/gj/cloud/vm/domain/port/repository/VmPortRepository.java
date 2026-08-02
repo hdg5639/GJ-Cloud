@@ -17,6 +17,8 @@ public interface VmPortRepository extends ReactiveCrudRepository<VmPortEntity, U
 
     Flux<VmPortEntity> findAllByVmIdAndDeploymentAppId(UUID vmId, String deploymentAppId);
 
+    Flux<VmPortEntity> findAllByVmIdAndLinkedDeploymentTargetId(UUID vmId, String deploymentTargetId);
+
     @Query("SELECT COUNT(*) FROM vm_ports WHERE vm_id = :vmId")
     Mono<Long> countByVmId(UUID vmId);
 

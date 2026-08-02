@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -63,6 +64,34 @@ public class DeploymentTargetController {
                 targetService.setAutoDeploy(vmId.toString(), targetId, body.enabled())));
     }
 
+    @PutMapping("/{targetId}/ports/{portId}")
+    public ApiResponse<Void> linkManualCname(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @PathVariable String targetId,
+            @PathVariable UUID portId
+    ) {
+        String bearerToken = requireDeployPermission(request, vmId);
+        DeploymentTargetEntity target = targetService.findOwned(vmId.toString(), targetId);
+        vmServiceClient.linkManualPortToDeploymentTarget(
+                bearerToken, vmId.toString(), portId.toString(), target.getId());
+        return ApiResponse.ok();
+    }
+
+    @DeleteMapping("/{targetId}/ports/{portId}")
+    public ApiResponse<Void> unlinkManualCname(
+            HttpServletRequest request,
+            @PathVariable UUID vmId,
+            @PathVariable String targetId,
+            @PathVariable UUID portId
+    ) {
+        String bearerToken = requireDeployPermission(request, vmId);
+        DeploymentTargetEntity target = targetService.findOwned(vmId.toString(), targetId);
+        vmServiceClient.unlinkManualPortFromDeploymentTarget(
+                bearerToken, vmId.toString(), portId.toString(), target.getId());
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/{targetId}/redeploy")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ApiResponse<DeploymentResponse> redeploy(
@@ -100,6 +129,9 @@ public class DeploymentTargetController {
     ) {
         String bearerToken = requireDeployPermission(request, vmId);
         DeploymentTargetEntity target = targetService.findOwned(vmId.toString(), targetId);
+        // 수동 CNAME은 삭제하지 않고 표시 연결만 해제해 다른 배포 대상에서 다시 사용할 수 있게 한다.
+        vmServiceClient.unlinkAllManualPortsFromDeploymentTarget(
+                bearerToken, vmId.toString(), target.getId());
         deploymentExecutor.deleteTarget(bearerToken, vmId.toString(), target);
         return ApiResponse.ok();
     }

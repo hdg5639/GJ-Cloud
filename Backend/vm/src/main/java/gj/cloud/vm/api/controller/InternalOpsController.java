@@ -1,6 +1,7 @@
 package gj.cloud.vm.api.controller;
 
 import gj.cloud.vm.application.port.dto.DeploymentRoutesSyncRequest;
+import gj.cloud.vm.application.port.dto.PortDeploymentTargetLinkRequest;
 import gj.cloud.vm.application.port.service.PortService;
 import gj.cloud.vm.application.vm.dto.VmContextResponse;
 import gj.cloud.vm.application.vm.service.VmAccessService;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -67,6 +69,41 @@ public class InternalOpsController {
         String bearerToken = extractToken(exchange);
         return portService.syncDeploymentRoutes(principal.userId(), principal.email(), vmId,
                         request.deploymentAppId(), request.deploymentId(), request.routes(), bearerToken)
+                .thenReturn(ApiResponse.<Void>ok(null));
+    }
+
+    @PutMapping("/vms/{vmId}/ports/{portId}/deployment-target")
+    public Mono<ApiResponse<Void>> linkManualPortToDeploymentTarget(
+            @PathVariable UUID vmId,
+            @PathVariable UUID portId,
+            @AuthenticationPrincipal VmPrincipal principal,
+            @Valid @RequestBody PortDeploymentTargetLinkRequest request
+    ) {
+        return portService.linkManualPortToDeploymentTarget(
+                        principal.userId(), principal.email(), vmId, portId, request.deploymentTargetId())
+                .thenReturn(ApiResponse.<Void>ok(null));
+    }
+
+    @DeleteMapping("/vms/{vmId}/ports/{portId}/deployment-target/{targetId}")
+    public Mono<ApiResponse<Void>> unlinkManualPortFromDeploymentTarget(
+            @PathVariable UUID vmId,
+            @PathVariable UUID portId,
+            @PathVariable String targetId,
+            @AuthenticationPrincipal VmPrincipal principal
+    ) {
+        return portService.unlinkManualPortFromDeploymentTarget(
+                        principal.userId(), principal.email(), vmId, portId, targetId)
+                .thenReturn(ApiResponse.<Void>ok(null));
+    }
+
+    @DeleteMapping("/vms/{vmId}/deployment-targets/{targetId}/manual-port-links")
+    public Mono<ApiResponse<Void>> unlinkAllManualPortsFromDeploymentTarget(
+            @PathVariable UUID vmId,
+            @PathVariable String targetId,
+            @AuthenticationPrincipal VmPrincipal principal
+    ) {
+        return portService.unlinkAllManualPortsFromDeploymentTarget(
+                        principal.userId(), principal.email(), vmId, targetId)
                 .thenReturn(ApiResponse.<Void>ok(null));
     }
 

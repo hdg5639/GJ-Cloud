@@ -28,4 +28,22 @@ class PortResponseTest {
         assertThat(response.deploymentId()).isEqualTo("deployment-2");
         assertThat(response.deploymentAppId()).isEqualTo("target-1");
     }
+
+    @Test
+    void keepsManualDisplayLinkSeparateFromDeploymentOwnership() {
+        VmPortEntity port = VmPortEntity.createPublic(
+                        UUID.randomUUID(),
+                        8080,
+                        Protocol.HTTP,
+                        "manual-web",
+                        "manual-portfolio",
+                        "cloudflare-record")
+                .withLinkedDeploymentTarget("target-2");
+
+        PortResponse response = PortResponse.of(port, List.of(), "gamjabox.cloud");
+
+        assertThat(response.deploymentId()).isNull();
+        assertThat(response.deploymentAppId()).isNull();
+        assertThat(response.linkedDeploymentTargetId()).isEqualTo("target-2");
+    }
 }

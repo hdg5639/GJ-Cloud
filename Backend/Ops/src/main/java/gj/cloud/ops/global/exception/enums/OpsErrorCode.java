@@ -44,6 +44,8 @@ public enum OpsErrorCode {
     AUTO_DEPLOY_REQUIRES_GITHUB(HttpStatus.BAD_REQUEST, "자동 배포는 GitHub App 저장소 연결이 필요합니다."),
     DEPLOYMENT_TARGET_DELETE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR,
             "배포 대상 삭제 중 VM 정리에 실패했습니다. VM 상태를 확인한 뒤 다시 시도해주세요."),
+    DEPLOYMENT_CNAME_NOT_FOUND(HttpStatus.NOT_FOUND, "연결할 수동 CNAME을 찾을 수 없습니다."),
+    DEPLOYMENT_CNAME_LINK_FAILED(HttpStatus.BAD_REQUEST, "수동 CNAME을 배포 대상에 연결하지 못했습니다."),
 
     // GitHub App / push webhook
     GITHUB_APP_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "GitHub App 연동이 설정되지 않았습니다."),

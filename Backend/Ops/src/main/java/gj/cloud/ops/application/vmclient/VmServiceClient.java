@@ -1,6 +1,7 @@
 package gj.cloud.ops.application.vmclient;
 
 import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
+import gj.cloud.ops.application.vmclient.dto.PortDeploymentTargetLinkRequest;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.response.ApiResponse;
@@ -42,6 +43,65 @@ public class VmServiceClient {
         } catch (Exception e) {
             log.error("VM 컨텍스트 조회 실패: vmId={}, error={}", vmId, e.getMessage());
             throw new OpsException(OpsErrorCode.VM_CONTEXT_FETCH_FAILED);
+        }
+    }
+
+    public void linkManualPortToDeploymentTarget(
+            String bearerToken, String vmId, String portId, String deploymentTargetId
+    ) {
+        try {
+            restClient.put()
+                    .uri("/internal/ops/vms/{vmId}/ports/{portId}/deployment-target", vmId, portId)
+                    .header("Authorization", "Bearer " + bearerToken)
+                    .body(new PortDeploymentTargetLinkRequest(deploymentTargetId))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException.Forbidden e) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_CNAME_NOT_FOUND);
+        } catch (Exception e) {
+            log.error("수동 CNAME 배포 연결 실패: vmId={}, portId={}, targetId={}, error={}",
+                    vmId, portId, deploymentTargetId, e.getMessage());
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_CNAME_LINK_FAILED);
+        }
+    }
+
+    public void unlinkManualPortFromDeploymentTarget(
+            String bearerToken, String vmId, String portId, String deploymentTargetId
+    ) {
+        try {
+            restClient.delete()
+                    .uri("/internal/ops/vms/{vmId}/ports/{portId}/deployment-target/{targetId}",
+                            vmId, portId, deploymentTargetId)
+                    .header("Authorization", "Bearer " + bearerToken)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException.Forbidden e) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_CNAME_NOT_FOUND);
+        } catch (Exception e) {
+            log.error("수동 CNAME 배포 연결 해제 실패: vmId={}, portId={}, targetId={}, error={}",
+                    vmId, portId, deploymentTargetId, e.getMessage());
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_CNAME_LINK_FAILED);
+        }
+    }
+
+    public void unlinkAllManualPortsFromDeploymentTarget(
+            String bearerToken, String vmId, String deploymentTargetId
+    ) {
+        try {
+            restClient.delete()
+                    .uri("/internal/ops/vms/{vmId}/deployment-targets/{targetId}/manual-port-links",
+                            vmId, deploymentTargetId)
+                    .header("Authorization", "Bearer " + bearerToken)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (Exception e) {
+            log.error("수동 CNAME 배포 연결 일괄 해제 실패: vmId={}, targetId={}, error={}",
+                    vmId, deploymentTargetId, e.getMessage());
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_CNAME_LINK_FAILED);
         }
     }
 }

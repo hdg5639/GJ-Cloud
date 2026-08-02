@@ -20,7 +20,9 @@ public record PortResponse(
         String deploymentId,
         // 재배포마다 바뀌는 deploymentId와 달리 배포 대상 ID는 유지된다.
         // 대상 카드에서 현재 연결된 실제 포트를 안정적으로 묶는 키로 사용한다.
-        String deploymentAppId
+        String deploymentAppId,
+        // 사용자가 수동 생성한 CNAME을 어느 배포 대상 카드에 표시할지 나타내는 별도 연결 ID.
+        String linkedDeploymentTargetId
 ) {
     public static PortResponse of(VmPortEntity entity, List<String> emails, String baseDomain) {
         return new PortResponse(
@@ -34,7 +36,8 @@ public record PortResponse(
                 emails,
                 entity.getCreatedAt(),
                 entity.getDeploymentId(),
-                entity.getDeploymentAppId()
+                entity.getDeploymentAppId(),
+                entity.getLinkedDeploymentTargetId()
         );
     }
 }

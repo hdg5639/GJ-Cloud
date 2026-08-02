@@ -224,6 +224,81 @@ public class PortServiceImpl implements PortService {
     }
 
     @Override
+    public Mono<Void> linkManualPortToDeploymentTarget(
+            String requesterId,
+            String requesterEmail,
+            UUID vmId,
+            UUID portId,
+            String deploymentTargetId
+    ) {
+        return findManualPortForLink(requesterId, requesterEmail, vmId, portId)
+                .flatMap(port -> {
+                    String current = port.getLinkedDeploymentTargetId();
+                    if (current != null && !current.equals(deploymentTargetId)) {
+                        return Mono.error(new VmException(VmErrorCode.PORT_DEPLOYMENT_LINK_CONFLICT));
+                    }
+                    return vmPortRepository.save(port.withLinkedDeploymentTarget(deploymentTargetId)).then();
+                });
+    }
+
+    @Override
+    public Mono<Void> unlinkManualPortFromDeploymentTarget(
+            String requesterId,
+            String requesterEmail,
+            UUID vmId,
+            UUID portId,
+            String deploymentTargetId
+    ) {
+        return findManualPortForLink(requesterId, requesterEmail, vmId, portId)
+                .flatMap(port -> {
+                    String current = port.getLinkedDeploymentTargetId();
+                    if (current == null) return Mono.empty();
+                    if (!current.equals(deploymentTargetId)) {
+                        return Mono.error(new VmException(VmErrorCode.PORT_DEPLOYMENT_LINK_CONFLICT));
+                    }
+                    return vmPortRepository.save(port.withLinkedDeploymentTarget(null)).then();
+                });
+    }
+
+    @Override
+    public Mono<Void> unlinkAllManualPortsFromDeploymentTarget(
+            String requesterId,
+            String requesterEmail,
+            UUID vmId,
+            String deploymentTargetId
+    ) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(
+                        vmId, vm.getUserId(), requesterId, requesterEmail))
+                .thenMany(vmPortRepository.findAllByVmIdAndLinkedDeploymentTargetId(vmId, deploymentTargetId))
+                .concatMap(port -> vmPortRepository.save(port.withLinkedDeploymentTarget(null)))
+                .then();
+    }
+
+    private Mono<VmPortEntity> findManualPortForLink(
+            String requesterId,
+            String requesterEmail,
+            UUID vmId,
+            UUID portId
+    ) {
+        return vmRepository.findById(vmId)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .filter(vm -> vm.getDeletedAt() == null)
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.VM_NOT_FOUND)))
+                .flatMap(vm -> vmAccessService.checkVmAdminAccess(
+                        vmId, vm.getUserId(), requesterId, requesterEmail))
+                .then(vmPortRepository.findById(portId))
+                .filter(port -> port.getVmId().equals(vmId))
+                .switchIfEmpty(Mono.error(new VmException(VmErrorCode.PORT_NOT_FOUND)))
+                .flatMap(port -> port.getDeploymentAppId() == null
+                        ? Mono.just(port)
+                        : Mono.error(new VmException(VmErrorCode.PORT_DEPLOYMENT_MANAGED)));
+    }
+
+    @Override
     public Mono<PortResponse> addPortAccessEmail(String userId, String userEmail, UUID vmId, UUID portId,
                                                   PortAccessAddRequest request) {
         return vmRepository.findById(vmId)
