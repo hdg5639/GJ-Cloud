@@ -7,19 +7,27 @@ import type { PreviewCapability, PreviewPage, PreviewRuntimeConfig } from "../..
 import type { BlueprintAction, BlueprintNavItem, BlueprintOption, BlueprintWorkflowStep } from "../core";
 import { partDescriptor, partKind, renderBlueprintPart } from "./registry";
 
-function navigationItems(page: PreviewPage, capabilities: PreviewCapability[]): BlueprintNavItem[] {
-  const resources = Array.from(new Set(capabilities.map((capability) => capability.resourceName).filter(Boolean)));
-  const labels = resources.length > 0 ? resources : [page.title];
-  return labels.map((label, index) => ({
-    id: `${page.id}-${index}`,
-    label,
-    active: index === 0,
+function navigationItems(page: PreviewPage, pages: PreviewPage[]): BlueprintNavItem[] {
+  const targets = pages.length > 0 ? pages : [page];
+  return targets.map((target) => ({
+    id: target.id,
+    label: target.title,
+    active: target.id === page.id,
   }));
 }
 
-function navigationNode(componentId: string | undefined, items: BlueprintNavItem[]): ReactNode {
+function navigationNode(
+  componentId: string | undefined,
+  items: BlueprintNavItem[],
+  onNavigate: (item: BlueprintNavItem) => void
+): ReactNode {
   if (!componentId || componentId === "default-navigation") return null;
-  return renderBlueprintPart(componentId, { items, activeId: items[0]?.id, onNavigate: () => undefined });
+  return renderBlueprintPart(componentId, {
+    items,
+    activeId: items.find((item) => item.active)?.id,
+    onNavigate,
+    onSelect: onNavigate,
+  });
 }
 
 function layoutProps(
@@ -27,7 +35,8 @@ function layoutProps(
   page: PreviewPage,
   content: ReactNode,
   navigation: ReactNode,
-  items: BlueprintNavItem[]
+  items: BlueprintNavItem[],
+  onNavigate: (item: BlueprintNavItem) => void
 ): Record<string, unknown> {
   const common = {
     title: page.title,
@@ -65,10 +74,10 @@ function layoutProps(
     currentStepId: "preview",
   };
   if (componentId === "admin-workspace-layout") {
-    return { ...common, navigation: items, onNavigate: () => undefined };
+    return { ...common, navigation: items, onNavigate };
   }
   if (componentId === "settings-workbench-layout") {
-    return { ...common, sections: items, onSelect: () => undefined };
+    return { ...common, sections: items, onSelect: onNavigate };
   }
   return common;
 }
@@ -76,26 +85,29 @@ function layoutProps(
 export function BlueprintPageChrome({
   blocks,
   page,
-  capabilities,
+  pages = [],
+  onNavigate,
   children,
 }: {
   blocks: Block[];
   page: PreviewPage;
-  capabilities: PreviewCapability[];
+  pages?: PreviewPage[];
+  onNavigate?: (pageId: string) => void;
   children: ReactNode;
 }) {
   const layoutId = blocks.find((block) => block.slot === "page.layout")?.componentId;
   const navigationId = blocks.find((block) => block.slot === "page.navigation")?.componentId;
   const themeId = blocks.find((block) => block.slot === "page.theme")?.componentId;
-  const items = navigationItems(page, capabilities);
-  const navigation = navigationNode(navigationId, items);
+  const items = navigationItems(page, pages);
+  const navigate = (item: BlueprintNavItem) => onNavigate?.(item.id);
+  const navigation = navigationNode(navigationId, items, navigate);
 
   let content = children;
   if (navigation && (!layoutId || layoutId === "default-layout")) {
     content = <div className="space-y-4">{navigation}{content}</div>;
   }
   if (layoutId && layoutId !== "default-layout") {
-    content = renderBlueprintPart(layoutId, layoutProps(layoutId, page, content, navigation, items));
+    content = renderBlueprintPart(layoutId, layoutProps(layoutId, page, content, navigation, items, navigate));
   }
   if (themeId && themeId !== "default-theme") {
     content = renderBlueprintPart(themeId, { children: content });
@@ -252,7 +264,6 @@ export function BlueprintOverlayPart({
     onAcknowledge: callback,
     onOpen: callback,
     onPermissionChange: callback,
-    onStepClick: () => undefined,
     onLabel: (value: unknown) => String(value ?? ""),
     onCopy: (value: unknown) => { void navigator.clipboard?.writeText(String(value ?? targetId ?? capability.resourceName)); },
     onValidate: async () => ({ valid: capability.fields.length, invalid: 0 }),

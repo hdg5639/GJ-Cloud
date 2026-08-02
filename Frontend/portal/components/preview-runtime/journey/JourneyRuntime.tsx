@@ -364,7 +364,6 @@ function GeneratedJourneyStep({
     onAcknowledge: advance(),
     onOpen: advance(["selected"]),
     onPermissionChange: advance(["permissions"]),
-    onStepClick: () => undefined,
     onLabel: (value: unknown) => String(value ?? ""),
     onCopy: (value: unknown) => { void navigator.clipboard?.writeText(String(value ?? targetName)); },
     onValidate: async () => ({ valid: session.capability.fields.length, invalid: 0 }),

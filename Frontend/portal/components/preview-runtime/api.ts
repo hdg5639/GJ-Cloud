@@ -33,6 +33,12 @@ function buildUrl(
   if (pathParams.id !== undefined && path.includes("{")) {
     path = replaceLastPathPlaceholder(path, pathParams.id);
   }
+  const unresolvedPathParameters = Array.from(path.matchAll(/\{([^}]+)}/g), (match) => match[1]);
+  if (unresolvedPathParameters.length > 0) {
+    throw new Error(
+      `${capability.method} ${capability.path} 요청에 필요한 경로 값이 없습니다: ${unresolvedPathParameters.join(", ")}`
+    );
+  }
   const base = config.apiBaseUrl.replace(/\/$/, "");
   const url = new URL(base + path);
   for (const [key, value] of Object.entries(query)) {
