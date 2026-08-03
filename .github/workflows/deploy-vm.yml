@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop]
     paths:
-      - 'Backend/vm/**'
+      - 'Backend/Vm/**'
   workflow_dispatch:
 
 jobs:

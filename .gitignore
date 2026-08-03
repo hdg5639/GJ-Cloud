@@ -22,6 +22,8 @@ $RECYCLE.BIN/
 *.ipr
 
 ### Local guides ###
+AGENTS.md
+CLOUD.md
 NEW_SERVICE_GUIDE.md
 Service_Info.md
 docs/github-auto-deploy.md

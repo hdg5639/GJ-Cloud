@@ -81,7 +81,7 @@ Cloudflare 자격 증명과 Tunnel·Zone 설정도 `cloudflare.*` 구성에 필�
 요구사항은 JDK 17, PostgreSQL, Redis다. 실제 프로비저닝 테스트에는 접근 가능한 Proxmox와 Cloudflare 개발 환경이 필요하다.
 
 ```bash
-cd Backend/vm
+cd Backend/Vm
 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
 ```
 
@@ -98,7 +98,7 @@ docker compose config
 
 ## 배포
 
-- `develop`의 `Backend/vm/**` 변경은 `deploy-vm.yml`을 통해 개발 VM에 배포된다.
+- `develop`의 `Backend/Vm/**` 변경은 `deploy-vm.yml`을 통해 개발 VM에 배포된다.
 - `main` 변경은 `deploy-main-vm.yml`을 통해 운영 VM에 배포된다.
 - VM 서비스는 콜드 스타트 시간을 고려해 최대 100초 동안 컨테이너 내부 IP의 Actuator를 확인한다.
 - 헬스체크 실패 시 보존된 직전 이미지로 자동 롤백한다.
