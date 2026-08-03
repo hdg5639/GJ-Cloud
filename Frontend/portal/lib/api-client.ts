@@ -1125,6 +1125,20 @@ export const api = {
           body: JSON.stringify(body),
           accessToken,
         }),
+      download: async (accessToken: string, vmId: string, backupId: string): Promise<Blob> => {
+        const token = await getExchangedToken(accessToken, "ops-service");
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_OPS_API}/ops/${vmId}/backups/${backupId}/download`,
+          { headers: { Authorization: `Bearer ${token}` }, credentials: "include" }
+        );
+        if (!res.ok) throw new Error("백업 다운로드에 실패했습니다");
+        return res.blob();
+      },
+      verify: (accessToken: string, vmId: string, backupId: string) =>
+        request<DbBackupResponse>("ops", `/ops/${vmId}/backups/${backupId}/verify`, {
+          method: "POST",
+          accessToken,
+        }),
     },
   },
   admin: {

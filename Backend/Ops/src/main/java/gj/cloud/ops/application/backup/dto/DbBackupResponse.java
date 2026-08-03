@@ -4,14 +4,17 @@ import gj.cloud.ops.domain.backup.entity.DbBackupEntity;
 
 import java.time.LocalDateTime;
 
-// filePath는 VM 파일시스템 절대경로 — 파일 브라우저(/ops/{vmId}/files/download?path=...)로 그대로 다운로드 가능
+// 물리 경로는 노출하지 않고 백업 id 기반 전용 API로만 다운로드한다.
 public record DbBackupResponse(
         String id,
         String vmId,
         String serviceName,
         String dbType,
-        String filePath,
         Long fileSizeBytes,
+        String checksumSha256,
+        String encryptionVersion,
+        LocalDateTime verifiedAt,
+        LocalDateTime expiresAt,
         boolean succeeded,
         String errorMessage,
         LocalDateTime createdAt
@@ -19,7 +22,8 @@ public record DbBackupResponse(
     public static DbBackupResponse from(DbBackupEntity entity) {
         return new DbBackupResponse(
                 entity.getId(), entity.getVmId(), entity.getServiceName(), entity.getDbType(),
-                entity.getFilePath(), entity.getFileSizeBytes(), entity.isSucceeded(),
+                entity.getFileSizeBytes(), entity.getChecksumSha256(), entity.getEncryptionVersion(),
+                entity.getVerifiedAt(), entity.getExpiresAt(), entity.isSucceeded(),
                 entity.getErrorMessage(), entity.getCreatedAt()
         );
     }

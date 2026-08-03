@@ -8,4 +8,6 @@ import java.util.List;
 public interface DbBackupRepository extends JpaRepository<DbBackupEntity, String> {
 
     List<DbBackupEntity> findAllByVmIdOrderByCreatedAtDesc(String vmId);
+
+    java.util.Optional<DbBackupEntity> findByIdAndVmId(String id, String vmId);
 }

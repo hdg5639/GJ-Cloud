@@ -41,7 +41,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -93,19 +92,17 @@ public class VmServiceImpl implements VmService {
                         Mono.zip(
                                 userServiceClient.getSshKey(bearerToken, creating.getSshKeyId()),
                                 opsServiceClient.issueManagementKey(creating.getId()),
-                                allocateVmId(),
-                                allocateIp(creating.getPlanType())
+                                allocateVmId()
                         )
                         .flatMap(tuple -> {
                             SshKeyInternalResponse userKey = tuple.getT1();
                             List<String> sshPublicKeys = List.of(userKey.publicKey(), tuple.getT2().publicKey());
                             int newVmid = tuple.getT3();
-                            String staticIp = tuple.getT4();
                             return proxmoxClient.ensurePoolExists(proxmoxProperties.getPool())
                                     .then(proxmoxClient.cloneVm(newVmid, creating.getPlanType(), creating.getName()))
                                     .flatMap(taskId -> vmRepository.save(creating.withVmidAndTaskId(newVmid, taskId)))
                                     .map(saved -> new ProvisioningContext(
-                                            saved, sshPublicKeys, staticIp,
+                                            saved, sshPublicKeys,
                                             userKey.publicKey(), userKey.fingerprint()));
                         })
                 )
@@ -116,7 +113,7 @@ public class VmServiceImpl implements VmService {
                                     proxmoxClient.waitForTaskCompletion(booting.getProxmoxTaskId())
                                             .then(proxmoxClient.configureVm(
                                                     booting.getVmid(), booting.getPlanType(),
-                                                    context.sshPublicKeys(), context.staticIp()))
+                                                    context.sshPublicKeys()))
                                             .then(proxmoxClient.resizeDisk(booting.getVmid(), booting.getDiskSizeGb()))
                                             .then(proxmoxClient.startVm(booting.getVmid()))
                                             .then(proxmoxClient.waitForIpAssignment(booting.getVmid()))
@@ -146,7 +143,6 @@ public class VmServiceImpl implements VmService {
     private record ProvisioningContext(
             VmEntity vm,
             List<String> sshPublicKeys,
-            String staticIp,
             String userPublicKey,
             String userFingerprint
     ) {
@@ -372,18 +368,6 @@ public class VmServiceImpl implements VmService {
         });
     }
 
-    private Mono<String> allocateIp(PlanType planType) {
-        List<String> pool = planType.getIpPool();
-        return vmRepository.findAllActiveInternalIps()
-                .collect(Collectors.toSet())
-                .map(usedIps -> {
-                    for (String ip : pool) {
-                        if (!usedIps.contains(ip)) return ip;
-                    }
-                    throw new VmException(VmErrorCode.IP_POOL_EXHAUSTED);
-                });
-    }
-
     @Override
     public Mono<List<String>> getSshAccessEmails(String userId, String email, UUID vmId) {
         return vmRepository.findById(vmId)
@@ -530,8 +514,8 @@ public class VmServiceImpl implements VmService {
 
     @Override
     public Mono<VmAvailabilityResponse> getAvailability() {
-        int freeTotal = PlanType.FREE.getIpPool().size();
-        int proTotal = PlanType.PRO.getIpPool().size();
+        int freeTotal = PlanType.FREE.getMaxVmCount();
+        int proTotal = PlanType.PRO.getMaxVmCount();
 
         return Mono.zip(
                 vmRepository.countActiveByPlanTypeFree(),

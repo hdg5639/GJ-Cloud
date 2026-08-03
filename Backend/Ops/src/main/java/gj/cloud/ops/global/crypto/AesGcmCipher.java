@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-// VM 관리 키 개인키를 DB에 평문으로 두지 않기 위한 AES-256-GCM 암복호화.
+// VM 관리 키, 배포 시크릿, 단기 Redis 티켓 페이로드를 평문으로 두지 않기 위한 AES-256-GCM 암복호화.
 // 시크릿은 반드시 32바이트(UTF-8)여야 AES-256 키로 쓸 수 있음.
 @Component
 public class AesGcmCipher {

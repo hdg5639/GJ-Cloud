@@ -115,11 +115,14 @@ public class FileBrowserController {
         String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
         response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName);
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'");
 
         fileBrowserService.download(extractToken(request), vmId.toString(), path, response.getOutputStream());
     }
 
-    @Operation(summary = "미디어 스트리밍 티켓 발급", description = "이미지/오디오/비디오 미리보기용. 재생 중 seek/버퍼링으로 여러 번 재사용되므로 짧은 TTL(10분) 동안 유효합니다.")
+    @Operation(summary = "미디어 스트리밍 티켓 발급", description = "래스터 이미지/오디오/비디오 미리보기용. SVG 등 active content는 제외되며, seek/버퍼링을 위해 3분 동안 재사용할 수 있습니다.")
     @PostMapping("/stream-ticket")
     public ApiResponse<FileStreamTicketResponse> issueStreamTicket(
             HttpServletRequest request,

@@ -56,6 +56,14 @@ ops:
   file-browser-max-edit-size-bytes: ${OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES:5242880}
   file-browser-max-upload-size-bytes: ${OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES:26214400}
   deployment-lock-ttl-seconds: 1800
+  git:
+    allowed-hosts: ${OPS_GIT_ALLOWED_HOSTS:github.com,gitlab.com,bitbucket.org}
+    local-egress-proxy-url: ${OPS_GIT_LOCAL_EGRESS_PROXY_URL:http://ops-git-egress-proxy:3128}
+    remote-egress-proxy-url: ${OPS_GIT_REMOTE_EGRESS_PROXY_URL:}
+  backup:
+    encryption-secret: ${OPS_BACKUP_ENCRYPTION_SECRET}
+    retention-days: ${OPS_BACKUP_RETENTION_DAYS:30}
+    max-files-per-vm: ${OPS_BACKUP_MAX_FILES_PER_VM:20}
   deployment-executor:
     core-pool-size: 2
     max-pool-size: 4
@@ -66,6 +74,10 @@ ops:
     max-depth: 12
     max-file-size-bytes: 1048576
     max-total-size-bytes: 52428800
+    max-clone-size-bytes: ${OPS_REPO_ANALYSIS_MAX_CLONE_SIZE_BYTES:268435456}
+    max-memory-bytes: ${OPS_REPO_ANALYSIS_MAX_MEMORY_BYTES:536870912}
+    max-cpu-seconds: ${OPS_REPO_ANALYSIS_MAX_CPU_SECONDS:60}
+    max-processes: ${OPS_REPO_ANALYSIS_MAX_PROCESSES:64}
   ai-generation-cache:
     ttl-seconds: 900
   blueprint-search:

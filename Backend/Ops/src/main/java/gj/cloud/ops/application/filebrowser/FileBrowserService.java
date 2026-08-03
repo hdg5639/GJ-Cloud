@@ -56,6 +56,7 @@ public class FileBrowserService {
     public FileListResponse list(String bearerToken, String vmId, String path) {
         return execute(bearerToken, vmId, PERMISSION_FILE_READ, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
+            requireNotBackupPath(real);
             List<FileEntry> entries = new ArrayList<>();
             for (Object o : sftp.ls(real)) {
                 ChannelSftp.LsEntry lsEntry = (ChannelSftp.LsEntry) o;
@@ -75,6 +76,7 @@ public class FileBrowserService {
     public FileContentResponse readContent(String bearerToken, String vmId, String path) {
         return execute(bearerToken, vmId, PERMISSION_FILE_READ, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
+            requireNotBackupPath(real);
             requireSecretReadIfSensitive(context, real);
             SftpATTRS attrs = statOrThrow(sftp, real);
             if (attrs.isDir()) {
@@ -105,6 +107,7 @@ public class FileBrowserService {
         }
         execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
+            requireNotBackupPath(real);
             try {
                 sftp.put(new ByteArrayInputStream(bytes), real);
             } catch (SftpException e) {
@@ -117,6 +120,7 @@ public class FileBrowserService {
     public void createDirectory(String bearerToken, String vmId, String parentPath, String name) {
         execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String target = pathResolver.resolveNewEntry(sftp, parentPath, name);
+            requireNotBackupPath(target);
             try {
                 sftp.mkdir(target);
             } catch (SftpException e) {
@@ -132,6 +136,7 @@ public class FileBrowserService {
         }
         execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String target = pathResolver.resolveNewEntry(sftp, parentPath, fileName);
+            requireNotBackupPath(target);
             try {
                 sftp.put(content, target);
             } catch (SftpException e) {
@@ -144,6 +149,7 @@ public class FileBrowserService {
     public void download(String bearerToken, String vmId, String path, OutputStream out) {
         execute(bearerToken, vmId, PERMISSION_FILE_READ, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
+            requireNotBackupPath(real);
             requireSecretReadIfSensitive(context, real);
             SftpATTRS attrs = statOrThrow(sftp, real);
             if (attrs.isDir()) {
@@ -161,6 +167,7 @@ public class FileBrowserService {
     public void delete(String bearerToken, String vmId, String path) {
         execute(bearerToken, vmId, PERMISSION_FILE_WRITE, (sftp, context) -> {
             String real = pathResolver.resolveExisting(sftp, path);
+            requireNotBackupPath(real);
             if (real.equals(pathResolver.rootPath())) {
                 throw new OpsException(OpsErrorCode.PATH_ACCESS_DENIED);
             }
@@ -174,6 +181,12 @@ public class FileBrowserService {
             // OBS-001: SECRET_READ 없이 민감 파일 내용을 시도한 거부 이벤트 — 구조화 로그 라인으로 기록
             log.warn("AUDIT action=SECRET_FILE_ACCESS_DENIED targetType=VM targetId={} role={} path={} result=DENIED",
                     context.vmId(), context.role(), resolvedPath);
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        }
+    }
+
+    private void requireNotBackupPath(String resolvedPath) {
+        if (SensitiveFilePolicy.isBackupPath(resolvedPath)) {
             throw new OpsException(OpsErrorCode.FORBIDDEN);
         }
     }
