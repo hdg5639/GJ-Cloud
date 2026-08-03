@@ -84,13 +84,25 @@ app/
 개발용 `.env.local` 예시는 다음과 같다. 실제 주소는 환경에 맞게 바꾼다.
 
 ```dotenv
-NEXT_PUBLIC_AUTH_API=http://localhost:8081
-NEXT_PUBLIC_USER_API=http://localhost:8082
-NEXT_PUBLIC_VM_API=http://localhost:8083
-NEXT_PUBLIC_OPS_API=http://localhost:8084
-NEXT_PUBLIC_ADMIN_API=http://localhost:8082
+NEXT_PUBLIC_AUTH_API=http://localhost:8080
+NEXT_PUBLIC_USER_API=http://localhost:8081
+NEXT_PUBLIC_VM_API=http://localhost:8082
+NEXT_PUBLIC_OPS_API=http://localhost:8083
 ADMIN_DOMAIN=admin.localhost:3000
 ```
+
+로컬에서 `NEXT_PUBLIC_ADMIN_API`를 생략하면 관리자 User API는 `NEXT_PUBLIC_USER_API`, 관리자 VM API는 `NEXT_PUBLIC_VM_API`로 각각 fallback한다. Caddy를 사용하는 배포 환경은 다음처럼 사용자 API를 Portal origin에 모으고 관리자 API를 ControlBox origin으로 지정한다.
+
+```dotenv
+NEXT_PUBLIC_AUTH_API=https://portal.gamjabox.cloud
+NEXT_PUBLIC_USER_API=https://portal.gamjabox.cloud
+NEXT_PUBLIC_VM_API=https://portal.gamjabox.cloud
+NEXT_PUBLIC_OPS_API=https://portal.gamjabox.cloud
+NEXT_PUBLIC_ADMIN_API=https://admin.gamjabox.cloud
+ADMIN_DOMAIN=admin.gamjabox.cloud
+```
+
+`ADMIN_DOMAIN`에는 scheme과 path 없이 Host만 넣는다. `NEXT_PUBLIC_*`는 빌드 시 브라우저 번들에 고정되므로 값을 바꾼 뒤 Portal 이미지를 반드시 재빌드하고, secret은 절대 넣지 않는다. 루트 Compose용 전체 예시는 `env.example`을 기준으로 한다.
 
 ## 로컬 실행
 

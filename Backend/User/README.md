@@ -71,7 +71,14 @@ Auth 회원가입
 | 프로필 이미지 | `PROFILE_IMAGE_STORAGE_PATH`, `PROFILE_IMAGE_PUBLIC_URL_PREFIX` | 저장 경로와 공개 URL prefix |
 | Docs 이미지 | `DOCS_IMAGE_STORAGE_PATH`, `DOCS_IMAGE_PUBLIC_URL_PREFIX` | 저장 경로와 공개 URL prefix |
 
-운영 이미지 경로는 반드시 영속 볼륨에 연결한다. 공개 URL prefix와 Caddy 라우팅 경로가 다르면 업로드는 성공해도 브라우저 표시가 실패한다.
+루트 Compose의 기본 경로 대응은 다음과 같다.
+
+| 데이터 | 호스트 영속 경로 | 컨테이너 저장 경로 | 공개 URL prefix |
+|---|---|---|---|
+| 프로필 이미지 | `/opt/gamjabox/data/profile-images` | `/data/profile-images` | `/users/uploads/profile-images` |
+| Docs 이미지 | `/opt/gamjabox/data/docs-images` | `/data/docs-images` | `/users/docs/images` |
+
+`PROFILE_IMAGE_HOST_PATH`와 `DOCS_IMAGE_HOST_PATH`는 Compose 볼륨의 호스트 경로이고 애플리케이션 내부 저장 경로가 아니다. 운영 이미지 경로는 반드시 영속 볼륨에 연결하고, `*_STORAGE_PATH`와 볼륨의 컨테이너 경로를 동일하게 유지한다. 공개 URL prefix는 Caddy의 `/users` 라우팅과 맞아야 하며, 어긋나면 업로드는 성공해도 브라우저 표시가 실패한다. 전체 값 예시는 루트 `env.example`을 기준으로 한다.
 
 ## 로컬 실행과 검증
 

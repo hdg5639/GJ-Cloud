@@ -69,7 +69,15 @@ Auth는 사용자 프로필이나 VM 데이터를 직접 소유하지 않는다.
 | 연동 URL | `USER_SERVICE_URL`, `VM_SERVICE_URL` | 후속 서비스 호출 주소 |
 | 서비스 인증 | `USER_SERVICE_CLIENT_SECRET`, `VM_SERVICE_CLIENT_SECRET`, `OPS_SERVICE_CLIENT_SECRET` | 서비스별 client secret |
 
-PEM 키는 줄바꿈이 보존되어야 한다. Base64나 한 줄 문자열로 전달하는 경우 현재 설정의 키 정규화 방식과 맞는지 먼저 확인한다.
+`JWT_PRIVATE_KEY`는 PKCS#8 DER, `JWT_PUBLIC_KEY`는 X.509 DER를 Base64 한 줄로 인코딩한 값이다. 다음처럼 한 쌍을 생성하고 출력값만 `.env`에 붙여넣는다. `JWT_PRIVATE_KEY`와 메일·서비스 secret을 로그나 Git에 남기지 않는다.
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out jwt-private.pem
+openssl pkcs8 -topk8 -nocrypt -in jwt-private.pem -outform DER | base64 | tr -d '\n'
+openssl pkey -in jwt-private.pem -pubout -outform DER | base64 | tr -d '\n'
+```
+
+서비스별 client secret과 일반 비밀번호는 `openssl rand -base64 48`처럼 충분히 긴 난수로 각각 생성한다. Gmail SMTP를 사용하면 일반 계정 비밀번호가 아니라 2단계 인증 후 발급한 앱 비밀번호를 `MAIL_PASSWORD`에 넣는다. 전체 형식과 예시는 루트 `env.example`을 기준으로 한다.
 
 ## 로컬 실행과 검증
 

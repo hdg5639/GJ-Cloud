@@ -842,6 +842,28 @@ GJ-Cloud/
 
 백엔드는 서비스별 Gradle wrapper로, 포털은 Next.js 스크립트로 검증한다.
 
+### 환경변수 준비
+
+루트 배포는 템플릿을 복사한 뒤 실제 값을 채운다. `.env`에서는 명령 치환이 실행되지 않으므로 생성 명령의 출력값을 직접 붙여넣고, 개발·운영 secret은 서로 다르게 관리한다.
+
+```bash
+cp env.example .env
+
+# 일반 비밀번호와 서비스 client secret
+openssl rand -base64 48
+
+# Ops 관리 키 암호화와 백업 암호화용 UTF-8 32바이트 값
+openssl rand -base64 24
+```
+
+- Ops의 두 AES 값은 서로 다르게 생성하고, 암호화된 관리 키나 백업이 존재한 뒤에는 변경하지 않는다.
+- Auth RS256 키는 `env.example`에 적힌 PKCS#8/X.509 DER Base64 생성 명령을 사용한다.
+- Proxmox Token ID, Cloudflare ID/Tunnel UUID, GitHub App 값은 각 서비스 Dashboard에서 확인한다.
+- `*_HOST_PATH`는 호스트 영속 경로, `*_STORAGE_PATH`는 컨테이너 경로다. 두 경로의 볼륨 대응을 유지한다.
+- `NEXT_PUBLIC_*`는 Portal 빌드 결과에 포함되는 공개 URL이므로 secret을 넣지 않고, 변경 후 이미지를 재빌드한다.
+- `OPS_GIT_REMOTE_EGRESS_PROXY_URL`은 사용자 VM에서 도달 가능한 LAN proxy가 있을 때만 설정하고, 없으면 비워 둔다.
+- 모든 `CHANGE_ME_*`를 교체한 뒤 `docker compose --env-file .env config`로 최종 구성을 확인한다.
+
 ```bash
 # 백엔드 예시
 cd Backend/Ops
@@ -859,7 +881,7 @@ GitHub Actions는 서비스별 path filter로 필요한 워크플로우만 실�
 
 Ops 배포 워크플로우는 `Backend/Ops/**`뿐만 아니라 `compose.yaml`과 빌드 시 하나의 이미지에 포함하는 포털 `lib/types.ts`, `components/ui/**`, `components/preview-runtime/**`도 감시한다. 포털과 Auto Preview 배포본이 항상 같은 Runtime을 포함하도록 Ops 이미지를 함께 재빌드한다.
 
-기본 `compose.yaml`과 `env.example`은 배포 구조와 환경변수 계약만 담아 Git으로 관리한다. 실제 값이 들어가는 `.env*`, 로컬 override·프록시 설정과 운영 자격증명은 Git에서 제외하고 서버 런타임 환경에서 관리한다.
+기본 `compose.yaml`과 `env.example`은 배포 구조와 환경변수 계약만 담아 Git으로 관리한다. `env.example`에는 secret 생성 명령, Proxmox·Cloudflare·GitHub 값 형식, 호스트/컨테이너 경로 예시를 함께 기록한다. `CHANGE_ME_*`는 실제 배포 전에 모두 교체해야 하며, 실제 값이 들어가는 `.env*`, 로컬 override·프록시 설정과 운영 자격증명은 Git에서 제외하고 서버 런타임 환경에서 관리한다.
 
 Ops의 저장소 분석 clone은 기본 Squid allowlist egress proxy, 저장소·프로세스·메모리·CPU·시간 한계와 `--filter=blob:none`을 적용한다. 사용자 VM 내 Git에는 그 VM에서 도달 가능한 원격 proxy URL을 별도로 설정할 수 있다.
 
