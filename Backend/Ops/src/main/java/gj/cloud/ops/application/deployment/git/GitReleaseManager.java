@@ -12,6 +12,7 @@ import gj.cloud.ops.global.ssh.VmSshSessionFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -32,6 +33,8 @@ public class GitReleaseManager {
     private static final int GIT_NETWORK_RETRY_ATTEMPTS = 3;
     private static final long GIT_NETWORK_RETRY_DELAY_MS = 5_000;
     private static final String BASE_DIR_TEMPLATE = "/home/%s/gamjabox/apps/%s";
+    private static final String GIT_RESOURCE_LIMITS = "timeout --signal=TERM --kill-after=5s 120s "
+            + "prlimit --as=536870912 --fsize=536870912 --cpu=120 --nproc=64 --nofile=256 -- ";
 
     // repoUrl/branch는 사용자 입력이 그대로 셸 커맨드 문자열에 꽂히므로 반드시 사전 검증함.
     // https:// 로만 제한하는 이유: git의 ext:: 트랜스포트는 임의 셸 명령을 실행할 수 있는 알려진 벡터라
@@ -47,6 +50,11 @@ public class GitReleaseManager {
     private final SshCommandExecutor sshCommandExecutor;
     private final VmSshSessionFactory sshSessionFactory;
     private final GitCloneSecurityValidator gitCloneSecurityValidator;
+
+    // 사용자 VM에서 실행되는 Git은 Ops 컨테이너의 Docker DNS 이름을 사용할 수 없다.
+    // 원격 VM에서 실제로 도달 가능한 프록시 주소가 명시된 경우에만 적용한다.
+    @Value("${ops.git.remote-egress-proxy-url:}")
+    private String gitRemoteEgressProxyUrl;
 
     public String appBaseDir(String appId) {
         return String.format(BASE_DIR_TEMPLATE, sshSessionFactory.vmSshUsername(), appId);
@@ -78,7 +86,8 @@ public class GitReleaseManager {
 
         withAskpass(session, patToken, askpassPath -> {
             // http.followRedirects=false: 사전 검증을 통과한 뒤 리다이렉트로 내부 주소로 우회하는 경로 차단
-            String cloneCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git -c http.followRedirects=false clone --mirror '"
+            String cloneCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 "
+                    + limitedGitCommand() + " clone --mirror --filter=blob:none '"
                     + repoUrl + "' '" + bareDir + "'";
             execGitNetworkCommandWithRetry(session, cloneCmd, "저장소 최초 clone");
         });
@@ -105,8 +114,9 @@ public class GitReleaseManager {
         String bareDir = bareRepoDir(appId);
 
         withAskpass(session, patToken, askpassPath -> {
-            String fetchCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 git -c http.followRedirects=false -C '" + bareDir
-                    + "' fetch --prune origin";
+            String fetchCmd = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 "
+                    + limitedGitCommand() + " -C '" + bareDir
+                    + "' fetch --filter=blob:none --prune origin";
             execGitNetworkCommandWithRetry(session, fetchCmd, "저장소 fetch");
         });
 
@@ -186,11 +196,23 @@ public class GitReleaseManager {
         }
     }
 
-    public void createWorktree(Session session, String appId, String deploymentId, String commitSha) {
+    public void createWorktree(
+            Session session,
+            String appId,
+            String deploymentId,
+            String commitSha,
+            String patToken
+    ) {
         String bareDir = bareRepoDir(appId);
         String targetDir = releaseDir(appId, deploymentId);
-        sshCommandExecutor.execOrThrow(session,
-                "git -C '" + bareDir + "' worktree add '" + targetDir + "' '" + commitSha + "'", GIT_TIMEOUT_MS);
+        // blob:none partial clone은 최초 checkout 시 누락 blob을 가져올 수 있으므로 이 단계에도 단기 askpass를
+        // 제공한다. 토큰은 명령줄에 넣지 않고 작업 직후 askpass 파일을 삭제한다.
+        withAskpass(session, patToken, askpassPath -> {
+            String command = "GIT_ASKPASS='" + askpassPath + "' GIT_TERMINAL_PROMPT=0 "
+                    + limitedGitCommand() + " -C '" + bareDir + "' worktree add '"
+                    + targetDir + "' '" + commitSha + "'";
+            execGitNetworkCommandWithRetry(session, command, "worktree checkout");
+        });
     }
 
     // 정리 목적이므로 실패해도(이미 지워졌거나 등) 예외를 던지지 않음
@@ -273,6 +295,24 @@ public class GitReleaseManager {
         if (branch == null || !SAFE_BRANCH_NAME.matcher(branch).matches() || branch.startsWith("-")) {
             throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
         }
+    }
+
+    private String limitedGitCommand() {
+        StringBuilder command = new StringBuilder(GIT_RESOURCE_LIMITS).append("git");
+        if (gitRemoteEgressProxyUrl != null && !gitRemoteEgressProxyUrl.isBlank()) {
+            try {
+                URI proxy = URI.create(gitRemoteEgressProxyUrl);
+                if (!("http".equalsIgnoreCase(proxy.getScheme()) || "https".equalsIgnoreCase(proxy.getScheme()))
+                        || proxy.getHost() == null
+                        || proxy.getUserInfo() != null) {
+                    throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+                }
+            } catch (IllegalArgumentException e) {
+                throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+            }
+            command.append(" -c http.proxy=").append(gj.cloud.ops.global.ssh.PosixShellArgument.quote(gitRemoteEgressProxyUrl));
+        }
+        return command.append(" -c http.followRedirects=false").toString();
     }
 
     // GIT_ASKPASS 스크립트: PAT는 SFTP로 파일 내용만 전송(ps aux에 노출되지 않음), exec 커맨드 라인에는 경로만 등장시킴.

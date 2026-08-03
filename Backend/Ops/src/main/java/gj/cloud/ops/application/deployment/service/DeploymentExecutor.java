@@ -736,7 +736,8 @@ public class DeploymentExecutor {
                 gitReleaseManager.ensureBareRepo(session, appId, repoConfig.repoUrl(), repoConfig.patToken());
                 String commitSha = gitReleaseManager.fetchAndResolveCommit(
                         session, appId, repoConfig.branch(), repoConfig.patToken(), requestedRevision);
-                gitReleaseManager.createWorktree(session, appId, deploymentId, commitSha);
+                gitReleaseManager.createWorktree(
+                        session, appId, deploymentId, commitSha, repoConfig.patToken());
                 releaseDir = gitReleaseManager.releaseDir(appId, deploymentId);
                 updateEntity(deploymentId, e -> e.withSourceRevision(commitSha, releaseDir));
                 eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,

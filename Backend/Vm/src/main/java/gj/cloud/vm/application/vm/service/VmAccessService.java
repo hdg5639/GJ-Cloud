@@ -61,7 +61,7 @@ public class VmAccessService {
 
     // 셸 접근(TERMINAL_ACCESS)·Docker 제어(DOCKER_ADMIN)는 VM root 권한과 동급이므로 Owner/Admin만 허용.
     // Member는 조회(FILE_READ, DOCKER_READ)만 — Docker 컨테이너/이미지 목록은 볼 수 있지만 시작/정지/삭제는 불가 (C.5)
-    // AUTHZ-001: 컨테이너 로그(DOCKER_LOG_READ)와 민감 파일 내용(SECRET_READ)은 시크릿 노출 위험이 있어
+    // AUTHZ-001: 컨테이너 로그(DOCKER_LOG_READ), 백업(BACKUP_READ), 민감 파일 내용(SECRET_READ)은 시크릿 노출 위험이 있어
     // 기본 조회 권한과 분리 — Member는 여전히 부여받지 않음
     private Set<VmPermission> permissionsFor(MemberRole role) {
         if (role == MemberRole.MEMBER) {
@@ -72,6 +72,7 @@ public class VmAccessService {
                 VmPermission.FILE_READ,
                 VmPermission.FILE_WRITE,
                 VmPermission.DEPLOY,
+                VmPermission.BACKUP_READ,
                 VmPermission.DOCKER_READ,
                 VmPermission.DOCKER_ADMIN,
                 VmPermission.DOCKER_LOG_READ,

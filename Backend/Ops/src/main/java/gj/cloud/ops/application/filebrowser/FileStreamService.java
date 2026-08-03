@@ -20,7 +20,6 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,19 +35,6 @@ public class FileStreamService {
     private static final int COPY_BUFFER_SIZE = 8192;
     private static final Pattern RANGE_PATTERN = Pattern.compile("^bytes=(\\d*)-(\\d*)$");
 
-    private static final Map<String, String> CONTENT_TYPES = Map.ofEntries(
-            Map.entry("jpg", "image/jpeg"), Map.entry("jpeg", "image/jpeg"),
-            Map.entry("png", "image/png"), Map.entry("gif", "image/gif"),
-            Map.entry("webp", "image/webp"), Map.entry("bmp", "image/bmp"),
-            Map.entry("svg", "image/svg+xml"), Map.entry("ico", "image/x-icon"),
-            Map.entry("mp3", "audio/mpeg"), Map.entry("wav", "audio/wav"),
-            Map.entry("ogg", "audio/ogg"), Map.entry("m4a", "audio/mp4"),
-            Map.entry("flac", "audio/flac"), Map.entry("aac", "audio/aac"),
-            Map.entry("mp4", "video/mp4"), Map.entry("webm", "video/webm"),
-            Map.entry("mov", "video/quicktime"), Map.entry("mkv", "video/x-matroska"),
-            Map.entry("avi", "video/x-msvideo")
-    );
-
     private final VmSshSessionFactory sshSessionFactory;
     private final SftpPathResolver pathResolver;
 
@@ -61,7 +47,7 @@ public class FileStreamService {
             sftp.connect(SFTP_CONNECT_TIMEOUT_MS);
 
             // OPS-SEC-005: 발급 시점에 확정해둔 경로/크기를 그대로 신뢰하지 않고, 매 요청마다 realpath로 재해석하고
-            // lstat으로 현재 상태를 다시 확인한다. TTL(10분) 동안 대상이 심볼릭 링크로 교체되거나 다른 파일로
+            // lstat으로 현재 상태를 다시 확인한다. TTL(3분) 동안 대상이 심볼릭 링크로 교체되거나 다른 파일로
             // 바뀌었을 가능성을 차단하기 위함 — 대상이 바뀐 것으로 판단되면 티켓을 거부하고 재발급을 요구한다.
             String realPath;
             try {
@@ -86,6 +72,9 @@ public class FileStreamService {
                 // 발급 시점 이후 파일 내용이 바뀜(재업로드 등) — 안전하게 재발급을 요구
                 throw new OpsException(OpsErrorCode.INVALID_TICKET);
             }
+            if (!FilePreviewPolicy.isPreviewable(realPath)) {
+                throw new OpsException(OpsErrorCode.INVALID_TICKET);
+            }
             long fileSize = attrs.getSize();
 
             long start = 0;
@@ -107,8 +96,10 @@ public class FileStreamService {
             long length = end - start + 1;
 
             try (InputStream in = sftp.get(realPath, null, start)) {
-                response.setContentType(contentTypeFor(realPath));
+                response.setContentType(FilePreviewPolicy.contentType(realPath));
                 response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
+                response.setHeader("X-Content-Type-Options", "nosniff");
+                response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
                 // SEC-012: 티켓 기반 인증이라 브라우저/중간 프록시 캐시에 남으면 재생 종료 후에도
                 // 재요청 없이 이전 응답이 재사용될 수 있음 — 캐시 저장 자체를 금지.
                 response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
@@ -191,12 +182,4 @@ public class FileStreamService {
         }
     }
 
-    private String contentTypeFor(String path) {
-        int dot = path.lastIndexOf('.');
-        if (dot == -1) {
-            return "application/octet-stream";
-        }
-        String ext = path.substring(dot + 1).toLowerCase();
-        return CONTENT_TYPES.getOrDefault(ext, "application/octet-stream");
-    }
 }

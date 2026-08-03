@@ -39,7 +39,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 | **AI 배포 스펙 생성** | 저장소를 결정론적으로 분석해 확신 가능한 경우(정적 사이트 등)는 AI 호출 없이 규칙 기반으로 확정, 애매한 경우만 구조화 출력으로 AI에 위임. 렌더링된 compose를 AI가 비차단으로 검수 |
 | **Auto Preview** | OpenAPI에서 서비스 의미와 사용자 목표를 해석해 다중 API 시나리오를 컴파일하고 실제 백엔드 상태로 실행·검증. 실행 가능한 시나리오가 없으면 Operation Preview로 안전하게 폴백하며, 281종 Blueprint Parts와 동일 Runtime으로 VM에 배포 |
 | **Docker 관리** | 비동기 단계별 설치와 진행 상태 폴링, VM 내부 컨테이너/이미지/네트워크/compose 스택 조회 및 제어 |
-| **DB 백업** | PostgreSQL/MySQL/MongoDB/Redis 온디맨드 덤프, 파일 브라우저로 다운로드 |
+| **DB 백업** | PostgreSQL/MySQL/MongoDB/Redis 온디맨드 덤프. 0600 임시 credential, AES-256-GCM 스트림 암호화, SHA-256 검증, `BACKUP_READ` 전용 다운로드와 보관 정책을 적용 |
 
 <!-- README IMAGE SLOT
 파일: docs/images/readme/01-portal-overview.webp
@@ -857,7 +857,11 @@ npm run build
 
 GitHub Actions는 서비스별 path filter로 필요한 워크플로우만 실행한다. `develop`은 `gamjabox-dev`, `main`은 `gamjabox-prod` 라벨의 self-hosted Linux/X64 runner를 사용하며, 모든 배포 명령은 서버의 `/home/ubuntu/GJ-Cloud`에서 실행된다. 백엔드와 포털 배포는 새 이미지를 기동한 뒤 컨테이너 내부 IP의 health endpoint를 확인하고, 실패하면 보존한 이전 이미지로 자동 롤백한다.
 
+Ops 배포 워크플로우는 `Backend/Ops/**`뿐만 아니라 `compose.yaml`과 빌드 시 하나의 이미지에 포함하는 포털 `lib/types.ts`, `components/ui/**`, `components/preview-runtime/**`도 감시한다. 포털과 Auto Preview 배포본이 항상 같은 Runtime을 포함하도록 Ops 이미지를 함께 재빌드한다.
+
 기본 `compose.yaml`과 `env.example`은 배포 구조와 환경변수 계약만 담아 Git으로 관리한다. 실제 값이 들어가는 `.env*`, 로컬 override·프록시 설정과 운영 자격증명은 Git에서 제외하고 서버 런타임 환경에서 관리한다.
+
+Ops의 저장소 분석 clone은 기본 Squid allowlist egress proxy, 저장소·프로세스·메모리·CPU·시간 한계와 `--filter=blob:none`을 적용한다. 사용자 VM 내 Git에는 그 VM에서 도달 가능한 원격 proxy URL을 별도로 설정할 수 있다.
 
 Docs 이미지는 User 컨테이너의 `/data/docs-images`에 저장하고 기본 호스트 경로 `/opt/gamjabox/data/docs-images`를 볼륨으로 연결한다. 운영 환경에서 경로를 바꾸려면 `DOCS_IMAGE_HOST_PATH`, `DOCS_IMAGE_STORAGE_PATH`, `DOCS_IMAGE_PUBLIC_URL_PREFIX`를 함께 설정한다. 로그인 유지 Refresh Token의 Sliding 만료는 기본 30일이며 `JWT_REMEMBER_ME_REFRESH_TOKEN_EXPIRY`에 밀리초 단위로 지정할 수 있다.
 

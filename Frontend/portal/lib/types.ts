@@ -1130,14 +1130,17 @@ export interface ComposeSpecResponse {
   routerPlan?: ComposeRouterPlanResult | null;
 }
 
-// 11절 수동 DB 백업 — 덤프 파일은 VM 파일시스템에 저장되고 다운로드는 파일 브라우저 API를 재사용함
+// 11절 수동 DB 백업 — AES-GCM 암호문은 전용 id 기반 API에서만 복호화 다운로드함
 export interface DbBackupResponse {
   id: string;
   vmId: string;
   serviceName: string;
   dbType: string;
-  filePath: string | null;
   fileSizeBytes: number | null;
+  checksumSha256: string | null;
+  encryptionVersion: string | null;
+  verifiedAt: string | null;
+  expiresAt: string | null;
   succeeded: boolean;
   errorMessage: string | null;
   createdAt: string;

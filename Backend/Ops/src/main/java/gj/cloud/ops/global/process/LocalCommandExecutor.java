@@ -2,17 +2,23 @@ package gj.cloud.ops.global.process;
 
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
+import gj.cloud.ops.global.io.BoundedOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 // Ops 컨테이너 자신의 프로세스로 로컬 명령을 실행 (SSH로 원격 VM에 실행하는 SshCommandExecutor와는 별개 — 배포
 // 스펙 생성 전 저장소를 분석할 때 사용, 아직 VM SSH 세션이 없는 시점에도 동작해야 하므로 로컬 실행이 필요함).
@@ -23,7 +29,22 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class LocalCommandExecutor {
 
+    private static final int MAX_CAPTURE_BYTES_PER_STREAM = 1024 * 1024;
+    private static final long LIMIT_POLL_INTERVAL_MS = 1_000;
+
     public LocalCommandResult exec(List<String> command, File workingDir, Map<String, String> extraEnv, long timeoutMs) {
+        return exec(command, workingDir, extraEnv, timeoutMs, null, -1);
+    }
+
+    public LocalCommandResult exec(
+            List<String> command,
+            File workingDir,
+            Map<String, String> extraEnv,
+            long timeoutMs,
+            File monitoredDirectory,
+            long maxDirectoryBytes
+    ) {
+        Process process = null;
         try {
             ProcessBuilder builder = new ProcessBuilder(command);
             if (workingDir != null) {
@@ -33,7 +54,7 @@ public class LocalCommandExecutor {
                 builder.environment().putAll(extraEnv);
             }
 
-            Process process = builder.start();
+            process = builder.start();
 
             StreamGobbler stdoutGobbler = new StreamGobbler(process.getInputStream());
             StreamGobbler stderrGobbler = new StreamGobbler(process.getErrorStream());
@@ -44,10 +65,21 @@ public class LocalCommandExecutor {
             stdoutThread.start();
             stderrThread.start();
 
-            boolean finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                throw new OpsException(OpsErrorCode.LOCAL_COMMAND_TIMEOUT);
+            long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+            while (process.isAlive()) {
+                long remainingNanos = deadlineNanos - System.nanoTime();
+                if (remainingNanos <= 0) {
+                    terminateAndJoin(process, stdoutThread, stderrThread);
+                    throw new OpsException(OpsErrorCode.LOCAL_COMMAND_TIMEOUT);
+                }
+                long waitMillis = Math.min(
+                        LIMIT_POLL_INTERVAL_MS,
+                        Math.max(1, TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
+                process.waitFor(waitMillis, TimeUnit.MILLISECONDS);
+                if (directoryExceedsLimit(monitoredDirectory, maxDirectoryBytes)) {
+                    terminateAndJoin(process, stdoutThread, stderrThread);
+                    throw new OpsException(OpsErrorCode.REPOSITORY_TOO_LARGE);
+                }
             }
 
             stdoutThread.join(5_000);
@@ -58,6 +90,9 @@ public class LocalCommandExecutor {
             log.error("로컬 명령 실행 실패: command={}, error={}", command, e.getMessage());
             throw new OpsException(OpsErrorCode.LOCAL_COMMAND_FAILED);
         } catch (InterruptedException e) {
+            if (process != null) {
+                terminateProcessTree(process);
+            }
             Thread.currentThread().interrupt();
             throw new OpsException(OpsErrorCode.LOCAL_COMMAND_FAILED);
         }
@@ -79,10 +114,54 @@ public class LocalCommandExecutor {
         return text.length() > 1000 ? text.substring(0, 1000) : text;
     }
 
+    private void terminateProcessTree(Process process) {
+        ArrayList<ProcessHandle> descendants = new ArrayList<>(process.descendants().toList());
+        Collections.reverse(descendants);
+        descendants.forEach(ProcessHandle::destroy);
+        process.destroy();
+        try {
+            process.waitFor(500, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+        if (process.isAlive()) {
+            process.destroyForcibly();
+        }
+    }
+
+    private void terminateAndJoin(Process process, Thread stdoutThread, Thread stderrThread)
+            throws InterruptedException {
+        terminateProcessTree(process);
+        stdoutThread.join(5_000);
+        stderrThread.join(5_000);
+    }
+
+    private boolean directoryExceedsLimit(File directory, long maxBytes) {
+        if (directory == null || maxBytes <= 0 || !directory.exists()) {
+            return false;
+        }
+        try (Stream<Path> stream = Files.walk(directory.toPath())) {
+            Iterator<Path> files = stream.filter(Files::isRegularFile).iterator();
+            long total = 0L;
+            while (files.hasNext()) {
+                long size = Files.size(files.next());
+                if (size > maxBytes - total) {
+                    return true;
+                }
+                total += size;
+            }
+            return false;
+        } catch (IOException ignored) {
+            // clone이 동시에 파일을 교체하면 일시적으로 walk가 실패할 수 있으므로 다음 poll에서 다시 확인한다.
+            return false;
+        }
+    }
+
     // 파이프 버퍼가 차서 프로세스가 블로킹되는 걸 막기 위해 별도 스레드에서 stdout/stderr를 즉시 소비
     private static final class StreamGobbler implements Runnable {
         private final InputStream input;
-        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private final BoundedOutputStream buffer = new BoundedOutputStream(MAX_CAPTURE_BYTES_PER_STREAM);
 
         StreamGobbler(InputStream input) {
             this.input = input;

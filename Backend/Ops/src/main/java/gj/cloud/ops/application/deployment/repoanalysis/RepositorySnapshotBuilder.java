@@ -19,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,16 @@ public class RepositorySnapshotBuilder {
     private long maxFileSizeBytes;
     @Value("${ops.repo-analysis.max-total-size-bytes:52428800}")
     private long maxTotalSizeBytes;
+    @Value("${ops.repo-analysis.max-clone-size-bytes:268435456}")
+    private long maxCloneSizeBytes;
+    @Value("${ops.git.local-egress-proxy-url:}")
+    private String gitLocalEgressProxyUrl;
+    @Value("${ops.repo-analysis.max-memory-bytes:536870912}")
+    private long maxCloneMemoryBytes;
+    @Value("${ops.repo-analysis.max-cpu-seconds:60}")
+    private long maxCloneCpuSeconds;
+    @Value("${ops.repo-analysis.max-processes:64}")
+    private long maxCloneProcesses;
 
     public Map<String, RepositoryEvidence> analyze(String repoUrl, String branch, String patToken, List<String> contexts) {
         return withClonedRepository(repoUrl, branch, patToken, repositoryRoot -> {
@@ -109,18 +120,34 @@ public class RepositorySnapshotBuilder {
             // DEP-001: 최초 연결 시 사전 DNS 검증을 통과해도, 서버가 응답에서 내부 주소로 리다이렉트하면
             // 그 우회 경로로 SSRF가 가능하므로 리다이렉트 자체를 비활성화
             List<String> cloneCommand = List.of(
+                    "prlimit",
+                    "--as=" + maxCloneMemoryBytes,
+                    "--fsize=" + maxCloneSizeBytes,
+                    "--cpu=" + maxCloneCpuSeconds,
+                    "--nproc=" + maxCloneProcesses,
+                    "--nofile=256",
+                    "--",
                     "git", "-c", "http.followRedirects=false", "clone", "--depth", "1", "--single-branch",
-                    "--branch", branch, repoUrl, tempDir.toString());
+                    "--filter=blob:none", "--no-tags", "--branch", branch, repoUrl, tempDir.toString());
             Map<String, String> env = new LinkedHashMap<>();
             env.put("GIT_TERMINAL_PROMPT", "0");
             if (askpassScript != null) {
                 env.put("GIT_ASKPASS", askpassScript.toString());
             }
+            if (gitLocalEgressProxyUrl != null && !gitLocalEgressProxyUrl.isBlank()) {
+                validateProxyUrl(gitLocalEgressProxyUrl);
+                env.put("HTTPS_PROXY", gitLocalEgressProxyUrl);
+                env.put("https_proxy", gitLocalEgressProxyUrl);
+            }
 
-            LocalCommandResult result = localCommandExecutor.exec(cloneCommand, null, env, cloneTimeoutMs);
+            LocalCommandResult result = localCommandExecutor.exec(
+                    cloneCommand, null, env, cloneTimeoutMs, tempDir.toFile(), maxCloneSizeBytes);
             if (!result.isSuccess()) {
                 log.warn("저장소 분석용 클론 실패: repoUrl={}, branch={}, stderr={}", repoUrl, branch, trim(result.stderr()));
                 throw new OpsException(OpsErrorCode.REPOSITORY_CLONE_FAILED);
+            }
+            if (directorySize(tempDir) > maxCloneSizeBytes) {
+                throw new OpsException(OpsErrorCode.REPOSITORY_TOO_LARGE);
             }
 
             return operation.apply(tempDir);
@@ -225,6 +252,24 @@ public class RepositorySnapshotBuilder {
         }
     }
 
+    private long directorySize(Path root) {
+        try (Stream<Path> stream = Files.walk(root)) {
+            long total = 0L;
+            Iterator<Path> files = stream.filter(Files::isRegularFile).iterator();
+            while (files.hasNext()) {
+                Path path = files.next();
+                long size = Files.size(path);
+                if (size > maxCloneSizeBytes - total) {
+                    return maxCloneSizeBytes + 1;
+                }
+                total += size;
+            }
+            return total;
+        } catch (IOException e) {
+            throw new OpsException(OpsErrorCode.REPOSITORY_CLONE_FAILED);
+        }
+    }
+
     private boolean existsAny(Path dir, String... names) {
         for (String name : names) {
             if (Files.exists(dir.resolve(name))) {
@@ -256,6 +301,19 @@ public class RepositorySnapshotBuilder {
 
     private void validateBranch(String branch) {
         if (branch == null || !SAFE_BRANCH_NAME.matcher(branch).matches() || branch.startsWith("-")) {
+            throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+        }
+    }
+
+    private void validateProxyUrl(String proxyUrl) {
+        try {
+            java.net.URI uri = java.net.URI.create(proxyUrl);
+            if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                    || uri.getHost() == null
+                    || uri.getUserInfo() != null) {
+                throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
+            }
+        } catch (IllegalArgumentException e) {
             throw new OpsException(OpsErrorCode.INVALID_REPO_CONFIG);
         }
     }

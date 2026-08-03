@@ -24,6 +24,18 @@ class SensitiveFilePolicyTest {
     }
 
     @Test
+    void flagsDatabaseBackupDirectory() {
+        assertThat(SensitiveFilePolicy.isSensitive("/home/deploy/gamjabox/backups/app_20260804.sql")).isTrue();
+        assertThat(SensitiveFilePolicy.isBackupPath("/home/deploy/gamjabox/backups/app.sql.enc")).isTrue();
+    }
+
+    @Test
+    void doesNotFlagSimilarBackupDirectoryName() {
+        assertThat(SensitiveFilePolicy.isSensitive("/home/deploy/gamjabox/backups-old/readme.txt")).isFalse();
+        assertThat(SensitiveFilePolicy.isBackupPath("/home/deploy/gamjabox/backups-old/readme.txt")).isFalse();
+    }
+
+    @Test
     void flagsSshDirectory() {
         assertThat(SensitiveFilePolicy.isSensitive("/home/deploy/.ssh/config")).isTrue();
     }

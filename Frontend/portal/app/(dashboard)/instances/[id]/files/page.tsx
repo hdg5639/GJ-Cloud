@@ -26,7 +26,8 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico"];
+// SVG는 Ops API origin에서 문서로 직접 열리면 active content가 될 수 있어 다운로드만 허용한다.
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "ico"];
 const AUDIO_EXTENSIONS = ["mp3", "wav", "ogg", "m4a", "flac", "aac"];
 const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "mkv", "avi"];
 

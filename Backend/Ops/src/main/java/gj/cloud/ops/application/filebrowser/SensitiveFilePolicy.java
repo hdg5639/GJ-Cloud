@@ -12,6 +12,7 @@ public final class SensitiveFilePolicy {
 
     private static final Pattern ENV_FILE = Pattern.compile("(^|/)\\.env(\\..*)?$");
     private static final Pattern DEPLOYED_APPS_DIR = Pattern.compile("(^|/)gamjabox/apps(/|$)");
+    private static final Pattern BACKUPS_DIR = Pattern.compile("(^|/)gamjabox/backups(/|$)");
     private static final Set<String> SENSITIVE_DOT_DIRS = Set.of(".ssh", ".aws", ".gnupg", ".docker");
     private static final Set<String> SENSITIVE_FILENAMES = Set.of(
             ".git-credentials", ".netrc", ".pgpass", "id_rsa", "id_ed25519", "id_ecdsa"
@@ -21,7 +22,9 @@ public final class SensitiveFilePolicy {
     }
 
     public static boolean isSensitive(String resolvedPath) {
-        if (ENV_FILE.matcher(resolvedPath).find() || DEPLOYED_APPS_DIR.matcher(resolvedPath).find()) {
+        if (ENV_FILE.matcher(resolvedPath).find()
+                || DEPLOYED_APPS_DIR.matcher(resolvedPath).find()
+                || BACKUPS_DIR.matcher(resolvedPath).find()) {
             return true;
         }
         String[] segments = resolvedPath.split("/");
@@ -31,5 +34,9 @@ public final class SensitiveFilePolicy {
             }
         }
         return false;
+    }
+
+    public static boolean isBackupPath(String resolvedPath) {
+        return BACKUPS_DIR.matcher(resolvedPath).find();
     }
 }

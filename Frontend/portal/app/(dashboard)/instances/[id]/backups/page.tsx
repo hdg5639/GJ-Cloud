@@ -51,6 +51,7 @@ export default function DbBackupsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ serviceName: "", dbType: "postgresql", database: "", username: "", password: "" });
   const [triggering, setTriggering] = useState(false);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -100,17 +101,32 @@ export default function DbBackupsPage() {
   }
 
   async function handleDownload(backup: DbBackupResponse) {
-    if (!accessToken || !backup.filePath) return;
+    if (!accessToken) return;
     try {
-      const blob = await api.ops.downloadFile(accessToken, vmId, backup.filePath);
+      const blob = await api.ops.backups.download(accessToken, vmId, backup.id);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = backup.filePath.split("/").pop() ?? "backup.dump";
+      a.download = `${backup.serviceName}-${backup.createdAt}.${backup.dbType === "redis" ? "rdb" : backup.dbType === "mongodb" ? "archive" : "sql"}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "다운로드에 실패했습니다.");
+    }
+  }
+
+  async function handleVerify(backup: DbBackupResponse) {
+    if (!accessToken) return;
+    setVerifyingId(backup.id);
+    setError(null);
+    try {
+      const verified = await api.ops.backups.verify(accessToken, vmId, backup.id);
+      setBackups((current) => current.map((item) => (item.id === verified.id ? verified : item)));
+      setNotice("암호화·체크섬 검증을 통과했습니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "백업 검증에 실패했습니다.");
+    } finally {
+      setVerifyingId(null);
     }
   }
 
@@ -163,7 +179,7 @@ export default function DbBackupsPage() {
                 <Th>DB 종류</Th>
                 <Th>크기</Th>
                 <Th>상태</Th>
-                <Th className="w-20">작업</Th>
+                <Th className="w-32">작업</Th>
               </tr>
             </thead>
             <tbody>
@@ -177,15 +193,28 @@ export default function DbBackupsPage() {
                     <StatusBadge tone={b.succeeded ? "ok" : "off"} className={!b.succeeded ? "bg-danger/10 text-danger" : undefined}>
                       {b.succeeded ? "성공" : "실패"}
                     </StatusBadge>
+                    {b.verifiedAt && <span className="ml-2 text-[11px] text-muted-soft">무결성 확인</span>}
+                    {b.succeeded && !b.encryptionVersion && (
+                      <span className="ml-2 text-[11px] text-muted-soft">레거시 백업·다운로드 차단</span>
+                    )}
                     {!b.succeeded && b.errorMessage && (
                       <span className="text-[11px] text-danger ml-2">{b.errorMessage}</span>
                     )}
                   </Td>
                   <Td>
-                    {b.succeeded && b.filePath && (
-                      <button onClick={() => handleDownload(b)} className="text-xs text-brand-strong hover:underline font-bold">
-                        다운로드
-                      </button>
+                    {b.succeeded && b.encryptionVersion && b.checksumSha256 && (
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => handleDownload(b)} className="text-xs text-brand-strong hover:underline font-bold">
+                          다운로드
+                        </button>
+                        <button
+                          onClick={() => handleVerify(b)}
+                          disabled={verifyingId === b.id}
+                          className="text-xs text-muted hover:text-foreground disabled:opacity-50"
+                        >
+                          {verifyingId === b.id ? "검증 중" : "다시 검증"}
+                        </button>
+                      </div>
                     )}
                   </Td>
                 </tr>

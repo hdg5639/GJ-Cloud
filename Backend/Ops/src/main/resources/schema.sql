@@ -348,6 +348,10 @@ CREATE TABLE IF NOT EXISTS db_backups (
     db_type             VARCHAR(20)  NOT NULL,
     file_path           TEXT,
     file_size_bytes     BIGINT,
+    checksum_sha256     VARCHAR(64),
+    encryption_version  VARCHAR(30),
+    verified_at         TIMESTAMP,
+    expires_at          TIMESTAMP,
     succeeded           BOOLEAN      NOT NULL,
     error_message       TEXT,
     created_at          TIMESTAMP    NOT NULL DEFAULT now(),
@@ -355,5 +359,11 @@ CREATE TABLE IF NOT EXISTS db_backups (
     CONSTRAINT chk_db_backups_db_type CHECK (db_type IN ('postgresql', 'mysql', 'redis', 'mongodb'))
 );
 
+ALTER TABLE db_backups ADD COLUMN IF NOT EXISTS checksum_sha256 VARCHAR(64);
+ALTER TABLE db_backups ADD COLUMN IF NOT EXISTS encryption_version VARCHAR(30);
+ALTER TABLE db_backups ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP;
+ALTER TABLE db_backups ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
+
 CREATE INDEX IF NOT EXISTS idx_db_backups_vm_id ON db_backups(vm_id);
 CREATE INDEX IF NOT EXISTS idx_db_backups_vm_id_created_at ON db_backups(vm_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_db_backups_expires_at ON db_backups(expires_at);
