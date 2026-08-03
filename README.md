@@ -798,7 +798,7 @@ GJ-Cloud/
 ├── Backend/
 │   ├── Auth/    Spring MVC — 인증·JWT·Refresh Token·이메일 인증
 │   ├── User/    Spring MVC — 프로필·SSH 키·플랜·사용 설명서 CMS
-│   ├── vm/      Spring WebFlux — VM·포트·조직·협업·메트릭
+│   ├── Vm/      Spring WebFlux — VM·포트·조직·협업·메트릭
 │   └── Ops/     Spring MVC — 웹 SSH 콘솔·파일 브라우저·배포 파이프라인·AI 스펙 생성·DB 백업
 ├── Frontend/
 │   └── portal/  Next.js — 사용자 포털 + 관리자 콘솔(같은 앱, 도메인으로 분리)
@@ -811,7 +811,7 @@ GJ-Cloud/
 |---|---|---|
 | Auth | [Backend/Auth/README.md](Backend/Auth/README.md) | 인증 흐름, 토큰 회전, 메일·서비스 인증, 운영 주의점 |
 | User | [Backend/User/README.md](Backend/User/README.md) | 프로필, SSH 키, 플랜, Docs CMS와 이미지 저장 |
-| VM | [Backend/vm/README.md](Backend/vm/README.md) | Proxmox 프로비저닝, Cloudflare, 조직·협업, 메트릭 |
+| VM | [Backend/Vm/README.md](Backend/Vm/README.md) | Proxmox 프로비저닝, Cloudflare, 조직·협업, 메트릭 |
 | Ops | [Backend/Ops/README.md](Backend/Ops/README.md) | SSH 운영, Docker, 배포, GitHub App, Auto Preview |
 | Portal | [Frontend/portal/README.md](Frontend/portal/README.md) | 사용자·관리자 화면, 인증 복구, 환경변수, Preview Runtime |
 
