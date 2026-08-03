@@ -26,7 +26,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 
 | 기능 | 설명 |
 |---|---|
-| **VM 프로비저닝** | Proxmox 템플릿 클론 → Static IP 할당 → SSH/cloud-init 준비 검증 → Cloudflare 연동까지 자동화. SSE로 생성 상태 실시간 수신 |
+| **VM 프로비저닝** | Proxmox 템플릿 클론 → cloud-init DHCP 주소 할당 → SSH/cloud-init 준비 검증 → Cloudflare 연동까지 자동화. SSE로 생성 상태 실시간 수신 |
 | **SSH 접속** | VM마다 전용 서브도메인 자동 발급. 관리 키로 접속 준비 상태와 사용자 `authorized_keys`를 검증·복구하고, Cloudflare Zero Trust로 이메일 기반 접근 제어 |
 | **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. PUBLIC / PRIVATE 구분, PRO 플랜의 자동 ID 없는 커스텀 CNAME 지원 |
 | **플랜 관리** | FREE / PRO 플랜 전환, 디스크 온라인 확장. 플랜 변경은 관리자 승인 후 반영 |
@@ -148,9 +148,9 @@ POST /vms  →  PENDING (즉시 202 응답)
     │
     ▼  백그라운드 비동기 파이프라인
     │
-    CREATING  →  SSH 공개키 조회 + Static IP 할당
+    CREATING  →  SSH 공개키 조회 + Proxmox VMID 할당
     BOOTING   →  Proxmox 템플릿 클론 → vmid 배정 → 사용자 키 + Ops 관리 키 주입
-              →  DNS 설정 → 디스크 리사이즈 → VM 시작 → Guest Agent로 IP 확인
+              →  cloud-init DHCP·DNS 설정 → 디스크 리사이즈 → VM 시작 → Guest Agent로 IP 확인
               →  관리 키 SSH 접속·cloud-init 완료·사용자 키 fingerprint 확인
               →  사용자 authorized_keys 누락 시 관리 키로 안전하게 복구
     RUNNING   →  Cloudflare: CNAME 등록 → Tunnel ingress 추가 → Zero Trust Access 생성
@@ -946,10 +946,10 @@ Ops Blueprint 검색은 기본적으로 Registry fallback 상태다. Elasticsear
 
 - **디스크 축소 불가** — Proxmox/QEMU 자체 제약. 확장만 가능
 - **플랜 변경 후 재부팅 필요** — cores/memory 변경은 재부팅 전까지 미적용 (`needsReboot` 필드로 UI 안내)
-- **Static IP** — VM IP는 재부팅해도 변경되지 않음. DHCP 범위와 충돌하지 않는 별도 풀 사용
+- **DHCP IP 자동 할당** — 개발·운영 VM 서비스가 공유하는 Proxmox/LAN에서 주소 충돌을 방지하도록 네트워크의 단일 DHCP 서버가 주소를 배정. 실제 IP는 Guest Agent로 확인해 DB에 저장
 - **CORS는 Caddy 담당** — 프로덕션에서 Spring 서버단 CORS 설정 없음. Caddy가 일괄 처리
 - **소셜 로그인 미구현** — MVP 범위 외
-- **VM 슬롯 제한** — 플랜별로 제한된 대수만 생성 가능 (물리 서버 IP 풀 기준)
+- **VM 슬롯 제한** — 플랜별로 제한된 대수만 생성 가능 (물리 서버 자원 정책 기준)
 - **포트 최대 5개, 접근 이메일 최대 10개** — VM당 제한
 - **GitHub App 자격증명** — 대상에는 저장소 ID·브랜치만 저장하고 installation token은 실행 시마다 단기로 발급. 직접 URL 방식의 PAT는 저장하지 않음
 - **자동/정기 DB 백업 미구현** — 현재는 온디맨드 수동 백업만 지원

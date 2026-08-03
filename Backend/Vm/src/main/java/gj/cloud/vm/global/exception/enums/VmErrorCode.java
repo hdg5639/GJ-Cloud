@@ -19,7 +19,6 @@ public enum VmErrorCode {
     VMID_ALLOCATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "VM ID 할당에 실패했습니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
     INVALID_AUDIENCE(HttpStatus.UNAUTHORIZED, "이 서비스에 유효하지 않은 토큰입니다."),
-    IP_POOL_EXHAUSTED(HttpStatus.SERVICE_UNAVAILABLE, "사용 가능한 IP가 없습니다. 잠시 후 다시 시도해주세요."),
     CLOUDFLARE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Cloudflare 연동에 실패했습니다."),
     INVALID_DISK_SIZE(HttpStatus.BAD_REQUEST, "디스크 크기가 플랜 허용 범위를 벗어났습니다."),
     DISK_DOWNSIZE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "디스크 크기는 줄일 수 없습니다."),

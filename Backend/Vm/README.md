@@ -21,8 +21,8 @@ VM 내부 SSH 명령, Docker, 파일, 배포 실행은 Ops가 담당한다. VM �
 ```text
 POST /vms
   → PENDING / 202 응답
-  → CREATING: 사용자 SSH 키 + Static IP 확보
-  → BOOTING: Proxmox 클론, cloud-init, 디스크, DNS, VM 시작
+  → CREATING: 사용자 SSH 키 + Proxmox VMID 확보
+  → BOOTING: Proxmox 클론, cloud-init DHCP·DNS, 디스크, VM 시작
   → Guest Agent IP 확인
   → Ops 관리 키 SSH 준비 + 사용자 authorized_keys 검증·복구
   → Cloudflare CNAME/Tunnel/Access 구성
@@ -30,6 +30,8 @@ POST /vms
 ```
 
 오래 걸리는 작업은 요청 스레드에서 끝까지 기다리지 않는다. 상태 변화는 `/vms/events/subscribe` SSE로 전달하며, 스트림 연결 전 단기 티켓을 발급한다.
+
+cloud-init 네트워크는 `ipconfig0=ip=dhcp`로 설정하여 개발·운영이 공유하는 LAN에서 각자 다른 DB 내부 IP 풀을 고르는 문제를 피한다. DHCP가 배정한 실제 IPv4는 Guest Agent로 확인하여 `internal_ip`에 저장한다.
 
 ## API 영역
 

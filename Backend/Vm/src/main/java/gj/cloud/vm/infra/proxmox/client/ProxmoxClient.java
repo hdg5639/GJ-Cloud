@@ -86,9 +86,9 @@ public class ProxmoxClient {
                 .doOnError(e -> log.error("VM 클론 실패: vmid={}, error={}", newVmid, e.getMessage()));
     }
 
-    public Mono<Void> configureVm(int vmid, PlanType planType, List<String> sshPublicKeys, String staticIp) {
+    public Mono<Void> configureVm(int vmid, PlanType planType, List<String> sshPublicKeys) {
         VmCreate config = VmCreate.from(planType, vmid, null, sshPublicKeys,
-                props.getBridge(), props.getStorage(), staticIp);
+                props.getBridge(), props.getStorage());
 
         MultiValueMap<String, String> configParams = new LinkedMultiValueMap<>();
         configParams.add("cores", String.valueOf(config.getCores()));
@@ -150,17 +150,18 @@ public class ProxmoxClient {
                                 .map(JsonNode::asText)
                                 .anyMatch(value -> value.contains("cloudinit"));
                         boolean hasExpectedUser = "ubuntu".equals(data.path("ciuser").asText());
+                        boolean usesDhcp = "ip=dhcp".equals(data.path("ipconfig0").asText());
                         String configuredKeys = decodePercentEncoded(data.path("sshkeys").asText());
                         boolean hasAllKeys = expectedPublicKeys.stream()
                                 .map(this::canonicalPublicKey)
                                 .allMatch(configuredKeys::contains);
 
-                        if (hasCloudInitDrive && hasExpectedUser && hasAllKeys) {
+                        if (hasCloudInitDrive && hasExpectedUser && usesDhcp && hasAllKeys) {
                             return Mono.<Void>empty();
                         }
                         log.error(
-                                "Proxmox cloud-init 설정 검증 실패: vmid={}, drive={}, ciuser={}, sshKeyCount={}",
-                                vmid, hasCloudInitDrive, hasExpectedUser, expectedPublicKeys.size());
+                                "Proxmox cloud-init 설정 검증 실패: vmid={}, drive={}, ciuser={}, dhcp={}, sshKeyCount={}",
+                                vmid, hasCloudInitDrive, hasExpectedUser, usesDhcp, expectedPublicKeys.size());
                         return Mono.error(new VmException(VmErrorCode.PROXMOX_CLONE_FAILED));
                     } catch (Exception e) {
                         log.error("Proxmox cloud-init 설정 응답 파싱 실패: vmid={}, error={}", vmid, e.getMessage());

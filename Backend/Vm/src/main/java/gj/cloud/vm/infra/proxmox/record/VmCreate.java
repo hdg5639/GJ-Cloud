@@ -30,12 +30,12 @@ public class VmCreate {
     private final String ciupgrade;
 
     public static VmCreate from(PlanType planType, int newVmid, String name, List<String> sshPublicKeys,
-                                 String bridge, String storage, String staticIp) {
-        return new VmCreate(planType, newVmid, name, sshPublicKeys, bridge, storage, staticIp);
+                                 String bridge, String storage) {
+        return new VmCreate(planType, newVmid, name, sshPublicKeys, bridge, storage);
     }
 
     private VmCreate(PlanType planType, int newVmid, String name, List<String> sshPublicKeys,
-                     String bridge, String storage, String staticIp) {
+                     String bridge, String storage) {
         this.newVmid = newVmid;
         this.name = name;
         this.sshkeys = String.join("\n", sshPublicKeys);
@@ -55,7 +55,9 @@ public class VmCreate {
         this.ide2 = storage + ":cloudinit";
         this.cipassword = "password";
         this.ciuser = "ubuntu";
-        this.ipconfig0 = "ip=" + staticIp + "/24,gw=192.168.0.1";
+        // 개발·운영 VM 서비스가 같은 Proxmox/LAN을 공유하므로 서비스별 DB에서 정적 IP를 고르면
+        // 서로의 예약 상태를 알 수 없어 주소가 충돌한다. 네트워크의 단일 DHCP 서버가 주소를 배정하게 한다.
+        this.ipconfig0 = "ip=dhcp";
         // cloud-init에 nameserver를 지정하지 않으면 게이트웨이(192.168.0.1)가 DNS도 포워딩해준다는 보장이
         // 없어 VM 내부에서 도메인 조회(git clone, curl 등)가 전부 실패할 수 있음 — 공인 DNS로 명시 고정
         this.nameserver = "1.1.1.1 8.8.8.8";
