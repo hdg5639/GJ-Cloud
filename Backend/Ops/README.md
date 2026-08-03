@@ -104,7 +104,13 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 | 파일 제한 | `OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES`, `OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES` | 편집·업로드 최대 크기 |
 | 포털 | `PORTAL_ORIGIN` | CORS와 GitHub 연결 복귀 주소 |
 
-GitHub App ID와 Client ID는 서로 다른 값이다. installation token 404가 발생하면 App ID, private key가 해당 installation의 App과 일치하는지 먼저 확인한다.
+`OPS_KEY_ENCRYPTION_SECRET`와 `OPS_BACKUP_ENCRYPTION_SECRET`은 각각 `openssl rand -base64 24`로 생성한 서로 다른 UTF-8 32바이트 값을 사용한다. 관리 SSH 키나 암호화 백업이 생성된 뒤에 이 값을 변경하면 기존 데이터를 복호화할 수 없으므로 서버 재배포 때도 동일한 값을 유지한다.
+
+`OPS_GIT_LOCAL_EGRESS_PROXY_URL`은 Ops 컨테이너가 저장소 분석 clone에 사용하는 주소이며 기본값 `http://ops-git-egress-proxy:3128`을 그대로 사용할 수 있다. `OPS_GIT_REMOTE_EGRESS_PROXY_URL`은 사용자 VM 안에서 실행되는 Git이 도달할 수 있는 별도 LAN proxy가 있을 때만 설정한다. 없으면 비워 두며, Docker 내부 서비스명 주소를 넣으면 사용자 VM에서는 해석되지 않는다.
+
+GitHub App ID는 숫자이고 OAuth Client ID는 보통 `Iv1...` 형식인 서로 다른 값이다. `GITHUB_APP_PRIVATE_KEY`에는 GitHub App에서 발급한 PEM 전체를 `\n` 문자로 연결해 넣고, OAuth client secret과 webhook secret도 각각 Dashboard 값으로 설정한다. installation token 404가 발생하면 App ID와 private key가 해당 installation의 App과 일치하는지 먼저 확인한다. `PORTAL_ORIGIN`은 브라우저가 실제로 접속하는 `https://portal.gamjabox.cloud` 같은 origin만 넣고 path는 포함하지 않는다.
+
+Blueprint 검색은 기본 Registry fallback이므로 Elasticsearch가 없으면 `BLUEPRINT_SEARCH_ENABLED=false`를 유지한다. 사용할 때만 연결 URL과 인증 정보를 설정하고, 시작 시 재색인은 관리된 단일 인스턴스에서만 활성화한다. 전체 값 예시는 루트 `env.example`을 기준으로 하며 모든 `CHANGE_ME_*`를 배포 전에 교체한다.
 
 ## 로컬 실행과 검증
 

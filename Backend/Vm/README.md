@@ -75,9 +75,12 @@ cloud-init 네트워크는 `ipconfig0=ip=dhcp`로 설정하여 개발·운영이
 | Proxmox | `PROXMOX_URL`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET` | API 연결과 인증 |
 | Proxmox 배치 | `PROXMOX_NODE`, `PROXMOX_STORAGE`, `PROXMOX_BRIDGE` | 노드·스토리지·브리지 |
 | VMID 범위 | `PROXMOX_VMID_START`, `PROXMOX_VMID_END` | 자동 할당 허용 범위 |
+| Cloudflare | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_BASE_DOMAIN` | DNS·Tunnel·Access와 기본 도메인 |
 | CNAME 정책 | `RESERVED_SUBDOMAINS` | 사용자 지정 서브도메인 금지 목록 |
 
-Cloudflare 자격 증명과 Tunnel·Zone 설정도 `cloudflare.*` 구성에 필요하다. 운영 값은 저장소 밖에서 주입하고 API 토큰 권한을 DNS·Tunnel·Access 관리에 필요한 최소 범위로 제한한다.
+`PROXMOX_URL`은 `https://pve.example.internal:8006/api2/json`처럼 API root까지 포함하고, Token ID는 `<user>@<realm>!<token-name>` 형식으로 넣는다. VMID 범위는 Proxmox에서 이미 사용하거나 다른 환경에 예약한 범위와 겹치지 않게 개발·운영별로 분리한다.
+
+Cloudflare의 Account ID, Zone ID, Tunnel UUID는 Dashboard에서 확인하고 API Token 권한은 DNS·Tunnel·Access 관리에 필요한 최소 범위로 제한한다. `RESERVED_SUBDOMAINS`는 `www,portal,admin,api,ssh`처럼 쉼표로 구분한다. DB·Redis 비밀번호와 서비스 secret은 서버별로 별도 생성하며, 전체 형식과 예시는 루트 `env.example`을 기준으로 한다.
 
 ## 로컬 실행과 검증
 
