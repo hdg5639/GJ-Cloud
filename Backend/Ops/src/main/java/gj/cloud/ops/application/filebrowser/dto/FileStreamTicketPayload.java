@@ -1,8 +1,13 @@
 package gj.cloud.ops.application.filebrowser.dto;
 
-// 발급 시점(정상 JWT 인증 하에)에 이미 실경로(symlink 해석 완료)와 internalIp/size까지 확정해 저장 —
-// 스트리밍 GET에서는 경로 해석을 다시 하지 않고 이 값만으로 SFTP 세션을 열 수 있게 함.
-// SEC-012: bearerToken은 매 스트리밍 요청마다 FILE_READ 권한을 재조회하기 위해 보관 — 이 값은
-// Redis(서버 내부)에만 있고 클라이언트에 노출되는 URL에는 opaque 티켓 문자열만 포함된다.
-public record FileStreamTicketPayload(String vmId, String path, String internalIp, long size, String bearerToken) {
+// 발급 시점의 실경로(symlink 해석 완료)와 internalIp/size를 확정해 저장한다.
+// 스트리밍 GET마다 현재 경로·IP·크기와 다시 비교해 TTL 도중의 심볼릭 교체나 VM IP 변경을 거부한다.
+// SEC-012: 권한 재검증에 필요한 사용자 토큰은 Redis에 평문으로 두지 않고 AES-256-GCM 암호문만 보관한다.
+public record FileStreamTicketPayload(
+        String vmId,
+        String path,
+        String internalIp,
+        long size,
+        String bearerTokenCiphertext
+) {
 }

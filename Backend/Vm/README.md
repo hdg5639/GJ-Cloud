@@ -60,6 +60,7 @@ cloud-init 네트워크는 `ipconfig0=ip=dhcp`로 설정하여 개발·운영이
 
 - 개인 VM은 소유자 문맥으로 접근한다.
 - 조직 공유 VM은 `OWNER`, `ADMIN`, `MEMBER` 역할과 작업별 권한을 조합한다.
+- DB 백업 이력·검증·다운로드는 `BACKUP_READ`로 분리하며 `MEMBER`에게는 부여하지 않는다.
 - Ops 내부 경로는 일반 사용자 JWT가 아니라 지정된 audience/scope의 서비스 토큰만 허용한다.
 - SSE 스트림은 URL에 장기 Access Token을 노출하지 않고 일회성 티켓으로 인증한다.
 

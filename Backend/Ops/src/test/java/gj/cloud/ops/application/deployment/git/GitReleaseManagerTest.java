@@ -76,7 +76,7 @@ class GitReleaseManagerTest {
     @Test
     void resolvesTheExactWebhookCommitInsteadOfTheMovingBranchHead() {
         String requestedRevision = "0123456789abcdef0123456789abcdef01234567";
-        when(sshCommandExecutor.exec(eq(session), org.mockito.ArgumentMatchers.contains(" fetch --prune origin"), anyLong()))
+        when(sshCommandExecutor.exec(eq(session), org.mockito.ArgumentMatchers.contains(" fetch --filter=blob:none --prune origin"), anyLong()))
                 .thenReturn(new CommandResult(0, "", ""));
         when(sshCommandExecutor.execOrThrow(
                 eq(session),
@@ -105,6 +105,27 @@ class GitReleaseManagerTest {
                         e -> assertThat(e.getErrorCode()).isEqualTo(OpsErrorCode.INVALID_REPO_CONFIG));
 
         verifyNoInteractions(sshCommandExecutor);
+    }
+
+    @Test
+    void worktreeCheckoutKeepsAskpassForPartialCloneBlobFetches() {
+        when(sshCommandExecutor.exec(
+                eq(session),
+                org.mockito.ArgumentMatchers.contains("GIT_ASKPASS='/bin/true'"),
+                anyLong()))
+                .thenReturn(new CommandResult(0, "", ""));
+
+        manager.createWorktree(
+                session,
+                "target-1",
+                "deployment-1",
+                "0123456789abcdef0123456789abcdef01234567",
+                null);
+
+        verify(sshCommandExecutor).exec(
+                eq(session),
+                org.mockito.ArgumentMatchers.contains("worktree add"),
+                anyLong());
     }
 
     @Test

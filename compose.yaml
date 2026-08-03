@@ -237,6 +237,16 @@ services:
       VM_SERVICE_URL: ${VM_SERVICE_URL:-http://vm:8080}
       USER_SERVICE_URL: ${USER_SERVICE_URL:-http://user:8080}
       OPS_KEY_ENCRYPTION_SECRET: ${OPS_KEY_ENCRYPTION_SECRET:?OPS_KEY_ENCRYPTION_SECRET is required}
+      OPS_GIT_ALLOWED_HOSTS: ${OPS_GIT_ALLOWED_HOSTS:-github.com,gitlab.com,bitbucket.org}
+      OPS_GIT_LOCAL_EGRESS_PROXY_URL: ${OPS_GIT_LOCAL_EGRESS_PROXY_URL:-http://ops-git-egress-proxy:3128}
+      OPS_GIT_REMOTE_EGRESS_PROXY_URL: ${OPS_GIT_REMOTE_EGRESS_PROXY_URL:-}
+      OPS_REPO_ANALYSIS_MAX_CLONE_SIZE_BYTES: ${OPS_REPO_ANALYSIS_MAX_CLONE_SIZE_BYTES:-268435456}
+      OPS_REPO_ANALYSIS_MAX_MEMORY_BYTES: ${OPS_REPO_ANALYSIS_MAX_MEMORY_BYTES:-536870912}
+      OPS_REPO_ANALYSIS_MAX_CPU_SECONDS: ${OPS_REPO_ANALYSIS_MAX_CPU_SECONDS:-60}
+      OPS_REPO_ANALYSIS_MAX_PROCESSES: ${OPS_REPO_ANALYSIS_MAX_PROCESSES:-64}
+      OPS_BACKUP_RETENTION_DAYS: ${OPS_BACKUP_RETENTION_DAYS:-30}
+      OPS_BACKUP_MAX_FILES_PER_VM: ${OPS_BACKUP_MAX_FILES_PER_VM:-20}
+      OPS_BACKUP_ENCRYPTION_SECRET: ${OPS_BACKUP_ENCRYPTION_SECRET:?OPS_BACKUP_ENCRYPTION_SECRET is required}
       VM_SSH_USERNAME: ${VM_SSH_USERNAME:-ubuntu}
       PORTAL_ORIGIN: ${PORTAL_ORIGIN:?PORTAL_ORIGIN is required}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
@@ -259,6 +269,39 @@ services:
         condition: service_healthy
       vm:
         condition: service_started
+      ops-git-egress-proxy:
+        condition: service_started
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=${OPS_TMPFS_SIZE:-512m},mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: ${OPS_CONTAINER_PIDS_LIMIT:-256}
+    mem_limit: ${OPS_CONTAINER_MEMORY_LIMIT:-1g}
+    cpus: ${OPS_CONTAINER_CPU_LIMIT:-2.0}
+    networks:
+      - loc-net
+
+  ops-git-egress-proxy:
+    build:
+      context: .
+      dockerfile: Backend/Ops/egress-proxy/Dockerfile
+    image: ${OPS_GIT_EGRESS_PROXY_IMAGE:-gj-cloud-ops-git-egress-proxy:latest}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=32m,mode=1777
+      - /var/run/squid:rw,nosuid,nodev,size=8m,mode=0755,uid=13,gid=13
+      - /var/spool/squid:rw,nosuid,nodev,size=32m,mode=0755,uid=13,gid=13
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
     restart: unless-stopped
     networks:
       - loc-net

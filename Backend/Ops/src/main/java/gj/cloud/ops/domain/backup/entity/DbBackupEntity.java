@@ -6,8 +6,8 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-// 11절 수동 DB 백업 이력 — 덤프 파일 자체는 DB가 아니라 VM 파일시스템(backups/ 디렉토리)에 저장되고,
-// 여기는 메타데이터만 기록. 다운로드는 기존 파일 브라우저(FILE_READ 권한, /home/{sshUser} 이하)를 그대로 재사용함.
+// 수동 DB 백업 이력 — VM backups/ 경로에는 AES-GCM 암호문만 저장하고 여기에는
+// 체크섬·암호화 버전·검증/만료 시각을 기록한다. 평문 다운로드는 BACKUP_READ 전용 API로만 제공한다.
 @Entity
 @Table(name = "db_backups")
 @Getter
@@ -34,6 +34,18 @@ public class DbBackupEntity {
     @Column(name = "file_size_bytes")
     private Long fileSizeBytes;
 
+    @Column(name = "checksum_sha256", length = 64)
+    private String checksumSha256;
+
+    @Column(name = "encryption_version", length = 30)
+    private String encryptionVersion;
+
+    @Column(name = "verified_at")
+    private LocalDateTime verifiedAt;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
     @Column(nullable = false)
     private boolean succeeded;
 
@@ -43,8 +55,17 @@ public class DbBackupEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public static DbBackupEntity create(String vmId, String serviceName, String dbType, String filePath,
-                                         Long fileSizeBytes, boolean succeeded, String errorMessage) {
+    public static DbBackupEntity succeeded(
+            String vmId,
+            String serviceName,
+            String dbType,
+            String filePath,
+            Long fileSizeBytes,
+            String checksumSha256,
+            String encryptionVersion,
+            LocalDateTime verifiedAt,
+            LocalDateTime expiresAt
+    ) {
         return DbBackupEntity.builder()
                 .id(UUID.randomUUID().toString())
                 .vmId(vmId)
@@ -52,9 +73,31 @@ public class DbBackupEntity {
                 .dbType(dbType)
                 .filePath(filePath)
                 .fileSizeBytes(fileSizeBytes)
-                .succeeded(succeeded)
-                .errorMessage(errorMessage)
+                .checksumSha256(checksumSha256)
+                .encryptionVersion(encryptionVersion)
+                .verifiedAt(verifiedAt)
+                .expiresAt(expiresAt)
+                .succeeded(true)
                 .createdAt(LocalDateTime.now())
                 .build();
+    }
+
+    public static DbBackupEntity failed(
+            String vmId, String serviceName, String dbType, String errorMessage, LocalDateTime expiresAt
+    ) {
+        return DbBackupEntity.builder()
+                .id(UUID.randomUUID().toString())
+                .vmId(vmId)
+                .serviceName(serviceName)
+                .dbType(dbType)
+                .succeeded(false)
+                .errorMessage(errorMessage)
+                .expiresAt(expiresAt)
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    public void markVerified(LocalDateTime verifiedAt) {
+        this.verifiedAt = verifiedAt;
     }
 }

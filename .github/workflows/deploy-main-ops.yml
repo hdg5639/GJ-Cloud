@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - 'Backend/Ops/**'
+      - 'Frontend/portal/lib/types.ts'
+      - 'Frontend/portal/components/ui/**'
+      - 'Frontend/portal/components/preview-runtime/**'
+      - 'compose.yaml'
+      - '.github/workflows/deploy-main-ops.yml'
 
 jobs:
   deploy:

@@ -10,6 +10,7 @@ import com.jcraft.jsch.SftpException;
 import gj.cloud.ops.application.filebrowser.dto.FileStreamTicketPayload;
 import gj.cloud.ops.application.vmclient.VmServiceClient;
 import gj.cloud.ops.application.vmclient.dto.VmContextResponse;
+import gj.cloud.ops.global.crypto.AesGcmCipher;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.ssh.VmSshSessionFactory;
@@ -19,13 +20,15 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.UUID;
 
 // 미디어 미리보기 스트리밍 인증 — 웹 콘솔의 TerminalTicketService와 달리 GETDEL(1회성)을 쓰지 않음.
 // <video>/<audio> 태그는 seek/버퍼링 때마다 Range 요청을 여러 번 보내므로 티켓이 한 번 쓰고 사라지면 재생이 끊긴다.
 // 대신 짧은 TTL 동안 재사용 가능한 값으로 두고, 발급 시점(FILE_READ 권한 확인 + 실경로 해석 완료)의 결과를
-// internalIp/실경로/파일크기까지 통째로 페이로드에 담아, 스트리밍 시점엔 권한 재조회 없이 그대로 쓴다.
+// internalIp/실경로/파일크기와 암호화한 사용자 토큰을 페이로드에 담고, 매 스트리밍 요청에서 권한을 다시 조회한다.
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -44,6 +47,7 @@ public class FileStreamTicketService {
     private final SftpPathResolver pathResolver;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final AesGcmCipher cipher;
 
     public String issue(String bearerToken, String vmId, String path) {
         VmContextResponse context = vmServiceClient.getContext(bearerToken, vmId);
@@ -60,6 +64,9 @@ public class FileStreamTicketService {
             sftp = (ChannelSftp) session.openChannel("sftp");
             sftp.connect(SFTP_CONNECT_TIMEOUT_MS);
             String real = pathResolver.resolveExisting(sftp, path);
+            if (SensitiveFilePolicy.isBackupPath(real)) {
+                throw new OpsException(OpsErrorCode.FORBIDDEN);
+            }
             // AUTHZ-001: .env/배포 시크릿/자격증명 디렉토리는 FILE_READ만으로 미리보기 스트리밍도 못 하게 함
             if (SensitiveFilePolicy.isSensitive(real) && !context.hasPermission(PERMISSION_SECRET_READ)) {
                 throw new OpsException(OpsErrorCode.FORBIDDEN);
@@ -73,9 +80,14 @@ public class FileStreamTicketService {
             if (attrs.isDir()) {
                 throw new OpsException(OpsErrorCode.INVALID_PATH);
             }
+            if (!FilePreviewPolicy.isPreviewable(real)) {
+                throw new OpsException(OpsErrorCode.INVALID_PATH);
+            }
 
             String ticket = UUID.randomUUID().toString();
-            FileStreamTicketPayload payload = new FileStreamTicketPayload(vmId, real, context.internalIp(), attrs.getSize(), bearerToken);
+            String tokenCiphertext = cipher.encrypt(bearerToken.getBytes(StandardCharsets.UTF_8));
+            FileStreamTicketPayload payload = new FileStreamTicketPayload(
+                    vmId, real, context.internalIp(), attrs.getSize(), tokenCiphertext);
             String json = objectMapper.writeValueAsString(payload);
             redisTemplate.opsForValue().set(KEY_PREFIX + ticket, json, TICKET_TTL);
             return ticket;
@@ -107,9 +119,18 @@ public class FileStreamTicketService {
             if (!payload.vmId().equals(vmId)) {
                 return Optional.empty();
             }
-            VmContextResponse context = vmServiceClient.getContext(payload.bearerToken(), vmId);
-            if (!context.hasPermission(PERMISSION_FILE_READ)) {
-                return Optional.empty();
+            byte[] tokenBytes = cipher.decrypt(payload.bearerTokenCiphertext());
+            try {
+                VmContextResponse context = vmServiceClient.getContext(
+                        new String(tokenBytes, StandardCharsets.UTF_8), vmId);
+                if (!context.hasPermission(PERMISSION_FILE_READ)
+                        || !"RUNNING".equals(context.status())
+                        || !payload.internalIp().equals(context.internalIp())) {
+                    return Optional.empty();
+                }
+                log.info("AUDIT action=FILE_STREAM_TICKET_USE targetType=VM targetId={} result=ALLOWED", vmId);
+            } finally {
+                Arrays.fill(tokenBytes, (byte) 0);
             }
             return Optional.of(payload);
         } catch (JsonProcessingException e) {

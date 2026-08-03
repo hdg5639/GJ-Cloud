@@ -71,7 +71,7 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 | 배포 | `/ops/{vmId}/deployments/**` | 생성·AI 스펙·Compose 분석·롤백·로그 |
 | 배포 대상 | `/ops/{vmId}/deployment-targets/**` | 자동 배포·포트 연결·재배포·삭제 |
 | GitHub | `/ops/github/**`, `/ops/webhooks/github` | App 설치·저장소·웹훅 |
-| 백업 | `/ops/{vmId}/backups` | DB 백업 생성·조회 |
+| 백업 | `/ops/{vmId}/backups`, `/ops/{vmId}/backups/{backupId}/download` | DB 백업 생성·조회·검증·전용 다운로드 |
 | Preview | `/ops/preview/**`, `/ops/{vmId}/preview/deploy` | 분석·검수·조립·배포 |
 | 회귀 Suite | `/ops/preview/regression-suites/**` | Suite와 실행 결과 |
 | 내부 SSH | `/internal/vms/{vmId}/management-key`, `/internal/vms/{vmId}/ssh-readiness` | 관리 키와 준비 상태 |
@@ -94,7 +94,9 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 | Redis | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | 티켓·락·캐시 |
 | 인증 | `AUTH_SERVER_URL`, `OPS_SERVICE_CLIENT_SECRET` | JWT·서비스 인증 |
 | 서비스 연동 | `VM_SERVICE_URL`, `USER_SERVICE_URL` | VM 문맥·라우트와 플랜 조회 |
-| SSH | `OPS_KEY_ENCRYPTION_SECRET`, `VM_SSH_USERNAME` | 관리 키 AES-GCM 암호화와 접속 사용자 |
+| SSH·티켓 암호화 | `OPS_KEY_ENCRYPTION_SECRET`, `VM_SSH_USERNAME` | 관리 키·Redis 스트림 티켓 AES-GCM 암호화와 접속 사용자 |
+| Git 방어 | `OPS_GIT_ALLOWED_HOSTS`, `OPS_GIT_LOCAL_EGRESS_PROXY_URL`, `OPS_GIT_REMOTE_EGRESS_PROXY_URL`, `OPS_REPO_ANALYSIS_MAX_CLONE_SIZE_BYTES` | clone allowlist·egress proxy와 분석용 clone 자원 한계 |
+| 백업 보호 | `OPS_BACKUP_ENCRYPTION_SECRET`, `OPS_BACKUP_RETENTION_DAYS`, `OPS_BACKUP_MAX_FILES_PER_VM` | AES-256-GCM 암호화 키와 보관 기간·개수 |
 | GitHub App | `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET` | App 인증·설치·웹훅 검증 |
 | AI | `OPENAI_API_KEY`, `AI_MODEL_STANDARD`, `AI_MODEL_ESCALATED` | 모델 호출과 난이도별 모델 선택 |
 | Blueprint 검색 | `BLUEPRINT_SEARCH_ENABLED`, `BLUEPRINT_SEARCH_INDEX`, `BLUEPRINT_SEARCH_REINDEX_ON_STARTUP` | 검색 기능과 인덱스 관리 |
@@ -128,8 +130,9 @@ npm run blueprint:check
 
 ## 배포
 
-- `develop`의 `Backend/Ops/**` 변경은 `deploy-ops.yml`을 통해 개발 VM에 배포된다.
-- `main` 변경은 `deploy-main-ops.yml`을 통해 운영 VM에 배포된다.
+- `develop`의 Ops 소스, `compose.yaml`, 포털 Runtime 의존 경로 변경은 `deploy-ops.yml`을 통해 개발 VM에 배포된다.
+- `main`의 동일한 의존 경로 변경은 `deploy-main-ops.yml`을 통해 운영 VM에 배포된다.
+- 포털 의존성은 `lib/types.ts`, `components/ui/**`, `components/preview-runtime/**`이다. 이 경로들이 바뀌면 Ops 이미지를 재빌드하여 배포 앱의 Auto Preview Runtime을 최신 상태로 유지한다.
 - Docker 빌드 context는 Ops 단독 폴더가 아니라 포털 Runtime을 포함하는 저장소 구조를 보존해야 한다.
 - 헬스체크 실패 시 보존된 직전 이미지로 자동 롤백한다.
 
@@ -138,5 +141,11 @@ npm run blueprint:check
 - SSH 명령 시간 초과가 원격 프로세스 실패를 뜻하지는 않는다. 긴 apt/dpkg 작업은 단계별 제한과 상태 확인을 사용한다.
 - Docker 설치는 dpkg 잠금과 cloud-init 때문에 수 분 걸릴 수 있으며 HTTP 요청 스레드를 점유하지 않는다.
 - DB check constraint에 enum 값을 추가할 때 Java enum과 `schema.sql` 제약을 반드시 함께 갱신한다.
+- DB 백업 생성은 `DEPLOY`, 이력·검증·다운로드는 `BACKUP_READ` 권한을 사용한다. `gamjabox/backups` 경로는 파일 브라우저와 일반 스트리밍 티켓에서 완전히 차단한다.
+- DB 비밀번호는 SSH 명령줄이 아닌 0600 임시 credential 파일로만 전달한다. 덤프 stdout은 평문 파일 없이 즉시 AES-256-GCM으로 암호화하고 SHA-256를 기록하며, 생성 직후와 전용 검증 API에서 전체 복호화를 수행한다.
+- 성공한 백업은 VM별 보관 기간과 최대 개수를 적용하고, 실패·기간 초과·개수 초과 파일은 정리한다. 복구 리허설은 [DB 백업 복구 런북](docs/DB_BACKUP_RECOVERY.md)을 따른다.
+- 기존 평문 백업은 전용 API에서 다운로드하지 않으며 새 백업 생성 시 보관 정책에 따라 순차 정리한다. 즉시 일괄 삭제는 수행하지 않는다.
+- 분석용 Git clone은 Squid allowlist proxy를 기본 사용하고 내부·메타데이터 대역을 연결 시점에 차단한다. 사용자 VM의 Git은 해당 VM에서 도달 가능한 `OPS_GIT_REMOTE_EGRESS_PROXY_URL`을 지정했을 때만 프록시를 적용한다.
+- SVG·HTML·XML은 Ops API origin에서 inline 미리보기하지 않고, 다운로드 응답은 `attachment` + `nosniff` + sandbox CSP를 적용한다.
 - `OPS_KEY_ENCRYPTION_SECRET`, GitHub private key, webhook secret, OpenAI key를 로그나 배포 스펙에 포함하지 않는다.
 - Blueprint manifest나 Runtime을 바꾼 뒤에는 포털 검사와 Ops 빌드를 모두 실행한다.
