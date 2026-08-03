@@ -1,0 +1,84 @@
+:80 {
+	# ─────────────────────────────────────
+	# 랜딩 페이지
+	# ─────────────────────────────────────
+	@landing_host host gamjabox.cloud
+	handle @landing_host {
+		root * /srv/gamjabox-landing
+		encode zstd gzip
+		file_server
+	}
+
+	# www → 루트 도메인
+	@www_host host www.gamjabox.cloud
+	handle @www_host {
+		redir https://gamjabox.cloud{uri} permanent
+	}
+
+	# ─────────────────────────────────────
+	# CORS 설정
+	# ─────────────────────────────────────
+	@admin_origin header Origin "https://{$ADMIN_DOMAIN}"
+	@user_origin header Origin "https://portal.gamjabox.cloud"
+
+	header @admin_origin Access-Control-Allow-Origin "https://{$ADMIN_DOMAIN}"
+	header @admin_origin Access-Control-Allow-Credentials "true"
+	header @user_origin Access-Control-Allow-Origin "https://portal.gamjabox.cloud"
+	header @user_origin Access-Control-Allow-Credentials "true"
+
+	@options method OPTIONS
+	handle @options {
+		header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+		header Access-Control-Allow-Headers "Authorization, Content-Type"
+		header Access-Control-Max-Age "86400"
+		respond 204
+	}
+
+	# ─────────────────────────────────────
+	# 관리자
+	# ─────────────────────────────────────
+	@admin_host host {$ADMIN_DOMAIN}
+	handle @admin_host {
+		@admin_users path /admin/users /admin/users/*
+		handle @admin_users {
+			reverse_proxy user:8080
+		}
+
+		@admin_vms path /admin/vms /admin/vms/*
+		handle @admin_vms {
+			reverse_proxy vm:8080
+		}
+
+		handle {
+			reverse_proxy portal:3000
+		}
+	}
+
+	# ─────────────────────────────────────
+	# 사용자 API
+	# ─────────────────────────────────────
+	@auth path /auth /auth/*
+	handle @auth {
+		reverse_proxy auth:8080
+	}
+
+	@users path /users /users/*
+	handle @users {
+		reverse_proxy user:8080
+	}
+
+	@vms path /vms /vms/*
+	handle @vms {
+		reverse_proxy vm:8080
+	}
+
+	@ops path /ops /ops/* /ws/terminal/*
+	handle @ops {
+		reverse_proxy ops:8080
+	}
+
+	# portal.gamjabox.cloud 기본 화면
+	handle {
+		reverse_proxy portal:3000
+	}
+}
