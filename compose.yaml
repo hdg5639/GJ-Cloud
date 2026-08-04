@@ -10,12 +10,6 @@ services:
     volumes:
       - "${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile:ro"
       - "${LANDING_PATH:-./gamjabox-landing}:/srv/gamjabox-landing:ro"
-    depends_on:
-      - auth
-      - user
-      - vm
-      - ops
-      - portal
     restart: unless-stopped
     networks:
       - loc-net
