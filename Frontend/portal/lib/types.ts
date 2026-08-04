@@ -1191,3 +1191,31 @@ export interface DocsImageUpload {
   url: string;
   filename: string;
 }
+
+export type SupportInquiryCategory = "DOCS" | "TECHNICAL" | "ACCOUNT" | "BILLING" | "OTHER";
+export type SupportInquiryStatus = "OPEN" | "ANSWERED" | "CLOSED";
+
+export interface SupportInquiry {
+  id: string;
+  userId: string;
+  requesterEmail: string;
+  category: SupportInquiryCategory;
+  title: string;
+  content: string;
+  sourceArticleSlug: string | null;
+  sourceArticleTitle: string | null;
+  status: SupportInquiryStatus;
+  response: string | null;
+  respondedBy: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateSupportInquiryInput {
+  category: SupportInquiryCategory;
+  title: string;
+  content: string;
+  sourceArticleSlug?: string;
+  sourceArticleTitle?: string;
+}

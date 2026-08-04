@@ -1,6 +1,6 @@
 # User Service
 
-GamjaBox 사용자 프로필, SSH 공개키, 플랜·사용량, 업그레이드 요청과 사용자 설명서 CMS를 담당하는 Spring Boot 서비스다.
+GamjaBox 사용자 프로필, SSH 공개키, 플랜·사용량, 업그레이드 요청, 사용자 설명서 CMS와 사용자 문의를 담당하는 Spring Boot 서비스다.
 
 > 전체 시스템 구성은 [프로젝트 루트 README](../../README.md)를 참고한다.
 
@@ -12,6 +12,7 @@ GamjaBox 사용자 프로필, SSH 공개키, 플랜·사용량, 업그레이드 
 - 플랜 업그레이드 요청 및 관리자 승인
 - 사용자·관리자 계정 조회와 정지·활성화
 - Markdown/GFM 기반 Docs CMS와 문서 이미지 저장
+- 사용자 문의 접수·본인 이력 조회와 관리자 답변·상태 관리
 
 인증 자격 증명은 Auth가, VM과 조직 데이터는 VM 서비스가 소유한다. User는 JWT를 검증하고 필요한 경우 두 서비스의 내부 API를 호출한다.
 
@@ -38,6 +39,14 @@ Auth 회원가입
 - 본문은 Markdown 원문으로 저장하고, 이미지는 JPEG/PNG/WebP/GIF 시그니처를 검증한다.
 - 이미지 파일은 컨테이너 재배포 후에도 유지되는 외부 볼륨에 저장한다.
 
+### 사용자 문의
+
+- 사용자는 기술·계정·플랜·설명서·기타 문의를 접수하고 본인의 문의와 관리자 답변만 조회한다.
+- 설명서에서 시작한 문의는 문서 slug와 제목을 함께 저장해 문의 맥락을 유지한다.
+- 관리자는 ControlBox에서 접수됨·답변 완료·종료 상태를 조회하고 답변, 종료와 재오픈을 처리한다.
+- 사용자 ID와 이메일은 JWT principal에서 가져오며 요청 본문 값으로 신뢰하지 않는다.
+- 문의 내용과 답변은 각각 4,000자로 제한하고 비밀번호·토큰·개인키 입력 금지를 UI에서 안내한다.
+
 ## API 영역
 
 | 영역 | 대표 경로 | 설명 |
@@ -47,14 +56,16 @@ Auth 회원가입
 | 사용량 | `/users/usage` | 사용자 플랜과 리소스 사용량 |
 | 플랜 요청 | `/users/{userId}/upgrade-requests` | 업그레이드 요청·조회·취소 |
 | 사용자 Docs | `/users/docs`, `/users/docs/{slug}` | 발행 문서 검색·카테고리·상세 |
+| 사용자 문의 | `/users/support-inquiries` | 문의 접수·본인 이력 조회·종료 |
 | Docs 이미지 | `/users/docs/images/{filename}` | 공개 문서 이미지 제공 |
 | 관리자 사용자 | `/admin/users/**` | 계정·플랜·상태 관리 |
 | 관리자 Docs | `/admin/docs/**` | 문서 CRUD, 발행, 이미지 업로드 |
+| 관리자 문의 | `/admin/users/support-inquiries/**` | 전체 문의 조회·답변·상태 관리 |
 | 내부 API | `/internal/profiles`, `/internal/ssh-keys/**`, `/internal/automation/**` | 서비스 간 프로필·키·플랜 조회 |
 
 ## 데이터와 보안
 
-- MySQL: 프로필, SSH 키, 플랜 요청, Docs 문서
+- MySQL: 프로필, SSH 키, 플랜 요청, Docs 문서, 사용자 문의와 답변
 - 파일 저장소: 프로필 이미지와 Docs 이미지
 - 사용자 API: JWT 인증 필요
 - `/admin/**`: `ADMIN` 역할 필요

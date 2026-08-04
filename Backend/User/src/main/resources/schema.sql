@@ -69,3 +69,25 @@ CREATE TABLE IF NOT EXISTS docs_article_tags (
     CONSTRAINT fk_docs_article_tags_article
         FOREIGN KEY (article_id) REFERENCES docs_articles(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS support_inquiries (
+    id                    BINARY(16)   NOT NULL,
+    user_id               VARCHAR(36)  NOT NULL,
+    requester_email       VARCHAR(255) NOT NULL,
+    category              VARCHAR(20)  NOT NULL,
+    title                 VARCHAR(120) NOT NULL,
+    content               MEDIUMTEXT   NOT NULL,
+    source_article_slug   VARCHAR(120),
+    source_article_title  VARCHAR(180),
+    status                VARCHAR(20)  NOT NULL,
+    response              MEDIUMTEXT,
+    responded_by          VARCHAR(36),
+    responded_at          DATETIME(6),
+    created_at            DATETIME(6)  NOT NULL,
+    updated_at            DATETIME(6)  NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT fk_support_inquiries_user
+        FOREIGN KEY (user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE,
+    INDEX idx_support_inquiries_user_created (user_id, created_at DESC),
+    INDEX idx_support_inquiries_status_created (status, created_at DESC)
+);
