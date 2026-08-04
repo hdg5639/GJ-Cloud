@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/users", icon: "◫", label: "사용자 관리" },
   { href: "/vms", icon: "⌘", label: "VM 관리" },
   { href: "/upgrade-requests", icon: "⚙", label: "플랜 변경 요청" },
+  { href: "/support-inquiries", icon: "?", label: "사용자 문의" },
   { href: "/docs", icon: "▤", label: "사용 설명서 관리" },
 ];
 

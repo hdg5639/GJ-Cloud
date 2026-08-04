@@ -71,6 +71,9 @@ import type {
   DocsCategory,
   DocsArticleInput,
   DocsImageUpload,
+  SupportInquiry,
+  SupportInquiryStatus,
+  CreateSupportInquiryInput,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -408,6 +411,25 @@ export const api = {
       request<DocsCategory[]>("user", "/users/docs/categories", { accessToken }),
     get: (accessToken: string, slug: string) =>
       request<DocsArticle>("user", `/users/docs/${encodeURIComponent(slug)}`, { accessToken }),
+  },
+  support: {
+    list: (accessToken: string, page: number = 1, size: number = 20) =>
+      request<PagedResponse<SupportInquiry>>(
+        "user",
+        `/users/support-inquiries?page=${page}&size=${size}`,
+        { accessToken }
+      ),
+    create: (accessToken: string, body: CreateSupportInquiryInput) =>
+      request<SupportInquiry>("user", "/users/support-inquiries", {
+        method: "POST",
+        body: JSON.stringify(body),
+        accessToken,
+      }),
+    close: (accessToken: string, inquiryId: string) =>
+      request<SupportInquiry>("user", `/users/support-inquiries/${inquiryId}/close`, {
+        method: "PATCH",
+        accessToken,
+      }),
   },
   org: {
     list: (accessToken: string) =>
@@ -1210,6 +1232,27 @@ export const api = {
         request<UpgradeRequestResponse>("adminUser", `/admin/users/upgrade-requests/${requestId}`, {
           method: "PATCH",
           body: JSON.stringify({ approved, reason }),
+          accessToken,
+        }),
+    },
+    support: {
+      list: (accessToken: string, status: SupportInquiryStatus | "ALL" = "ALL", page: number = 1, size: number = 20) => {
+        const params = new URLSearchParams({ page: String(page), size: String(size) });
+        if (status !== "ALL") params.set("status", status);
+        return request<PagedResponse<SupportInquiry>>(
+          "adminUser",
+          `/admin/users/support-inquiries?${params.toString()}`,
+          { accessToken }
+        );
+      },
+      update: (
+        accessToken: string,
+        inquiryId: string,
+        body: { status: SupportInquiryStatus; response?: string }
+      ) =>
+        request<SupportInquiry>("adminUser", `/admin/users/support-inquiries/${inquiryId}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
           accessToken,
         }),
     },

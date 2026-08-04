@@ -15,12 +15,14 @@ GamjaBox 사용자 포털과 ControlBox 관리자 콘솔을 함께 제공하는 
 - OpenAPI 기반 Auto Preview 분석·시나리오 실행·VM 배포
 - 조직·멤버·VM 공유와 협업 메모·공지·요청
 - SSH 키, 프로필, 보안 설정과 사용자 설명서
+- 기술·계정·플랜·설명서 문의 접수와 관리자 답변 확인
 
 ### ControlBox
 
 - 사용자와 VM 관리
 - 플랜 업그레이드 요청 승인
 - Docs 문서 작성·미리보기·발행·이미지 관리
+- 사용자 문의 조회·답변·종료·재오픈
 
 `ADMIN_DOMAIN`과 요청 Host가 일치하면 middleware가 일반 경로를 `/admin` 영역으로 rewrite한다. 일반 사용자 도메인에서 `/admin` 직접 접근은 차단하며, 환경변수가 없으면 관리자 라우팅을 fail-safe로 비활성화한다. 최종 권한은 각 백엔드의 `/admin/**` API가 다시 검증한다.
 
@@ -43,9 +45,10 @@ app/
 │   ├── instances/          VM 생성·상세·운영 기능
 │   ├── organizations/      조직과 협업
 │   ├── docs/               사용자 설명서
+│   ├── support/            문의 접수와 답변 이력
 │   ├── settings/           프로필·보안·회원 탈퇴
 │   └── ssh-keys/           SSH 키
-├── admin/                  ControlBox 전용 화면
+├── admin/                  ControlBox 전용 화면과 사용자 문의 관리
 └── preview-demo/           Preview Runtime 개발 확인
 ```
 

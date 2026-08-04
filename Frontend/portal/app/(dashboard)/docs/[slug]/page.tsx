@@ -66,7 +66,7 @@ export default function DocsArticlePage({ params }: { params: Promise<{ slug: st
               <span>약 {Math.max(1, Math.ceil(article.content.length / 900))}분</span>
             </div>
             <MarkdownRenderer content={article.content} className="pt-4" />
-            <div className="mt-14 rounded-[16px] border border-line bg-white/[0.025] p-5 text-center"><p className="text-sm font-extrabold">원하는 답을 찾지 못했나요?</p><p className="mt-1 text-xs text-muted">협업 메모나 관리자 문의를 통해 필요한 설명서를 알려주세요.</p><Link href="/organizations" className="mt-4 inline-flex text-xs font-extrabold text-brand-strong hover:underline">협업 페이지로 이동 →</Link></div>
+            <div className="mt-14 rounded-[16px] border border-line bg-white/[0.025] p-5 text-center"><p className="text-sm font-extrabold">원하는 답을 찾지 못했나요?</p><p className="mt-1 text-xs text-muted">찾지 못한 내용이나 보완이 필요한 부분을 문의로 남겨주세요.</p><Link href={{ pathname: "/support", query: { category: "DOCS", articleSlug: article.slug, articleTitle: article.title } }} className="mt-4 inline-flex text-xs font-extrabold text-brand-strong hover:underline">이 설명서에 대해 문의하기 →</Link></div>
           </div>
         </main>
 

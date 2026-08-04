@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/organizations", icon: "◫", label: "협업", expandedSize: "text-xl", collapsedSize: "lg:text-2xl" },
   { href: "/ssh-keys", icon: "⌘", label: "SSH 키" },
   { href: "/docs", icon: "▤", label: "사용 설명서" },
+  { href: "/support", icon: "?", label: "문의하기" },
   { href: "/settings", icon: "⚙", label: "설정", expandedSize: "text-xl", collapsedSize: "lg:text-2xl" },
 ];
 
