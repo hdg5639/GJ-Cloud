@@ -60,6 +60,7 @@ Auth 회원가입
 | Docs 이미지 | `/users/docs/images/{filename}` | 공개 문서 이미지 제공 |
 | 관리자 사용자 | `/admin/users/**` | 계정·플랜·상태 관리 |
 | 관리자 Docs | `/admin/docs/**` | 문서 CRUD, 발행, 이미지 업로드 |
+| 관리자 Docs 이미지 | `/admin/users/docs/images/{filename}` | ControlBox 도메인용 공개 문서 이미지 조회 |
 | 관리자 문의 | `/admin/users/support-inquiries/**` | 전체 문의 조회·답변·상태 관리 |
 | 내부 API | `/internal/profiles`, `/internal/ssh-keys/**`, `/internal/automation/**` | 서비스 간 프로필·키·플랜 조회 |
 
