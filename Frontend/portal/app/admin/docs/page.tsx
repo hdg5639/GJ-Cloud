@@ -10,6 +10,7 @@ import { PageLoader } from "@/components/ui/loader";
 import { buttonClass, Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { toAdminDocsImageUrl } from "@/components/docs/admin-image-url";
 
 type StatusFilter = "ALL" | DocsArticleStatus;
 
@@ -98,7 +99,7 @@ export default function AdminDocsPage() {
             {filtered.map((article) => (
               <article key={article.id} className="group grid gap-4 p-4 transition hover:bg-[#f9fcfa] sm:grid-cols-[108px_minmax(0,1fr)_auto] sm:items-center">
                 <div className="aspect-[16/10] overflow-hidden rounded-[11px] border border-[#e0e7e2] bg-[linear-gradient(135deg,#edf8f0,#f8fbf9)]">
-                  {article.coverImageUrl ? <img src={article.coverImageUrl} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xl text-[#90b298]">▤</div>}
+                  {article.coverImageUrl ? <img src={toAdminDocsImageUrl(article.coverImageUrl)} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xl text-[#90b298]">▤</div>}
                 </div>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-1 text-[9px] font-extrabold ${article.status === "PUBLISHED" ? "bg-[#e7f7eb] text-[#28753c]" : "bg-[#f0f2f0] text-[#6e7971]"}`}>{article.status === "PUBLISHED" ? "발행됨" : "초안"}</span>{article.featured && <span className="rounded-full bg-[#fff4d8] px-2 py-1 text-[9px] font-extrabold text-[#9a6b0d]">추천</span>}<span className="text-[10px] font-bold text-[#849087]">{article.category}</span></div>

@@ -17,7 +17,15 @@ function textOf(node: ReactNode): string {
     .join("");
 }
 
-export function MarkdownRenderer({ content, className }: { content: string; className?: string }) {
+export function MarkdownRenderer({
+  content,
+  className,
+  resolveImageUrl = (src) => src,
+}: {
+  content: string;
+  className?: string;
+  resolveImageUrl?: (src: string) => string;
+}) {
   const headingCounts = new Map<string, number>();
 
   function uniqueHeadingId(text: string): string {
@@ -62,7 +70,7 @@ export function MarkdownRenderer({ content, className }: { content: string; clas
           thead: ({ children }) => <thead className="bg-white/[0.04] text-foreground">{children}</thead>,
           th: ({ children }) => <th className="border-b border-line px-4 py-3 text-xs font-extrabold">{children}</th>,
           td: ({ children }) => <td className="border-b border-line px-4 py-3 text-sm text-muted last:[tr:last-child_&]:border-b-0">{children}</td>,
-          img: ({ src, alt }) => <figure className="my-8"><img src={src ?? ""} alt={alt ?? ""} loading="lazy" className="max-h-[680px] w-full rounded-[16px] border border-line object-contain bg-black/10 shadow-xl shadow-black/10" />{alt && <figcaption className="mt-2 text-center text-xs text-muted-soft">{alt}</figcaption>}</figure>,
+          img: ({ src, alt }) => <figure className="my-8"><img src={resolveImageUrl(typeof src === "string" ? src : "")} alt={alt ?? ""} loading="lazy" className="max-h-[680px] w-full rounded-[16px] border border-line object-contain bg-black/10 shadow-xl shadow-black/10" />{alt && <figcaption className="mt-2 text-center text-xs text-muted-soft">{alt}</figcaption>}</figure>,
           input: ({ type, checked, disabled }) => type === "checkbox"
             ? <input type="checkbox" checked={checked} disabled={disabled} readOnly className="mr-2 h-4 w-4 accent-brand" />
             : <input type={type} disabled={disabled} />,

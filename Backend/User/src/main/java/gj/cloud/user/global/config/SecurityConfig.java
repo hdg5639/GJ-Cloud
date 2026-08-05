@@ -163,7 +163,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/webjars/**",
                                 "/users/uploads/profile-images/**",
-                                "/users/docs/images/**"
+                                "/users/docs/images/**",
+                                "/admin/users/docs/images/**"
                         ).permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
