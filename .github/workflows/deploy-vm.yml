@@ -7,9 +7,14 @@ on:
       - 'Backend/Vm/**'
   workflow_dispatch:
 
+concurrency:
+  group: deploy-vm-dev
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Dev VM
+    timeout-minutes: 30
     runs-on:
       - self-hosted
       - Linux

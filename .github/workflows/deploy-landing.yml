@@ -6,9 +6,14 @@ on:
     paths:
       - 'gamjabox-landing/**'
 
+concurrency:
+  group: deploy-landing-dev
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Dev VM
+    timeout-minutes: 10
     runs-on:
       - self-hosted
       - Linux
