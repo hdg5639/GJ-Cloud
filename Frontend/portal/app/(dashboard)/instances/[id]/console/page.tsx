@@ -61,6 +61,39 @@ export default function ConsolePage() {
       termRef.current = term;
       fitRef.current = fitAddon;
 
+      // macOS는 Cmd(metaKey) 복사/붙여넣기를 브라우저가 네이티브로 처리하지만,
+      // Windows/Linux의 Ctrl+C/Ctrl+V는 xterm이 PTY 입력으로 보내버려 동작하지 않는다.
+      // Ctrl 조합만 가로채 클립보드에 연결한다. (metaKey 경로는 그대로 두어 Mac 동작 유지)
+      term.attachCustomKeyEventHandler((event) => {
+        if (event.type !== "keydown" || !event.ctrlKey) return true;
+        const key = event.key.toLowerCase();
+
+        // 복사: Ctrl+C는 선택 영역이 있을 때만 복사(없으면 기존대로 SIGINT 전달),
+        // Ctrl+Shift+C는 명시적 복사. 둘 다 선택 영역이 있어야 의미가 있다.
+        if (key === "c" && (event.shiftKey || term.hasSelection())) {
+          const selection = term.getSelection();
+          if (selection) {
+            void navigator.clipboard?.writeText(selection).catch(() => {});
+            event.preventDefault();
+            return false;
+          }
+        }
+
+        // 붙여넣기: Ctrl+V / Ctrl+Shift+V는 클립보드 내용을 PTY로 전송한다.
+        if (key === "v") {
+          void navigator.clipboard
+            ?.readText()
+            .then((text) => {
+              if (text) term.paste(text);
+            })
+            .catch(() => {});
+          event.preventDefault();
+          return false;
+        }
+
+        return true;
+      });
+
       // 티켓은 일회용(30초 TTL, Redis GETDEL) — 발급 직후 바로 WS 핸드셰이크에 사용해야 함
       const { ticket } = await api.ops.issueTerminalTicket(accessToken, vmId);
       const wsBase = process.env.NEXT_PUBLIC_OPS_API!.replace(/^http/, "ws");
