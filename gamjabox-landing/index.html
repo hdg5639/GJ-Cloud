@@ -1,20 +1,24 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#07080b" />
-  <meta name="description" content="GamjaBox — VM 생성부터 SSH, 파일 관리, Docker 배포까지 한 화면에서 다루는 셀프호스팅 클라우드." />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07080b">
+  <meta name="description" content="GamjaBox — Proxmox VM 생성부터 웹 콘솔, Docker·GitHub 배포, Auto Preview와 운영까지 연결하는 셀프호스팅 클라우드.">
+  <meta property="og:title" content="GamjaBox — Your cloud, under your control.">
+  <meta property="og:description" content="VM 생성, 운영, 배포와 협업을 하나의 포털에서.">
+  <meta property="og:type" content="website">
   <title>GamjaBox — Your cloud, under your control.</title>
-  <link rel="icon" href="./favicon/favicon.ico" sizes="any" />
-  <link rel="icon" type="image/png" sizes="16x16" href="./favicon/favicon-16x16.png" />
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicon/favicon-32x32.png" />
-  <link rel="apple-touch-icon" href="./favicon/apple-touch-icon.png" />
-  <link rel="manifest" href="./site.webmanifest" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" href="./favicon/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="16x16" href="./favicon/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon/favicon-32x32.png">
+  <link rel="apple-touch-icon" href="./favicon/apple-touch-icon.png">
+  <link rel="manifest" href="./site.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
+  <div class="scene-transition-veil" aria-hidden="true"></div>
   <div class="ambient-layer" aria-hidden="true">
     <div class="ambient ambient-a"></div>
     <div class="ambient ambient-b"></div>
@@ -26,26 +30,22 @@
         <title id="wm-title-header">GamjaBox</title>
         <defs>
           <linearGradient id="wm-g-header" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#c8ff58"/>
-            <stop offset="1" stop-color="#62ffa8"/>
+            <stop offset="0" stop-color="#c8ff58" />
+            <stop offset="1" stop-color="#62ffa8" />
           </linearGradient>
         </defs>
-        <g class="wm-symbol">
-          <g transform="translate(5.3 7.6) scale(2.3)">
-            <path fill="url(#wm-g-header)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
-            <path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"/>
-          </g>
+        <g transform="translate(5.3 7.6) scale(2.3)">
+          <path fill="url(#wm-g-header)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z" />
+          <path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z" />
         </g>
-        <text x="100" y="67" class="brand-name wm-name">
-          <tspan fill="#FFFFFF">Gamja</tspan><tspan fill="#08B85B">Box</tspan>
-        </text>
+        <text x="100" y="67" class="brand-name"><tspan fill="#fff">Gamja</tspan><tspan fill="#08b85b">Box</tspan></text>
       </svg>
     </a>
 
     <nav class="desktop-nav" aria-label="주요 메뉴">
-      <a href="#top">홈</a>
       <a href="#features">기능</a>
-      <a href="#workflow">워크플로</a>
+      <a href="#operations">운영</a>
+      <a href="#workflow">흐름</a>
       <a href="#architecture">구조</a>
       <a href="https://github.com/hdg5639/GJ-Cloud" target="_blank" rel="noreferrer">GitHub</a>
     </nav>
@@ -54,213 +54,236 @@
   </header>
 
   <main id="top">
-    <section class="hero section-shell">
+    <section class="hero section-shell snap-section">
       <div class="hero-copy reveal">
         <div class="eyebrow"><span class="status-dot"></span> SELF-HOSTED CLOUD PLATFORM</div>
-        <h1>Your cloud.<br /><span>Under your control.</span></h1>
+        <h1>Your cloud.<span>Under your control.</span></h1>
         <p class="hero-description">
-          복잡한 가상화 인프라를 누구나 다룰 수 있는 제품으로.<br />
-          VM 생성부터 SSH, 파일 관리, Docker 배포까지 한 화면에서 끝냅니다.
+          Proxmox VM 생성부터 웹 콘솔, Docker·GitHub 배포,<br class="desktop-break">
+          Auto Preview와 팀 운영까지 하나의 흐름으로 연결합니다.
         </p>
         <div class="hero-actions">
           <a class="button button-primary" href="https://portal.gamjabox.cloud">GamjaBox 시작하기 <span>→</span></a>
-          <a class="button button-secondary" href="#features">무엇을 만들었는지 보기</a>
+          <a class="button button-secondary" href="#features">기능 살펴보기</a>
         </div>
         <div class="hero-meta">
-          <div><strong>Proxmox</strong><span>Virtualization</span></div>
+          <div><strong>Proxmox VE</strong><span>Automated provisioning</span></div>
           <div><strong>Zero Trust</strong><span>Secure access</span></div>
-          <div><strong>One-click</strong><span>Deploy workflow</span></div>
+          <div><strong>Git to VM</strong><span>Deploy · expose · rollback</span></div>
         </div>
       </div>
 
-      <div class="hero-visual reveal reveal-delay-1" aria-label="GamjaBox 대시보드 미리보기">
+      <div class="hero-visual reveal reveal-delay-1" role="img" aria-label="실제 GamjaBox 인스턴스 화면을 반영한 미리보기">
         <div class="window">
           <div class="window-topbar">
-            <div class="traffic"><span></span><span></span><span></span></div>
-            <div class="window-address">portal.gamjabox.cloud / instances</div>
+            <div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="window-address"><i data-icon="lock"></i> portal.gamjabox.cloud / instances</div>
             <div class="secure-pill"><span></span> secure</div>
           </div>
 
           <div class="app-shell">
             <aside class="sidebar">
-              <div class="side-brand"><span class="mini-logo">G</span><b>GamjaBox</b></div>
-              <div class="side-section">CLOUD</div>
-              <div class="side-item active"><i data-icon="server"></i><span>Instances</span><em>3</em></div>
-              <div class="side-item"><i data-icon="globe"></i><span>Exposures</span></div>
-              <div class="side-item"><i data-icon="users"></i><span>Organizations</span></div>
-              <div class="side-section">MANAGE</div>
-              <div class="side-item"><i data-icon="key"></i><span>SSH Keys</span></div>
-              <div class="side-item"><i data-icon="activity"></i><span>Activity</span></div>
-              <div class="user-card"><span>HD</span><div><b>hdg5639</b><small>PRO PLAN</small></div></div>
+              <div class="side-brand"><span class="mini-logo">G</span><b>Gamja<span>Box</span></b></div>
+              <nav class="mock-navigation" aria-label="포털 메뉴 미리보기">
+                <div class="side-item active"><i data-icon="server"></i><span>인스턴스</span></div>
+                <div class="side-item"><i data-icon="users"></i><span>협업</span></div>
+                <div class="side-item"><i data-icon="key"></i><span>SSH 키</span></div>
+                <div class="side-item"><i data-icon="book"></i><span>사용 설명서</span></div>
+                <div class="side-item"><i data-icon="message"></i><span>문의하기</span></div>
+                <div class="side-item"><i data-icon="settings"></i><span>설정</span></div>
+              </nav>
+              <div class="mock-side-footer">
+                <div class="plan-card">
+                  <div><small>CURRENT PLAN</small><b>PRO</b></div>
+                  <p><span>인스턴스</span><strong>2 / 4</strong></p>
+                  <p><span>최대 사양</span><strong>8 vCPU · 12 GB</strong></p>
+                  <div class="plan-bar"><i></i></div>
+                </div>
+                <div class="user-card"><span>HD</span><div><b>동균</b><small>donggyun@example.com</small></div><i data-icon="logout"></i></div>
+              </div>
             </aside>
 
             <div class="dashboard">
               <div class="dash-heading">
-                <div><p>Infrastructure</p><h2>Instances</h2></div>
-                <button><span>＋</span> Create instance</button>
+                <div><p>COMPUTE</p><h2>인스턴스</h2><span>가상 머신의 상태, 자원과 네트워크를 관리합니다.</span></div>
+                <button type="button" disabled><span>＋</span> 인스턴스 생성</button>
               </div>
 
               <div class="metric-grid">
-                <article><div><span class="metric-icon"><i data-icon="server"></i></span><small>RUNNING</small></div><strong>3</strong><em>of 4 instances</em></article>
-                <article><div><span class="metric-icon"><i data-icon="cpu"></i></span><small>VCPU</small></div><strong>8</strong><em>allocated cores</em></article>
-                <article><div><span class="metric-icon"><i data-icon="memory"></i></span><small>MEMORY</small></div><strong>14 GB</strong><em>of 16 GB used</em></article>
+                <article><span class="metric-icon"><i data-icon="server"></i></span><div><small>전체 인스턴스</small><strong>3</strong></div></article>
+                <article><span class="metric-icon success"><i data-icon="pulse"></i></span><div><small>실행 중</small><strong>2</strong></div></article>
+                <article><span class="metric-icon"><i data-icon="box"></i></span><div><small>FREE</small><strong>1</strong></div></article>
+                <article><span class="metric-icon purple"><i data-icon="zap"></i></span><div><small>PRO</small><strong>2</strong></div></article>
+              </div>
+
+              <div class="table-tools">
+                <div class="mock-search"><i data-icon="search"></i><span>이름, IP, 서브도메인으로 검색</span></div>
+                <div class="mock-filter"><span>모든 상태</span><b>⌄</b></div>
               </div>
 
               <div class="instance-table">
-                <div class="table-head"><span>INSTANCE</span><span>STATUS</span><span>SPEC</span><span>NETWORK</span><span></span></div>
+                <div class="table-head"><span>이름</span><span>상태</span><span>플랜</span><span>vCPU</span><span>RAM</span><span>디스크</span><span>IP 주소</span><span>생성일</span></div>
                 <div class="table-row selected">
-                  <div class="instance-name"><span class="os-cube">U</span><div><b>prod-api</b><small>Ubuntu 24.04 LTS</small></div></div>
-                  <div><span class="running"><i></i> Running</span></div>
-                  <div><b>4 vCPU · 8 GB</b><small>80 GB NVMe</small></div>
-                  <div><b>10.10.20.14</b><small>api.gamjabox.cloud</small></div>
-                  <button class="row-button">Open <span>↗</span></button>
+                  <div class="instance-name"><span class="os-cube">G</span><div><b>production</b><small>production.gamjabox.cloud</small></div></div>
+                  <div><span class="running"><i></i> 실행 중</span></div>
+                  <div><span class="plan-badge pro">PRO</span></div>
+                  <b>8</b><b>12 GB</b><b>80 GB</b><code>192.168.0.31</code><small>2026. 08. 04.</small>
                 </div>
                 <div class="table-row">
-                  <div class="instance-name"><span class="os-cube">D</span><div><b>dev-lab</b><small>Debian 12</small></div></div>
-                  <div><span class="running"><i></i> Running</span></div>
-                  <div><b>2 vCPU · 4 GB</b><small>40 GB NVMe</small></div>
-                  <div><b>10.10.20.18</b><small>dev.gamjabox.cloud</small></div>
-                  <button class="dots">•••</button>
+                  <div class="instance-name"><span class="os-cube">G</span><div><b>development</b><small>development.gamjabox.cloud</small></div></div>
+                  <div><span class="running"><i></i> 실행 중</span></div>
+                  <div><span class="plan-badge free">FREE</span></div>
+                  <b>4</b><b>5 GB</b><b>40 GB</b><code>192.168.0.32</code><small>2026. 08. 02.</small>
                 </div>
                 <div class="table-row">
-                  <div class="instance-name"><span class="os-cube">U</span><div><b>monitoring</b><small>Ubuntu 24.04 LTS</small></div></div>
-                  <div><span class="running"><i></i> Running</span></div>
-                  <div><b>2 vCPU · 2 GB</b><small>30 GB NVMe</small></div>
-                  <div><b>10.10.20.22</b><small>grafana.gamjabox.cloud</small></div>
-                  <button class="dots">•••</button>
+                  <div class="instance-name"><span class="os-cube">G</span><div><b>preview-lab</b><small>preview-lab.gamjabox.cloud</small></div></div>
+                  <div><span class="creating"><i></i> 생성 중</span></div>
+                  <div><span class="plan-badge pro">PRO</span></div>
+                  <b>4</b><b>8 GB</b><b>60 GB</b><code>할당 중</code><small>방금 전</small>
                 </div>
-              </div>
-
-              <div class="terminal-card">
-                <div class="terminal-title"><span><i></i><i></i><i></i></span><b>prod-api — Web terminal</b><em>Connected</em></div>
-                <div class="terminal-body"><span class="prompt">ubuntu@prod-api</span>:<span class="path">~</span>$ docker compose up -d<br/><span class="terminal-muted">[+] Running 4/4</span><br/><span class="terminal-ok">✔ Container api&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Started</span><br/><span class="terminal-ok">✔ Container mysql&nbsp;&nbsp;&nbsp;&nbsp;Healthy</span><br/><span class="prompt">ubuntu@prod-api</span>:<span class="path">~</span>$ <span class="cursor"></span></div>
               </div>
             </div>
           </div>
         </div>
-        <div class="float-card float-card-a"><span><i data-icon="shield"></i></span><div><b>Zero Trust secured</b><small>Identity-aware access</small></div></div>
-        <div class="float-card float-card-b"><span><i data-icon="rocket"></i></span><div><b>Deployment complete</b><small>api.gamjabox.cloud</small></div><em>12s</em></div>
+        <div class="float-card float-card-a"><span><i data-icon="shield"></i></span><div><b>SSH 준비 완료</b><small>사용자 키 검증 · Zero Trust</small></div><em>✓</em></div>
+        <div class="float-card float-card-b"><span><i data-icon="rocket"></i></span><div><b>GitHub 자동 배포 완료</b><small>production · 2f7d9a1</small></div><em>32s</em></div>
       </div>
     </section>
 
     <section class="trust-strip section-shell reveal">
-      <p>BUILT ON A REAL SELF-HOSTED INFRASTRUCTURE</p>
+      <p>BUILT AND RUNNING ON REAL SELF-HOSTED INFRASTRUCTURE</p>
       <div class="trust-logos"><span>PROXMOX VE</span><span>CLOUDFLARE</span><span>DOCKER</span><span>SPRING</span><span>NEXT.JS</span><span>CADDY</span></div>
     </section>
 
-    <section class="manifesto section-shell reveal">
+    <section class="manifesto section-shell reveal snap-section">
       <p class="section-kicker">BEYOND A DASHBOARD</p>
-      <h2>인프라를 숨기는 게 아니라,<br/><span>더 잘 다룰 수 있게 만듭니다.</span></h2>
-      <p>GamjaBox는 단순한 VM 생성 폼이 아닙니다. 프로비저닝, 네트워크, 인증, 배포, 운영 상태를 하나의 일관된 흐름으로 묶은 셀프호스팅 IaaS입니다.</p>
+      <h2>인프라 기능을 나열하지 않고,<br><span>하나의 제품 경험으로 연결합니다.</span></h2>
+      <p>GamjaBox는 개인 Proxmox 환경 위에서 VM 생성, 접근, 배포, 외부 공개, 협업과 운영을 끝까지 이어 주는 셀프호스팅 클라우드 플랫폼입니다.</p>
     </section>
 
-    <section class="features section-shell" id="features">
+    <section class="features section-shell snap-section" id="features">
+      <div class="section-heading reveal">
+        <p class="section-kicker">CORE PLATFORM</p>
+        <h2>서버를 만들고 다루는 데<br>필요한 모든 기본 기능.</h2>
+      </div>
+
       <div class="feature-grid">
         <article class="feature-card feature-large reveal">
           <div class="feature-copy">
             <span class="feature-index">01 / PROVISION</span>
-            <h3>몇 번의 클릭으로<br/>내 서버가 준비됩니다.</h3>
-            <p>템플릿 클론, IP 할당, 초기 설정, DNS 연결까지 자동화합니다. 생성 과정은 실시간으로 확인할 수 있습니다.</p>
-            <ul><li>Proxmox 기반 VM 프로비저닝</li><li>SSE 실시간 진행 상태</li><li>플랜별 리소스 정책</li></ul>
+            <h3>생성 버튼을 누른 뒤에도<br>준비 상태를 끝까지 확인합니다.</h3>
+            <p>플랜과 디스크, SSH 키를 선택하면 Proxmox 템플릿 클론부터 cloud-init, 사용자 키 검증, Cloudflare 연결까지 순서대로 처리합니다.</p>
+            <ul><li>FREE 4 vCPU · 5 GB / PRO 8 vCPU · 12 GB</li><li>SSE 기반 생성 진행 상태</li><li>실패 시 외부 리소스까지 보상 정리</li></ul>
           </div>
-          <div class="provision-visual">
-            <div class="step-card done"><span>01</span><div><b>Clone template</b><small>ubuntu-24.04-cloudinit</small></div><i>✓</i></div>
+          <div class="provision-visual" role="img" aria-label="VM 생성 진행 단계">
+            <div class="step-card done"><span>01</span><div><b>Proxmox 템플릿 클론</b><small>cloud-init 드라이브 구성</small></div><i>✓</i></div>
             <div class="step-line done"></div>
-            <div class="step-card done"><span>02</span><div><b>Configure network</b><small>10.10.20.24 assigned</small></div><i>✓</i></div>
+            <div class="step-card done"><span>02</span><div><b>네트워크 준비</b><small>Guest Agent IP 확인</small></div><i>✓</i></div>
+            <div class="step-line done"></div>
+            <div class="step-card done"><span>03</span><div><b>SSH 키 검증</b><small>관리 키 · 사용자 키 확인</small></div><i>✓</i></div>
             <div class="step-line active"></div>
-            <div class="step-card active"><span>03</span><div><b>Attach secure tunnel</b><small>Creating DNS records...</small></div><i class="spinner"></i></div>
-            <div class="step-line"></div>
-            <div class="step-card"><span>04</span><div><b>Instance ready</b><small>Waiting for health check</small></div><i>•</i></div>
+            <div class="step-card active"><span>04</span><div><b>외부 접근 연결</b><small>DNS · Tunnel · Access 설정 중</small></div><i class="spinner"></i></div>
           </div>
         </article>
 
         <article class="feature-card reveal">
           <div class="feature-icon"><i data-icon="terminal"></i></div>
-          <span class="feature-index">02 / ACCESS</span>
-          <h3>브라우저가 곧<br/>당신의 터미널.</h3>
-          <p>별도 클라이언트 없이 웹에서 SSH에 접속하고, Zero Trust 인증으로 접근을 보호합니다.</p>
-          <div class="mini-terminal"><div><i></i><i></i><i></i><span>secure shell</span></div><p><b>ubuntu@vm</b>:~$ ssh connected<span class="cursor"></span></p></div>
+          <span class="feature-index">02 / TERMINAL</span>
+          <h3>브라우저에서 바로<br>안전하게 접속합니다.</h3>
+          <p>단기 티켓 기반 웹 터미널과 SSH 키 관리로 별도 클라이언트 없이 VM을 운영합니다.</p>
+          <div class="mini-terminal"><div><i></i><i></i><i></i><span>production — terminal</span></div><p><b>ubuntu@production</b>:~$ docker ps<br><span>4 containers running</span><i class="cursor"></i></p></div>
         </article>
 
         <article class="feature-card reveal reveal-delay-1">
           <div class="feature-icon"><i data-icon="folder"></i></div>
           <span class="feature-index">03 / FILES</span>
-          <h3>서버 파일도<br/>로컬처럼 다룹니다.</h3>
-          <p>탐색, 업로드, 편집, 다운로드와 미디어 미리보기까지 브라우저에서 처리합니다.</p>
-          <div class="file-list"><div><span>📁</span><b>app</b><small>directory</small></div><div><span>◇</span><b>docker-compose.yml</b><small>2.4 KB</small></div><div><span>⌁</span><b>application.yml</b><small>1.8 KB</small></div></div>
+          <h3>원격 파일도<br>로컬처럼 다룹니다.</h3>
+          <p>탐색, 업로드, 편집, 다운로드와 미디어 미리보기를 권한과 민감 경로 정책 안에서 제공합니다.</p>
+          <div class="file-list"><div><span>📁</span><b>apps</b><small>directory</small></div><div><span>◇</span><b>compose.yaml</b><small>2.4 KB</small></div><div><span>⌁</span><b>application.yml</b><small>1.8 KB</small></div></div>
         </article>
 
         <article class="feature-card feature-wide reveal">
           <div class="deploy-visual">
-            <div class="deploy-source"><span class="git-icon"><i data-icon="git"></i></span><div><small>SOURCE</small><b>hdg5639 / gamjabox-api</b><em>main · 2f7d9a1</em></div></div>
-            <div class="deploy-flow"><span></span><span></span><span></span></div>
-            <div class="deploy-target"><span class="docker-icon"><i data-icon="box"></i></span><div><small>DEPLOYMENT</small><b>4 containers running</b><em>Healthy · 32 seconds ago</em></div><i>✓</i></div>
+            <div class="deploy-source"><span class="git-icon"><i data-icon="git"></i></span><div><small>GITHUB PUSH</small><b>hdg5639 / gamjabox-api</b><em>develop · 2f7d9a1</em></div></div>
+            <div class="deploy-flow" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="deploy-target"><span class="docker-icon"><i data-icon="box"></i></span><div><small>VM DEPLOYMENT</small><b>4개 컨테이너 실행 중</b><em>Health check 통과 · 방금 전</em></div><i>✓</i></div>
           </div>
           <div class="feature-copy compact">
             <span class="feature-index">04 / DEPLOY</span>
-            <h3>Compose를 올리고,<br/>서비스를 바로 공개하세요.</h3>
-            <p>Docker Compose 구성부터 상태 확인, 로그, 외부 도메인 연결까지 하나의 배포 흐름으로 이어집니다.</p>
+            <h3>Git push에서 서비스 공개까지<br>정확한 커밋으로 배포합니다.</h3>
+            <p>GitHub App 연결, Compose 분석, 이미지 빌드, 상태 검사, Cloudflare 라우트와 실패 시 롤백을 배포 대상별로 관리합니다.</p>
           </div>
         </article>
       </div>
     </section>
 
-    <section class="workflow section-shell" id="workflow">
-      <div class="section-heading reveal"><p class="section-kicker">ONE CONTINUOUS FLOW</p><h2>생성에서 운영까지,<br/>끊기지 않는 경험.</h2></div>
-      <div class="workflow-grid reveal">
-        <article><span>01</span><div class="workflow-icon"><i data-icon="sliders"></i></div><h3>리소스 선택</h3><p>필요한 vCPU, 메모리, 디스크와 OS를 고릅니다.</p></article>
-        <article><span>02</span><div class="workflow-icon"><i data-icon="zap"></i></div><h3>자동 프로비저닝</h3><p>VM, 네트워크, SSH, DNS 구성이 자동으로 진행됩니다.</p></article>
-        <article><span>03</span><div class="workflow-icon"><i data-icon="code"></i></div><h3>접속 & 배포</h3><p>웹 콘솔과 파일 브라우저로 코드를 올리고 실행합니다.</p></article>
-        <article><span>04</span><div class="workflow-icon"><i data-icon="pulse"></i></div><h3>운영 & 관찰</h3><p>상태, 로그, 포트, 도메인과 권한을 한곳에서 관리합니다.</p></article>
+    <section class="operations section-shell snap-section" id="operations">
+      <div class="section-heading reveal">
+        <p class="section-kicker">OPERATE AS A PRODUCT</p>
+        <h2>배포 다음 날에도 필요한<br>운영 기능까지 갖췄습니다.</h2>
+        <p>서버 콘솔을 오가며 따로 처리하던 작업을 VM과 사용자 맥락 안에 모았습니다.</p>
+      </div>
+
+      <div class="capability-grid">
+        <article class="capability-card reveal"><div class="capability-icon"><i data-icon="preview"></i></div><span>AUTO PREVIEW</span><h3>OpenAPI를 실제 서비스형 화면으로</h3><p>API와 설명을 분석해 페이지·시나리오·데이터 흐름을 조립하고, 동일한 Runtime으로 VM에 배포합니다.</p><ul><li>JSON·YAML·문서 URL 입력</li><li>제품형 다중 페이지·모달·Flow</li></ul></article>
+        <article class="capability-card reveal reveal-delay-1"><div class="capability-icon"><i data-icon="database"></i></div><span>DATA &amp; CONTAINERS</span><h3>Docker 운영과 DB 백업을 한곳에서</h3><p>Compose 상태와 로그를 확인하고 PostgreSQL, MySQL, MongoDB, Redis 백업을 생성·보관합니다.</p><ul><li>AES-256-GCM 백업 암호화</li><li>체크섬·보존 기간 관리</li></ul></article>
+        <article class="capability-card reveal reveal-delay-2"><div class="capability-icon"><i data-icon="activity"></i></div><span>OBSERVABILITY</span><h3>자원과 서비스 상태를 이어서 확인</h3><p>CPU, 메모리, 디스크와 네트워크 메트릭부터 포트, 배포 로그, 상태 변경까지 VM 단위로 살펴봅니다.</p><ul><li>실시간 상태·메트릭</li><li>포트와 CNAME 라우트 관리</li></ul></article>
+        <article class="capability-card reveal"><div class="capability-icon"><i data-icon="users"></i></div><span>COLLABORATION</span><h3>역할이 있는 조직 단위 운영</h3><p>OWNER, ADMIN, MEMBER 역할에 따라 VM 작업을 제어하고 공지, 메모, 요청으로 운영 맥락을 공유합니다.</p><ul><li>서버 재검증 기반 권한</li><li>협업 공지·메모·요청</li></ul></article>
+        <article class="capability-card reveal reveal-delay-1"><div class="capability-icon"><i data-icon="globe"></i></div><span>PUBLIC ACCESS</span><h3>필요한 서비스만 안전하게 공개</h3><p>Cloudflare DNS, Tunnel, Access와 CNAME을 연결해 VM의 내부 서비스와 외부 도메인을 관리합니다.</p><ul><li>다중 서비스 라우팅</li><li>Zero Trust 접근 정책</li></ul></article>
+        <article class="capability-card reveal reveal-delay-2"><div class="capability-icon"><i data-icon="book"></i></div><span>GUIDE &amp; SUPPORT</span><h3>설명서와 문의도 포털 안에서</h3><p>실제 기능에 맞는 사용 설명서를 검색하고, 필요한 도움은 문의로 남겨 관리자와 상태를 이어갑니다.</p><ul><li>Docs CMS · 이미지·태그·검색</li><li>사용자 문의·관리자 답변</li></ul></article>
       </div>
     </section>
 
-    <section class="architecture section-shell" id="architecture">
+    <section class="workflow section-shell snap-section" id="workflow">
+      <div class="section-heading reveal"><p class="section-kicker">ONE CONTINUOUS FLOW</p><h2>생성에서 공개와 운영까지,<br>끊기지 않는 경험.</h2></div>
+      <div class="workflow-grid reveal">
+        <article><span>01</span><div class="workflow-icon"><i data-icon="sliders"></i></div><h3>계획</h3><p>플랜, 디스크, SSH 키를 고르고 VM 생성을 요청합니다.</p></article>
+        <article><span>02</span><div class="workflow-icon"><i data-icon="zap"></i></div><h3>프로비저닝</h3><p>VM, cloud-init, SSH 검증과 네트워크 구성이 자동으로 진행됩니다.</p></article>
+        <article><span>03</span><div class="workflow-icon"><i data-icon="code"></i></div><h3>개발·배포</h3><p>터미널과 파일을 다루거나 GitHub·Auto Preview로 서비스를 배포합니다.</p></article>
+        <article><span>04</span><div class="workflow-icon"><i data-icon="globe"></i></div><h3>공개</h3><p>포트와 CNAME을 연결하고 Cloudflare를 통해 외부에 공개합니다.</p></article>
+        <article><span>05</span><div class="workflow-icon"><i data-icon="pulse"></i></div><h3>운영</h3><p>메트릭, 로그, 백업과 조직 권한을 지속적으로 관리합니다.</p></article>
+      </div>
+    </section>
+
+    <section class="architecture section-shell snap-section" id="architecture">
       <div class="architecture-card reveal">
-        <div class="architecture-copy"><p class="section-kicker">REAL INFRASTRUCTURE</p><h2>보이는 화면 뒤에는<br/>실제 운영 구조가 있습니다.</h2><p>프론트엔드만 그럴듯한 데모가 아닙니다. 서비스 분리, 내부 인증, 네트워크 자동화와 하이퍼바이저 제어까지 직접 설계하고 운영합니다.</p><a href="https://github.com/hdg5639/GJ-Cloud" target="_blank" rel="noreferrer">GitHub에서 구조 보기 <span>↗</span></a></div>
-        <div class="architecture-map">
-          <div class="arch-node edge"><span><i data-icon="cloud"></i></span><b>Cloudflare</b><small>Zero Trust · Tunnel · DNS</small></div>
-          <div class="arch-connect"><i></i><i></i><i></i></div>
-          <div class="arch-row">
-            <div class="arch-node"><span><i data-icon="layout"></i></span><b>Portal</b><small>Next.js</small></div>
-            <div class="arch-node"><span><i data-icon="lock"></i></span><b>Auth</b><small>JWT · Service token</small></div>
-            <div class="arch-node"><span><i data-icon="server"></i></span><b>VM Service</b><small>Provisioning</small></div>
-            <div class="arch-node"><span><i data-icon="settings"></i></span><b>Ops</b><small>Infrastructure control</small></div>
+        <div class="architecture-copy"><p class="section-kicker">REAL INFRASTRUCTURE</p><h2>화면 뒤의 역할도<br>명확하게 나뉘어 있습니다.</h2><p>Portal이 사용자 경험을 묶고 Auth, User, VM, Ops가 각자의 데이터와 책임을 소유합니다. Caddy와 Cloudflare가 진입점을 보호하고 Proxmox VE와 사용자 VM까지 실제 작업을 이어갑니다.</p><a href="https://github.com/hdg5639/GJ-Cloud" target="_blank" rel="noreferrer">GitHub에서 전체 구조 보기 <span>↗</span></a></div>
+        <div class="architecture-map" role="img" aria-label="GamjaBox 서비스 구조">
+          <div class="arch-node edge"><span><i data-icon="cloud"></i></span><div><b>Cloudflare + Caddy</b><small>DNS · Tunnel · Access · Routing</small></div></div>
+          <div class="arch-line"><i></i></div>
+          <div class="arch-node portal"><span><i data-icon="layout"></i></span><div><b>Portal</b><small>사용자 포털 · ControlBox</small></div></div>
+          <div class="arch-line branching"><i></i></div>
+          <div class="arch-services">
+            <div class="arch-node"><span><i data-icon="lock"></i></span><div><b>Auth</b><small>인증 · 토큰</small></div></div>
+            <div class="arch-node"><span><i data-icon="user"></i></span><div><b>User</b><small>프로필 · Docs</small></div></div>
+            <div class="arch-node"><span><i data-icon="server"></i></span><div><b>VM</b><small>VM · 조직 · 네트워크</small></div></div>
+            <div class="arch-node"><span><i data-icon="settings"></i></span><div><b>Ops</b><small>SSH · 배포 · 백업</small></div></div>
           </div>
-          <div class="arch-connect vertical"><i></i><i></i><i></i></div>
-          <div class="arch-node core"><span><i data-icon="layers"></i></span><b>Proxmox Cluster</b><small>VM · Storage · Network</small></div>
+          <div class="arch-line"><i></i></div>
+          <div class="arch-core-row">
+            <div class="arch-node core"><span><i data-icon="layers"></i></span><div><b>Proxmox VE</b><small>Compute · Storage · Network</small></div></div>
+            <div class="arch-node core"><span><i data-icon="box"></i></span><div><b>User VMs</b><small>Docker · Apps · Databases</small></div></div>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="final-cta section-shell reveal">
+    <section class="final-cta section-shell reveal snap-section">
       <div class="cta-glow" aria-hidden="true"></div>
       <p class="section-kicker">BUILD. SHIP. OWN.</p>
-      <h2>클라우드를 빌리는 대신,<br/><span>직접 소유하는 경험.</span></h2>
-      <p>GamjaBox에서 당신의 다음 서비스를 시작하세요.</p>
+      <h2>내 인프라를 직접 소유하면서도,<br><span>제품처럼 편하게 운영하세요.</span></h2>
+      <p>GamjaBox에서 VM 생성부터 다음 서비스의 배포까지 시작할 수 있습니다.</p>
       <div class="hero-actions centered"><a class="button button-primary" href="https://portal.gamjabox.cloud">콘솔 열기 <span>→</span></a><a class="button button-secondary" href="https://github.com/hdg5639/GJ-Cloud" target="_blank" rel="noreferrer">GitHub 보기</a></div>
     </section>
   </main>
 
-  <footer class="site-footer section-shell">
-    <a class="brand footer-brand" href="#top">
+  <footer class="site-footer section-shell reveal">
+    <a class="brand footer-brand" href="#top" aria-label="GamjaBox 홈">
       <svg viewBox="14 2 353 86" role="img" aria-labelledby="wm-title-footer">
         <title id="wm-title-footer">GamjaBox</title>
-        <defs>
-          <linearGradient id="wm-g-footer" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#c8ff58"/>
-            <stop offset="1" stop-color="#62ffa8"/>
-          </linearGradient>
-        </defs>
-        <g class="wm-symbol">
-          <g transform="translate(5.3 7.6) scale(2.3)">
-            <path fill="url(#wm-g-footer)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z"/>
-            <path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z"/>
-          </g>
-        </g>
-        <text x="100" y="67" class="brand-name wm-name">
-          <tspan fill="#FFFFFF">Gamja</tspan><tspan fill="#08B85B">Box</tspan>
-        </text>
+        <defs><linearGradient id="wm-g-footer" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c8ff58" /><stop offset="1" stop-color="#62ffa8" /></linearGradient></defs>
+        <g transform="translate(5.3 7.6) scale(2.3)"><path fill="url(#wm-g-footer)" d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z" /><path fill="#07100a" d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z" /></g>
+        <text x="100" y="67" class="brand-name"><tspan fill="#fff">Gamja</tspan><tspan fill="#08b85b">Box</tspan></text>
       </svg>
     </a>
     <p>Self-hosted cloud, built from the ground up.</p>
