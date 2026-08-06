@@ -6,9 +6,14 @@ on:
     paths:
       - 'Frontend/portal/**'
 
+concurrency:
+  group: deploy-portal-prod
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Production VM
+    timeout-minutes: 30
     runs-on:
       - self-hosted
       - Linux

@@ -11,9 +11,14 @@ on:
       - 'compose.yaml'
       - '.github/workflows/deploy-main-ops.yml'
 
+concurrency:
+  group: deploy-ops-prod
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to Production VM
+    timeout-minutes: 30
     runs-on:
       - self-hosted
       - Linux

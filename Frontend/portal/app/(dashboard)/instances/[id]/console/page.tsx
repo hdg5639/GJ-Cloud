@@ -153,9 +153,10 @@ export default function ConsolePage() {
         End: "end",
       };
 
-      // macOS는 Cmd(metaKey) 복사/붙여넣기를 브라우저가 네이티브로 처리하지만,
-      // Windows/Linux의 Ctrl+C/Ctrl+V는 xterm이 PTY 입력으로 보내버려 동작하지 않는다.
-      // Ctrl 조합만 가로채 클립보드에 연결한다. (metaKey 경로는 그대로 두어 Mac 동작 유지)
+      // Windows/Linux의 Ctrl+C/Ctrl+V는 xterm이 PTY 입력으로 보내버려 동작하지 않으므로
+      // 직접 클립보드에 연결한다. 복사는 Cmd+C(맥)도 함께 처리한다 — 키보드로 만든
+      // 선택은 아래 정리 블록이 먼저 지워버려 xterm 네이티브 copy 이벤트가 못 읽기 때문.
+      // 붙여넣기는 맥 Cmd+V의 네이티브 경로(clipboard read 권한 프롬프트 방지)를 유지한다.
       term.attachCustomKeyEventHandler((event) => {
         if (event.type !== "keydown") return true;
 
@@ -170,10 +171,11 @@ export default function ConsolePage() {
           return false;
         }
 
-        // 복사/붙여넣기(Ctrl 계열). 키보드로 만든 선택도 여기서 그대로 복사된다.
-        if (event.ctrlKey) {
+        // 복사/붙여넣기. 키보드로 만든 선택도 여기서 그대로 복사된다.
+        if (event.ctrlKey || event.metaKey) {
           const key = event.key.toLowerCase();
-          // Ctrl+C는 선택이 있을 때만 복사(없으면 SIGINT 전달), Ctrl+Shift+C는 명시적 복사.
+          // 복사: Ctrl+C(윈도우/리눅스)와 Cmd+C(맥) 모두. 선택이 있을 때만 복사(없으면
+          // Ctrl+C는 SIGINT 전달), Ctrl+Shift+C는 명시적 복사.
           if (key === "c" && (event.shiftKey || term.hasSelection())) {
             const selection = term.getSelection();
             if (selection) {
@@ -182,8 +184,9 @@ export default function ConsolePage() {
               return false;
             }
           }
-          // Ctrl+V / Ctrl+Shift+V: 클립보드 내용을 PTY로 전송.
-          if (key === "v") {
+          // 붙여넣기: Windows/Linux는 Ctrl+V를 가로채 clipboard.readText로 넣는다.
+          // 맥 Cmd+V는 네이티브 붙여넣기에 맡긴다.
+          if (event.ctrlKey && key === "v") {
             void navigator.clipboard
               ?.readText()
               .then((text) => {
