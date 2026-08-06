@@ -109,6 +109,17 @@ window.addEventListener('scroll', scheduleNavigationUpdate, { passive: true });
 
 const smoothScrollMedia = window.matchMedia('(min-width: 821px) and (prefers-reduced-motion: no-preference)');
 const rootElement = document.documentElement;
+
+// 데스크톱에서는 이 스크립트의 JS 엔진이 모든 스무스 스크롤을 담당하므로 CSS
+// `scroll-behavior: smooth`를 꺼 둔다. 켜 두면 씬 전환 후 위치를 즉시 맞추는
+// scrollTo가 브라우저 렌더 시점에 CSS smooth로 다시 해석돼, 화면이 뒤늦게 스르륵
+// 자리를 찾아가는 현상이 생긴다. 모바일/모션축소 환경에서는 앵커 링크의 네이티브
+// 스무스 스크롤을 위해 CSS 기본값을 유지한다.
+const syncNativeScrollBehavior = () => {
+  rootElement.style.scrollBehavior = smoothScrollMedia.matches ? 'auto' : '';
+};
+syncNativeScrollBehavior();
+
 const sceneDefinitions = [
   {
     id: 'top',
@@ -129,11 +140,10 @@ const sceneDefinitions = [
   },
   {
     id: 'final',
+    // 푸터는 씬 크로스페이드(스케일)에 넣지 않는다. final-cta만 페이드시키고
+    // 푸터는 자체 reveal 로 아래에서 위로 슥 올라오게 해 마지막 화면을 마무리한다.
     anchor: document.querySelector('.final-cta'),
-    elements: [
-      document.querySelector('.final-cta'),
-      document.querySelector('.site-footer'),
-    ],
+    elements: [document.querySelector('.final-cta')],
   },
 ]
   .filter((scene) => scene.anchor)
@@ -150,7 +160,7 @@ let lastWheelAt = 0;
 let lastFrameAt = performance.now();
 let scrollFrame;
 let scrollEngineRunning = false;
-let previousScrollBehavior = '';
+let previousScrollBehavior = rootElement.style.scrollBehavior;
 let sceneTransitionRunning = false;
 let boundaryGestureArmed = false;
 let boundaryDirection = 0;
@@ -187,6 +197,11 @@ const getSceneEnd = (index) => {
   if (index >= sceneDefinitions.length - 1) return clampScroll(Number.POSITIVE_INFINITY);
   return Math.max(getSceneStart(index), getSceneStart(index + 1) - window.innerHeight);
 };
+
+// 씬 내부 스크롤 여유(콘텐츠가 뷰포트를 넘는 양). 뷰포트를 조금만 넘는 씬(top의 로고 띠,
+// final의 푸터 등)은 사실상 한 화면짜리로 취급하고, 진짜 여러 화면 분량인 씬만 tall로 본다.
+const getSceneOverflow = (index) => Math.max(0, getSceneEnd(index) - getSceneStart(index));
+const isTallScene = (index) => getSceneOverflow(index) >= window.innerHeight * 0.5;
 
 const getSceneIndex = (position = window.scrollY) => {
   let activeIndex = 0;
@@ -267,7 +282,13 @@ const transitionToScene = async (targetIndex, requestedDirection) => {
   const enteringClass = direction > 0 ? 'is-scene-entering-forward' : 'is-scene-entering-backward';
   const leavingElements = sceneDefinitions[currentIndex].elements;
   const enteringElements = sceneDefinitions[targetIndex].elements;
-  const landingPosition = direction > 0 ? getSceneStart(targetIndex) : getSceneEnd(targetIndex);
+  // 아래로 진입하면 항상 씬 맨 위에 착지한다. 위로 되돌아올 때는 진짜 여러 화면 분량인 씬만
+  // 바닥(getSceneEnd)에 착지해 콘텐츠를 위로 훑게 하고, 뷰포트를 조금만 넘는 씬은 맨 위에
+  // 딱 맞춰 착지시킨다. (top으로 복귀할 때 로고 띠 프레이밍(139px)에 걸쳤다가 다시 슥
+  // 올라가던 현상을 없앤다.)
+  const landingPosition = direction > 0 || !isTallScene(targetIndex)
+    ? getSceneStart(targetIndex)
+    : getSceneEnd(targetIndex);
 
   sceneTransitionRunning = true;
   resetBoundaryGesture();
@@ -416,7 +437,15 @@ window.addEventListener('keydown', () => {
 window.addEventListener('resize', () => {
   stopSmoothScroll();
   resetBoundaryGesture();
+  syncNativeScrollBehavior();
   targetScroll = clampScroll(targetScroll);
   renderedScroll = window.scrollY;
   updateActiveNavigation();
+});
+
+// 데스크톱↔모바일/모션축소 경계를 오갈 때 CSS 스무스 스크롤 on/off를 다시 맞춘다.
+smoothScrollMedia.addEventListener('change', () => {
+  stopSmoothScroll();
+  resetBoundaryGesture();
+  syncNativeScrollBehavior();
 });
