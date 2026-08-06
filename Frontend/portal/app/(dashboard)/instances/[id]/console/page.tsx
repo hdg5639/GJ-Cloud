@@ -61,34 +61,149 @@ export default function ConsolePage() {
       termRef.current = term;
       fitRef.current = fitAddon;
 
+      // Shift + 방향키로 터미널 텍스트를 선택하는 키보드 선택 컨트롤러.
+      // 터미널은 에디터처럼 자유 캐럿이 없으므로 앵커/캐럿을 버퍼 절대 좌표로 직접
+      // 관리하고, 공개 API select(col, row, length)로 선형 선택을 만든다. length가
+      // cols를 넘으면 다음 행으로 이어지는 xterm 동작을 이용해 여러 줄도 선택된다.
+      type SelCell = { x: number; y: number };
+      let selAnchor: SelCell | null = null;
+      let selCaret: SelCell | null = null;
+
+      // 커서의 버퍼 절대 위치. cursorY는 baseY 기준 상대값이라 baseY를 더한다.
+      const cursorCell = (): SelCell => {
+        const buf = term.buffer.active;
+        return { x: buf.cursorX, y: buf.baseY + buf.cursorY };
+      };
+
+      const applySelection = () => {
+        if (!selAnchor || !selCaret) return;
+        const cols = term.cols;
+        const forward =
+          selAnchor.y < selCaret.y || (selAnchor.y === selCaret.y && selAnchor.x <= selCaret.x);
+        const start = forward ? selAnchor : selCaret;
+        const end = forward ? selCaret : selAnchor;
+        const length = (end.y - start.y) * cols + (end.x - start.x);
+        if (length <= 0) {
+          term.clearSelection();
+          return;
+        }
+        term.select(start.x, start.y, length);
+      };
+
+      const ensureCaretVisible = () => {
+        if (!selCaret) return;
+        const top = term.buffer.active.viewportY;
+        if (selCaret.y < top) term.scrollToLine(selCaret.y);
+        else if (selCaret.y > top + term.rows - 1) term.scrollToLine(selCaret.y - term.rows + 1);
+      };
+
+      const clearKeyboardSelection = () => {
+        selAnchor = null;
+        selCaret = null;
+      };
+
+      type NavDir = "left" | "right" | "up" | "down" | "home" | "end";
+      const extendSelection = (dir: NavDir) => {
+        const cols = term.cols;
+        const lastRow = term.buffer.active.length - 1;
+        if (!selCaret || !selAnchor) {
+          const origin = cursorCell();
+          selAnchor = { ...origin };
+          selCaret = { ...origin };
+        }
+        const c = selCaret;
+        switch (dir) {
+          case "left":
+            if (c.x > 0) c.x -= 1;
+            else if (c.y > 0) {
+              c.y -= 1;
+              c.x = cols - 1;
+            }
+            break;
+          case "right":
+            if (c.x < cols - 1) c.x += 1;
+            else if (c.y < lastRow) {
+              c.y += 1;
+              c.x = 0;
+            }
+            break;
+          case "up":
+            if (c.y > 0) c.y -= 1;
+            break;
+          case "down":
+            if (c.y < lastRow) c.y += 1;
+            break;
+          case "home":
+            c.x = 0;
+            break;
+          case "end":
+            c.x = cols; // 줄 끝 경계까지 포함
+            break;
+        }
+        ensureCaretVisible();
+        applySelection();
+      };
+
+      const navMap: Record<string, NavDir> = {
+        ArrowLeft: "left",
+        ArrowRight: "right",
+        ArrowUp: "up",
+        ArrowDown: "down",
+        Home: "home",
+        End: "end",
+      };
+
       // macOS는 Cmd(metaKey) 복사/붙여넣기를 브라우저가 네이티브로 처리하지만,
       // Windows/Linux의 Ctrl+C/Ctrl+V는 xterm이 PTY 입력으로 보내버려 동작하지 않는다.
       // Ctrl 조합만 가로채 클립보드에 연결한다. (metaKey 경로는 그대로 두어 Mac 동작 유지)
       term.attachCustomKeyEventHandler((event) => {
-        if (event.type !== "keydown" || !event.ctrlKey) return true;
-        const key = event.key.toLowerCase();
+        if (event.type !== "keydown") return true;
 
-        // 복사: Ctrl+C는 선택 영역이 있을 때만 복사(없으면 기존대로 SIGINT 전달),
-        // Ctrl+Shift+C는 명시적 복사. 둘 다 선택 영역이 있어야 의미가 있다.
-        if (key === "c" && (event.shiftKey || term.hasSelection())) {
-          const selection = term.getSelection();
-          if (selection) {
-            void navigator.clipboard?.writeText(selection).catch(() => {});
+        // 단독 수식키는 무시(Shift만 눌렀다고 진행 중인 선택을 지우지 않도록).
+        if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return true;
+
+        // Shift + 방향키/Home/End: 키보드로 텍스트 선택 (맥·윈도우 공통).
+        const nav = navMap[event.key];
+        if (nav && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          extendSelection(nav);
+          event.preventDefault();
+          return false;
+        }
+
+        // 복사/붙여넣기(Ctrl 계열). 키보드로 만든 선택도 여기서 그대로 복사된다.
+        if (event.ctrlKey) {
+          const key = event.key.toLowerCase();
+          // Ctrl+C는 선택이 있을 때만 복사(없으면 SIGINT 전달), Ctrl+Shift+C는 명시적 복사.
+          if (key === "c" && (event.shiftKey || term.hasSelection())) {
+            const selection = term.getSelection();
+            if (selection) {
+              void navigator.clipboard?.writeText(selection).catch(() => {});
+              event.preventDefault();
+              return false;
+            }
+          }
+          // Ctrl+V / Ctrl+Shift+V: 클립보드 내용을 PTY로 전송.
+          if (key === "v") {
+            void navigator.clipboard
+              ?.readText()
+              .then((text) => {
+                if (text) term.paste(text);
+              })
+              .catch(() => {});
             event.preventDefault();
             return false;
           }
         }
 
-        // 붙여넣기: Ctrl+V / Ctrl+Shift+V는 클립보드 내용을 PTY로 전송한다.
-        if (key === "v") {
-          void navigator.clipboard
-            ?.readText()
-            .then((text) => {
-              if (text) term.paste(text);
-            })
-            .catch(() => {});
-          event.preventDefault();
-          return false;
+        // 그 외 키 입력이 오면 진행 중인 키보드 선택을 정리한다.
+        // Escape는 선택만 취소하고 PTY로 보내지 않는다.
+        if (selCaret) {
+          clearKeyboardSelection();
+          term.clearSelection();
+          if (event.key === "Escape") {
+            event.preventDefault();
+            return false;
+          }
         }
 
         return true;
