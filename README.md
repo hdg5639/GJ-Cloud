@@ -789,6 +789,14 @@ Suite를 만들 때 참조하는 Scenario가 활성 상태이고 revision과 Ope
 
 관리자 콘솔은 별도 비공개 도메인으로 분리되며, 같은 Next.js 애플리케이션에서 호스트 기반으로 ControlBox 라우트에 연결된다.
 
+### 랜딩페이지
+
+`gamjabox-landing/`은 별도 프레임워크나 빌드 단계 없이 HTML, CSS, JavaScript로 제공하는 정적 마케팅 페이지다. 실제 포털의 인스턴스 화면과 현재 VM 생성·운영·배포·협업 기능을 반영하며, 포털과 동일한 육각형 GamjaBox 파비콘 세트를 사용한다.
+
+데스크톱에서는 Hero, 제품 선언, 기능, 운영, 워크플로우, 아키텍처, 최종 CTA를 독립 장면으로 나눈다. 한 화면보다 긴 장면 안에서는 일반 스크롤을 유지하고, 장면 경계에서는 트랙패드의 감속과 다음 제스처를 구분한 뒤 양방향 원근 전환을 수행한다. Hero 목업과 카드·블록·아키텍처 노드는 화면에 다시 진입할 때마다 짧은 순차 애니메이션을 재생한다. 모바일과 `prefers-reduced-motion` 환경에서는 이 전환 엔진을 사용하지 않고 기본 문서 스크롤과 최소 애니메이션으로 동작한다.
+
+Cloudflare는 HTML보다 CSS·JavaScript를 오래 캐시할 수 있다. 새 HTML과 구형 정적 자산이 섞이면 레이아웃과 장면 제어가 함께 깨지므로 `styles.css` 또는 `script.js`를 변경할 때는 `index.html`의 `?v=` 값도 올리거나 배포 직후 해당 URL의 Cloudflare 캐시를 purge한다. 파비콘과 Web App Manifest 아이콘도 같은 방식으로 버전 URL을 사용한다.
+
 ---
 
 ## 프로젝트 구조
@@ -880,6 +888,8 @@ npm run build
 
 GitHub Actions는 서비스별 path filter로 필요한 워크플로우만 실행한다. `develop`은 `gamjabox-dev`, `main`은 `gamjabox-prod` 라벨의 self-hosted Linux/X64 runner를 사용하며, 모든 배포 명령은 서버의 `/home/ubuntu/GJ-Cloud`에서 실행된다. 백엔드와 포털 배포는 새 이미지를 기동한 뒤 컨테이너 내부 IP의 health endpoint를 확인하고, 실패하면 보존한 이전 이미지로 자동 롤백한다.
 
+랜딩페이지는 `gamjabox-landing/**` 변경 시 `develop`의 `deploy-landing.yml`과 `main`의 `deploy-main-landing.yml`이 각각 실행된다. 별도 빌드 없이 대상 브랜치로 작업 디렉터리를 맞춘 뒤, bind mount된 정적 파일을 Caddy가 다시 읽도록 `docker compose restart caddy`를 수행한다. 워크플로우 성공은 서버 파일 갱신과 Caddy 재시작을 뜻하며 Cloudflare Edge 캐시 갱신까지 보장하지는 않으므로, 배포 확인 시 HTML뿐 아니라 버전이 붙은 CSS·JavaScript 응답도 함께 비교한다.
+
 Ops 배포 워크플로우는 `Backend/Ops/**`뿐만 아니라 `compose.yaml`과 빌드 시 하나의 이미지에 포함하는 포털 `lib/types.ts`, `components/ui/**`, `components/preview-runtime/**`도 감시한다. 포털과 Auto Preview 배포본이 항상 같은 Runtime을 포함하도록 Ops 이미지를 함께 재빌드한다.
 
 기본 `compose.yaml`과 `env.example`은 배포 구조와 환경변수 계약만 담아 Git으로 관리한다. `env.example`에는 secret 생성 명령, Proxmox·Cloudflare·GitHub 값 형식, 호스트/컨테이너 경로 예시를 함께 기록한다. `CHANGE_ME_*`는 실제 배포 전에 모두 교체해야 하며, 실제 값이 들어가는 `.env*`, 로컬 override·프록시 설정과 운영 자격증명은 Git에서 제외하고 서버 런타임 환경에서 관리한다.
@@ -921,6 +931,7 @@ Ops Blueprint 검색은 기본적으로 Registry fallback 상태다. Elasticsear
 
 - 배포 자동 롤백용 헬스체크가 `docker compose port`로 알아낸 호스트 매핑 포트에 `localhost`로 curl했는데, 그 포트를 호스트에 publish하지 않는 구성이면 대상 자체가 비어 있어 앱이 매번 정상 기동돼도 헬스체크는 100% 실패하고 매 배포가 자동 롤백당하던 문제 → 호스트 포트 publish 여부와 무관하게 항상 유효한 컨테이너 내부 IP로 직접 확인하도록 변경
 - 리액티브 앱(R2DBC + Redis + WebClient 초기화)의 콜드 스타트 시간이 헬스체크 재시도 타임아웃 경계값과 겹쳐서, 정상적으로 뜬 이미지가 타이밍 때문에 실패로 오판돼 롤백당한 적 있음 → 재시도 타임아웃을 넉넉히 확대
+- 랜딩 배포에서 새 `index.html`은 즉시 반영됐지만 Cloudflare가 이전 `styles.css`와 `script.js`를 4시간 캐시해 새 마크업에 구형 스타일·스크립트가 섞이고 페이지 하단이 깨진 문제 → 정적 자산 URL에 배포 버전을 붙여 캐시 키를 갱신하고, 배포 후 버전 URL의 응답 해시를 저장소 파일과 비교
 
 ### VM 프로비저닝 (Proxmox / Cloudflare)
 
