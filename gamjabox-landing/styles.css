@@ -52,6 +52,45 @@ svg {
   display: block;
 }
 
+/* 한국어 자연 줄바꿈.
+   - word-break: keep-all → 한글을 어절(단어) 단위로만 끊어 "배포"가 "배/포"처럼
+     중간에서 갈라지지 않게 한다. (구형 브라우저까지 지원되는 근본 해결)
+   - text-wrap: balance(헤딩) → 여러 줄 제목의 줄 길이를 고르게 맞춘다.
+   - text-wrap: pretty(본문) → 마지막 줄에 한 단어만 남는 고아 줄을 줄인다.
+   balance/pretty 미지원 브라우저에서도 keep-all 만으로 어색한 중간 끊김은 사라진다. */
+h1,
+h2,
+h3,
+h4,
+p,
+li {
+  word-break: keep-all;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p,
+li {
+  text-wrap: pretty;
+}
+
+/* 헤딩의 하드코딩 <br> 은 데스크톱 줄 길이에 맞춰 넣은 것이라, 폰 폭에서는 강제 줄바꿈이
+   "않고," 같은 고아 줄을 만든다. 폰에서는 숨겨서 keep-all + balance 의 자연 줄바꿈에
+   맡긴다. (mini-terminal 등 헤딩이 아닌 <br> 은 건드리지 않는다.) */
+@media (max-width: 560px) {
+  .manifesto h2 br,
+  .section-heading h2 br,
+  .feature-card h3 br,
+  .architecture-copy h2 br,
+  .final-cta h2 br {
+    display: none;
+  }
+}
+
 .noise {
   position: fixed;
   z-index: 20;
@@ -152,16 +191,20 @@ body.is-scene-revealing .scene-fade-target {
   background: rgba(107, 82, 255, 0.08);
 }
 
-.section-shell,
-.site-header {
+.section-shell {
   width: min(1480px, calc(100% - 64px));
   margin-inline: auto;
 }
 
+/* 헤더는 화면 끝까지 닿는 풀블리드 바로 두고(양옆 배경이 비쳐 잘려 보이던 문제 제거),
+   안쪽 콘텐츠만 padding 으로 섹션과 동일한 거터에 정렬한다. 거터는 section-shell 의
+   유효 여백과 같은 공식: max(기본거터, (100% - 최대폭)/2). */
 .site-header {
   position: sticky;
   z-index: 30;
   top: 0;
+  width: 100%;
+  padding-inline: max(32px, calc((100% - 1480px) / 2));
   display: grid;
   grid-template-columns: 220px 1fr 220px;
   align-items: center;
@@ -240,22 +283,42 @@ body.is-scene-revealing .scene-fade-target {
   justify-self: end;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 15px;
-  border: 1px solid rgba(130, 241, 106, 0.34);
-  border-radius: 10px;
-  color: #dfffd6;
-  background: rgba(130, 241, 106, 0.07);
+  gap: 7px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #07130b;
+  background: linear-gradient(135deg, #c8ff58 0%, #6ce89a 100%);
   font-size: 13px;
   font-weight: 700;
-  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+  letter-spacing: -0.01em;
+  box-shadow:
+    0 6px 18px rgba(108, 232, 154, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms ease,
+    filter 200ms ease;
+}
+
+.nav-cta span {
+  display: inline-flex;
+  font-weight: 800;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav-cta:hover,
 .nav-cta:focus-visible {
-  transform: translateY(-2px);
-  border-color: rgba(130, 241, 106, 0.7);
-  background: rgba(130, 241, 106, 0.12);
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow:
+    0 10px 26px rgba(108, 232, 154, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.nav-cta:hover span,
+.nav-cta:focus-visible span {
+  transform: translate(2px, -2px);
 }
 
 .hero {
@@ -2172,9 +2235,12 @@ body.is-scene-revealing .scene-fade-target {
 }
 
 @media (max-width: 1250px) {
-  .section-shell,
-  .site-header {
+  .section-shell {
     width: min(1120px, calc(100% - 48px));
+  }
+
+  .site-header {
+    padding-inline: max(24px, calc((100% - 1120px) / 2));
   }
 
   .hero {
@@ -2333,13 +2399,32 @@ body.is-scene-revealing .scene-fade-target {
   }
 }
 
+/* 데스크톱 씬 엔진이 꺼지는 구간(<821px). 히어로 목업 .window 의 pre-reveal 3D
+   틸트(translateX 26px + rotateY)가 좁은 화면에서 뷰포트를 4~7px 넘겨 페이지 전체가
+   좌우로 흔들리던 문제를 없앤다. 가로 슬라이드를 빼고 상승+스케일 reveal 은 유지하며,
+   main 가로 clip 으로 장식 요소 bleed 까지 한 번 더 가둔다. (세로 스크롤·sticky 헤더
+   영향 없음: 헤더는 main 의 형제) */
+@media (max-width: 820px) {
+  main {
+    overflow-x: clip;
+  }
+
+  .hero-visual.reveal .window {
+    transform: translate3d(0, 12px, 0) scale(0.965);
+  }
+
+  .hero-visual.reveal.is-visible .window {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
 @media (max-width: 768px) {
-  .section-shell,
-  .site-header {
+  .section-shell {
     width: calc(100% - 32px);
   }
 
   .site-header {
+    padding-inline: 16px;
     min-height: 72px;
   }
 
@@ -2348,7 +2433,7 @@ body.is-scene-revealing .scene-fade-target {
   }
 
   .nav-cta {
-    padding: 9px 12px;
+    padding: 9px 15px;
     font-size: 11px;
   }
 
@@ -2523,14 +2608,14 @@ body.is-scene-revealing .scene-fade-target {
 }
 
 @media (max-width: 560px) {
-  .section-shell,
-  .site-header {
+  .section-shell {
     width: calc(100% - 24px);
   }
 
   .site-header {
     display: flex;
     justify-content: space-between;
+    padding-inline: 12px;
     min-height: 66px;
   }
 
