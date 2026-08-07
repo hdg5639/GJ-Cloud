@@ -96,7 +96,13 @@ export function useBrandIntroPhase(): BrandIntroPhase {
   const [phase, setPhase] = useState<BrandIntroPhase>("pending");
 
   useEffect(() => {
-    if (sessionStorage.getItem(BRAND_INTRO_KEY)) {
+    // 인트로(아이콘이 화면 중앙에서 좌상단으로 이동하며 워드마크를 이루는 연출)는 좌측
+    // 데스크톱 패널(hidden lg:flex, 착지점 40,40) 전용이다. lg 미만에서는 그 패널이 숨겨져
+    // 있어 portal된 fixed 워드마크가 허공(좌상단)에 착지하고 폼 상단의 모바일 브랜드
+    // (lg:hidden)와 중복돼 깨져 보인다 — 모바일에서는 인트로를 재생하지 않고 정적으로 둔다.
+    const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
+    if (!isDesktop || sessionStorage.getItem(BRAND_INTRO_KEY)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPhase("done");
       return;
     }
