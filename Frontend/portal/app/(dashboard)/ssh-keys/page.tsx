@@ -101,7 +101,7 @@ export default function SshKeysPage() {
       )}
 
       <Modal open={modalOpen} onClose={handleModalClose}>
-        <div className="mx-auto w-[420px] rounded-panel bg-panel p-6">
+        <div className="mx-auto w-[min(420px,calc(100vw-32px))] rounded-panel bg-panel p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-bold">SSH 키 등록</h2>
             <button onClick={handleModalClose} className="text-muted-soft hover:text-muted text-xl leading-none">×</button>

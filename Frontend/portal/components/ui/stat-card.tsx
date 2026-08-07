@@ -13,7 +13,7 @@ export function StatGrid({
   return (
     <div
       className={cn(
-        "mb-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-[repeat(var(--stat-cols),minmax(0,1fr))]",
+        "mb-4 grid grid-cols-2 gap-3.5 lg:grid-cols-[repeat(var(--stat-cols),minmax(0,1fr))]",
         className
       )}
       style={{ "--stat-cols": cols } as CSSProperties}

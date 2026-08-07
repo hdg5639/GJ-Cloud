@@ -625,9 +625,9 @@ export default function InstanceDetailPage() {
       </StatGrid>
 
       {/* 2단 레이아웃 */}
-      <div className="flex gap-4 items-start">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
       {/* ── 좌측: SSH / 이메일 / 포트 ── */}
-      <div className="flex-[11] min-w-0 space-y-3">
+      <div className="w-full min-w-0 space-y-3 lg:flex-[11]">
 
       {/* SSH 접속 정보 */}
       <Panel className="p-4 px-5">
@@ -1027,8 +1027,8 @@ sudo apt-get update && sudo apt-get install cloudflared`}
       </div>{/* end left col */}
 
       {/* ── 우측: 협업 패널 (sticky) ── */}
-      <div className="flex-[10] min-w-0">
-        <div className="sticky top-0 rounded-panel bg-white/[0.03] border border-line p-4">
+      <div className="w-full min-w-0 lg:flex-[10]">
+        <div className="rounded-panel bg-white/[0.03] border border-line p-4 lg:sticky lg:top-0">
           {/* 패널 헤더 */}
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[15px] font-bold">협업</span>
@@ -1109,7 +1109,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
       {/* 포트 추가 모달 */}
       <Modal open={showPortModal} onClose={() => setShowPortModal(false)}>
-        <div className="mx-auto w-[420px] rounded-panel bg-panel p-6">
+        <div className="mx-auto w-[min(420px,calc(100vw-32px))] rounded-panel bg-panel p-6">
           <h2 className="mb-4 text-base font-bold">포트 추가</h2>
           <form onSubmit={handleAddPort} className="flex flex-col gap-1">
             <Field label="닉네임" htmlFor="port-nickname">
@@ -1237,7 +1237,7 @@ sudo apt-get update && sudo apt-get install cloudflared`}
 
       {/* 삭제 확인 모달 */}
       <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)}>
-        <div className="mx-auto w-[340px] rounded-panel bg-panel p-6">
+        <div className="mx-auto w-[min(340px,calc(100vw-32px))] rounded-panel bg-panel p-6">
           <h2 className="mb-2 text-base font-bold">인스턴스 삭제</h2>
           <p className="mb-5 text-sm text-muted">
             <span className="font-bold text-foreground">{vm.name}</span>을 삭제하면 복구할 수 없습니다. 계속하시겠습니까?
