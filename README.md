@@ -317,7 +317,7 @@ AI 검수 결과는 읽기 전용 조언으로 끝나지 않는다. 검수 내�
 
 사용자는 배포 대상 이름과 실제 API Base URL을 지정한다. VM을 가진 사용자는 기존 VM Target으로, VM이 없는 사용자는 GamjaBox 관리형 Worker로 배포할 수 있다. 관리형 Preview는 배포별 컨테이너·Compose project·포트·호스트명을 격리하고 FREE 6시간, PRO 24시간 TTL 후 자동 정리한다. 사용자에게는 Preview URL·상태·만료 시각만 보이며 worker VMID·내부 IP·SSH 정보는 노출하지 않는다.
 
-ControlBox의 **시스템 인프라** 화면에서는 `AUTO_PREVIEW` Worker의 VMID 300, 4 vCPU, 5GB RAM, 80GB 사양과 프로비저닝 단계를 확인하고 시작·정지·재부팅·Reconcile·Runtime Repair·일회용 콘솔을 실행할 수 있다. 활성 worker를 삭제하거나 무조건 재생성하는 API는 제공하지 않는다.
+ControlBox의 **시스템 인프라** 화면에서는 `AUTO_PREVIEW` Worker의 VMID 300, 4 vCPU, 5GB RAM, 80GB 사양과 프로비저닝 단계를 확인하고 시작·정지·재부팅·Reconcile·Runtime Repair·일회용 콘솔을 실행할 수 있다. 화면 진입 시 저장된 상태만 표시하지 않고 Proxmox에 예약 VMID가 실제로 존재하는지 다시 확인한다. VM이 직접 삭제됐다면 기존 DB 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR` 중 무엇이었든 `MISSING`으로 전환해 **Worker 재생성** 버튼을 노출하며, 요청 시점에도 실제 부재를 재검증한다. 실제 프로비저닝 중이거나 예약 VMID에 VM이 존재하면 중복 생성은 거부한다.
 
 <details>
 <summary><strong>🔍 분석 엔진 상세</strong> — 입력 보안, OpenAPI 정규화, 서비스 이해와 Scenario 의미 계획</summary>

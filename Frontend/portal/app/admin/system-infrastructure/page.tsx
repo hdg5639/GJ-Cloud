@@ -32,10 +32,11 @@ export default function SystemInfrastructurePage() {
     return () => clearTimeout(timer);
   }, [load]);
   useEffect(() => {
-    if (worker?.status !== "PROVISIONING") return;
-    const timer = setInterval(() => void load(), 3000);
+    if (!worker?.configured) return;
+    // 프로비저닝 진행 상황은 빠르게, 평상시 Proxmox 직접 삭제는 관리자 화면을 켜둔 상태에서도 감지한다.
+    const timer = setInterval(() => void load(), worker.status === "PROVISIONING" ? 3000 : 15000);
     return () => clearInterval(timer);
-  }, [worker?.status, load]);
+  }, [worker?.configured, worker?.status, load]);
 
   async function run(action: "create" | "start" | "stop" | "reboot" | "reconcile" | "repair") {
     if (!accessToken) return;
@@ -89,7 +90,7 @@ export default function SystemInfrastructurePage() {
                 <Button disabled={!!busy || !worker.internalIp || !["ACTIVE", "DEGRADED", "ERROR"].includes(worker.status)} onClick={() => run("repair")}>Runtime Repair</Button>
                 {active && <Link href="/system-infrastructure/console" className="inline-flex h-9 items-center rounded-md border border-line px-4 text-xs font-bold hover:bg-[#f3f6f4]">워커 콘솔</Link>}
               </div>
-              <p className="mt-4 text-[11px] leading-5 text-muted-soft">ControlBox에서는 워커 삭제를 제공하지 않습니다. Proxmox에서 VM이 직접 삭제되어 MISSING으로 확인된 경우에만 동일한 등록 정보로 재생성할 수 있습니다.</p>
+              <p className="mt-4 text-[11px] leading-5 text-muted-soft">ControlBox에서는 워커 삭제를 제공하지 않습니다. 화면을 열 때 Proxmox 존재 여부를 다시 확인하며, VM이 직접 삭제된 경우 DB의 이전 상태와 관계없이 동일한 등록 정보로 재생성할 수 있습니다.</p>
             </div>
           </>
         ) : (

@@ -35,19 +35,36 @@ public class SystemWorkerService {
         this.vmClient = vmClient; this.runtime = runtime; this.executor = executor;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public SystemWorkerResponse get() {
-        return repository.findByRole(SystemWorkerRole.AUTO_PREVIEW).map(SystemWorkerResponse::from)
-                .orElseGet(SystemWorkerResponse::notConfigured);
+        var worker = repository.findByRole(SystemWorkerRole.AUTO_PREVIEW);
+        if (worker.isEmpty()) return SystemWorkerResponse.notConfigured();
+        SystemWorkerEntity current = worker.get();
+        if (current.getStatus() == SystemWorkerStatus.PROVISIONING) return SystemWorkerResponse.from(current);
+
+        try {
+            SystemWorkerVmResponse vm = vmClient.status(current.getVmId());
+            if (!vm.exists()) return SystemWorkerResponse.from(repository.save(current.missing(vm.node())));
+            if (current.getStatus() == SystemWorkerStatus.MISSING) {
+                SystemWorkerStatus recoveredStatus = "RUNNING".equals(vm.powerState())
+                        ? SystemWorkerStatus.DEGRADED : SystemWorkerStatus.STOPPED;
+                current = repository.save(current.observed(recoveredStatus, vm.node(), vm.internalIp(),
+                        "Proxmox VM이 다시 확인되었습니다. Reconcile로 Runtime 상태를 확인해주세요."));
+            }
+        } catch (Exception e) {
+            // ControlBox 자체를 막지 않는다. VM 서비스 장애와 실제 VM 부재를 혼동해 재생성을 허용해서도 안 된다.
+            log.warn("Auto Preview Worker 존재 여부 확인 실패, 마지막 저장 상태를 반환합니다: {}", e.getMessage());
+        }
+        return SystemWorkerResponse.from(current);
     }
 
     @Transactional
     public SystemWorkerResponse create() {
         var existingWorker = repository.findByRole(SystemWorkerRole.AUTO_PREVIEW);
-        boolean reprovisioning = existingWorker.map(worker -> worker.getStatus() == SystemWorkerStatus.MISSING).orElse(false);
+        boolean reprovisioning = existingWorker.map(this::canReprovision).orElse(false);
         SystemWorkerEntity worker = existingWorker
                 .map(existing -> {
-                    if (existing.getStatus() != SystemWorkerStatus.MISSING) throw new OpsException(OpsErrorCode.SYSTEM_WORKER_ALREADY_CONFIGURED);
+                    if (!reprovisioning) throw new OpsException(OpsErrorCode.SYSTEM_WORKER_ALREADY_CONFIGURED);
                     return repository.save(existing.reprovisioning());
                 })
                 .orElseGet(() -> repository.save(SystemWorkerEntity.provisioning(properties.getName(),
@@ -65,6 +82,11 @@ public class SystemWorkerService {
             }
         });
         return SystemWorkerResponse.from(worker);
+    }
+
+    private boolean canReprovision(SystemWorkerEntity worker) {
+        if (worker.getStatus() == SystemWorkerStatus.PROVISIONING) return false;
+        return !vmClient.status(worker.getVmId()).exists();
     }
 
     private void provision(String id, String publicKey) {
@@ -90,7 +112,7 @@ public class SystemWorkerService {
     public SystemWorkerResponse reconcile() {
         SystemWorkerEntity worker = requireWorker();
         SystemWorkerVmResponse vm = vmClient.status(worker.getVmId());
-        if (!vm.exists()) return SystemWorkerResponse.from(repository.save(worker.observed(SystemWorkerStatus.MISSING, vm.node(), null, "Proxmox VM이 없습니다.")));
+        if (!vm.exists()) return SystemWorkerResponse.from(repository.save(worker.missing(vm.node())));
         if (!"RUNNING".equals(vm.powerState())) return SystemWorkerResponse.from(repository.save(worker.observed(SystemWorkerStatus.STOPPED, vm.node(), null, null)));
         SystemWorkerEntity observed = worker.observed(SystemWorkerStatus.DEGRADED, vm.node(), vm.internalIp(), null);
         boolean resourceMatches = vm.cores() == worker.getCores() && vm.memoryMb() == worker.getMemoryMb()

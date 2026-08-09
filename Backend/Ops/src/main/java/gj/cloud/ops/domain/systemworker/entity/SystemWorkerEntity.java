@@ -53,6 +53,12 @@ public class SystemWorkerEntity {
         return toBuilder().status(status).node(node == null ? this.node : node).internalIp(ip == null ? this.internalIp : ip)
                 .lastHealthCheckAt(now).lastError(error).updatedAt(now).build();
     }
+    public SystemWorkerEntity missing(String node) {
+        LocalDateTime now = LocalDateTime.now();
+        return toBuilder().status(SystemWorkerStatus.MISSING).node(node == null ? this.node : node).internalIp(null)
+                .provisioningStage("MISSING").lastHealthCheckAt(now).lastError("Proxmox VM이 없습니다.")
+                .updatedAt(now).build();
+    }
     public SystemWorkerEntity failed(String error) {
         return toBuilder().status(SystemWorkerStatus.ERROR).provisioningStage("FAILED").lastError(error)
                 .updatedAt(LocalDateTime.now()).build();

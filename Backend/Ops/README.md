@@ -76,7 +76,7 @@ VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한
 | GitHub | `/ops/github/**`, `/ops/webhooks/github` | App 설치·저장소·웹훅 |
 | 백업 | `/ops/{vmId}/backups`, `/ops/{vmId}/backups/{backupId}/download` | DB 백업 생성·조회·검증·전용 다운로드 |
 | Preview | `/ops/preview/**`, `/ops/{vmId}/preview/deploy` | 분석·검수·조립·관리형 또는 사용자 VM 배포 |
-| 시스템 워커 관리 | `/admin/system-workers/auto-preview/**` | 구성·전원·Reconcile·Repair·일회용 콘솔 티켓 |
+| 시스템 워커 관리 | `/admin/system-workers/auto-preview/**` | 구성·전원·존재 확인·유실 VM 재생성·Reconcile·Repair·일회용 콘솔 티켓 |
 | 회귀 Suite | `/ops/preview/regression-suites/**` | Suite와 실행 결과 |
 | 내부 SSH | `/internal/vms/{vmId}/management-key`, `/internal/vms/{vmId}/ssh-readiness` | 관리 키와 준비 상태 |
 
@@ -89,6 +89,10 @@ VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한
 - GitHub App API: installation token, 저장소, webhook
 - OpenAI API: 불확실한 배포 스펙과 Preview 의미 계획 보조
 - Elasticsearch: Blueprint 검색 인덱스(기능 플래그로 제어)
+
+### Auto Preview Worker 유실 복구
+
+ControlBox 조회는 등록된 Worker의 예약 VMID가 Proxmox에 실제로 존재하는지 확인한다. VM이 없으면 저장 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR`였더라도 `MISSING`으로 갱신하고 내부 IP를 제거한다. 재생성 API도 요청 시점의 Proxmox 상태를 다시 검사하므로 DB 상태가 늦게 갱신된 경우에도 실제 VM이 없으면 재생성할 수 있다. 단, `PROVISIONING` 상태이거나 예약 VMID에 VM이 존재하면 중복 생성을 막는다. VM 서비스 조회 자체가 실패한 경우에는 부재로 간주하지 않는다.
 
 ## 환경변수
 
