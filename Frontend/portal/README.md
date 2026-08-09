@@ -12,7 +12,7 @@ GamjaBox 사용자 포털과 ControlBox 관리자 콘솔을 함께 제공하는 
 - VM 목록·생성·상세·전원·플랜·SSH Access·포트
 - 실시간 메트릭, 웹 SSH 콘솔, 파일 브라우저
 - Docker 관리, DB 백업, 배포 대상·이력·GitHub 자동 배포
-- OpenAPI 기반 Auto Preview 분석·시나리오 실행·VM 배포
+- OpenAPI 기반 Auto Preview 분석·시나리오 실행·관리형/사용자 VM 배포
 - 조직·멤버·VM 공유와 협업 메모·공지·요청
 - SSH 키, 프로필, 보안 설정과 사용자 설명서
 - 기술·계정·플랜·설명서 문의 접수와 관리자 답변 확인

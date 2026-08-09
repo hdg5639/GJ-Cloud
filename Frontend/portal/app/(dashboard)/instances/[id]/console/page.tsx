@@ -14,9 +14,13 @@ import "@xterm/xterm/css/xterm.css";
 type ConnectionStatus = "connecting" | "connected" | "closed" | "error";
 
 export default function ConsolePage() {
+  return <TerminalConsole />;
+}
+
+export function TerminalConsole({ systemWorker = false }: { systemWorker?: boolean }) {
   const params = useParams();
   const router = useRouter();
-  const vmId = params.id as string;
+  const vmId = systemWorker ? "" : params.id as string;
   const { accessToken } = useAuth();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -213,9 +217,11 @@ export default function ConsolePage() {
       });
 
       // 티켓은 일회용(30초 TTL, Redis GETDEL) — 발급 직후 바로 WS 핸드셰이크에 사용해야 함
-      const { ticket } = await api.ops.issueTerminalTicket(accessToken, vmId);
+      const ticketResponse = systemWorker
+        ? await api.admin.systemWorker.consoleTicket(accessToken)
+        : { ...(await api.ops.issueTerminalTicket(accessToken, vmId)), connectionId: vmId };
       const wsBase = process.env.NEXT_PUBLIC_OPS_API!.replace(/^http/, "ws");
-      const ws = new WebSocket(`${wsBase}/ws/terminal/${vmId}?ticket=${ticket}`);
+      const ws = new WebSocket(`${wsBase}/ws/terminal/${ticketResponse.connectionId}?ticket=${ticketResponse.ticket}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -245,10 +251,10 @@ export default function ConsolePage() {
       setStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "콘솔 연결에 실패했습니다.");
     }
-  }, [accessToken, vmId, teardown]);
+  }, [accessToken, vmId, systemWorker, teardown]);
 
   useEffect(() => {
-    connect();
+    const connectTimer = setTimeout(() => void connect(), 0);
 
     function handleResize() {
       const fitAddon = fitRef.current;
@@ -263,6 +269,7 @@ export default function ConsolePage() {
     window.addEventListener("resize", handleResize);
 
     return () => {
+      clearTimeout(connectTimer);
       window.removeEventListener("resize", handleResize);
       teardown();
     };
@@ -277,7 +284,7 @@ export default function ConsolePage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-170px)]">
-      <InstanceSectionNav vmId={vmId} />
+      {!systemWorker && <InstanceSectionNav vmId={vmId} />}
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
           <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
@@ -285,7 +292,7 @@ export default function ConsolePage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-[15px] font-bold whitespace-nowrap">콘솔</h1>
+          <h1 className="text-[15px] font-bold whitespace-nowrap">{systemWorker ? "Auto Preview Worker 콘솔" : "콘솔"}</h1>
           <StatusBadge tone={status === "error" ? "off" : statusTone} className={status === "error" ? "bg-danger/10 text-danger" : undefined}>
             {statusLabel}
           </StatusBadge>

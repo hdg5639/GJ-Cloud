@@ -89,6 +89,37 @@ export interface AdminVmResponse {
   createdAt: string;
 }
 
+export interface SystemWorkerResponse {
+  configured: boolean;
+  id: string | null;
+  role: "AUTO_PREVIEW";
+  name: string;
+  vmId: number | null;
+  node: string | null;
+  internalIp: string | null;
+  status: "NOT_CONFIGURED" | "PROVISIONING" | "ACTIVE" | "DEGRADED" | "STOPPED" | "MISSING" | "ERROR";
+  provisioningStage: string | null;
+  cores: number;
+  memoryMb: number;
+  diskGb: number;
+  lastHealthCheckAt: string | null;
+  lastError: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ManagedPreviewResponse {
+  id: string;
+  targetType: "MANAGED";
+  status: "ALLOCATED" | "QUEUED" | "BUILDING" | "RUNNING" | "FAILED" | "EXPIRED" | "STOPPED";
+  url: string | null;
+  deploymentId: string | null;
+  createdAt: string;
+  deployedAt: string | null;
+  expiresAt: string;
+  errorMessage: string | null;
+}
+
 export interface UsageResponse {
   planType: string;
   vCpuLimit: number;

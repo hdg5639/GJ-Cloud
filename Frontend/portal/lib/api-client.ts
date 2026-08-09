@@ -74,6 +74,8 @@ import type {
   SupportInquiry,
   SupportInquiryStatus,
   CreateSupportInquiryInput,
+  SystemWorkerResponse,
+  ManagedPreviewResponse,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -1133,6 +1135,30 @@ export const api = {
           body: JSON.stringify(body),
           accessToken,
         }),
+      deployManaged: (
+        accessToken: string,
+        body: {
+          targetName: string;
+          apiBaseUrl: string;
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
+          authStrategy: PreviewAuthStrategy;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          generationMode?: PreviewGenerationMode;
+          scenarios?: PreviewCompiledScenario[];
+          previewMode?: PreviewMode;
+          partOverrides?: Record<string, string>;
+        }
+      ) => request<ManagedPreviewResponse>("ops", "/ops/preview/deploy", {
+        method: "POST", body: JSON.stringify(body), accessToken,
+      }),
+      managedDeployments: (accessToken: string) =>
+        request<ManagedPreviewResponse[]>("ops", "/ops/preview/deployments", { accessToken }),
+      managedDeployment: (accessToken: string, id: string) =>
+        request<ManagedPreviewResponse>("ops", `/ops/preview/deployments/${encodeURIComponent(id)}`, { accessToken }),
     },
     backups: {
       list: (accessToken: string, vmId: string) =>
@@ -1164,6 +1190,13 @@ export const api = {
     },
   },
   admin: {
+    systemWorker: {
+      get: (accessToken: string) => request<SystemWorkerResponse>("ops", "/admin/system-workers/auto-preview", { accessToken }),
+      create: (accessToken: string) => request<SystemWorkerResponse>("ops", "/admin/system-workers/auto-preview", { method: "POST", accessToken }),
+      action: (accessToken: string, action: "start" | "stop" | "reboot" | "reconcile" | "repair") =>
+        request<SystemWorkerResponse>("ops", `/admin/system-workers/auto-preview/${action}`, { method: "POST", accessToken }),
+      consoleTicket: (accessToken: string) => request<{ ticket: string; connectionId: string }>("ops", "/admin/system-workers/auto-preview/console-ticket", { method: "POST", accessToken }),
+    },
     docs: {
       list: (accessToken: string) =>
         request<DocsArticleSummary[]>("adminUser", "/admin/docs", { accessToken }),

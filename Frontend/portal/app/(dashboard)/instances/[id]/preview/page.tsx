@@ -133,11 +133,15 @@ const ACCESS_TOKEN_PATH_FIELD = "auth.login.accessTokenPath";
 const AUTH_LOGIN_FIELD = "auth.login";
 
 export default function PreviewWizardPage() {
+  return <AutoPreviewWorkspace />;
+}
+
+export function AutoPreviewWorkspace({ managed = false }: { managed?: boolean }) {
   const params = useParams();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const vmId = params.id as string;
+  const vmId = managed ? "" : params.id as string;
   const { accessToken } = useAuth();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -647,7 +651,7 @@ export default function PreviewWizardPage() {
     setDeploying(true);
     setDeployError(null);
     try {
-      const deployment = await api.ops.preview.deploy(accessToken, vmId, {
+      const deployBody = {
         targetName: targetName.trim(),
         apiBaseUrl: apiBaseUrl.trim(),
         capabilities: result.capabilities,
@@ -661,8 +665,14 @@ export default function PreviewWizardPage() {
         scenarios: result.scenarios,
         previewMode: result.previewMode,
         partOverrides,
-      });
-      router.push(`/instances/${vmId}/deployments/${deployment.id}`);
+      };
+      if (managed) {
+        const preview = await api.ops.preview.deployManaged(accessToken, deployBody);
+        router.push(`/preview/deployments/${preview.id}`);
+      } else {
+        const deployment = await api.ops.preview.deploy(accessToken, vmId, deployBody);
+        router.push(`/instances/${vmId}/deployments/${deployment.id}`);
+      }
     } catch (err) {
       setDeployError(err instanceof Error ? err.message : "배포에 실패했습니다.");
       setDeploying(false);
@@ -774,13 +784,13 @@ export default function PreviewWizardPage() {
 
   return (
     <div className="mx-auto max-w-[1380px]">
-      <InstanceSectionNav vmId={vmId} />
+      {!managed && <InstanceSectionNav vmId={vmId} />}
 
       <header className="mb-5">
         <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">AUTO PREVIEW</span>
         <h1 className="my-[5px] text-[22px] font-extrabold tracking-tight">API 문서로 테스트 페이지 자동 생성</h1>
         <p className="m-0 text-sm text-muted">
-          OpenAPI URL이나 파일과 서비스 문맥을 분석해 실제 사용자 시나리오를 만들고 이 VM에 배포합니다.
+          OpenAPI URL이나 파일과 서비스 문맥을 분석해 실제 사용자 시나리오를 만들고 {managed ? "GamjaBox 관리형 환경에" : "이 VM에"} 배포합니다.
         </p>
       </header>
 
@@ -1606,8 +1616,8 @@ export default function PreviewWizardPage() {
           </Field>
 
           <p className="mt-4 text-xs text-muted-soft">
-            {result.pages.length}개 페이지, {result.capabilities.length}개 capability로 Vite+React 프로젝트를 생성해 이
-            VM에 새 배포 대상으로 추가합니다. 생성 후 자동으로 배포 서브도메인이 발급됩니다.
+            {result.pages.length}개 페이지, {result.capabilities.length}개 capability로 Vite+React 프로젝트를 생성합니다.
+            {managed ? " 별도 VM 없이 격리된 관리형 Preview로 배포되며, FREE는 6시간·PRO는 24시간 후 자동 정리됩니다." : " 이 VM의 새 배포 대상으로 추가되며 서브도메인이 발급됩니다."}
           </p>
 
           {deployError && <p className="mt-3 text-xs text-danger">{deployError}</p>}

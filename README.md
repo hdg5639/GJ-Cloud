@@ -313,9 +313,11 @@ AI 검수 결과는 읽기 전용 조언으로 끝나지 않는다. 검수 내�
   <sub>다중 API Flow의 실행 순서, 입력 바인딩, 요청·응답과 검증 결과를 확인하는 시나리오 디버거</sub>
 </p>
 
-#### 3단계: VM 배포
+#### 3단계: 관리형 또는 사용자 VM 배포
 
-사용자는 배포 대상 이름과 실제 API Base URL을 지정한다. 배포 요청이 승인되면 현재 Scenario·Page Plan·Flow·Binding·Blueprint를 다시 검증하고 공용 Runtime이 들어간 Vite + React 프로젝트를 생성한 뒤 기존 비동기 배포 파이프라인에 전달한다. 배포 로그 화면에서도 포털 상단 내비게이션을 유지하므로 사용자가 Auto Preview 첫 화면으로 강제 이동하지 않고 원하는 위치로 이동할 수 있다.
+사용자는 배포 대상 이름과 실제 API Base URL을 지정한다. VM을 가진 사용자는 기존 VM Target으로, VM이 없는 사용자는 GamjaBox 관리형 Worker로 배포할 수 있다. 관리형 Preview는 배포별 컨테이너·Compose project·포트·호스트명을 격리하고 FREE 6시간, PRO 24시간 TTL 후 자동 정리한다. 사용자에게는 Preview URL·상태·만료 시각만 보이며 worker VMID·내부 IP·SSH 정보는 노출하지 않는다.
+
+ControlBox의 **시스템 인프라** 화면에서는 `AUTO_PREVIEW` Worker의 VMID 300, 4 vCPU, 5GB RAM, 80GB 사양과 프로비저닝 단계를 확인하고 시작·정지·재부팅·Reconcile·Runtime Repair·일회용 콘솔을 실행할 수 있다. 활성 worker를 삭제하거나 무조건 재생성하는 API는 제공하지 않는다.
 
 <details>
 <summary><strong>🔍 분석 엔진 상세</strong> — 입력 보안, OpenAPI 정규화, 서비스 이해와 Scenario 의미 계획</summary>

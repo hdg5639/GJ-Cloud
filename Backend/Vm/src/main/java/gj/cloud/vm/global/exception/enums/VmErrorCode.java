@@ -36,6 +36,9 @@ public enum VmErrorCode {
     CUSTOM_SUBDOMAIN_PRO_ONLY(HttpStatus.FORBIDDEN, "커스텀 서브도메인은 PRO 플랜 사용자만 이용할 수 있습니다."),
     SUBDOMAIN_RESERVED(HttpStatus.BAD_REQUEST, "예약된 서브도메인입니다."),
     SUBDOMAIN_ALREADY_TAKEN(HttpStatus.CONFLICT, "이미 사용 중인 서브도메인입니다."),
+    INVALID_SYSTEM_WORKER_SPEC(HttpStatus.BAD_REQUEST, "허용되지 않은 시스템 워커 사양입니다."),
+    SYSTEM_WORKER_ALREADY_EXISTS(HttpStatus.CONFLICT, "Auto Preview Worker VM이 이미 존재합니다."),
+    SYSTEM_WORKER_IDENTITY_MISMATCH(HttpStatus.CONFLICT, "예약된 VMID에 다른 VM이 존재합니다."),
 
     // Organization
     ORGANIZATION_NOT_FOUND(HttpStatus.NOT_FOUND, "조직을 찾을 수 없습니다."),

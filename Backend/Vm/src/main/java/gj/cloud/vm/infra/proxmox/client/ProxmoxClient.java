@@ -46,13 +46,22 @@ public class ProxmoxClient {
     }
 
     public Mono<String> cloneVm(int newVmid, PlanType planType, String name) {
-        int templateVmid = PlanType.TEMPLATE_VMID;
+        return cloneVm(newVmid, PlanType.TEMPLATE_VMID, name)
+                .doOnSubscribe(s -> log.info("VM 클론 시작: vmid={}, templateVmid={}, plan={}",
+                        newVmid, PlanType.TEMPLATE_VMID, planType));
+    }
+
+    public Mono<String> cloneVm(int newVmid, int templateVmid, String name) {
+        return cloneVm(newVmid, templateVmid, name, props.getPool());
+    }
+
+    public Mono<String> cloneVm(int newVmid, int templateVmid, String name, String pool) {
 
         MultiValueMap<String, String> cloneParams = new LinkedMultiValueMap<>();
         cloneParams.add("newid", String.valueOf(newVmid));
         cloneParams.add("name", name);
         cloneParams.add("full", "1");
-        cloneParams.add("pool", props.getPool());
+        cloneParams.add("pool", pool);
 
         return proxmoxWebClient.post()
                 .uri("/nodes/{node}/qemu/{vmid}/clone", props.getNode(), templateVmid)
@@ -81,7 +90,7 @@ public class ProxmoxClient {
                             }
                         })
                 )
-                .doOnSubscribe(s -> log.info("VM 클론 시작: vmid={}, templateVmid={}, plan={}", newVmid, templateVmid, planType))
+                .doOnSubscribe(s -> log.info("시스템 VM 클론 시작: vmid={}, templateVmid={}", newVmid, templateVmid))
                 .doOnSuccess(t -> log.info("VM 클론 태스크 등록: vmid={}, taskId={}", newVmid, t))
                 .doOnError(e -> log.error("VM 클론 실패: vmid={}, error={}", newVmid, e.getMessage()));
     }
@@ -90,29 +99,40 @@ public class ProxmoxClient {
         VmCreate config = VmCreate.from(planType, vmid, null, sshPublicKeys,
                 props.getBridge(), props.getStorage());
 
+        return configureVm(vmid, config.getCores(), Integer.parseInt(config.getMemory()),
+                config.getCpulimit(), config.getCpuunits(), sshPublicKeys);
+    }
+
+    public Mono<Void> configureVm(int vmid, int cores, int memoryMb, List<String> sshPublicKeys) {
+        return configureVm(vmid, cores, memoryMb, 0, 1024, sshPublicKeys);
+    }
+
+    private Mono<Void> configureVm(int vmid, int cores, int memoryMb, int cpuLimit, int cpuUnits,
+                                   List<String> sshPublicKeys) {
+
         MultiValueMap<String, String> configParams = new LinkedMultiValueMap<>();
-        configParams.add("cores", String.valueOf(config.getCores()));
-        configParams.add("vcpus", String.valueOf(config.getVcpus()));
-        configParams.add("memory", config.getMemory());
-        configParams.add("cpu", config.getCpu());
+        configParams.add("cores", String.valueOf(cores));
+        configParams.add("vcpus", String.valueOf(cores));
+        configParams.add("memory", String.valueOf(memoryMb));
+        configParams.add("cpu", "host,hidden=1");
         // 단일 템플릿(9026) 클론 직후에는 cloud-init이 첫 부팅 시 자동 apt upgrade를 실행하지 않도록
         // 반드시 시작 전에 ciupgrade=0을 적용해야 함 — 늦게 적용하면 이미 부팅이 진행되어 의미가 없음
-        configParams.add("ciupgrade", config.getCiupgrade());
+        configParams.add("ciupgrade", "0");
         // 템플릿 기본 사용자에 의존하면 템플릿 교체/재생성 시 키가 다른 계정에 들어갈 수 있다.
-        configParams.add("ciuser", config.getCiuser());
+        configParams.add("ciuser", "ubuntu");
         // Proxmox의 sshkeys 파라미터는 자체 검증기가 "urlencoded 문자열이어야 함"을 요구함 — HTTP 폼
         // 전송단의 인코딩(BodyInserters.fromFormData가 자동 처리)과는 별개로, Proxmox가 전달받는 값 자체가
         // 이미 percent-encoded 상태여야 통과함(원본 그대로 보내면 400 invalid urlencoded string 에러).
         // 그래서 여기서 한 번 인코딩한 뒤 폼 전송단에서 한 번 더 인코딩되는 이중 인코딩이 정상 동작임 — 되돌리지 말 것.
-        configParams.add("sshkeys", UriUtils.encode(config.getSshkeys(), StandardCharsets.UTF_8));
-        configParams.add("ipconfig0", config.getIpconfig0());
-        configParams.add("nameserver", config.getNameserver());
+        configParams.add("sshkeys", UriUtils.encode(String.join("\n", sshPublicKeys), StandardCharsets.UTF_8));
+        configParams.add("ipconfig0", "ip=dhcp");
+        configParams.add("nameserver", "1.1.1.1 8.8.8.8");
 
-        if (config.getCpulimit() > 0) {
-            configParams.add("cpulimit", String.valueOf(config.getCpulimit()));
+        if (cpuLimit > 0) {
+            configParams.add("cpulimit", String.valueOf(cpuLimit));
         }
-        if (config.getCpuunits() != 1024) {
-            configParams.add("cpuunits", String.valueOf(config.getCpuunits()));
+        if (cpuUnits != 1024) {
+            configParams.add("cpuunits", String.valueOf(cpuUnits));
         }
 
         return proxmoxWebClient.put()
@@ -441,6 +461,45 @@ public class ProxmoxClient {
                     }
                 });
     }
+
+    public Mono<SystemVmInfo> getSystemVmInfo(int vmid) {
+        Mono<JsonNode> config = proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/config", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve().bodyToMono(String.class)
+                .map(body -> readData(body));
+        Mono<JsonNode> status = proxmoxWebClient.get()
+                .uri("/nodes/{node}/qemu/{vmid}/status/current", props.getNode(), vmid)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .retrieve().bodyToMono(String.class)
+                .map(body -> readData(body));
+        return Mono.zip(config, status).map(tuple -> new SystemVmInfo(
+                tuple.getT1().path("name").asText(),
+                tuple.getT1().path("cores").asInt(),
+                tuple.getT1().path("memory").asInt(),
+                parseDiskGb(tuple.getT1()),
+                tuple.getT2().path("status").asText("unknown")
+        ));
+    }
+
+    private int parseDiskGb(JsonNode config) {
+        for (String key : List.of("scsi0", "sata0", "virtio0", "ide0")) {
+            String value = config.path(key).asText("");
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?:^|,)size=(\\d+)G(?:,|$)").matcher(value);
+            if (matcher.find()) return Integer.parseInt(matcher.group(1));
+        }
+        return 0;
+    }
+
+    private JsonNode readData(String body) {
+        try {
+            return new ObjectMapper().readTree(body).path("data");
+        } catch (Exception e) {
+            throw new VmException(VmErrorCode.PROXMOX_CLONE_FAILED);
+        }
+    }
+
+    public record SystemVmInfo(String name, int cores, int memoryMb, int diskGb, String powerState) {}
 
     public Mono<Boolean> needsReboot(int vmid) {
         return Mono.zip(getConfig(vmid), getCurrentStatus(vmid))

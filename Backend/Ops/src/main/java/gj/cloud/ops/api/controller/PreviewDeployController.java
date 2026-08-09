@@ -27,6 +27,9 @@ import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import gj.cloud.ops.application.preview.planning.patch.PagePlanPatchValidator;
 import gj.cloud.ops.application.preview.planning.patch.PlanPatchState;
 import gj.cloud.ops.application.preview.service.PreviewBlueprintService;
+import gj.cloud.ops.application.preview.managed.ManagedPreviewService;
+import gj.cloud.ops.application.preview.managed.dto.ManagedPreviewResponse;
+import gj.cloud.ops.domain.preview.entity.ManagedPreviewDeploymentEntity;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompilationStatus;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
@@ -61,7 +64,7 @@ import java.util.stream.Collectors;
 
 @Tag(name = "Preview", description = "Auto Preview — 생성된 소스를 VM에 배포")
 @RestController
-@RequestMapping("/ops/{vmId}/preview")
+@RequestMapping("/ops")
 @RequiredArgsConstructor
 @Slf4j
 public class PreviewDeployController {
@@ -74,17 +77,19 @@ public class PreviewDeployController {
     private final DeploymentTargetService deploymentTargetService;
     private final DeploymentExecutor deploymentExecutor;
     private final VmServiceClient vmServiceClient;
+    private final ManagedPreviewService managedPreviewService;
 
     @Operation(summary = "Auto Preview 배포", description = "검증된 Product Blueprint를 Vite 프로젝트로 생성해 새 배포 대상으로 배포합니다.")
-    @PostMapping("/deploy")
+    @PostMapping({"/{vmId}/preview/deploy", "/preview/deploy"})
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public ApiResponse<DeploymentResponse> deploy(
+    public ApiResponse<?> deploy(
             HttpServletRequest request,
-            @PathVariable UUID vmId,
+            @PathVariable(required = false) UUID vmId,
             @AuthenticationPrincipal OpsPrincipal principal,
             @Valid @RequestBody PreviewDeployRequest body
     ) {
-        String bearerToken = requireDeployPermission(request, vmId);
+        boolean managed = vmId == null;
+        String bearerToken = managed ? bearerToken(request) : requireDeployPermission(request, vmId);
 
         List<PagePlan> pagePlans = body.pagePlans() == null || body.pagePlans().isEmpty()
                 ? PagePlanMapper.from(body.pages(), body.capabilities())
@@ -162,9 +167,31 @@ public class PreviewDeployController {
         // 전면 이전(Phase B): 포털 preview-runtime 실물을 번들하는 빌더로 생성 — 배포 앱이 라이브
         // 프리뷰와 같은 컴포넌트(Blueprint 파츠 포함)를 쓴다. 검증(hasErrorFinding)은 기본 Block으로
         // 수행하고 파츠 치환은 아티팩트 생성 단계에서만 적용해 배포가 막히지 않는다.
-        ComposeArtifact artifact = previewComposeArtifactBuilder.build(
-                body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
-                body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides());
+        ManagedPreviewDeploymentEntity managedAllocation = managed
+                ? managedPreviewService.allocate(bearerToken, principal.userId()) : null;
+        ComposeArtifact artifact = managed
+                ? previewComposeArtifactBuilder.buildManaged(
+                        body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
+                        body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides(),
+                        managedAllocation.getInternalPort(), managedAllocation.getContainerName())
+                : previewComposeArtifactBuilder.build(
+                        body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
+                        body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides());
+
+        GenerationMode generationMode = body.generationMode() == null
+                ? GenerationMode.RULE_BASED : body.generationMode();
+        PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
+                body.apiBaseUrl(), runtimeCapabilities, effectivePages, body.authStrategy(), pageBlocks,
+                RegistryStatus.VALIDATED, body.purpose(), pagePlans, flows, bindings, generationMode,
+                BlueprintCompiler.VERSION, ComponentRegistry.VERSION, scenarios, previewMode);
+
+        if (managed) {
+            ManagedPreviewResponse response = managedPreviewService.deploy(
+                    managedAllocation, principal.email(), body.targetName(), artifact);
+            managedPreviewService.findDeployment(response.deploymentId())
+                    .ifPresent(deployment -> deploymentExecutor.attachPreviewBlueprint(deployment, snapshot));
+            return ApiResponse.ok(response);
+        }
 
         DeploymentTargetEntity target = deploymentTargetService.create(
                 vmId.toString(),
@@ -184,12 +211,6 @@ public class PreviewDeployController {
         DeploymentEntity deployment = deploymentExecutor.enqueueForTarget(
                 bearerToken, vmId.toString(), target, repoConfig, artifact);
 
-        GenerationMode generationMode = body.generationMode() == null
-                ? GenerationMode.RULE_BASED : body.generationMode();
-        PreviewBlueprintSnapshot snapshot = new PreviewBlueprintSnapshot(
-                body.apiBaseUrl(), runtimeCapabilities, effectivePages, body.authStrategy(), pageBlocks,
-                RegistryStatus.VALIDATED, body.purpose(), pagePlans, flows, bindings, generationMode,
-                BlueprintCompiler.VERSION, ComponentRegistry.VERSION, scenarios, previewMode);
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
         return ApiResponse.ok(DeploymentResponse.from(deployment));
     }
@@ -209,11 +230,15 @@ public class PreviewDeployController {
     }
 
     private String requireDeployPermission(HttpServletRequest request, UUID vmId) {
-        String header = request.getHeader("Authorization");
-        String token = header != null && header.startsWith("Bearer ") ? header.substring(7) : header;
+        String token = bearerToken(request);
         if (!vmServiceClient.getContext(token, vmId.toString()).hasPermission(PERMISSION_DEPLOY)) {
             throw new OpsException(OpsErrorCode.FORBIDDEN);
         }
         return token;
+    }
+
+    private String bearerToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        return header != null && header.startsWith("Bearer ") ? header.substring(7) : header;
     }
 }

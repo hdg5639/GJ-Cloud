@@ -287,4 +287,17 @@ public class CloudflareClient {
                     return Mono.empty();
                 });
     }
+
+    public Mono<Void> deleteCnameStrict(String dnsRecordId) {
+        return cloudflareWebClient.delete()
+                .uri("/zones/{zoneId}/dns_records/{recordId}", props.getZoneId(), dnsRecordId)
+                .header(HttpHeaders.AUTHORIZATION, authHeader())
+                .exchangeToMono(response -> {
+                    if (response.statusCode().is2xxSuccessful() || response.statusCode().value() == 404) {
+                        return response.releaseBody();
+                    }
+                    return response.bodyToMono(String.class).defaultIfEmpty("")
+                            .flatMap(body -> Mono.error(new VmException(VmErrorCode.CLOUDFLARE_ERROR)));
+                });
+    }
 }

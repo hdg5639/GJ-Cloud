@@ -16,6 +16,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 // 일회용 티켓(Redis GETDEL) + Origin 검증. 여기서 통과해야만 실제 WebSocket 업그레이드가 진행됨
 @Slf4j
@@ -29,14 +32,16 @@ public class TerminalHandshakeInterceptor implements HandshakeInterceptor {
 
     private final TerminalTicketService terminalTicketService;
 
-    @Value("${ops.allowed-origin:}")
-    private String allowedOrigin;
+    @Value("${ops.allowed-origins:${ops.allowed-origin:}}")
+    private String allowedOrigins;
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                     WebSocketHandler wsHandler, Map<String, Object> attributes) {
         String origin = request.getHeaders().getOrigin();
-        if (StringUtils.hasText(allowedOrigin) && origin != null && !allowedOrigin.equals(origin)) {
+        Set<String> originAllowlist = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim).filter(StringUtils::hasText).collect(Collectors.toUnmodifiableSet());
+        if (!originAllowlist.isEmpty() && (origin == null || !originAllowlist.contains(origin))) {
             log.warn("터미널 WebSocket Origin 불일치: origin={}", origin);
             response.setStatusCode(HttpStatus.FORBIDDEN);
             return false;

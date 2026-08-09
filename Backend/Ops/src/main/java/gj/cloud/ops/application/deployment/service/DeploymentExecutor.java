@@ -123,6 +123,42 @@ public class DeploymentExecutor {
                 bearerToken, vmId, target, DeploymentTriggerType.RETRY, repoConfig, artifact);
     }
 
+    public DeploymentEntity enqueueManagedForTarget(
+            String workerKeyRef,
+            String internalIp,
+            DeploymentTargetEntity target,
+            RepoConfig repoConfig,
+            ComposeArtifact artifact
+    ) {
+        ValidationResult validation = composeValidator.validate(artifact.composeContent());
+        if (!validation.valid()) throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        String sourceCiphertext = cipher.encrypt(artifact.composeContent().getBytes(StandardCharsets.UTF_8));
+        String environmentFilesCiphertext = artifact.environmentFiles().isEmpty() ? null
+                : cipher.encrypt(toJson(artifact.environmentFiles()).getBytes(StandardCharsets.UTF_8));
+        String healthChecksJson = artifact.healthChecks().isEmpty() ? null : toJson(artifact.healthChecks());
+        DeploymentEntity queued = DeploymentEntity.createQueuedForTarget(
+                workerKeyRef, target.getId(), DeploymentTriggerType.MANUAL, null, artifact.sourceType(),
+                sourceCiphertext, null, environmentFilesCiphertext, null, healthChecksJson,
+                repoConfig.context(), repoConfig.installPath());
+        DeploymentEntity deployment = deploymentRepository.save(queued);
+        String appId = target.getId();
+        if (!tryLockWithStaleRecovery(appId, deployment.getId())) {
+            deploymentRepository.save(deployment.withFailed("이미 배포가 진행 중입니다."));
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS);
+        }
+        try {
+            String deploymentId = deployment.getId();
+            deploymentTaskExecutor.execute(() -> runPipeline(
+                    deploymentId, workerKeyRef, appId, internalIp, null, null, null, true,
+                    repoConfig, artifact, null));
+            return deployment;
+        } catch (RuntimeException e) {
+            lockService.unlock(appId, deployment.getId());
+            deploymentRepository.save(deployment.withFailed("관리형 배포 워커가 요청을 수락하지 못했습니다."));
+            throw e;
+        }
+    }
+
     private DeploymentEntity enqueueInternal(
             String bearerToken,
             String vmId,
@@ -845,7 +881,7 @@ public class DeploymentExecutor {
 
             updateEntity(deploymentId, DeploymentEntity::withSucceeded);
             eventPublisher.publish(deploymentId, DeploymentEventType.DONE, "배포 완료");
-            if (useAutomationAuth) {
+            if (useAutomationAuth && ownerUserId != null) {
                 regressionSuiteServiceProvider.ifAvailable(service -> {
                     try {
                         service.triggerForDeployment(appId, deploymentId);
@@ -885,6 +921,10 @@ public class DeploymentExecutor {
             String appId,
             DeploymentRoutesRequest request
     ) {
+        // 관리형 Preview는 VM 서비스의 전용 preview-routes API에서 독립적으로 라우팅한다.
+        if (useAutomationAuth && ownerUserId == null) {
+            return;
+        }
         if (useAutomationAuth) {
             vmAutomationClient.syncRoutes(vmId, ownerUserId, ownerEmail, appId, request);
             return;

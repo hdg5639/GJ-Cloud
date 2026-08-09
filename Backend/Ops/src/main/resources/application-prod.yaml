@@ -53,9 +53,25 @@ ops:
   vm-ssh-username: ${VM_SSH_USERNAME:ubuntu}
   terminal-idle-timeout-minutes: 30
   allowed-origin: ${PORTAL_ORIGIN}
+  allowed-origins: ${PORTAL_ORIGIN},${ADMIN_ORIGIN}
   file-browser-max-edit-size-bytes: ${OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES:5242880}
   file-browser-max-upload-size-bytes: ${OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES:26214400}
   deployment-lock-ttl-seconds: 1800
+  system-worker:
+    auto-preview:
+      enabled: ${SYSTEM_WORKER_AUTO_PREVIEW_ENABLED:true}
+      preferred-vmid: ${SYSTEM_WORKER_AUTO_PREVIEW_VMID:300}
+      cores: ${SYSTEM_WORKER_AUTO_PREVIEW_CORES:4}
+      memory-mb: ${SYSTEM_WORKER_AUTO_PREVIEW_MEMORY_MB:5120}
+      disk-gb: ${SYSTEM_WORKER_AUTO_PREVIEW_DISK_GB:80}
+      template-vmid: ${SYSTEM_WORKER_AUTO_PREVIEW_TEMPLATE_VMID:9026}
+      name: ${SYSTEM_WORKER_AUTO_PREVIEW_DISPLAY_NAME:Auto Preview Worker}
+  managed-preview:
+    port-start: ${MANAGED_PREVIEW_PORT_START:20000}
+    port-end: ${MANAGED_PREVIEW_PORT_END:20999}
+    free-ttl-hours: ${MANAGED_PREVIEW_FREE_TTL_HOURS:6}
+    pro-ttl-hours: ${MANAGED_PREVIEW_PRO_TTL_HOURS:24}
+    cleanup-interval-ms: ${MANAGED_PREVIEW_CLEANUP_INTERVAL_MS:60000}
   git:
     allowed-hosts: ${OPS_GIT_ALLOWED_HOSTS:github.com,gitlab.com,bitbucket.org}
     local-egress-proxy-url: ${OPS_GIT_LOCAL_EGRESS_PROXY_URL:http://ops-git-egress-proxy:3128}
