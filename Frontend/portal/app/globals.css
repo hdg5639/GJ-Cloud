@@ -11,8 +11,9 @@
   --panel: #ffffff;
   --line: #e4eae6;
   --line-strong: #d6dfd9;
-  --muted: #738077;
-  --muted-soft: #9aa59e;
+  /* ControlBox의 작은 보조 문구도 흰색/기본 배경에서 WCAG AA 대비를 넘도록 유지한다. */
+  --muted: #4f5f55;
+  --muted-soft: #5f6d64;
   --soft: #eaf8ef;
   --danger: #e34949;
   --danger-soft: #efb1b1;

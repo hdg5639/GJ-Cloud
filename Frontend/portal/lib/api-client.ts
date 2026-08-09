@@ -74,6 +74,8 @@ import type {
   SupportInquiry,
   SupportInquiryStatus,
   CreateSupportInquiryInput,
+  SystemWorkerResponse,
+  ManagedPreviewResponse,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -84,6 +86,7 @@ const API_BASE = {
   ops: process.env.NEXT_PUBLIC_OPS_API!,
   adminUser: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_USER_API)!,
   adminVm: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_VM_API)!,
+  adminOps: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_OPS_API)!,
 };
 
 const SERVICE_AUDIENCE: Partial<Record<keyof typeof API_BASE, string>> = {
@@ -92,6 +95,7 @@ const SERVICE_AUDIENCE: Partial<Record<keyof typeof API_BASE, string>> = {
   ops: "ops-service",
   adminUser: "user-service",
   adminVm: "vm-service",
+  adminOps: "ops-service",
 };
 
 interface ApiResponse<T> {
@@ -1133,6 +1137,30 @@ export const api = {
           body: JSON.stringify(body),
           accessToken,
         }),
+      deployManaged: (
+        accessToken: string,
+        body: {
+          targetName: string;
+          apiBaseUrl: string;
+          capabilities: PreviewCapability[];
+          pages: PreviewPageDraft[];
+          pagePlans?: PreviewPagePlan[];
+          flows?: PreviewFlowBlueprint[];
+          bindings?: PreviewApiBinding[];
+          authStrategy: PreviewAuthStrategy;
+          purpose?: "API_TEST" | "PRODUCT_LIKE" | "ADMIN";
+          generationMode?: PreviewGenerationMode;
+          scenarios?: PreviewCompiledScenario[];
+          previewMode?: PreviewMode;
+          partOverrides?: Record<string, string>;
+        }
+      ) => request<ManagedPreviewResponse>("ops", "/ops/preview/deploy", {
+        method: "POST", body: JSON.stringify(body), accessToken,
+      }),
+      managedDeployments: (accessToken: string) =>
+        request<ManagedPreviewResponse[]>("ops", "/ops/preview/deployments", { accessToken }),
+      managedDeployment: (accessToken: string, id: string) =>
+        request<ManagedPreviewResponse>("ops", `/ops/preview/deployments/${encodeURIComponent(id)}`, { accessToken }),
     },
     backups: {
       list: (accessToken: string, vmId: string) =>
@@ -1164,6 +1192,13 @@ export const api = {
     },
   },
   admin: {
+    systemWorker: {
+      get: (accessToken: string) => request<SystemWorkerResponse>("adminOps", "/admin/system-workers/auto-preview", { accessToken }),
+      create: (accessToken: string) => request<SystemWorkerResponse>("adminOps", "/admin/system-workers/auto-preview", { method: "POST", accessToken }),
+      action: (accessToken: string, action: "start" | "stop" | "reboot" | "reconcile" | "repair") =>
+        request<SystemWorkerResponse>("adminOps", `/admin/system-workers/auto-preview/${action}`, { method: "POST", accessToken }),
+      consoleTicket: (accessToken: string) => request<{ ticket: string; connectionId: string }>("adminOps", "/admin/system-workers/auto-preview/console-ticket", { method: "POST", accessToken }),
+    },
     docs: {
       list: (accessToken: string) =>
         request<DocsArticleSummary[]>("adminUser", "/admin/docs", { accessToken }),

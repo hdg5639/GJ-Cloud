@@ -14,6 +14,7 @@ import { Avatar } from "@/components/ui/avatar";
 // font-size를 줘도 눈으로 보기엔 더 작아 보임 — 그래서 이 둘만 펼침/접힘 크기를 한 단계씩 더 키움.
 const NAV_ITEMS = [
   { href: "/instances", icon: "▣", label: "인스턴스" },
+  { href: "/auto-preview", icon: "◇", label: "Auto Preview" },
   { href: "/organizations", icon: "◫", label: "협업", expandedSize: "text-xl", collapsedSize: "lg:text-2xl" },
   { href: "/ssh-keys", icon: "⌘", label: "SSH 키" },
   { href: "/docs", icon: "▤", label: "사용 설명서" },

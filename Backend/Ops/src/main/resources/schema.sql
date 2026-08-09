@@ -367,3 +367,57 @@ ALTER TABLE db_backups ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_db_backups_vm_id ON db_backups(vm_id);
 CREATE INDEX IF NOT EXISTS idx_db_backups_vm_id_created_at ON db_backups(vm_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_db_backups_expires_at ON db_backups(expires_at);
+
+CREATE TABLE IF NOT EXISTS system_workers (
+    id                    VARCHAR(36)  PRIMARY KEY,
+    role                  VARCHAR(40)  NOT NULL UNIQUE,
+    name                  VARCHAR(100) NOT NULL,
+    vm_id                 INTEGER      NOT NULL,
+    node                  VARCHAR(100),
+    internal_ip           VARCHAR(64),
+    status                VARCHAR(30)  NOT NULL,
+    provisioning_stage    VARCHAR(40),
+    ssh_key_ref           VARCHAR(36)  NOT NULL,
+    cores                 INTEGER      NOT NULL,
+    memory_mb             INTEGER      NOT NULL,
+    disk_gb               INTEGER      NOT NULL,
+    last_health_check_at  TIMESTAMP,
+    last_error            TEXT,
+    created_at            TIMESTAMP    NOT NULL,
+    updated_at            TIMESTAMP    NOT NULL,
+    CONSTRAINT chk_system_worker_role CHECK (role IN ('AUTO_PREVIEW')),
+    CONSTRAINT chk_system_worker_status CHECK (status IN ('PROVISIONING','ACTIVE','DEGRADED','STOPPED','MISSING','ERROR'))
+);
+
+CREATE TABLE IF NOT EXISTS managed_preview_deployments (
+    id                      VARCHAR(36)  PRIMARY KEY,
+    user_id                 VARCHAR(64)  NOT NULL,
+    project_id              VARCHAR(100),
+    target_type             VARCHAR(20)  NOT NULL,
+    worker_id               VARCHAR(36)  NOT NULL REFERENCES system_workers(id),
+    deployment_target_id    VARCHAR(36),
+    deployment_id           VARCHAR(36),
+    container_name          VARCHAR(80)  NOT NULL,
+    compose_project_name    VARCHAR(80)  NOT NULL,
+    hostname                VARCHAR(100) NOT NULL UNIQUE,
+    subdomain               VARCHAR(40)  NOT NULL UNIQUE,
+    dns_record_id           VARCHAR(128),
+    internal_port           INTEGER      NOT NULL,
+    status                  VARCHAR(20)  NOT NULL,
+    error_code              VARCHAR(80),
+    error_message           TEXT,
+    created_at              TIMESTAMP    NOT NULL,
+    deployed_at             TIMESTAMP,
+    expires_at              TIMESTAMP    NOT NULL,
+    stopped_at              TIMESTAMP,
+    updated_at              TIMESTAMP    NOT NULL,
+    CONSTRAINT chk_managed_preview_target CHECK (target_type IN ('MANAGED','USER_VM')),
+    CONSTRAINT chk_managed_preview_status CHECK (status IN ('ALLOCATED','QUEUED','BUILDING','RUNNING','FAILED','EXPIRED','STOPPED')),
+    CONSTRAINT chk_managed_preview_port CHECK (internal_port BETWEEN 20000 AND 29999)
+);
+CREATE INDEX IF NOT EXISTS idx_managed_preview_user_created ON managed_preview_deployments(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_managed_preview_expiry ON managed_preview_deployments(expires_at);
+DROP INDEX IF EXISTS uq_managed_preview_active_port;
+CREATE UNIQUE INDEX uq_managed_preview_active_port
+    ON managed_preview_deployments(internal_port)
+    WHERE status IN ('ALLOCATED','QUEUED','BUILDING','RUNNING','FAILED');

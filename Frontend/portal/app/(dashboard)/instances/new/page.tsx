@@ -9,11 +9,7 @@ import { Card } from "@/components/ui/panel";
 import { Field, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { isValidVmName, VmNameInput } from "@/components/vm-name-input";
-
-const PLAN_INFO = {
-  FREE: { cores: 4, memory: "5GB", diskMin: 20, diskMax: 50 },
-  PRO: { cores: 8, memory: "12GB", diskMin: 20, diskMax: 100 },
-};
+import { VM_PLAN_SPECS } from "@/lib/vm-plans";
 
 export default function CreateInstancePage() {
   const router = useRouter();
@@ -46,7 +42,7 @@ export default function CreateInstancePage() {
   // 플랜 변경 시 디스크 크기를 플랜 최솟값으로 리셋
   function handlePlanChange(plan: "FREE" | "PRO") {
     setPlanType(plan);
-    setDiskSizeGb(PLAN_INFO[plan].diskMin);
+    setDiskSizeGb(VM_PLAN_SPECS[plan].diskMin);
   }
 
   async function handleSubmit() {
@@ -69,7 +65,7 @@ export default function CreateInstancePage() {
 
   const freeFull = availability?.free.isFull ?? false;
   const proFull = availability?.pro.isFull ?? false;
-  const planInfo = PLAN_INFO[planType];
+  const planInfo = VM_PLAN_SPECS[planType];
 
   return (
     <div className="max-w-xl">
@@ -101,7 +97,7 @@ export default function CreateInstancePage() {
           <span className="text-xs font-bold text-muted block mb-2">플랜</span>
           <div className="grid grid-cols-2 gap-2.5">
             {(["FREE", "PRO"] as const).map((plan) => {
-              const info = PLAN_INFO[plan];
+              const info = VM_PLAN_SPECS[plan];
               const isFree = plan === "FREE";
               const full = isFree ? freeFull : proFull;
               const planLocked = plan === "PRO" && userPlan === "FREE";

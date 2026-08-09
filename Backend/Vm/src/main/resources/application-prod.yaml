@@ -49,6 +49,17 @@ proxmox:
 cloudflare:
   reserved-subdomains: ${RESERVED_SUBDOMAINS:}
 
+system-worker:
+  auto-preview:
+    enabled: ${SYSTEM_WORKER_AUTO_PREVIEW_ENABLED:true}
+    preferred-vmid: ${SYSTEM_WORKER_AUTO_PREVIEW_VMID:300}
+    cores: ${SYSTEM_WORKER_AUTO_PREVIEW_CORES:4}
+    memory-mb: ${SYSTEM_WORKER_AUTO_PREVIEW_MEMORY_MB:5120}
+    disk-gb: ${SYSTEM_WORKER_AUTO_PREVIEW_DISK_GB:80}
+    template-vmid: ${SYSTEM_WORKER_AUTO_PREVIEW_TEMPLATE_VMID:9026}
+    name: ${SYSTEM_WORKER_AUTO_PREVIEW_NAME:gamjabox-auto-preview-worker}
+    pool: ${SYSTEM_WORKER_AUTO_PREVIEW_POOL:system-worker}
+
 springdoc:
   api-docs:
     enabled: false

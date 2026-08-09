@@ -52,6 +52,25 @@ public class TerminalTicketService {
         return ticket;
     }
 
+    public String issueSystemWorkerTicket(String adminUserId, String sshKeyRef, String internalIp) {
+        if (internalIp == null || internalIp.isBlank()) {
+            throw new OpsException(OpsErrorCode.SYSTEM_WORKER_NOT_ACTIVE);
+        }
+        return store(adminUserId, sshKeyRef, internalIp);
+    }
+
+    private String store(String userId, String vmId, String internalIp) {
+        String ticket = UUID.randomUUID().toString();
+        TicketPayload payload = new TicketPayload(userId, vmId, internalIp);
+        try {
+            redisTemplate.opsForValue().set(KEY_PREFIX + ticket, objectMapper.writeValueAsString(payload),
+                    Duration.ofSeconds(ticketTtlSeconds));
+            return ticket;
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("티켓 직렬화 실패", e);
+        }
+    }
+
     // 원자적 조회+폐기(GETDEL 상당) — 재사용 원천 차단
     public Optional<TicketPayload> consumeTicket(String ticket) {
         String json = redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + ticket);

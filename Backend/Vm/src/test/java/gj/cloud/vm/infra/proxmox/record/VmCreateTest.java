@@ -29,4 +29,10 @@ class VmCreateTest {
         assertEquals(3, PlanType.FREE.getMaxVmCount());
         assertEquals(3, PlanType.PRO.getMaxVmCount());
     }
+
+    @Test
+    void configuresPlanMemoryInMegabytes() {
+        assertEquals("4096", PlanType.FREE.getMemory());
+        assertEquals("10240", PlanType.PRO.getMemory());
+    }
 }

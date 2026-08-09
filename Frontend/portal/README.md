@@ -12,7 +12,7 @@ GamjaBox 사용자 포털과 ControlBox 관리자 콘솔을 함께 제공하는 
 - VM 목록·생성·상세·전원·플랜·SSH Access·포트
 - 실시간 메트릭, 웹 SSH 콘솔, 파일 브라우저
 - Docker 관리, DB 백업, 배포 대상·이력·GitHub 자동 배포
-- OpenAPI 기반 Auto Preview 분석·시나리오 실행·VM 배포
+- OpenAPI 기반 Auto Preview 분석·시나리오 실행·관리형/사용자 VM 배포
 - 조직·멤버·VM 공유와 협업 메모·공지·요청
 - SSH 키, 프로필, 보안 설정과 사용자 설명서
 - 기술·계정·플랜·설명서 문의 접수와 관리자 답변 확인
@@ -43,6 +43,7 @@ app/
 ├── (auth)/                 로그인·가입·인증·온보딩
 ├── (dashboard)/
 │   ├── instances/          VM 생성·상세·운영 기능
+│   ├── auto-preview/       독립 Auto Preview 생성과 관리형 배포 상태
 │   ├── organizations/      조직과 협업
 │   ├── docs/               사용자 설명서
 │   ├── support/            문의 접수와 답변 이력
@@ -52,7 +53,7 @@ app/
 └── preview-demo/           Preview Runtime 개발 확인
 ```
 
-공통 API 계약과 타입은 `lib/api-client.ts`, `lib/types.ts`에 둔다. 재사용 UI는 `components/ui`, Auto Preview 실행 UI는 `components/preview-runtime`에 둔다.
+공통 API 계약과 타입은 `lib/api-client.ts`, `lib/types.ts`에 둔다. 재사용 UI는 `components/ui`, Auto Preview 마법사와 배포 대상 선택은 `components/auto-preview`, 생성 결과 실행 UI는 `components/preview-runtime`에 둔다.
 
 ## 인증과 API 호출
 
@@ -136,6 +137,8 @@ npm run blueprint:check
 ```
 
 ## Auto Preview Runtime
+
+사이드바의 `/auto-preview`에서는 VM 없이 분석·미리보기를 진행한 뒤 공용 관리형 Worker 또는 실행 중인 내 VM을 배포 대상으로 선택한다. VM 목록은 배포 단계에 들어갈 때만 조회한다. VM 상세의 `/instances/{id}/preview` 진입도 유지하며, 이 경로에서는 별도 선택 없이 해당 VM에 바로 배포한다. 이전 `/preview` 링크는 `/auto-preview`로 리다이렉트한다.
 
 `components/preview-runtime/blueprints/manifests/component-manifest.json`이 컴포넌트 계약의 단일 정본이다.
 

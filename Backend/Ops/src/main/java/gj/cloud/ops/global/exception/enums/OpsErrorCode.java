@@ -17,6 +17,12 @@ public enum OpsErrorCode {
     MANAGEMENT_KEY_ISSUE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "관리 키 발급에 실패했습니다."),
     INVALID_TICKET(HttpStatus.UNAUTHORIZED, "유효하지 않거나 만료된 티켓입니다."),
     SSH_CONNECTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "VM SSH 연결에 실패했습니다."),
+    SYSTEM_WORKER_NOT_CONFIGURED(HttpStatus.NOT_FOUND, "Auto Preview Worker가 구성되지 않았습니다."),
+    SYSTEM_WORKER_NOT_ACTIVE(HttpStatus.SERVICE_UNAVAILABLE, "Auto Preview Worker가 사용 가능한 상태가 아닙니다."),
+    SYSTEM_WORKER_ALREADY_CONFIGURED(HttpStatus.CONFLICT, "Auto Preview Worker가 이미 구성되어 있습니다."),
+    SYSTEM_WORKER_VM_FAILED(HttpStatus.BAD_GATEWAY, "Auto Preview Worker VM 작업에 실패했습니다."),
+    MANAGED_PREVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "관리형 Preview 배포를 찾을 수 없습니다."),
+    MANAGED_PREVIEW_CAPACITY_EXHAUSTED(HttpStatus.SERVICE_UNAVAILABLE, "현재 관리형 Preview 배포 용량이 모두 사용 중입니다."),
 
     // 파일 브라우저
     INVALID_PATH(HttpStatus.BAD_REQUEST, "유효하지 않은 경로입니다."),

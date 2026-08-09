@@ -13,6 +13,7 @@ GamjaBox VM 내부의 SSH 기반 운영 기능과 배포 파이프라인, GitHub
 - GitHub App 저장소 연결과 push 자동 재배포
 - PostgreSQL/MySQL/MongoDB/Redis 백업
 - OpenAPI 기반 Auto Preview 분석·조립·실행·VM 배포
+- 플랫폼 관리형 Auto Preview Worker 레지스트리·조정·TTL Runtime 정리
 - Preview 회귀 Suite와 CI 실행 기록
 - VM 관리 키 암호화 저장과 SSH 준비 검증
 
@@ -61,6 +62,8 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 
 포털의 `components/preview-runtime`과 Ops 배포본은 별도 구현이 아니다. `syncPreviewTemplate` Gradle 작업이 포털 소스를 Ops 리소스로 복사한다. Blueprint manifest도 `syncBlueprintManifest`가 단일 정본을 동기화한다.
 
+VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한다. Ops의 `SystemWorker` 레지스트리가 `AUTO_PREVIEW` 역할 전용 VM을 조정하고, Preview마다 고유 포트·컨테이너·Compose project·호스트명을 배정한다. 컨테이너는 0.5 CPU/256MB로 제한하며 FREE는 6시간, PRO는 24시간 후 자동 정리한다. 일반 사용자 응답에는 worker ID, VMID, node, 내부 IP, SSH 정보를 포함하지 않는다.
+
 ## API 영역
 
 | 영역 | 대표 경로 | 설명 |
@@ -72,7 +75,8 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 | 배포 대상 | `/ops/{vmId}/deployment-targets/**` | 자동 배포·포트 연결·재배포·삭제 |
 | GitHub | `/ops/github/**`, `/ops/webhooks/github` | App 설치·저장소·웹훅 |
 | 백업 | `/ops/{vmId}/backups`, `/ops/{vmId}/backups/{backupId}/download` | DB 백업 생성·조회·검증·전용 다운로드 |
-| Preview | `/ops/preview/**`, `/ops/{vmId}/preview/deploy` | 분석·검수·조립·배포 |
+| Preview | `/ops/preview/**`, `/ops/{vmId}/preview/deploy` | 분석·검수·조립·관리형 또는 사용자 VM 배포 |
+| 시스템 워커 관리 | `/admin/system-workers/auto-preview/**` | 구성·전원·존재 확인·유실 VM 재생성·Reconcile·Repair·일회용 콘솔 티켓 |
 | 회귀 Suite | `/ops/preview/regression-suites/**` | Suite와 실행 결과 |
 | 내부 SSH | `/internal/vms/{vmId}/management-key`, `/internal/vms/{vmId}/ssh-readiness` | 관리 키와 준비 상태 |
 
@@ -85,6 +89,10 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 - GitHub App API: installation token, 저장소, webhook
 - OpenAI API: 불확실한 배포 스펙과 Preview 의미 계획 보조
 - Elasticsearch: Blueprint 검색 인덱스(기능 플래그로 제어)
+
+### Auto Preview Worker 유실 복구
+
+ControlBox 조회는 등록된 Worker의 예약 VMID가 Proxmox에 실제로 존재하는지 확인한다. VM이 없으면 저장 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR`였더라도 `MISSING`으로 갱신하고 내부 IP를 제거한다. 재생성 API도 요청 시점의 Proxmox 상태를 다시 검사하므로 DB 상태가 늦게 갱신된 경우에도 실제 VM이 없으면 재생성할 수 있다. 단, `PROVISIONING` 상태이거나 예약 VMID에 VM이 존재하면 중복 생성을 막는다. VM 서비스 조회 자체가 실패한 경우에는 부재로 간주하지 않는다.
 
 ## 환경변수
 
@@ -102,7 +110,8 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 | Blueprint 검색 | `BLUEPRINT_SEARCH_ENABLED`, `BLUEPRINT_SEARCH_INDEX`, `BLUEPRINT_SEARCH_REINDEX_ON_STARTUP` | 검색 기능과 인덱스 관리 |
 | Elasticsearch | `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | Blueprint 검색 연결 |
 | 파일 제한 | `OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES`, `OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES` | 편집·업로드 최대 크기 |
-| 포털 | `PORTAL_ORIGIN` | CORS와 GitHub 연결 복귀 주소 |
+| 포털 | `PORTAL_ORIGIN`, `ADMIN_ORIGIN` | 사용자 콘솔·ControlBox worker 콘솔 WebSocket Origin allowlist |
+| 관리형 Preview | `SYSTEM_WORKER_AUTO_PREVIEW_*`, `MANAGED_PREVIEW_PORT_*`, `MANAGED_PREVIEW_*_TTL_HOURS` | 전용 워커 사양·VMID·포트 풀·플랜별 TTL |
 
 `OPS_KEY_ENCRYPTION_SECRET`와 `OPS_BACKUP_ENCRYPTION_SECRET`은 각각 `openssl rand -base64 24`로 생성한 서로 다른 UTF-8 32바이트 값을 사용한다. 관리 SSH 키나 암호화 백업이 생성된 뒤에 이 값을 변경하면 기존 데이터를 복호화할 수 없으므로 서버 재배포 때도 동일한 값을 유지한다.
 

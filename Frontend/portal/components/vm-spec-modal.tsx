@@ -4,12 +4,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { VmResponse } from "@/lib/types";
+import { VM_PLAN_SPECS } from "@/lib/vm-plans";
 import { Modal } from "@/components/ui/modal";
-
-const PLAN_DISK = {
-  FREE: { min: 20, max: 50,  step: 5 },
-  PRO:  { min: 20, max: 100, step: 5 },
-} as const;
 
 interface Props {
   open?: boolean;
@@ -37,18 +33,18 @@ export default function VmSpecModal({ open = true, vm, onClose, onSuccess }: Pro
   const planChanged = selectedPlan !== vm.planType;
 
   // PRO→FREE 다운그레이드는 현재 디스크가 FREE 최대치 초과하면 불가
-  const canDowngrade = vm.diskSizeGb <= PLAN_DISK.FREE.max;
+  const canDowngrade = vm.diskSizeGb <= VM_PLAN_SPECS.FREE.diskMax;
 
-  const diskMin = Math.max(vm.diskSizeGb, PLAN_DISK[selectedPlan].min);
-  const diskMax = PLAN_DISK[selectedPlan].max;
-  const diskStep = PLAN_DISK[selectedPlan].step;
+  const diskMin = Math.max(vm.diskSizeGb, VM_PLAN_SPECS[selectedPlan].diskMin);
+  const diskMax = VM_PLAN_SPECS[selectedPlan].diskMax;
+  const diskStep = VM_PLAN_SPECS[selectedPlan].diskStep;
 
   function handlePlanSelect(plan: "FREE" | "PRO") {
     if (plan === "FREE" && !canDowngrade) return;
     setSelectedPlan(plan);
     // 새 플랜 범위 밖이면 최솟값으로 조정
-    const newMin = Math.max(vm.diskSizeGb, PLAN_DISK[plan].min);
-    const newMax = PLAN_DISK[plan].max;
+    const newMin = Math.max(vm.diskSizeGb, VM_PLAN_SPECS[plan].diskMin);
+    const newMax = VM_PLAN_SPECS[plan].diskMax;
     setDiskSizeGb((prev) => Math.min(Math.max(prev, newMin), newMax));
     setError(null);
   }
@@ -100,11 +96,11 @@ export default function VmSpecModal({ open = true, vm, onClose, onSuccess }: Pro
                 >
                   <p className="text-sm font-medium text-foreground">{plan}</p>
                   <p className="text-[11px] text-muted mt-0.5">
-                    {plan === "FREE" ? "4 vCPU · 6GB RAM" : "8 vCPU · 16GB RAM"}
+                    {VM_PLAN_SPECS[plan].cores} vCPU · {VM_PLAN_SPECS[plan].memory} RAM
                   </p>
                   {disabled && (
                     <p className="text-[10px] text-danger mt-1">
-                      현재 디스크 {vm.diskSizeGb}GB가 FREE 최대 {PLAN_DISK.FREE.max}GB 초과
+                      현재 디스크 {vm.diskSizeGb}GB가 FREE 최대 {VM_PLAN_SPECS.FREE.diskMax}GB 초과
                     </p>
                   )}
                 </button>

@@ -32,6 +32,11 @@ public class ManagementKeyService {
                 .orElseGet(() -> createKey(vmId));
     }
 
+    @Transactional
+    public String rotate(String vmId) {
+        return repository.findByVmId(vmId).map(this::rotateKey).orElseGet(() -> createKey(vmId));
+    }
+
     private String createKey(String vmId) {
         ManagementKeyPair pair = keyGenerator.generate();
         String encryptedPrivateKey = cipher.encrypt(pair.privateKeyPemBytes());

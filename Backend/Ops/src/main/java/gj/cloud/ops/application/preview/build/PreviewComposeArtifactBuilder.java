@@ -56,6 +56,26 @@ public class PreviewComposeArtifactBuilder {
             List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
             List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides
     ) {
+        return buildInternal(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose,
+                scenarios, previewMode, partOverrides, null, null);
+    }
+
+    public ComposeArtifact buildManaged(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
+            List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides,
+            int hostPort, String containerName
+    ) {
+        return buildInternal(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose,
+                scenarios, previewMode, partOverrides, hostPort, containerName);
+    }
+
+    private ComposeArtifact buildInternal(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
+            List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides,
+            Integer hostPort, String containerName
+    ) {
         Map<String, List<Block>> pageBlocks = BlueprintPartSelector.select(
                 BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose),
                 capabilities, purpose, partOverrides);
@@ -74,6 +94,26 @@ public class PreviewComposeArtifactBuilder {
         // 포털 preview-runtime + ui 프리미티브 + lib/types 실물(build.gradle이 baked).
         uploadedFiles.addAll(readPreviewTemplateFiles());
 
+        if (hostPort != null) {
+            String compose = """
+                    services:
+                      web:
+                        build: .
+                        container_name: %s
+                        cpus: "0.5"
+                        mem_limit: 256m
+                        ports:
+                          - "%d:80"
+                        networks:
+                          - gamjabox-preview
+                    networks:
+                      gamjabox-preview:
+                        external: true
+                    """.formatted(containerName, hostPort);
+            HealthCheck healthCheck = new HealthCheck("web", "/", hostPort, CONTAINER_PORT);
+            return new ComposeArtifact(compose, List.of(), uploadedFiles, List.of(), List.of(healthCheck),
+                    SourceType.AUTO_PREVIEW);
+        }
         String nickname = "preview-" + UUID.randomUUID().toString().substring(0, 8);
         ExposedRoute route = new ExposedRoute("web", CONTAINER_PORT, "HTTP", "PUBLIC", nickname, null);
         HealthCheck healthCheck = new HealthCheck("web", "/", CONTAINER_PORT, CONTAINER_PORT);
