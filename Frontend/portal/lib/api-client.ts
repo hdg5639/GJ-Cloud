@@ -86,6 +86,7 @@ const API_BASE = {
   ops: process.env.NEXT_PUBLIC_OPS_API!,
   adminUser: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_USER_API)!,
   adminVm: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_VM_API)!,
+  adminOps: (process.env.NEXT_PUBLIC_ADMIN_API ?? process.env.NEXT_PUBLIC_OPS_API)!,
 };
 
 const SERVICE_AUDIENCE: Partial<Record<keyof typeof API_BASE, string>> = {
@@ -94,6 +95,7 @@ const SERVICE_AUDIENCE: Partial<Record<keyof typeof API_BASE, string>> = {
   ops: "ops-service",
   adminUser: "user-service",
   adminVm: "vm-service",
+  adminOps: "ops-service",
 };
 
 interface ApiResponse<T> {
@@ -1191,11 +1193,11 @@ export const api = {
   },
   admin: {
     systemWorker: {
-      get: (accessToken: string) => request<SystemWorkerResponse>("ops", "/admin/system-workers/auto-preview", { accessToken }),
-      create: (accessToken: string) => request<SystemWorkerResponse>("ops", "/admin/system-workers/auto-preview", { method: "POST", accessToken }),
+      get: (accessToken: string) => request<SystemWorkerResponse>("adminOps", "/admin/system-workers/auto-preview", { accessToken }),
+      create: (accessToken: string) => request<SystemWorkerResponse>("adminOps", "/admin/system-workers/auto-preview", { method: "POST", accessToken }),
       action: (accessToken: string, action: "start" | "stop" | "reboot" | "reconcile" | "repair") =>
-        request<SystemWorkerResponse>("ops", `/admin/system-workers/auto-preview/${action}`, { method: "POST", accessToken }),
-      consoleTicket: (accessToken: string) => request<{ ticket: string; connectionId: string }>("ops", "/admin/system-workers/auto-preview/console-ticket", { method: "POST", accessToken }),
+        request<SystemWorkerResponse>("adminOps", `/admin/system-workers/auto-preview/${action}`, { method: "POST", accessToken }),
+      consoleTicket: (accessToken: string) => request<{ ticket: string; connectionId: string }>("adminOps", "/admin/system-workers/auto-preview/console-ticket", { method: "POST", accessToken }),
     },
     docs: {
       list: (accessToken: string) =>
