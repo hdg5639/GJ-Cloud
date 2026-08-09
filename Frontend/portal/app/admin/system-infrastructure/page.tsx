@@ -50,6 +50,7 @@ export default function SystemInfrastructurePage() {
 
   if (!accessToken || !worker) return <PageLoader label="시스템 인프라 확인 중" />;
   const active = worker.status === "ACTIVE";
+  const missing = worker.status === "MISSING";
 
   return (
     <div className="mx-auto max-w-[1050px]">
@@ -77,8 +78,10 @@ export default function SystemInfrastructurePage() {
             </dl>
             <div className="p-5">
               {worker.status === "PROVISIONING" && <p className="mb-4 rounded-xl bg-[#f3f7f4] p-3 text-xs font-bold text-muted">현재 단계 · {worker.provisioningStage ?? "PREPARING"}</p>}
+              {missing && <p className="mb-4 rounded-xl border border-[#ead9a9] bg-[#fffaf0] p-3 text-xs font-bold text-[#79591e]">Proxmox에서 워커 VM을 찾을 수 없습니다. 동일한 등록 정보와 VMID로 새 VM을 구성할 수 있습니다.</p>}
               {worker.lastError && <p className="mb-4 rounded-xl bg-[#fdf1f1] p-3 text-xs leading-5 text-danger">{worker.lastError}</p>}
               <div className="flex flex-wrap gap-2">
+                {missing && <Button variant="primary" disabled={!!busy} onClick={() => run("create")}>{busy === "create" ? "재생성 요청 중..." : "Worker 재생성"}</Button>}
                 {worker.status === "STOPPED" && <Button variant="primary" disabled={!!busy} onClick={() => run("start")}>시작</Button>}
                 {active && <Button disabled={!!busy} onClick={() => run("stop")}>정지</Button>}
                 {(active || worker.status === "DEGRADED") && <Button disabled={!!busy} onClick={() => run("reboot")}>재부팅</Button>}
@@ -86,7 +89,7 @@ export default function SystemInfrastructurePage() {
                 <Button disabled={!!busy || !worker.internalIp || !["ACTIVE", "DEGRADED", "ERROR"].includes(worker.status)} onClick={() => run("repair")}>Runtime Repair</Button>
                 {active && <Link href="/system-infrastructure/console" className="inline-flex h-9 items-center rounded-md border border-line px-4 text-xs font-bold hover:bg-[#f3f6f4]">워커 콘솔</Link>}
               </div>
-              <p className="mt-4 text-[11px] leading-5 text-muted-soft">활성 워커 삭제·재생성은 제공하지 않습니다. Proxmox에서 VM이 사라진 경우만 MISSING으로 판정한 뒤 새로 구성할 수 있습니다.</p>
+              <p className="mt-4 text-[11px] leading-5 text-muted-soft">ControlBox에서는 워커 삭제를 제공하지 않습니다. Proxmox에서 VM이 직접 삭제되어 MISSING으로 확인된 경우에만 동일한 등록 정보로 재생성할 수 있습니다.</p>
             </div>
           </>
         ) : (
