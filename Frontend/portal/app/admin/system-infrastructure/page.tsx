@@ -83,7 +83,7 @@ export default function SystemInfrastructurePage() {
                 {active && <Button disabled={!!busy} onClick={() => run("stop")}>정지</Button>}
                 {(active || worker.status === "DEGRADED") && <Button disabled={!!busy} onClick={() => run("reboot")}>재부팅</Button>}
                 <Button disabled={!!busy || worker.status === "PROVISIONING"} onClick={() => run("reconcile")}>Reconcile</Button>
-                <Button disabled={!!busy || !["ACTIVE", "DEGRADED"].includes(worker.status)} onClick={() => run("repair")}>Runtime Repair</Button>
+                <Button disabled={!!busy || !worker.internalIp || !["ACTIVE", "DEGRADED", "ERROR"].includes(worker.status)} onClick={() => run("repair")}>Runtime Repair</Button>
                 {active && <Link href="/system-infrastructure/console" className="inline-flex h-9 items-center rounded-md border border-line px-4 text-xs font-bold hover:bg-[#f3f6f4]">워커 콘솔</Link>}
               </div>
               <p className="mt-4 text-[11px] leading-5 text-muted-soft">활성 워커 삭제·재생성은 제공하지 않습니다. Proxmox에서 VM이 사라진 경우만 MISSING으로 판정한 뒤 새로 구성할 수 있습니다.</p>
