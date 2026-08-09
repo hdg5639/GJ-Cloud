@@ -13,11 +13,7 @@ import { Panel } from "@/components/ui/panel";
 import { SearchInput, Select } from "@/components/ui/field";
 import { Table, Th, Td } from "@/components/ui/table";
 import { Badge, StatusBadge, StatusDot } from "@/components/ui/badge";
-
-const PLAN_SPEC: Record<string, { cores: number; memory: string }> = {
-  FREE: { cores: 4, memory: "5GB" },
-  PRO: { cores: 8, memory: "12GB" },
-};
+import { VM_PLAN_SPECS } from "@/lib/vm-plans";
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "대기 중",
@@ -121,7 +117,7 @@ export default function InstancesPage() {
               {freeCount} <em className="text-base font-normal not-italic text-muted-soft">/ {usage?.maxFreeVmCount ?? "-"}</em>
             </>
           }
-          hint={`${PLAN_SPEC.FREE.cores} vCPU · ${PLAN_SPEC.FREE.memory} RAM`}
+          hint={`${VM_PLAN_SPECS.FREE.cores} vCPU · ${VM_PLAN_SPECS.FREE.memory} RAM`}
         />
         <StatCard
           label="PRO"
@@ -130,7 +126,7 @@ export default function InstancesPage() {
               {proCount} <em className="text-base font-normal not-italic text-muted-soft">/ {usage?.maxProVmCount ?? "-"}</em>
             </>
           }
-          hint={`${PLAN_SPEC.PRO.cores} vCPU · ${PLAN_SPEC.PRO.memory} RAM`}
+          hint={`${VM_PLAN_SPECS.PRO.cores} vCPU · ${VM_PLAN_SPECS.PRO.memory} RAM`}
         />
       </StatGrid>
 
@@ -188,7 +184,7 @@ export default function InstancesPage() {
               </tr>
             ) : (
               filteredVms.map((vm) => {
-                const spec = PLAN_SPEC[vm.planType] ?? PLAN_SPEC.FREE;
+                const spec = VM_PLAN_SPECS[vm.planType];
                 return (
                   <tr key={vm.id}>
                     <Td>

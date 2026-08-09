@@ -19,6 +19,7 @@ import { isValidVmName, VmNameInput } from "@/components/vm-name-input";
 import { Avatar } from "@/components/ui/avatar";
 import { MemberInviteCombobox, type InviteTarget } from "@/components/member-invite-combobox";
 import { maskEmail } from "@/lib/mask-email";
+import { VM_PLAN_SPECS } from "@/lib/vm-plans";
 
 const ROLE_LABEL: Record<MemberRole, string> = { OWNER: "소유자", ADMIN: "관리자", MEMBER: "멤버" };
 
@@ -597,13 +598,9 @@ export default function OrganizationDetailPage() {
 
       {/* ── VM 생성 모달 ── */}
       {showCreateVm && (() => {
-        const PLAN_INFO = {
-          FREE: { cores: 4, memory: "5GB", diskMin: 20, diskMax: 50 },
-          PRO: { cores: 8, memory: "12GB", diskMin: 20, diskMax: 100 },
-        };
         const freeFull = vmAvailability?.free.isFull ?? false;
         const proFull = vmAvailability?.pro.isFull ?? false;
-        const planInfo = PLAN_INFO[createVmPlan];
+        const planInfo = VM_PLAN_SPECS[createVmPlan];
         return (
           <Modal open={showCreateVm} onClose={() => setShowCreateVm(false)}>
             <div className="mx-auto w-full max-w-md rounded-panel bg-panel">
@@ -628,7 +625,7 @@ export default function OrganizationDetailPage() {
                   <span className="text-xs font-bold text-muted block mb-2">플랜</span>
                   <div className="grid grid-cols-2 gap-2">
                     {(["FREE", "PRO"] as const).map((plan) => {
-                      const info = PLAN_INFO[plan];
+                      const info = VM_PLAN_SPECS[plan];
                       const full = plan === "FREE" ? freeFull : proFull;
                       const planLocked = plan === "PRO" && userPlan === "FREE";
                       const used = vmAvailability?.[plan.toLowerCase() as "free" | "pro"].used ?? 0;

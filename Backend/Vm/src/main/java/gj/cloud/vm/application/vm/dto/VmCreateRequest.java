@@ -16,7 +16,7 @@ public record VmCreateRequest(
                 message = "영문자, 숫자, 하이픈(-)만 사용 가능하며 하이픈으로 시작/끝날 수 없습니다")
         String name,
 
-        @Schema(description = "플랜 (FREE: 4코어·5GB / PRO: 8코어·12GB)", allowableValues = {"FREE", "PRO"})
+        @Schema(description = "플랜 (FREE: 4코어·4GB / PRO: 8코어·10GB)", allowableValues = {"FREE", "PRO"})
         @NotNull PlanType planType,
 
         @Schema(description = "디스크 크기 (GB). FREE: 20~50, PRO: 50~500", example = "20")
