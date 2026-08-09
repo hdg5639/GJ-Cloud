@@ -289,6 +289,12 @@ const transitionToScene = async (targetIndex, requestedDirection) => {
   const landingPosition = direction > 0 || !isTallScene(targetIndex)
     ? getSceneStart(targetIndex)
     : getSceneEnd(targetIndex);
+  // tall 씬은 요소 중심이 뷰포트 밖(아래)이라, 중심 기준 scale 리빌이 화면에 보이는
+  // 상단(kicker)을 세로로 밀어낸다. 스케일 피벗을 화면에 고정된 지점으로 옮겨 상단이
+  // 전혀 움직이지 않게 한다: 아래로 진입 시 콘텐츠 상단(= padding-top = kicker 라인)에
+  // 정확히 맞추고, 위로 복귀 시엔 하단(50% 100%)에 맞춘다.
+  // 짧은 씬은 중심 기준이 자연스러워 그대로 둔다(빈 문자열 = CSS 기본 50% 50%).
+  const enteringIsTall = isTallScene(targetIndex);
 
   sceneTransitionRunning = true;
   resetBoundaryGesture();
@@ -298,7 +304,12 @@ const transitionToScene = async (targetIndex, requestedDirection) => {
 
   await wait(330);
 
-  enteringElements.forEach((element) => element.classList.add(enteringClass));
+  enteringElements.forEach((element) => {
+    element.style.transformOrigin = enteringIsTall
+      ? (direction > 0 ? `50% ${parseFloat(getComputedStyle(element).paddingTop) || 0}px` : '50% 100%')
+      : '';
+    element.classList.add(enteringClass);
+  });
   setImmediateScroll(landingPosition);
   leavingElements.forEach((element) => element.classList.remove(leavingClass));
   document.body.classList.remove('is-scene-fading');
@@ -309,6 +320,9 @@ const transitionToScene = async (targetIndex, requestedDirection) => {
 
   await wait(580);
   document.body.classList.remove('is-scene-revealing');
+  // 다음에 이 씬이 떠날 때(leaving scale)는 중심 기준으로 돌아가도록 인라인 피벗 해제.
+  // 이 시점엔 scale이 1(항등)이라 해제해도 시각적 변화가 없다.
+  enteringElements.forEach((element) => { element.style.transformOrigin = ''; });
   sceneTransitionRunning = false;
 };
 
