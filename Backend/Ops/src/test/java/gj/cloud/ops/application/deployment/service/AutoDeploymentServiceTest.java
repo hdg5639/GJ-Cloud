@@ -9,10 +9,13 @@ import gj.cloud.ops.domain.deployment.enums.DeploymentTriggerType;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
 import gj.cloud.ops.domain.deployment.repository.DeploymentTargetRepository;
+import gj.cloud.ops.global.exception.OpsException;
+import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +25,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.any;
 
 class AutoDeploymentServiceTest {
 
@@ -34,6 +39,7 @@ class AutoDeploymentServiceTest {
     private final VmAutomationClient vmAutomationClient = mock(VmAutomationClient.class);
     private final StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
     private final TaskExecutor taskExecutor = mock(TaskExecutor.class);
+    private final DeploymentOrphanReconciler orphanReconciler = mock(DeploymentOrphanReconciler.class);
 
     private AutoDeploymentService service;
 
@@ -48,7 +54,8 @@ class AutoDeploymentServiceTest {
                 githubAppService,
                 vmAutomationClient,
                 redisTemplate,
-                taskExecutor);
+                taskExecutor,
+                orphanReconciler);
         when(deploymentRepository.findAllByStatus(DeploymentStatus.STOPPING))
                 .thenReturn(List.of());
         when(deploymentRepository.findAllByTriggerTypeAndStatusNotIn(
@@ -117,6 +124,58 @@ class AutoDeploymentServiceTest {
         service.retryPendingDeployments();
 
         verify(taskExecutor, never()).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
+    }
+
+    @Test
+    void removesStalePendingKeyForInactiveTarget() {
+        DeploymentTargetEntity target = DeploymentTargetEntity.builder()
+                .id("target-inactive")
+                .active(false)
+                .autoDeployEnabled(false)
+                .build();
+        when(targetRepository.findAll()).thenReturn(List.of(target));
+
+        service.retryPendingDeployments();
+
+        verify(redisTemplate).delete("auto-deploy-pending:target-inactive");
+        verify(taskExecutor, never()).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
+    }
+
+    @Test
+    void quarantinesPendingAutomaticDeploymentWhenVmServiceConfirmsVmIsMissing() {
+        String revision = "0123456789abcdef0123456789abcdef01234567";
+        LocalDateTime now = LocalDateTime.now();
+        DeploymentTargetEntity target = DeploymentTargetEntity.builder()
+                .id("target-orphan")
+                .vmId("vm-missing")
+                .ownerUserId("user-1")
+                .ownerEmail("owner@example.com")
+                .active(true)
+                .autoDeployEnabled(true)
+                .latestRequestedRevision(revision)
+                .latestRequestedAt(now)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+        when(targetRepository.findAll()).thenReturn(List.of(target));
+        when(targetRepository.findById(target.getId())).thenReturn(Optional.of(target));
+        when(redisTemplate.hasKey("auto-deploy-pending:" + target.getId())).thenReturn(true);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("auto-deploy-pending:" + target.getId())).thenReturn(revision);
+        when(lockService.currentHolder(target.getId())).thenReturn(Optional.empty());
+        when(vmAutomationClient.getContext(target.getVmId(), target.getOwnerUserId(), target.getOwnerEmail()))
+                .thenThrow(new OpsException(OpsErrorCode.VM_NOT_FOUND));
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(taskExecutor).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
+
+        service.retryPendingDeployments();
+
+        verify(orphanReconciler).handleConfirmedMissingVm(target.getId());
+        verify(githubAppService, never()).resolveRepositoryAccess(any(), any());
     }
 
     private DeploymentTargetEntity target(String id, String latestDeploymentId) {

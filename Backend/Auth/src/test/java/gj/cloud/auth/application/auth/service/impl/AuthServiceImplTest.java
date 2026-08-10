@@ -2,6 +2,7 @@ package gj.cloud.auth.application.auth.service.impl;
 
 import gj.cloud.auth.application.auditlog.service.SecurityAuditLogService;
 import gj.cloud.auth.application.auth.dto.LoginResult;
+import gj.cloud.auth.application.auth.dto.WithdrawRequest;
 import gj.cloud.auth.application.deletion.service.AccountDeletionAttemptService;
 import gj.cloud.auth.application.token.service.TokenService;
 import gj.cloud.auth.domain.auditlog.enums.AuditAction;
@@ -10,6 +11,7 @@ import gj.cloud.auth.domain.auditlog.enums.AuditResult;
 import gj.cloud.auth.domain.deletion.repository.AccountDeletionJobRepository;
 import gj.cloud.auth.domain.token.enums.ServiceAudience;
 import gj.cloud.auth.domain.user.entity.UserEntity;
+import gj.cloud.auth.domain.user.enums.UserStatus;
 import gj.cloud.auth.domain.user.repository.UserRepository;
 import gj.cloud.auth.global.client.UserServiceClient;
 import gj.cloud.auth.global.exception.AuthException;
@@ -27,6 +29,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -72,5 +76,47 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> authService.createSessionAfterEmailVerification(user.getEmail(), "203.0.113.10"))
                 .isInstanceOfSatisfying(AuthException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(AuthErrorCode.EMAIL_NOT_VERIFIED));
+    }
+
+    @Test
+    void withdrawsOnlyAfterCurrentPasswordMatches() {
+        UserEntity user = UserEntity.create("owner@gamjabox.cloud", "encoded-password");
+        user.activate();
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("current-password", "encoded-password")).thenReturn(true);
+
+        authService.withdraw(user.getId(), new WithdrawRequest("current-password"), "203.0.113.20");
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
+        assertThat(user.getEmail()).isEqualTo("deleted_" + user.getId() + "@deleted");
+        verify(loginRateLimiter).clearFailures("owner@gamjabox.cloud", "203.0.113.20");
+        verify(tokenService).deleteAllUserTokens(user.getId());
+        verify(accountDeletionAttemptService).attempt(org.mockito.ArgumentMatchers.any());
+        verify(accountDeletionJobRepository).save(org.mockito.ArgumentMatchers.any());
+        verify(securityAuditLogService).record(
+                AuditActorType.USER, user.getId(), AuditAction.ACCOUNT_WITHDRAWN,
+                "USER", user.getId(), AuditResult.SUCCESS, "203.0.113.20", null);
+    }
+
+    @Test
+    void keepsAccountAndSessionsWhenWithdrawalPasswordIsWrong() {
+        UserEntity user = UserEntity.create("owner@gamjabox.cloud", "encoded-password");
+        user.activate();
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong-password", "encoded-password")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.withdraw(
+                user.getId(), new WithdrawRequest("wrong-password"), "203.0.113.20"))
+                .isInstanceOfSatisfying(AuthException.class,
+                        error -> assertThat(error.getErrorCode()).isEqualTo(AuthErrorCode.INVALID_PASSWORD));
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.getEmail()).isEqualTo("owner@gamjabox.cloud");
+        verify(loginRateLimiter).recordFailure("owner@gamjabox.cloud", "203.0.113.20");
+        verify(tokenService, never()).deleteAllUserTokens(user.getId());
+        verifyNoInteractions(accountDeletionAttemptService, accountDeletionJobRepository);
+        verify(securityAuditLogService).record(
+                AuditActorType.USER, user.getId(), AuditAction.ACCOUNT_WITHDRAWN,
+                "USER", user.getId(), AuditResult.FAILURE, "203.0.113.20", "INVALID_PASSWORD_CONFIRMATION");
     }
 }

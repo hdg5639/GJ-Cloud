@@ -12,6 +12,8 @@ import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
 import gj.cloud.ops.domain.deployment.enums.DeploymentTriggerType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
 import gj.cloud.ops.domain.deployment.repository.DeploymentTargetRepository;
+import gj.cloud.ops.global.exception.OpsException;
+import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
@@ -48,6 +50,7 @@ public class AutoDeploymentService {
     private final VmAutomationClient vmAutomationClient;
     private final StringRedisTemplate redisTemplate;
     private final TaskExecutor deploymentTaskExecutor;
+    private final DeploymentOrphanReconciler orphanReconciler;
 
     public void request(DeploymentTargetEntity target, String revision) {
         if (!COMMIT_SHA.matcher(revision).matches()) {
@@ -67,11 +70,13 @@ public class AutoDeploymentService {
 
     @Scheduled(fixedDelayString = "${ops.auto-deployment.retry-delay-ms:30000}")
     public void retryPendingDeployments() {
-        targetRepository.findAll().stream()
-                .filter(DeploymentTargetEntity::isActive)
-                .filter(DeploymentTargetEntity::isAutoDeployEnabled)
-                .filter(this::hasPendingRevision)
-                .forEach(target -> submitSchedule(target.getId()));
+        for (DeploymentTargetEntity target : targetRepository.findAll()) {
+            if (!target.isActive() || !target.isAutoDeployEnabled()) {
+                redisTemplate.delete(pendingKey(target.getId()));
+                continue;
+            }
+            if (hasPendingRevision(target)) submitSchedule(target.getId());
+        }
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -203,6 +208,18 @@ public class AutoDeploymentService {
             if (deploymentExecutor.enqueueAutomatic(target, repoConfig, artifact, revision).isPresent()) {
                 redisTemplate.execute(COMPARE_AND_DELETE, List.of(pendingKey(targetId)), revision);
             }
+        } catch (OpsException e) {
+            if (e.getErrorCode() == OpsErrorCode.VM_NOT_FOUND) {
+                try {
+                    orphanReconciler.handleConfirmedMissingVm(targetId);
+                } catch (Exception cleanupError) {
+                    log.warn("자동 배포 고아 대상 정리 보류: targetId={}, error={}",
+                            targetId, cleanupError.getMessage());
+                }
+                return;
+            }
+            log.warn("자동 배포 시작 보류: targetId={}, revision={}, error={}",
+                    targetId, revision, e.getMessage());
         } catch (Exception e) {
             // VM이 꺼져 있거나 GitHub가 일시 장애인 경우 pending을 유지한다. 정기 재시도에서 다시 확인하며,
             // 실제 파이프라인이 시작된 뒤의 빌드 실패는 enqueue 직후 pending이 지워지므로 무한 재시도하지 않는다.

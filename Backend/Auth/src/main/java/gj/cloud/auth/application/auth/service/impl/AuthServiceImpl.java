@@ -5,6 +5,7 @@ import gj.cloud.auth.application.auth.dto.ChangePasswordRequest;
 import gj.cloud.auth.application.auth.dto.LoginRequest;
 import gj.cloud.auth.application.auth.dto.LoginResult;
 import gj.cloud.auth.application.auth.dto.RegisterRequest;
+import gj.cloud.auth.application.auth.dto.WithdrawRequest;
 import gj.cloud.auth.application.auth.service.AuthService;
 import gj.cloud.auth.application.deletion.service.AccountDeletionAttemptService;
 import gj.cloud.auth.application.token.service.TokenService;
@@ -145,9 +146,19 @@ public class AuthServiceImpl implements AuthService {
     // 확정) job row에 결과를 남긴다. 실패분은 AccountDeletionRetryScheduler가 재시도한다.
     @Override
     @Transactional
-    public void withdraw(String userId) {
+    public void withdraw(String userId, WithdrawRequest request, String clientIp) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
+
+        loginRateLimiter.checkAndThrowIfLocked(user.getEmail(), clientIp);
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            loginRateLimiter.recordFailure(user.getEmail(), clientIp);
+            securityAuditLogService.record(AuditActorType.USER, userId, AuditAction.ACCOUNT_WITHDRAWN,
+                    "USER", userId, AuditResult.FAILURE, clientIp, "INVALID_PASSWORD_CONFIRMATION");
+            throw new AuthException(AuthErrorCode.INVALID_PASSWORD);
+        }
+        loginRateLimiter.clearFailures(user.getEmail(), clientIp);
+
         String originalEmail = user.getEmail();
         user.anonymizeAndDelete();
         logout(userId);
@@ -157,7 +168,7 @@ public class AuthServiceImpl implements AuthService {
         accountDeletionJobRepository.save(job);
 
         securityAuditLogService.record(AuditActorType.USER, userId, AuditAction.ACCOUNT_WITHDRAWN,
-                "USER", userId, AuditResult.SUCCESS, null, null);
+                "USER", userId, AuditResult.SUCCESS, clientIp, null);
     }
 
     // SEC-004: User 서비스가 정지/복구 시 호출. Auth가 계정 접근 상태의 단일 진실 공급원이므로

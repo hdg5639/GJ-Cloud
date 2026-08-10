@@ -39,7 +39,7 @@ Auth는 사용자 프로필이나 VM 데이터를 직접 소유하지 않는다.
 | 키 공개 | `/auth/.well-known/jwks.json` | 다른 서비스의 JWT 서명 검증용 JWKS |
 | 이메일 | `/auth/email/verify/**` | 인증 코드 발송·확인 |
 | 비밀번호 | `/auth/password/**` | 재설정 코드, 비밀번호 재설정·변경 |
-| 계정 | `/auth/withdraw` | 사용자 탈퇴 시작 |
+| 계정 | `/auth/withdraw` | 현재 비밀번호 재확인 후 사용자 탈퇴 시작 |
 | 관리자 | `/admin/security-audit-logs`, `/admin/account-deletion-jobs` | 감사 로그와 삭제 실패 작업 확인 |
 | 내부 API | `/internal/users/{userId}/status` | 서비스 인증 기반 사용자 상태 변경 |
 
@@ -53,6 +53,8 @@ Auth는 사용자 프로필이나 VM 데이터를 직접 소유하지 않는다.
 - 매시간: 만료된 미인증 사용자 정리
 - 매일 03:00: 장기 정리 작업
 - 5분 간격: 실패한 계정 삭제 작업 재시도
+
+회원 탈퇴는 로그인된 Access Token만으로 실행하지 않는다. `DELETE /auth/withdraw` 요청 본문의 현재 비밀번호를 다시 검증하며, 불일치하면 계정 상태·토큰·후속 삭제 작업을 변경하지 않는다. 실패 시도는 로그인 레이트 리밋과 보안 감사 로그에 반영하고, 성공 시 모든 토큰과 Refresh 쿠키를 만료시킨 뒤 User·VM 정리 작업을 시작한다.
 
 ## 환경변수
 

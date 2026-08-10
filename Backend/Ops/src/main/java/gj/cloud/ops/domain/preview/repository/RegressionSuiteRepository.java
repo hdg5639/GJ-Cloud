@@ -8,6 +8,8 @@ import java.util.Optional;
 
 public interface RegressionSuiteRepository extends JpaRepository<RegressionSuiteEntity, String> {
 
+    boolean existsByDeploymentTargetId(String deploymentTargetId);
+
     Optional<RegressionSuiteEntity> findByIdAndOwnerIdAndActiveTrue(String id, String ownerId);
 
     List<RegressionSuiteEntity> findAllByServiceIdAndOwnerIdAndActiveTrueOrderByUpdatedAtDesc(

@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 @Slf4j
@@ -25,9 +26,10 @@ public class VmAutomationClient {
 
     public VmAutomationClient(
             @Value("${vm.service-url}") String vmServiceUrl,
-            ServiceTokenClient serviceTokenClient
+            ServiceTokenClient serviceTokenClient,
+            RestClient.Builder restClientBuilder
     ) {
-        this.restClient = RestClient.builder().baseUrl(vmServiceUrl).build();
+        this.restClient = restClientBuilder.baseUrl(vmServiceUrl).build();
         this.serviceTokenClient = serviceTokenClient;
     }
 
@@ -42,6 +44,10 @@ public class VmAutomationClient {
                     .retrieve()
                     .body(CONTEXT_RESPONSE_TYPE);
             return response.data();
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new OpsException(OpsErrorCode.VM_NOT_FOUND);
+        } catch (HttpClientErrorException.Forbidden e) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
         } catch (Exception e) {
             log.error("자동 배포 VM 컨텍스트 조회 실패: vmId={}, error={}", vmId, e.getMessage());
             throw new OpsException(OpsErrorCode.VM_CONTEXT_FETCH_FAILED);

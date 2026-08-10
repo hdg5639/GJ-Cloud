@@ -13,6 +13,10 @@ public interface DeploymentRepository extends JpaRepository<DeploymentEntity, St
 
     List<DeploymentEntity> findAllByVmIdOrderByCreatedAtDesc(String vmId);
 
+    List<DeploymentEntity> findTop100ByOrderByCreatedAtDesc();
+
+    long countByDeploymentTargetId(String deploymentTargetId);
+
     List<DeploymentEntity> findAllByStatus(DeploymentStatus status);
 
     Optional<DeploymentEntity> findTopByVmIdAndDeploymentTargetIdIsNullAndStatusOrderByCreatedAtDesc(

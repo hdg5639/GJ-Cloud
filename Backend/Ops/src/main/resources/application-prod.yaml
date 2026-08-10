@@ -72,6 +72,8 @@ ops:
     free-ttl-hours: ${MANAGED_PREVIEW_FREE_TTL_HOURS:6}
     pro-ttl-hours: ${MANAGED_PREVIEW_PRO_TTL_HOURS:24}
     cleanup-interval-ms: ${MANAGED_PREVIEW_CLEANUP_INTERVAL_MS:60000}
+  deployment-orphan:
+    reconcile-interval-ms: ${OPS_DEPLOYMENT_ORPHAN_RECONCILE_INTERVAL_MS:300000}
   git:
     allowed-hosts: ${OPS_GIT_ALLOWED_HOSTS:github.com,gitlab.com,bitbucket.org}
     local-egress-proxy-url: ${OPS_GIT_LOCAL_EGRESS_PROXY_URL:http://ops-git-egress-proxy:3128}

@@ -4,6 +4,7 @@ import gj.cloud.auth.application.auth.dto.ChangePasswordRequest;
 import gj.cloud.auth.application.auth.dto.LoginRequest;
 import gj.cloud.auth.application.auth.dto.LoginResponse;
 import gj.cloud.auth.application.auth.dto.RegisterRequest;
+import gj.cloud.auth.application.auth.dto.WithdrawRequest;
 import gj.cloud.auth.application.email.dto.EmailVerifyConfirmRequest;
 import gj.cloud.auth.application.email.dto.EmailVerifyRequest;
 import gj.cloud.auth.application.passwordreset.dto.PasswordResetConfirmRequest;
@@ -37,9 +38,14 @@ public interface AuthApi {
     @PostMapping("/logout")
     ApiResponse<Void> logout(@AuthenticationPrincipal String userId, HttpServletResponse response);
 
-    @Operation(summary = "회원 탈퇴", description = "계정 및 모든 토큰 삭제")
+    @Operation(summary = "회원 탈퇴", description = "현재 비밀번호 재확인 후 계정 및 모든 토큰 삭제")
     @DeleteMapping("/withdraw")
-    ApiResponse<Void> withdraw(@AuthenticationPrincipal String userId);
+    ApiResponse<Void> withdraw(
+            @AuthenticationPrincipal String userId,
+            @Valid @RequestBody WithdrawRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse response
+    );
 
     @Operation(summary = "인증 코드 발송", description = "이메일로 6자리 코드 발송 (5분 유효)")
     @PostMapping("/email/verify/send")
