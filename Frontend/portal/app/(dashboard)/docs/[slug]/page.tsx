@@ -70,7 +70,7 @@ export default function DocsArticlePage({ params }: { params: Promise<{ slug: st
           </div>
         </main>
 
-        <aside className="hidden xl:sticky xl:top-5 xl:flex xl:max-h-[calc(100dvh-2.5rem)] xl:min-h-0 xl:flex-col">
+        <aside className="hidden xl:sticky xl:top-5 xl:flex xl:h-[calc(100dvh-6rem)] xl:min-h-0 xl:flex-col">
           <p className="mb-3 shrink-0 text-[10px] font-extrabold uppercase tracking-[.13em] text-muted-soft">이 페이지에서</p>
           {headings.length > 0 ? <nav aria-label="이 페이지 목차" className="grid min-h-0 flex-1 touch-pan-y gap-1 overflow-y-auto overscroll-contain border-l border-line pl-3 pr-2 [scrollbar-gutter:stable]">{headings.map((heading) => <a key={heading.id} href={`#${heading.id}`} className={`py-1 text-[11px] leading-5 text-muted hover:text-brand-strong ${heading.level === 3 ? "pl-3" : "font-bold"}`}>{heading.text}</a>)}</nav> : <p className="min-h-0 flex-1 text-[11px] leading-5 text-muted-soft">별도 목차가 없는 짧은 문서입니다.</p>}
           <Link href="/docs" className="mt-6 block shrink-0 rounded-[12px] border border-line bg-panel p-3 text-[11px] font-bold text-muted hover:border-brand/35 hover:text-brand-strong">⌕ 다른 설명서 찾기</Link>
