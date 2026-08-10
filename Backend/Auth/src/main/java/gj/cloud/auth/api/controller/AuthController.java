@@ -6,6 +6,7 @@ import gj.cloud.auth.application.auth.dto.LoginRequest;
 import gj.cloud.auth.application.auth.dto.LoginResponse;
 import gj.cloud.auth.application.auth.dto.LoginResult;
 import gj.cloud.auth.application.auth.dto.RegisterRequest;
+import gj.cloud.auth.application.auth.dto.WithdrawRequest;
 import gj.cloud.auth.application.auth.service.AuthService;
 import gj.cloud.auth.application.email.dto.EmailVerifyConfirmRequest;
 import gj.cloud.auth.application.email.dto.EmailVerifyRequest;
@@ -55,8 +56,14 @@ public class AuthController implements AuthApi {
     }
 
     @Override
-    public ApiResponse<Void> withdraw(@AuthenticationPrincipal String userId) {
-        authService.withdraw(userId);
+    public ApiResponse<Void> withdraw(
+            @AuthenticationPrincipal String userId,
+            WithdrawRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse response
+    ) {
+        authService.withdraw(userId, request, clientIpResolver.resolve(httpRequest));
+        clearRefreshTokenCookie(response);
         return ApiResponse.ok();
     }
 

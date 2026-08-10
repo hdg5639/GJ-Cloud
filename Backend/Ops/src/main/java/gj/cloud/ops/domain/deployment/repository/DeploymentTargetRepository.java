@@ -2,6 +2,7 @@ package gj.cloud.ops.domain.deployment.repository;
 
 import gj.cloud.ops.domain.deployment.entity.DeploymentTargetEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,10 +10,25 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 
 public interface DeploymentTargetRepository extends JpaRepository<DeploymentTargetEntity, String> {
 
     List<DeploymentTargetEntity> findAllByVmIdAndActiveTrueOrderByCreatedAtAsc(String vmId);
+
+    List<DeploymentTargetEntity> findAllByActiveTrueOrderByCreatedAtAsc();
+
+    List<DeploymentTargetEntity> findTop200ByOrderByUpdatedAtDesc();
+
+    long countByActiveTrue();
+
+    long countByActiveTrueAndAutoDeployEnabledTrue();
+
+    long countByOrphanedAtIsNotNull();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select target from DeploymentTargetEntity target where target.id = :targetId")
+    Optional<DeploymentTargetEntity> findByIdForUpdate(@Param("targetId") String targetId);
 
     Optional<DeploymentTargetEntity> findByIdAndVmIdAndActiveTrue(String id, String vmId);
 
@@ -86,4 +102,19 @@ public interface DeploymentTargetRepository extends JpaRepository<DeploymentTarg
              where target.id = :targetId
             """)
     int deactivate(@Param("targetId") String targetId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update DeploymentTargetEntity target
+               set target.active = false,
+                   target.autoDeployEnabled = false,
+                   target.orphanedAt = :orphanedAt,
+                   target.orphanReason = :reason,
+                   target.updatedAt = :orphanedAt
+             where target.id = :targetId
+            """)
+    int quarantineOrphan(
+            @Param("targetId") String targetId,
+            @Param("reason") String reason,
+            @Param("orphanedAt") LocalDateTime orphanedAt);
 }

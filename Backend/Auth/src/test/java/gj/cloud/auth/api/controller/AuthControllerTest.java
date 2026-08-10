@@ -2,6 +2,7 @@ package gj.cloud.auth.api.controller;
 
 import gj.cloud.auth.application.auth.dto.LoginResponse;
 import gj.cloud.auth.application.auth.dto.LoginResult;
+import gj.cloud.auth.application.auth.dto.WithdrawRequest;
 import gj.cloud.auth.application.auth.service.AuthService;
 import gj.cloud.auth.application.email.dto.EmailVerifyConfirmRequest;
 import gj.cloud.auth.application.email.service.EmailVerificationService;
@@ -20,6 +21,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,5 +63,29 @@ class AuthControllerTest {
         InOrder verificationThenSession = inOrder(emailVerificationService, authService);
         verificationThenSession.verify(emailVerificationService).confirmCode(email, code);
         verificationThenSession.verify(authService).createSessionAfterEmailVerification(email, clientIp);
+    }
+
+    @Test
+    void withdrawsWithPasswordAndClearsRefreshCookie() {
+        String userId = "user-1";
+        String clientIp = "203.0.113.20";
+        WithdrawRequest request = new WithdrawRequest("current-password");
+        MockHttpServletRequest httpRequest = new MockHttpServletRequest();
+        MockHttpServletResponse httpResponse = new MockHttpServletResponse();
+        when(clientIpResolver.resolve(httpRequest)).thenReturn(clientIp);
+
+        ApiResponse<Void> response = authController.withdraw(
+                userId, request, httpRequest, httpResponse);
+
+        assertThat(response.success()).isTrue();
+        verify(authService).withdraw(userId, request, clientIp);
+        Cookie refreshCookie = httpResponse.getCookie("refreshToken");
+        assertThat(refreshCookie).isNotNull();
+        assertThat(refreshCookie.getValue()).isEmpty();
+        assertThat(refreshCookie.getPath()).isEqualTo("/auth/token");
+        assertThat(refreshCookie.getMaxAge()).isZero();
+        assertThat(refreshCookie.getSecure()).isTrue();
+        assertThat(refreshCookie.isHttpOnly()).isTrue();
+        assertThat(refreshCookie.getAttribute("SameSite")).isEqualTo("Strict");
     }
 }

@@ -108,6 +108,71 @@ export interface SystemWorkerResponse {
   updatedAt: string | null;
 }
 
+export interface AdminDeploymentOperationsResponse {
+  summary: {
+    totalTargets: number;
+    activeTargets: number;
+    activeAutoDeployments: number;
+    orphanedTargets: number;
+    recentFailedDeployments: number;
+  };
+  targets: AdminDeploymentTargetOperation[];
+  recentDeployments: AdminDeploymentOperation[];
+  cleanupEvents: AdminDeploymentCleanupEvent[];
+}
+
+export interface AdminDeploymentTargetOperation {
+  id: string;
+  vmId: string;
+  ownerUserId: string;
+  ownerEmail: string;
+  name: string;
+  repository: string;
+  branch: string;
+  lifecycleStatus: "ACTIVE" | "INACTIVE" | "ORPHANED";
+  autoDeployEnabled: boolean;
+  latestRequestedRevision: string | null;
+  latestDeployedRevision: string | null;
+  orphanReason: string | null;
+  orphanedAt: string | null;
+  updatedAt: string;
+}
+
+export interface AdminDeploymentOperation {
+  id: string;
+  vmId: string;
+  deploymentTargetId: string | null;
+  triggerType: string;
+  status: string;
+  sourceType: string;
+  revision: string | null;
+  errorMessage: string | null;
+  lastEvent: string | null;
+  createdAt: string;
+  deployedAt: string | null;
+}
+
+export interface AdminDeploymentCleanupEvent {
+  id: string;
+  deploymentTargetId: string;
+  vmId: string;
+  ownerUserId: string;
+  ownerEmail: string;
+  targetName: string;
+  action: "HARD_DELETED" | "QUARANTINED";
+  reason: string;
+  hadRelatedData: boolean;
+  createdAt: string;
+}
+
+export interface OrphanReconcileResult {
+  scanned: number;
+  missing: number;
+  hardDeleted: number;
+  quarantined: number;
+  errors: number;
+}
+
 export interface ManagedPreviewResponse {
   id: string;
   targetType: "MANAGED";

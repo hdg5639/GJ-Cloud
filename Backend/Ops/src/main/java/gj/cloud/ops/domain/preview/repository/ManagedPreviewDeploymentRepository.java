@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ManagedPreviewDeploymentRepository extends JpaRepository<ManagedPreviewDeploymentEntity, String> {
+    boolean existsByDeploymentTargetId(String deploymentTargetId);
     Optional<ManagedPreviewDeploymentEntity> findByIdAndUserId(String id, String userId);
     List<ManagedPreviewDeploymentEntity> findAllByUserIdOrderByCreatedAtDesc(String userId);
     List<ManagedPreviewDeploymentEntity> findAllByStatusIn(Collection<ManagedPreviewStatus> statuses);

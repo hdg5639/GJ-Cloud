@@ -17,6 +17,8 @@ GamjaBox 사용자 포털과 ControlBox 관리자 콘솔을 함께 제공하는 
 - SSH 키, 프로필, 보안 설정과 사용자 설명서
 - 기술·계정·플랜·설명서 문의 접수와 관리자 답변 확인
 
+설정의 회원 탈퇴는 공통 모달에서 현재 비밀번호를 한 번 더 입력받는다. Auth 서버 검증이 성공한 경우에만 계정을 삭제하고 로그인 세션을 종료하며, 비밀번호가 틀리면 모달을 유지한 채 오류를 표시한다.
+
 ### ControlBox
 
 - 사용자와 VM 관리
@@ -54,6 +56,10 @@ app/
 ```
 
 공통 API 계약과 타입은 `lib/api-client.ts`, `lib/types.ts`에 둔다. 재사용 UI는 `components/ui`, Auto Preview 마법사와 배포 대상 선택은 `components/auto-preview`, 생성 결과 실행 UI는 `components/preview-runtime`에 둔다.
+
+ControlBox의 `/deployment-operations`는 전체 사용자의 배포 대상·자동 재배포 상태·최근 배포와 배포별 이벤트 로그, Ops의 고아 데이터 정리 감사 이력을 조회한다. VM 서비스의 확정 404로 격리된 대상은 사용자 화면에서 활성 대상으로 노출되지 않으며, hard delete된 빈 대상도 별도 정리 이벤트로 추적한다.
+
+관리자 도메인 Caddy는 `/admin/deployment-operations/**`와 `/admin/system-workers/**`를 Ops로 전달해야 한다. 루트 `Caddyfile.example`의 `@admin_ops` matcher를 기준으로 운영 설정을 맞춘다.
 
 ## 인증과 API 호출
 

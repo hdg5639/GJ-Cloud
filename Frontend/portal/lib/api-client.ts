@@ -76,6 +76,8 @@ import type {
   CreateSupportInquiryInput,
   SystemWorkerResponse,
   ManagedPreviewResponse,
+  AdminDeploymentOperationsResponse,
+  OrphanReconcileResult,
 } from "./types";
 import type { Block } from "@/components/preview-runtime/blueprint";
 
@@ -249,8 +251,12 @@ export const api = {
       }),
     logout: (accessToken: string) =>
       request<void>("auth", "/auth/logout", { method: "POST", accessToken }),
-    withdraw: (accessToken: string) =>
-      request<void>("auth", "/auth/withdraw", { method: "DELETE", accessToken }),
+    withdraw: (accessToken: string, password: string) =>
+      request<void>("auth", "/auth/withdraw", {
+        method: "DELETE",
+        body: JSON.stringify({ password }),
+        accessToken,
+      }),
     sendPasswordResetCode: (email: string) =>
       request<void>("auth", "/auth/password/reset/send", {
         method: "POST",
@@ -1198,6 +1204,17 @@ export const api = {
       action: (accessToken: string, action: "start" | "stop" | "reboot" | "reconcile" | "repair") =>
         request<SystemWorkerResponse>("adminOps", `/admin/system-workers/auto-preview/${action}`, { method: "POST", accessToken }),
       consoleTicket: (accessToken: string) => request<{ ticket: string; connectionId: string }>("adminOps", "/admin/system-workers/auto-preview/console-ticket", { method: "POST", accessToken }),
+    },
+    deploymentOperations: {
+      get: (accessToken: string) =>
+        request<AdminDeploymentOperationsResponse>("adminOps", "/admin/deployment-operations", { accessToken }),
+      getEvents: (accessToken: string, deploymentId: string) =>
+        request<DeploymentEventPayload[]>("adminOps", `/admin/deployment-operations/deployments/${deploymentId}/events`, { accessToken }),
+      reconcileOrphans: (accessToken: string) =>
+        request<OrphanReconcileResult>("adminOps", "/admin/deployment-operations/reconcile-orphans", {
+          method: "POST",
+          accessToken,
+        }),
     },
     docs: {
       list: (accessToken: string) =>

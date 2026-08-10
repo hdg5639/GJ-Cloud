@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS deployment_targets (
     latest_requested_at          TIMESTAMP,
     latest_deployed_revision     VARCHAR(64),
     latest_deployment_id         VARCHAR(36),
+    orphaned_at                  TIMESTAMP,
+    orphan_reason                VARCHAR(80),
     created_at                   TIMESTAMP    NOT NULL DEFAULT now(),
     updated_at                   TIMESTAMP    NOT NULL DEFAULT now(),
 
@@ -76,6 +78,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_deployment_target_vm_name_ci
 CREATE INDEX IF NOT EXISTS idx_deployment_targets_github_repo
     ON deployment_targets(github_installation_id, github_repository_id);
 ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS latest_requested_at TIMESTAMP;
+ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS orphaned_at TIMESTAMP;
+ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS orphan_reason VARCHAR(80);
+CREATE INDEX IF NOT EXISTS idx_deployment_targets_orphaned_at
+    ON deployment_targets(orphaned_at DESC) WHERE orphaned_at IS NOT NULL;
 
 -- Auto Preview(SourceType.AUTO_PREVIEW) 반영 — 기존 배포 환경의 CHECK 제약을 확장
 ALTER TABLE deployment_targets DROP CONSTRAINT IF EXISTS chk_deployment_target_source_type;
@@ -171,6 +177,26 @@ CREATE TABLE IF NOT EXISTS deployment_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id_sequence ON deployment_events(deployment_id, sequence);
+
+-- VM 서비스의 정본과 Ops 볼륨이 어긋났을 때 수행한 고아 배포 대상 정리 감사 이력.
+-- 운영 대상 자체를 hard delete해도 누가/무엇이/왜 정리됐는지는 ControlBox에서 확인할 수 있게 남긴다.
+CREATE TABLE IF NOT EXISTS deployment_orphan_cleanup_events (
+    id                 VARCHAR(36)  PRIMARY KEY,
+    deployment_target_id VARCHAR(36) NOT NULL,
+    vm_id              VARCHAR(36)  NOT NULL,
+    owner_user_id      VARCHAR(255) NOT NULL,
+    owner_email        VARCHAR(255) NOT NULL,
+    target_name        VARCHAR(60)  NOT NULL,
+    action             VARCHAR(20)  NOT NULL,
+    reason             VARCHAR(80)  NOT NULL,
+    had_related_data   BOOLEAN      NOT NULL,
+    created_at         TIMESTAMP    NOT NULL,
+    CONSTRAINT chk_deployment_orphan_cleanup_action CHECK (action IN ('HARD_DELETED', 'QUARANTINED'))
+);
+ALTER TABLE deployment_orphan_cleanup_events
+    ADD COLUMN IF NOT EXISTS had_related_data BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_deployment_orphan_cleanup_created_at
+    ON deployment_orphan_cleanup_events(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS ai_spec_generation_log (
     id                          VARCHAR(36)  PRIMARY KEY,

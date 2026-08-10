@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { validateProfileImage } from "@/lib/profile-image";
+import { Modal } from "@/components/ui/modal";
 
 type Tab = "profile" | "security" | "upgrade-requests";
 
@@ -31,6 +32,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [withdrawConfirm, setWithdrawConfirm] = useState(false);
+  const [withdrawPassword, setWithdrawPassword] = useState("");
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [requestLoading, setRequestLoading] = useState(false);
@@ -109,16 +112,30 @@ export default function SettingsPage() {
   }
 
   async function handleWithdraw() {
-    if (!accessToken) return;
+    if (!accessToken || !withdrawPassword) return;
     setWithdrawing(true);
+    setWithdrawError(null);
     try {
-      await api.auth.withdraw(accessToken);
+      await api.auth.withdraw(accessToken, withdrawPassword);
       logout();
-      router.push("/login");
-    } catch {
-      setWithdrawConfirm(false);
+      router.replace("/login");
+    } catch (err) {
+      setWithdrawError(err instanceof Error ? err.message : "회원 탈퇴에 실패했습니다.");
       setWithdrawing(false);
     }
+  }
+
+  function openWithdrawModal() {
+    setWithdrawPassword("");
+    setWithdrawError(null);
+    setWithdrawConfirm(true);
+  }
+
+  function closeWithdrawModal() {
+    if (withdrawing) return;
+    setWithdrawConfirm(false);
+    setWithdrawPassword("");
+    setWithdrawError(null);
   }
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -337,21 +354,9 @@ export default function SettingsPage() {
                 <h2 className="text-sm font-bold text-danger mb-1">위험 영역</h2>
                 <p className="text-xs text-muted-soft mb-4">계정을 삭제하면 모든 데이터가 영구적으로 제거됩니다.</p>
 
-                {!withdrawConfirm ? (
-                  <Button variant="danger" onClick={() => setWithdrawConfirm(true)}>
-                    회원 탈퇴
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted">정말 탈퇴하시겠습니까?</span>
-                    <Button variant="danger-solid" size="small" onClick={handleWithdraw} disabled={withdrawing}>
-                      {withdrawing ? "처리 중..." : "네, 탈퇴합니다"}
-                    </Button>
-                    <Button size="small" onClick={() => setWithdrawConfirm(false)}>
-                      취소
-                    </Button>
-                  </div>
-                )}
+                <Button variant="danger" onClick={openWithdrawModal}>
+                  회원 탈퇴
+                </Button>
               </Card>
             </div>
           )}
@@ -477,6 +482,58 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      <Modal open={withdrawConfirm} onClose={closeWithdrawModal}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleWithdraw();
+          }}
+          className="w-[min(460px,calc(100vw-32px))] overflow-hidden rounded-2xl border border-danger-soft bg-panel shadow-2xl"
+        >
+          <div className="border-b border-line px-5 py-5 sm:px-6">
+            <span className="text-[10px] font-extrabold tracking-[.12em] text-danger">DELETE ACCOUNT</span>
+            <h2 className="mt-1 text-lg font-extrabold">회원 탈퇴 확인</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              탈퇴하면 계정과 연결된 모든 데이터가 삭제되며 되돌릴 수 없습니다. 본인 확인을 위해 현재 비밀번호를 입력해주세요.
+            </p>
+          </div>
+
+          <div className="space-y-4 px-5 py-5 sm:px-6">
+            <Field label="현재 비밀번호" htmlFor="withdraw-password" className="mb-0">
+              <Input
+                id="withdraw-password"
+                name="withdraw-password"
+                type="password"
+                autoComplete="current-password"
+                value={withdrawPassword}
+                onChange={(event) => {
+                  setWithdrawPassword(event.target.value);
+                  setWithdrawError(null);
+                }}
+                placeholder="현재 비밀번호"
+                required
+                autoFocus
+              />
+            </Field>
+
+            {withdrawError && (
+              <p aria-live="polite" className="rounded-lg border border-danger-soft bg-danger/10 px-3 py-2.5 text-xs text-danger">
+                {withdrawError}
+              </p>
+            )}
+
+            <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+              <Button type="button" onClick={closeWithdrawModal} disabled={withdrawing}>
+                취소
+              </Button>
+              <Button type="submit" variant="danger-solid" disabled={withdrawing || !withdrawPassword}>
+                {withdrawing ? "탈퇴 처리 중..." : "비밀번호 확인 후 탈퇴"}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

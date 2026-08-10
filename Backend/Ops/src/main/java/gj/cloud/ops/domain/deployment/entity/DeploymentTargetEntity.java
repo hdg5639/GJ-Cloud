@@ -98,6 +98,12 @@ public class DeploymentTargetEntity {
     @Column(name = "latest_deployment_id", length = 36)
     private String latestDeploymentId;
 
+    @Column(name = "orphaned_at")
+    private LocalDateTime orphanedAt;
+
+    @Column(name = "orphan_reason", length = 80)
+    private String orphanReason;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

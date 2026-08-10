@@ -77,6 +77,7 @@ VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한
 | 백업 | `/ops/{vmId}/backups`, `/ops/{vmId}/backups/{backupId}/download` | DB 백업 생성·조회·검증·전용 다운로드 |
 | Preview | `/ops/preview/**`, `/ops/{vmId}/preview/deploy` | 분석·검수·조립·관리형 또는 사용자 VM 배포 |
 | 시스템 워커 관리 | `/admin/system-workers/auto-preview/**` | 구성·전원·존재 확인·유실 VM 재생성·Reconcile·Repair·일회용 콘솔 티켓 |
+| 관리자 배포 운영 | `/admin/deployment-operations/**` | 전체 대상·자동 재배포·최근 로그·고아 정리 이력 조회와 수동 조정 |
 | 회귀 Suite | `/ops/preview/regression-suites/**` | Suite와 실행 결과 |
 | 내부 SSH | `/internal/vms/{vmId}/management-key`, `/internal/vms/{vmId}/ssh-readiness` | 관리 키와 준비 상태 |
 
@@ -93,6 +94,16 @@ VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한
 ### Auto Preview Worker 유실 복구
 
 ControlBox 조회는 등록된 Worker의 예약 VMID가 Proxmox에 실제로 존재하는지 확인한다. VM이 없으면 저장 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR`였더라도 `MISSING`으로 갱신하고 내부 IP를 제거한다. 재생성 API도 요청 시점의 Proxmox 상태를 다시 검사하므로 DB 상태가 늦게 갱신된 경우에도 실제 VM이 없으면 재생성할 수 있다. 단, `PROVISIONING` 상태이거나 예약 VMID에 VM이 존재하면 중복 생성을 막는다. VM 서비스 조회 자체가 실패한 경우에는 부재로 간주하지 않는다.
+
+### 사용자 배포 대상 고아 조정
+
+Ops는 활성 배포 대상을 기본 5분마다 VM 서비스 정본과 대조한다. VM 서비스가 명확한 `404 VM_NOT_FOUND`를 반환할 때만 고아로 판정하며 타임아웃, 네트워크 오류, 5xx는 정리하지 않는다. 자동 재배포 실행 중에도 같은 404가 확인되면 Redis pending을 제거해 30초 재시도 루프를 멈춘다.
+
+- 연결된 `deployments`, 관리형 프리뷰, 회귀 Suite가 모두 없고 배포 락도 없으면 `deployment_targets`를 완전 삭제한다.
+- 배포·프리뷰·회귀 데이터가 하나라도 있거나 실행 락이 남아 있으면 `active=false`, `auto_deploy_enabled=false`, `orphaned_at`, `orphan_reason`으로 격리한다.
+- hard delete와 격리 모두 `deployment_orphan_cleanup_events`에 소유자·VM·대상·판정 근거를 감사 이벤트로 남긴다.
+- `DeploymentEntity`와 `deployment_events`는 사용자 배포 감사·장애 분석을 위해 자동 삭제하지 않는다.
+- ControlBox **배포 운영** 화면에서 전체 사용자 대상, 활성 자동 재배포, 최근 배포와 배포별 이벤트 로그(최대 1,000건), 격리 대상과 정리 이력을 확인하고 즉시 조정을 실행할 수 있다.
 
 ## 환경변수
 
@@ -112,6 +123,7 @@ ControlBox 조회는 등록된 Worker의 예약 VMID가 Proxmox에 실제로 존
 | 파일 제한 | `OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES`, `OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES` | 편집·업로드 최대 크기 |
 | 포털 | `PORTAL_ORIGIN`, `ADMIN_ORIGIN` | 사용자 콘솔·ControlBox worker 콘솔 WebSocket Origin allowlist |
 | 관리형 Preview | `SYSTEM_WORKER_AUTO_PREVIEW_*`, `MANAGED_PREVIEW_PORT_*`, `MANAGED_PREVIEW_*_TTL_HOURS` | 전용 워커 사양·VMID·포트 풀·플랜별 TTL |
+| 고아 배포 조정 | `OPS_DEPLOYMENT_ORPHAN_RECONCILE_INTERVAL_MS` | VM 정본과 활성 배포 대상을 대조하는 주기(기본 300000ms) |
 
 `OPS_KEY_ENCRYPTION_SECRET`와 `OPS_BACKUP_ENCRYPTION_SECRET`은 각각 `openssl rand -base64 24`로 생성한 서로 다른 UTF-8 32바이트 값을 사용한다. 관리 SSH 키나 암호화 백업이 생성된 뒤에 이 값을 변경하면 기존 데이터를 복호화할 수 없으므로 서버 재배포 때도 동일한 값을 유지한다.
 

@@ -49,6 +49,11 @@
 			reverse_proxy vm:8080
 		}
 
+		@admin_ops path /admin/system-workers /admin/system-workers/* /admin/deployment-operations /admin/deployment-operations/*
+		handle @admin_ops {
+			reverse_proxy ops:8080
+		}
+
 		handle {
 			reverse_proxy portal:3000
 		}
