@@ -14,7 +14,7 @@ export function Th({ className, ...props }: ThHTMLAttributes<HTMLTableCellElemen
   return (
     <th
       className={cn(
-        "whitespace-nowrap border-b border-line bg-white/[0.02] px-4 py-[15px] text-left text-[11px] font-medium text-muted",
+        "whitespace-nowrap border-b border-line bg-foreground/[0.02] px-4 py-[15px] text-left text-[11px] font-medium text-muted",
         className
       )}
       {...props}
@@ -26,7 +26,7 @@ export function Td({ className, ...props }: TdHTMLAttributes<HTMLTableCellElemen
   return (
     <td
       className={cn(
-        "whitespace-nowrap border-b border-line px-4 py-[15px] text-[13px] text-[#dfe5df]",
+        "whitespace-nowrap border-b border-line px-4 py-[15px] text-[13px]",
         className
       )}
       {...props}

@@ -24,7 +24,7 @@ export function StatusBadge({
     <span
       className={cn(
         "inline-flex items-center rounded-[7px] px-2 py-[5px] text-[11px] font-extrabold",
-        tone === "ok" ? "bg-success-soft text-success" : "bg-white/[0.05] text-muted-soft",
+        tone === "ok" ? "bg-success-soft text-success" : "bg-foreground/[0.05] text-muted-soft",
         className
       )}
       {...props}
