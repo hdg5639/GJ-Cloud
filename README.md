@@ -30,6 +30,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 | **SSH 접속** | VM마다 전용 서브도메인 자동 발급. 관리 키로 접속 준비 상태와 사용자 `authorized_keys`를 검증·복구하고, Cloudflare Zero Trust로 이메일 기반 접근 제어 |
 | **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. PUBLIC / PRIVATE 구분, PRO 플랜의 자동 ID 없는 커스텀 CNAME 지원 |
 | **플랜 관리** | FREE / PRO 플랜 전환, 디스크 온라인 확장. 플랜 변경은 관리자 승인 후 반영 |
+| **계정 보안** | RS256 세션과 Refresh Token Rotation, 이메일 인증·비밀번호 재설정 메일, 점진적 로그인 제한, 현재 비밀번호 재확인 기반 회원 탈퇴 |
 | **협업 (Organization)** | 팀 단위로 VM 공유. 메모·공지·요청 게시판, 역할별 권한(OWNER / ADMIN / MEMBER) |
 | **사용 설명서 (Docs)** | 사용자 포털에서 기능별 가이드를 검색·카테고리별로 탐색. ControlBox에서 Markdown/GFM 문서, 이미지, 태그, 추천 노출과 발행 상태 관리 |
 | **사용자 문의** | 포털에서 기술·계정·플랜·설명서 문의를 접수하고 답변 이력을 확인. 설명서 문맥을 함께 전달하며 ControlBox에서 답변·종료·재오픈 처리 |
@@ -132,6 +133,7 @@ Redis — 웹 콘솔/미디어 스트리밍 티켓, 배포 동시 실행 락, AI
 2. Access Token 만료 전 → /auth/token/refresh → Refresh Token Rotation (새 쌍 발급)
 3. 서비스 간 호출 → Token Exchange 또는 client-credentials → audience-scoped 단기 토큰 (Redis 캐시)
 4. 토큰 탈취 감지 → 이미 사용된 Refresh Token 재사용 시 해당 token family만 폐기
+5. 회원 탈퇴 → 현재 비밀번호 재검증 → 계정·세션 폐기 → User·VM 후속 데이터 정리
 ```
 
 - `rememberMe` 옵션: ON → 30일 슬라이딩 갱신 / OFF → 고정 7일
@@ -140,7 +142,7 @@ Redis — 웹 콘솔/미디어 스트리밍 티켓, 배포 동시 실행 락, AI
 - 프론트엔드는 Access Token을 메모리(React state)에만 보관, localStorage 미사용
 - 네트워크 단절·429·5xx는 로그아웃으로 오판하지 않고 5→15→30→60초 간격으로 재시도. 실제 세션 무효 응답(400/401/403)에서만 로그인 화면으로 이동
 - 절전·백그라운드 탭 복귀와 온라인 전환 시 만료 임박 토큰을 복구하고, Web Locks + BroadcastChannel로 여러 탭의 Rotation 충돌과 세션 상태 불일치를 방지
-- 회원 탈퇴는 현재 비밀번호를 서버에서 다시 검증한 뒤에만 확정하며, 실패하면 계정·토큰·후속 데이터 삭제 작업을 변경하지 않는다.
+- 이메일 인증과 비밀번호 재설정 코드는 5분 유효하며, GamjaBox 다크·그린 디자인의 반응형 HTML 메일로 전달한다.
 
 ---
 
