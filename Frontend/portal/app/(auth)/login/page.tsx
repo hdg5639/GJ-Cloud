@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api-client";
+import { api, type ApiRequestError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { AuthBrand } from "@/components/ui/auth-card";
 import { AuthMarketingPanel, AuthSplitLayout, useBrandIntroPhase } from "@/components/ui/auth-split-layout";
 import { Field, Input } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { formatRetryCountdown, useRetryCountdown } from "@/hooks/use-retry-countdown";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,9 +19,11 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { remainingSeconds: retrySeconds, start: startRetryCountdown } = useRetryCountdown();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (retrySeconds > 0) return;
     setError(null);
     setLoading(true);
     try {
@@ -28,11 +31,12 @@ export default function LoginPage() {
       login(result.accessToken, { email });
       router.push("/instances");
     } catch (err) {
-      const e = err as Error & { errorCode?: string };
+      const e = err as ApiRequestError;
       if (e.errorCode === "EMAIL_NOT_VERIFIED") {
         router.push(`/verify?email=${encodeURIComponent(email)}`);
         return;
       }
+      if (e.retryAfterSeconds) startRetryCountdown(e.retryAfterSeconds);
       setError(e.message ?? "로그인에 실패했습니다");
     } finally {
       setLoading(false);
@@ -91,10 +95,14 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+        {error && (
+          <p aria-live="polite" className="mt-2 text-xs text-danger">
+            {error}{retrySeconds > 0 ? ` (${formatRetryCountdown(retrySeconds)} 후 다시 시도)` : ""}
+          </p>
+        )}
 
-        <Button type="submit" variant="primary" disabled={loading} className="mb-4 mt-4 w-full">
-          {loading ? "로그인 중..." : "로그인"}
+        <Button type="submit" variant="primary" disabled={loading || retrySeconds > 0} className="mb-4 mt-4 w-full">
+          {loading ? "로그인 중..." : retrySeconds > 0 ? `${formatRetryCountdown(retrySeconds)} 후 다시 시도` : "로그인"}
         </Button>
       </form>
 

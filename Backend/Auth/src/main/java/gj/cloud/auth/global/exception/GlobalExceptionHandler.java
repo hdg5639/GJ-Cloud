@@ -1,6 +1,7 @@
 package gj.cloud.auth.global.exception;
 
 import gj.cloud.auth.global.response.ApiResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -11,9 +12,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ApiResponse<Void>> handleAuthException(AuthException e) {
-        return ResponseEntity
-                .status(e.getErrorCode().getStatus())
-                .body(ApiResponse.fail(e.getMessage(), e.getErrorCode().name()));
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(e.getErrorCode().getStatus());
+        if (e.getRetryAfterSeconds() != null) {
+            response.header(HttpHeaders.RETRY_AFTER, String.valueOf(e.getRetryAfterSeconds()));
+        }
+        return response.body(ApiResponse.fail(e.getMessage(), e.getErrorCode().name()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
