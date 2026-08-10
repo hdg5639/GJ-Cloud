@@ -8,6 +8,7 @@ import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
@@ -24,8 +25,16 @@ public class VmAutomationClient {
     private final RestClient restClient;
     private final ServiceTokenClient serviceTokenClient;
 
+    @Autowired
     public VmAutomationClient(
             @Value("${vm.service-url}") String vmServiceUrl,
+            ServiceTokenClient serviceTokenClient
+    ) {
+        this(vmServiceUrl, serviceTokenClient, RestClient.builder());
+    }
+
+    VmAutomationClient(
+            String vmServiceUrl,
             ServiceTokenClient serviceTokenClient,
             RestClient.Builder restClientBuilder
     ) {
