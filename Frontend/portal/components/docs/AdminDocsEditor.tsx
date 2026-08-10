@@ -12,6 +12,7 @@ import { Field, Input, Textarea } from "@/components/ui/field";
 import { PageLoader, Spinner } from "@/components/ui/loader";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { toAdminDocsImageUrl } from "./admin-image-url";
+import { parseDocsDraft } from "./parse-docs-draft";
 
 type EditorMode = "WRITE" | "SPLIT" | "PREVIEW";
 
@@ -83,6 +84,8 @@ export function AdminDocsEditor({ articleId }: { articleId?: string }) {
   const [draft, setDraft] = useState<DocsArticleInput>(EMPTY_DOCUMENT);
   const [tagInput, setTagInput] = useState("");
   const [mode, setMode] = useState<EditorMode>("SPLIT");
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
   const [loading, setLoading] = useState(Boolean(articleId));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -141,6 +144,20 @@ export function AdminDocsEditor({ articleId }: { articleId?: string }) {
     if (!tag || draft.tags.includes(tag) || draft.tags.length >= 12) return;
     update("tags", [...draft.tags, tag]);
     setTagInput("");
+  }
+
+  function applyImport() {
+    const parsed = parseDocsDraft(importText);
+    if (!parsed) {
+      setError("인식할 수 있는 내용이 없습니다. 제목/본문이 포함된 초안 양식을 붙여넣어 주세요.");
+      return;
+    }
+    setDraft((current) => ({ ...current, ...parsed.fields }));
+    setDirty(true);
+    setError(null);
+    setNotice(`가져오기 완료 — 채워진 항목: ${parsed.matched.join(", ")}. 검토 후 저장하세요.`);
+    setShowImport(false);
+    setImportText("");
   }
 
   async function save(): Promise<DocsArticle | null> {
@@ -253,6 +270,8 @@ export function AdminDocsEditor({ articleId }: { articleId?: string }) {
             {TOOLBAR.map((tool) => <button key={tool.title} type="button" title={tool.title} onClick={() => insertMarkdown(tool.before, tool.after)} className="grid min-h-8 min-w-8 place-items-center rounded-[7px] px-2 text-[11px] font-extrabold text-muted hover:bg-[#ebf1ec] hover:text-[#2f7140]">{tool.label}</button>)}
             <span className="mx-1 h-5 w-px bg-[#dce3dd]" />
             <button type="button" onClick={() => chooseImage("CONTENT")} disabled={uploading} className="inline-flex min-h-8 items-center gap-1.5 rounded-[7px] px-2.5 text-[11px] font-extrabold text-muted hover:bg-[#ebf1ec] hover:text-[#2f7140]">{uploading ? <Spinner className="h-3 w-3" /> : "▧"} 이미지</button>
+            <span className="mx-1 h-5 w-px bg-[#dce3dd]" />
+            <button type="button" onClick={() => setShowImport(true)} className="inline-flex min-h-8 items-center gap-1.5 rounded-[7px] px-2.5 text-[11px] font-extrabold text-muted hover:bg-[#ebf1ec] hover:text-[#2f7140]" title="user-guides 양식 붙여넣기로 폼 채우기">⇪ 가져오기</button>
             <span className="ml-auto hidden text-[10px] text-muted-soft sm:block">Markdown · ⌘S 저장</span>
           </div>
 
@@ -270,6 +289,30 @@ export function AdminDocsEditor({ articleId }: { articleId?: string }) {
           <section className="rounded-[16px] border border-[#dce4de] bg-white p-4 shadow-sm"><h2 className="text-xs font-extrabold">태그</h2><div className="mt-3 flex gap-2"><Input value={tagInput} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTag(); } }} placeholder="태그 입력" className="min-h-9 border-[#d9e1db] bg-[#fbfdfb] text-xs text-[#344038]" /><button type="button" onClick={addTag} className="shrink-0 rounded-[9px] border border-[#d9e1db] px-3 text-xs font-bold text-[#56635a]">추가</button></div><div className="mt-3 flex flex-wrap gap-1.5">{draft.tags.map((tag) => <button key={tag} type="button" onClick={() => update("tags", draft.tags.filter((item) => item !== tag))} className="rounded-full bg-[#edf5ef] px-2.5 py-1.5 text-[10px] font-bold text-[#3e7449]">#{tag} ×</button>)}</div><p className="mt-2 text-[10px] text-muted-soft">최대 12개 · 검색 키워드로도 사용됩니다.</p></section>
         </aside>
       </div>
+
+      {showImport && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4" onClick={() => setShowImport(false)}>
+          <div className="w-full max-w-[560px] rounded-[16px] border border-[#dce4de] bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <h2 className="text-sm font-extrabold text-[#1d2720]">초안 붙여넣기 가져오기</h2>
+            <p className="mt-1 text-[11px] leading-4 text-muted">
+              <code className="rounded bg-[#eef3ef] px-1 text-[10px]">---</code> 로 구분된 초안 양식(제목·요약·본문·카테고리·문서 주소·정렬 순서·추천·태그)을 붙여넣으면 아래 폼이 자동으로 채워집니다. 채운 뒤 검토하고 저장·발행하세요.
+            </p>
+            <textarea
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+              rows={12}
+              autoFocus
+              spellCheck={false}
+              placeholder={"---\n제목\n인스턴스(VM) 생성하기\n---\n요약\n...\n---\n본문\n\n## ...\n---\n카테고리\n인스턴스\n---\n..."}
+              className="mt-3 w-full resize-none rounded-[10px] border border-[#d9e1db] bg-[#fbfdfb] p-3 font-mono text-[12px] leading-6 text-[#344139] outline-none placeholder:text-muted-soft focus:border-[#9dc7a8]"
+            />
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setShowImport(false)} className="border-[#d8e0da] bg-white text-[#435048] hover:bg-[#f1f6f2]">취소</Button>
+              <Button type="button" variant="primary" onClick={applyImport} disabled={!importText.trim()}>폼 채우기</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

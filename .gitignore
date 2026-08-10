@@ -28,6 +28,9 @@ NEW_SERVICE_GUIDE.md
 Service_Info.md
 docs/github-auto-deploy.md
 
+### 사용 설명서 초안 (Docs CMS 발행 전 로컬 드래프트) ###
+user-guides/
+
 ### Local docker ###
 .env
 .env.*
