@@ -4,6 +4,7 @@ import gj.cloud.ops.global.auth.ServiceTokenClient;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -18,6 +19,18 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class VmAutomationClientTest {
+    @Test
+    void startsWithoutRestClientBuilderBean() {
+        new ApplicationContextRunner()
+                .withPropertyValues("vm.service-url=http://vm-service")
+                .withBean(ServiceTokenClient.class, () -> mock(ServiceTokenClient.class))
+                .withBean(VmAutomationClient.class)
+                .run(context -> {
+                    org.assertj.core.api.Assertions.assertThat(context).hasNotFailed();
+                    org.assertj.core.api.Assertions.assertThat(context).hasSingleBean(VmAutomationClient.class);
+                });
+    }
+
     @Test
     void preservesNotFoundAsDefinitiveVmMissingSignal() {
         ServiceTokenClient tokenClient = mock(ServiceTokenClient.class);
