@@ -22,6 +22,7 @@ import gj.cloud.auth.global.client.UserServiceClient;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import gj.cloud.auth.global.security.LoginRateLimiter;
+import gj.cloud.auth.global.security.WithdrawalRateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +39,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final LoginRateLimiter loginRateLimiter;
+    private final WithdrawalRateLimiter withdrawalRateLimiter;
     private final UserServiceClient userServiceClient;
     private final AccountDeletionJobRepository accountDeletionJobRepository;
     private final AccountDeletionAttemptService accountDeletionAttemptService;
@@ -150,14 +152,20 @@ public class AuthServiceImpl implements AuthService {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.USER_NOT_FOUND));
 
-        loginRateLimiter.checkAndThrowIfLocked(user.getEmail(), clientIp);
+        withdrawalRateLimiter.checkAndThrowIfLocked(userId);
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            loginRateLimiter.recordFailure(user.getEmail(), clientIp);
+            AuthException rateLimitError = null;
+            try {
+                withdrawalRateLimiter.recordFailure(userId);
+            } catch (AuthException error) {
+                rateLimitError = error;
+            }
             securityAuditLogService.record(AuditActorType.USER, userId, AuditAction.ACCOUNT_WITHDRAWN,
                     "USER", userId, AuditResult.FAILURE, clientIp, "INVALID_PASSWORD_CONFIRMATION");
+            if (rateLimitError != null) throw rateLimitError;
             throw new AuthException(AuthErrorCode.INVALID_PASSWORD);
         }
-        loginRateLimiter.clearFailures(user.getEmail(), clientIp);
+        withdrawalRateLimiter.clearFailures(userId);
 
         String originalEmail = user.getEmail();
         user.anonymizeAndDelete();

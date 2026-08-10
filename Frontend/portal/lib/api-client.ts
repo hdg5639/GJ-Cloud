@@ -107,6 +107,11 @@ interface ApiResponse<T> {
   errorCode?: string | null;
 }
 
+export type ApiRequestError = Error & {
+  errorCode?: string;
+  retryAfterSeconds?: number;
+};
+
 // ─── Exchange token cache with exp-based TTL ──────────────────────────────────
 interface CachedToken {
   token: string;
@@ -213,8 +218,12 @@ async function request<T>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: "요청에 실패했습니다", errorCode: null }));
-    const err = new Error(error.message ?? "요청에 실패했습니다") as Error & { errorCode?: string };
+    const err = new Error(error.message ?? "요청에 실패했습니다") as ApiRequestError;
     err.errorCode = error.errorCode ?? undefined;
+    const retryAfterSeconds = Number(res.headers.get("Retry-After"));
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+      err.retryAfterSeconds = Math.ceil(retryAfterSeconds);
+    }
     throw err;
   }
 

@@ -17,6 +17,7 @@ import gj.cloud.auth.global.client.UserServiceClient;
 import gj.cloud.auth.global.exception.AuthException;
 import gj.cloud.auth.global.exception.enums.AuthErrorCode;
 import gj.cloud.auth.global.security.LoginRateLimiter;
+import gj.cloud.auth.global.security.WithdrawalRateLimiter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -40,6 +41,7 @@ class AuthServiceImplTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private TokenService tokenService;
     @Mock private LoginRateLimiter loginRateLimiter;
+    @Mock private WithdrawalRateLimiter withdrawalRateLimiter;
     @Mock private UserServiceClient userServiceClient;
     @Mock private AccountDeletionJobRepository accountDeletionJobRepository;
     @Mock private AccountDeletionAttemptService accountDeletionAttemptService;
@@ -89,7 +91,7 @@ class AuthServiceImplTest {
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.DELETED);
         assertThat(user.getEmail()).isEqualTo("deleted_" + user.getId() + "@deleted");
-        verify(loginRateLimiter).clearFailures("owner@gamjabox.cloud", "203.0.113.20");
+        verify(withdrawalRateLimiter).clearFailures(user.getId());
         verify(tokenService).deleteAllUserTokens(user.getId());
         verify(accountDeletionAttemptService).attempt(org.mockito.ArgumentMatchers.any());
         verify(accountDeletionJobRepository).save(org.mockito.ArgumentMatchers.any());
@@ -112,7 +114,7 @@ class AuthServiceImplTest {
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(user.getEmail()).isEqualTo("owner@gamjabox.cloud");
-        verify(loginRateLimiter).recordFailure("owner@gamjabox.cloud", "203.0.113.20");
+        verify(withdrawalRateLimiter).recordFailure(user.getId());
         verify(tokenService, never()).deleteAllUserTokens(user.getId());
         verifyNoInteractions(accountDeletionAttemptService, accountDeletionJobRepository);
         verify(securityAuditLogService).record(

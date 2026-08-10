@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
+import { api, type ApiRequestError } from "@/lib/api-client";
 import type { ProfileResponse, UpgradeRequestResponse } from "@/lib/types";
 import { PageLoader, Spinner } from "@/components/ui/loader";
 import { Card } from "@/components/ui/panel";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { validateProfileImage } from "@/lib/profile-image";
 import { Modal } from "@/components/ui/modal";
+import { formatRetryCountdown, useRetryCountdown } from "@/hooks/use-retry-countdown";
 
 type Tab = "profile" | "security" | "upgrade-requests";
 
@@ -35,6 +36,7 @@ export default function SettingsPage() {
   const [withdrawPassword, setWithdrawPassword] = useState("");
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
+  const { remainingSeconds: withdrawRetrySeconds, start: startWithdrawRetry } = useRetryCountdown();
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [requestLoading, setRequestLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<"FREE" | "PRO" | null>(null);
@@ -112,7 +114,7 @@ export default function SettingsPage() {
   }
 
   async function handleWithdraw() {
-    if (!accessToken || !withdrawPassword) return;
+    if (!accessToken || !withdrawPassword || withdrawRetrySeconds > 0) return;
     setWithdrawing(true);
     setWithdrawError(null);
     try {
@@ -120,7 +122,9 @@ export default function SettingsPage() {
       logout();
       router.replace("/login");
     } catch (err) {
-      setWithdrawError(err instanceof Error ? err.message : "회원 탈퇴에 실패했습니다.");
+      const requestError = err as ApiRequestError;
+      if (requestError.retryAfterSeconds) startWithdrawRetry(requestError.retryAfterSeconds);
+      setWithdrawError(requestError.message || "회원 탈퇴에 실패했습니다.");
       setWithdrawing(false);
     }
   }
@@ -519,7 +523,7 @@ export default function SettingsPage() {
 
             {withdrawError && (
               <p aria-live="polite" className="rounded-lg border border-danger-soft bg-danger/10 px-3 py-2.5 text-xs text-danger">
-                {withdrawError}
+                {withdrawError}{withdrawRetrySeconds > 0 ? ` (${formatRetryCountdown(withdrawRetrySeconds)} 후 다시 시도)` : ""}
               </p>
             )}
 
@@ -527,8 +531,12 @@ export default function SettingsPage() {
               <Button type="button" onClick={closeWithdrawModal} disabled={withdrawing}>
                 취소
               </Button>
-              <Button type="submit" variant="danger-solid" disabled={withdrawing || !withdrawPassword}>
-                {withdrawing ? "탈퇴 처리 중..." : "비밀번호 확인 후 탈퇴"}
+              <Button type="submit" variant="danger-solid" disabled={withdrawing || !withdrawPassword || withdrawRetrySeconds > 0}>
+                {withdrawing
+                  ? "탈퇴 처리 중..."
+                  : withdrawRetrySeconds > 0
+                    ? `${formatRetryCountdown(withdrawRetrySeconds)} 후 다시 시도`
+                    : "비밀번호 확인 후 탈퇴"}
               </Button>
             </div>
           </div>
