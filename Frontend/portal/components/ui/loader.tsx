@@ -23,7 +23,7 @@ export function PageLoader({ label = "불러오는 중", size = 72 }: { label?: 
 }
 
 export function SkeletonRow({ cols = 4, dark = false }: { cols?: number; dark?: boolean }) {
-  const bg = dark ? "bg-white/[0.12]" : "bg-white/[0.06]";
+  const bg = dark ? "bg-foreground/[0.12]" : "bg-foreground/[0.08]";
   return (
     <tr className="border-b border-line">
       {Array.from({ length: cols }).map((_, i) => (
