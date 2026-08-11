@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -19,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 public class SystemWorkerProvisioningService {
     private static final String ROLE = "AUTO_PREVIEW";
+    private static final Duration STATUS_TIMEOUT = Duration.ofSeconds(10);
 
     private final ProxmoxClient proxmoxClient;
     private final ProxmoxProperties proxmoxProperties;
@@ -60,11 +62,10 @@ public class SystemWorkerProvisioningService {
                     return Mono.just(new SystemWorkerVmResponse(true, vmId, proxmoxProperties.getNode(), null,
                             info.powerState().toUpperCase(), info.cores(), info.memoryMb(), info.diskGb()));
                 }
-                return proxmoxClient.waitForIpAssignment(vmId)
-                        .map(ip -> toResponse(vmId, ip, info))
-                        .onErrorReturn(toResponse(vmId, null, info));
+                return proxmoxClient.findVmIpOnce(vmId)
+                        .map(ip -> toResponse(vmId, ip.orElse(null), info));
             });
-        });
+        }).timeout(STATUS_TIMEOUT);
     }
 
     public Mono<SystemWorkerVmResponse> start(int vmId) { validateVmid(vmId); return proxmoxClient.startVm(vmId).then(status(vmId)); }

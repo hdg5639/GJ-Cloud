@@ -16,7 +16,13 @@ public interface DeploymentTargetRepository extends JpaRepository<DeploymentTarg
 
     List<DeploymentTargetEntity> findAllByVmIdAndActiveTrueOrderByCreatedAtAsc(String vmId);
 
-    List<DeploymentTargetEntity> findAllByActiveTrueOrderByCreatedAtAsc();
+    @Query("""
+            select new gj.cloud.ops.domain.deployment.repository.ActiveDeploymentTargetVmRef(target.id, target.vmId)
+              from DeploymentTargetEntity target
+             where target.active = true
+             order by target.createdAt asc
+            """)
+    List<ActiveDeploymentTargetVmRef> findActiveTargetVmRefs();
 
     @Query("""
             select new gj.cloud.ops.domain.deployment.repository.PendingAutomaticTarget(

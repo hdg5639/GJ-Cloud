@@ -97,15 +97,20 @@ VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한
 - 관리형 Preview 포트 할당은 점유 엔티티 전체를 로드하지 않고 `generate_series`+anti-join으로 첫 빈 포트 하나만 반환한다.
 - 30초 자동 재배포 재시도는 활성 대상 전체가 아니라 `latest_requested_revision`에 해당하는 deployment가 아직 없는 ID/revision projection만 조회한다.
 - Ops 재시작 시 대상별 최신 deployment를 개별 조회하던 N+1을 제거하고, 활성 포인터가 변경되어야 하는 행만 set-based 쿼리로 선별한다. rollback의 이전 배포도 일괄 조회한다.
+- 관리형 Preview 목록은 Preview마다 deployment를 다시 조회하지 않고 필요한 deployment ID를 한 번에 조회해 상태를 갱신한다.
 - 최근순, STOPPING 복구, legacy 성공 이력, Git push 미완료, target/revision 검사에 맞춘 복합/partial 인덱스를 사용하며 동일 prefix의 중복 인덱스는 제거한다.
+
+서비스 간 client-credentials 토큰은 Auth가 반환한 만료 시각보다 최대 30초 먼저 갱신하도록 메모리에 보관한다. 동시에 여러 내부 호출이 발생해도 발급 요청은 하나로 직렬화하므로 Auth 호출과 JWT 서명 비용이 내부 API 요청 수만큼 반복되지 않는다.
 
 ### Auto Preview Worker 유실 복구
 
-ControlBox 조회는 등록된 Worker의 예약 VMID가 Proxmox에 실제로 존재하는지 확인한다. VM이 없으면 저장 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR`였더라도 `MISSING`으로 갱신하고 내부 IP를 제거한다. 재생성 API도 요청 시점의 Proxmox 상태를 다시 검사하므로 DB 상태가 늦게 갱신된 경우에도 실제 VM이 없으면 재생성할 수 있다. 단, `PROVISIONING` 상태이거나 예약 VMID에 VM이 존재하면 중복 생성을 막는다. VM 서비스 조회 자체가 실패한 경우에는 부재로 간주하지 않는다.
+ControlBox의 일반 조회는 Ops DB에 마지막으로 조정된 Worker 상태만 즉시 반환한다. 브라우저의 15초 폴링마다 Proxmox Guest Agent IP 대기를 반복하지 않으며, 실제 VM·Runtime 상태 확인은 기본 60초 주기 조정과 관리자가 누른 Reconcile에서 수행한다. 따라서 평상시 조회는 DB 1회로 끝나고, 외부에서 VM을 직접 삭제한 상태는 자동 조정 기준 최대 약 1분 뒤 또는 Reconcile 직후 반영된다.
+
+조정 시 VM이 없으면 저장 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR`였더라도 `MISSING`으로 갱신하고 내부 IP를 제거한다. 재생성 API도 요청 시점의 Proxmox 상태를 다시 검사하므로 DB 상태가 늦게 갱신된 경우에도 실제 VM이 없으면 재생성할 수 있다. 단, `PROVISIONING` 상태이거나 예약 VMID에 VM이 존재하면 중복 생성을 막는다. VM 서비스 조회 자체가 실패한 경우에는 부재로 간주하지 않는다.
 
 ### 사용자 배포 대상 고아 조정
 
-Ops는 활성 배포 대상을 기본 5분마다 VM 서비스 정본과 대조한다. VM 서비스가 명확한 `404 VM_NOT_FOUND`를 반환할 때만 고아로 판정하며 타임아웃, 네트워크 오류, 5xx는 정리하지 않는다. 자동 재배포 실행 중에도 같은 404가 확인되면 Redis pending을 제거해 30초 재시도 루프를 멈춘다.
+Ops는 활성 배포 대상을 기본 5분마다 VM 서비스 정본과 대조한다. 이때 암호화된 Compose 등 넓은 target 엔티티 대신 target ID와 VM ID projection만 읽고, 중복을 제거한 VM ID를 최대 500개씩 VM 서비스에 일괄 조회한다. VM 서비스가 정상 응답한 묶음에서 존재하지 않는 ID만 고아로 판정하며 타임아웃, 네트워크 오류, 5xx가 발생한 묶음은 모두 보류한다. 잘못된 UUID 형식의 레거시 데이터도 자동 삭제하지 않는다. 자동 재배포 실행 중 개별 VM 조회가 명확한 `404 VM_NOT_FOUND`를 반환하면 Redis pending을 제거해 30초 재시도 루프를 멈춘다.
 
 - 연결된 `deployments`, 관리형 프리뷰, 회귀 Suite가 모두 없고 배포 락도 없으면 `deployment_targets`를 완전 삭제한다.
 - 배포·프리뷰·회귀 데이터가 하나라도 있거나 실행 락이 남아 있으면 `active=false`, `auto_deploy_enabled=false`, `orphaned_at`, `orphan_reason`으로 격리한다.

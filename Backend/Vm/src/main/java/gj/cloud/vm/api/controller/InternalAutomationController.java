@@ -3,6 +3,8 @@ package gj.cloud.vm.api.controller;
 import gj.cloud.vm.application.port.dto.AutomationDeploymentRoutesRequest;
 import gj.cloud.vm.application.port.service.PortService;
 import gj.cloud.vm.application.vm.dto.VmContextResponse;
+import gj.cloud.vm.application.vm.dto.VmExistenceRequest;
+import gj.cloud.vm.application.vm.dto.VmExistenceResponse;
 import gj.cloud.vm.application.vm.service.VmAccessService;
 import gj.cloud.vm.domain.vm.enums.VmPermission;
 import gj.cloud.vm.domain.vm.repository.VmRepository;
@@ -14,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
+import java.util.LinkedHashSet;
 import java.util.UUID;
 
 @Hidden
@@ -48,6 +52,15 @@ public class InternalAutomationController {
                         .switchIfEmpty(Mono.error(new VmException(VmErrorCode.FORBIDDEN)))
                         .map(access -> VmContextResponse.from(vm, access)))
                 .map(ApiResponse::ok);
+    }
+
+    @PostMapping("/vms/existence")
+    public Mono<ApiResponse<VmExistenceResponse>> findExistingVms(
+            @Valid @RequestBody VmExistenceRequest request
+    ) {
+        return vmRepository.findExistingIds(request.vmIds())
+                .collectList()
+                .map(ids -> ApiResponse.ok(new VmExistenceResponse(new LinkedHashSet<>(ids))));
     }
 
     @PutMapping("/vms/{vmId}/deployment-routes")
