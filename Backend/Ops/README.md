@@ -150,6 +150,8 @@ Blueprint 검색은 기본 Registry fallback이므로 Elasticsearch가 없으면
 
 배포 환경에서 `prod,docs` 프로파일을 활성화하면 Ops가 Swagger UI WebJar 자산과 자체 OpenAPI JSON을 제공한다. 루트 `api-docs-ui`의 GamjaBox 전용 콘솔이 이 자산과 Auth·User·VM·Ops 스펙을 조합하며, 다른 세 서비스는 OpenAPI JSON만 제공한다. 콘솔은 서버·검색·스펙 통계를 합친 `API Reference`와 카테고리/검색을 제공하는 기능별 `API Flows`를 분리해 제공한다. 플로우 단계는 현재 OpenAPI 경로와 대조하고 클릭 시 Reference의 해당 경로 검색으로 연결된다. Try it out은 문서 도메인의 `/try/*` 동일 출처 프록시를 사용하고 인증 쿠키도 포함한다. 운영은 `prod`만 유지해 문서 엔드포인트를 비활성화한다.
 
+`OpenApiExampleCustomizer`는 공개 비관리자 API의 요청 DTO, path/query/header/cookie 입력과 응답 DTO에 안전한 목업 예시를 자동 보완한다. 명시적 `@Schema(example=...)`는 덮어쓰지 않고 중첩 객체·배열·Map과 `$ref`를 순회하며, `/admin/**`, `/internal/**`와 binary 파일은 제외한다.
+
 ## 로컬 실행과 검증
 
 요구사항은 JDK 17, PostgreSQL, Redis다. Auto Preview 리소스 동기화를 위해 저장소 전체 구조에서 빌드해야 한다.
