@@ -126,6 +126,33 @@ Redis — 웹 콘솔/미디어 스트리밍 티켓, 배포 동시 실행 락, AI
 
 ---
 
+## 조회 성능 최적화
+
+관리자 목록, Docs, 배포 복구 스케줄러처럼 데이터 증가에 따라 전체 테이블 조회와 JVM 후처리가 커지던 경로를 DB 페이징과 목적별 쿼리로 변경했다. 목록 API는 필요한 행과 컬럼만 반환하고, 최근 이력·상태 queue·정렬 조건에 맞춘 복합/partial index를 사용한다. 동일 prefix의 중복 index와 대부분의 행을 반환해 효과가 없던 index는 제거해 쓰기 비용도 제한했다.
+
+주요 변경은 다음과 같다.
+
+- 사용자·VM 관리자 목록은 50건씩 DB에서 페이징하고, VM 화면은 현재 페이지에 포함된 소유자만 User 서비스에서 batch 조회한다.
+- Docs는 `MEDIUMTEXT` 본문을 제외한 summary 모델로 사용자 18건·관리자 20건씩 페이징한다. 한국어 검색은 제목·요약·카테고리와 태그의 MySQL n-gram FULLTEXT index를 사용한다.
+- Ops의 최근 배포 이벤트는 전체 이력을 JVM에서 거르지 않고 PostgreSQL `DISTINCT ON`으로 최신 event만 일괄 조회한다. 자동 재배포와 재시작 복구도 전체 target 및 대상별 N+1 조회 대신 projection과 set-based query를 사용한다.
+- Auth의 만료 계정 정리와 탈퇴 재시도는 상태·시각 복합 index를 사용해 각각 최대 1,000건·100건 단위로 처리한다.
+
+개발 서버와 같은 DB 버전에서 동일한 10만~100만 건 합성 데이터로 `EXPLAIN ANALYZE`를 실행한 결과다. 수치는 DB 내부 실행 시간이며 HTTP·인증·직렬화·네트워크 지연은 포함하지 않는다.
+
+| 대표 조회 | 최적화 전 | 최적화 후 | 개선 내용 |
+|---|---:|---:|---|
+| 사용자용 Docs 목록 | 845 ms / 80,000건 반환 | 0.568 ms / 18건 반환 | summary projection, 정렬 index, DB 페이징 |
+| 관리자 Docs 목록 | 257 ms / 100,000건 반환 | 0.073 ms / 20건 반환 | 최근 수정순 index, DB 페이징 |
+| ControlBox 사용자 목록 | 36.2 ms / 100,000건 반환 | 0.513 ms / 50건 반환 | 최근순 index, DB 페이징 |
+| Ops 최근 배포 100건 | 201 ms | 0.114 ms | `created_at DESC` index로 full scan·정렬 제거 |
+| Ops 최근 배포별 최신 event | 228 ms | 1.08 ms | `DISTINCT ON` 기반 일괄 조회 |
+| Auth 만료 미인증 계정 | 62.5 ms | 0.718 ms | 상태·생성 시각 index, 1,000건 배치 |
+| User 전체 문의 최근 20건 | 535 ms | 0.0586 ms | 최근 생성순 index |
+
+Docs의 8만 건 정확한 전체 개수 계산은 약 25.7 ms, 10만 문서 중 100건이 일치하는 한국어 검색은 cold 기준 약 33.2 ms였다. 실제 데이터가 수만 건 이상 누적되어 count가 병목이 되면 count cache 또는 cursor pagination으로 전환한다. 합성 데이터는 격리된 임시·벤치마크 테이블에서만 생성하며 서비스 데이터에는 삽입하지 않는다.
+
+---
+
 ## 인증 흐름
 
 ```
@@ -758,14 +785,16 @@ Suite를 만들 때 참조하는 Scenario가 활성 상태이고 revision과 Ope
 <details>
 <summary><strong>🗄️ 저장 구조와 API</strong> — 문서 스키마, 이미지 검증과 운영 환경변수</summary>
 
-문서 본문은 Markdown 원문으로 MySQL `docs_articles` 테이블에 저장한다. 상태는 `DRAFT`/`PUBLISHED`로 제한하고 slug에 고유 인덱스를 둔다. 태그는 JSON으로 보존하며 작성자, 추천 여부, 정렬 순서, 조회 수, 발행·생성·수정 시각을 함께 기록한다.
+문서 본문은 Markdown 원문으로 MySQL `docs_articles` 테이블에 저장한다. 상태는 `DRAFT`/`PUBLISHED`로 제한하고 slug에 고유 인덱스를 둔다. 태그는 `docs_article_tags`에 순서와 함께 보존하며 작성자, 추천 여부, 정렬 순서, 조회 수, 발행·생성·수정 시각을 함께 기록한다. 목록은 본문을 제외한 summary 모델과 DB 페이징을 사용하고, 한국어 검색은 MySQL n-gram FULLTEXT index를 우선 사용한다.
 
 | 영역 | 엔드포인트 | 설명 |
 |---|---|---|
-| 사용자 | `GET /users/docs` | 발행 문서 목록, `query`·`category` 필터 |
+| 사용자 | `GET /users/docs/page` | 발행 문서 18건 페이징, `query`·`category` 필터 |
+| 사용자 | `GET /users/docs/featured` | 추천 문서 2건 |
 | 사용자 | `GET /users/docs/categories` | 발행 문서의 카테고리별 개수 |
-| 사용자 | `GET /users/docs/{slug}` | 발행 문서 상세 및 조회 수 기록 |
-| 관리자 | `GET/POST /admin/docs` | 전체 문서 목록·생성 |
+| 사용자 | `GET /users/docs/{slug}/page` | 발행 문서 상세·조회 수·같은 카테고리 navigation |
+| 관리자 | `GET/POST /admin/docs` | 호환 목록(최대 100건)·생성 |
+| 관리자 | `GET /admin/docs/page`, `/stats` | 문서 20건 페이징·전체 현황 |
 | 관리자 | `GET/PUT/DELETE /admin/docs/{id}` | 문서 상세·수정·삭제 |
 | 관리자 | `POST /admin/docs/{id}/publish` | 문서 발행 |
 | 관리자 | `POST /admin/docs/{id}/unpublish` | 문서 초안 전환 |

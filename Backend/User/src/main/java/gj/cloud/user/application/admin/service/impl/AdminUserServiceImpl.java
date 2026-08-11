@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
 
@@ -29,6 +31,26 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Transactional(readOnly = true)
     public List<AdminUserResponse> listUsers() {
         return profileRepository.findAll().stream()
+                .map(AdminUserResponse::from)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<AdminUserResponse> listUsers(int page, int size) {
+        int safePage = Math.max(page, 1) - 1;
+        int safeSize = Math.max(1, Math.min(size, 100));
+        return profileRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(safePage, safeSize))
+                .map(AdminUserResponse::from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AdminUserResponse> listUsersByIds(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        return profileRepository.findAllByUserIdIn(userIds.stream().distinct().limit(100).toList()).stream()
                 .map(AdminUserResponse::from)
                 .toList();
     }

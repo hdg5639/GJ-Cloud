@@ -18,6 +18,44 @@ public interface DeploymentTargetRepository extends JpaRepository<DeploymentTarg
 
     List<DeploymentTargetEntity> findAllByActiveTrueOrderByCreatedAtAsc();
 
+    @Query("""
+            select new gj.cloud.ops.domain.deployment.repository.PendingAutomaticTarget(
+                   target.id, target.latestRequestedRevision)
+              from DeploymentTargetEntity target
+             where target.active = true
+               and target.autoDeployEnabled = true
+               and target.latestRequestedRevision is not null
+               and (
+                    target.latestRequestedAt is null
+                    or not exists (
+                        select deployment.id
+                          from DeploymentEntity deployment
+                         where deployment.deploymentTargetId = target.id
+                           and deployment.requestedRevision = target.latestRequestedRevision
+                           and deployment.createdAt >= target.latestRequestedAt
+                    )
+               )
+             order by target.createdAt asc
+            """)
+    List<PendingAutomaticTarget> findPendingAutomaticTargets();
+
+    @Query("""
+            select target.id
+              from DeploymentTargetEntity target
+             where (target.active = false or target.autoDeployEnabled = false)
+               and target.latestRequestedRevision is not null
+            """)
+    List<String> findDisabledTargetIdsWithRequestedRevision();
+
+    @Query(value = """
+            SELECT target.id AS targetId, target.latest_deployment_id AS deploymentId
+              FROM deployment_targets target
+              JOIN deployments deployment ON deployment.id = target.latest_deployment_id
+             WHERE target.active = true
+               AND deployment.status = 'STOPPED'
+            """, nativeQuery = true)
+    List<ActiveDeploymentPointerProjection> findStoppedActiveDeploymentPointers();
+
     List<DeploymentTargetEntity> findTop200ByOrderByUpdatedAtDesc();
 
     long countByActiveTrue();

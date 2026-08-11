@@ -2,33 +2,66 @@ package gj.cloud.user.application.docs.service;
 
 import gj.cloud.user.application.docs.dto.*;
 import gj.cloud.user.domain.docs.entity.DocsArticleEntity;
+import gj.cloud.user.domain.docs.entity.DocsArticleSummaryEntity;
 import gj.cloud.user.domain.docs.enums.DocsArticleStatus;
 import gj.cloud.user.domain.docs.repository.DocsArticleRepository;
+import gj.cloud.user.domain.docs.repository.DocsArticleSummaryRepository;
 import gj.cloud.user.global.exception.UserException;
 import gj.cloud.user.global.exception.enums.UserErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
 import java.util.*;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class DocsArticleService {
 
     private final DocsArticleRepository repository;
+    private final DocsArticleSummaryRepository summaryRepository;
 
     @Transactional(readOnly = true)
     public List<DocsArticleSummaryResponse> listPublished(String query, String category) {
+        return listPublishedPage(query, category, 1, 48).getContent();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DocsArticleSummaryResponse> listPublishedPage(
+            String query, String category, int page, int size
+    ) {
         String normalizedQuery = normalizeSearch(query);
         String normalizedCategory = normalizeSearch(category);
-        return repository.findAllByStatusOrderByFeaturedDescSortOrderAscPublishedAtDesc(DocsArticleStatus.PUBLISHED)
+        PageRequest pageable = pageRequest(page, size, 48);
+        Page<DocsArticleSummaryEntity> articles;
+        if (normalizedQuery.isBlank()) {
+            articles = normalizedCategory.isBlank()
+                    ? summaryRepository.findAllByStatusOrderByFeaturedDescSortOrderAscPublishedAtDesc(
+                            DocsArticleStatus.PUBLISHED, pageable)
+                    : summaryRepository.findAllByStatusAndCategoryIgnoreCaseOrderByFeaturedDescSortOrderAscPublishedAtDesc(
+                            DocsArticleStatus.PUBLISHED, normalizedCategory, pageable);
+        } else if (normalizedQuery.length() < 2) {
+            articles = summaryRepository.searchPublishedContains(
+                    DocsArticleStatus.PUBLISHED, normalizedCategory, normalizedQuery, pageable);
+        } else {
+            articles = summaryRepository.searchPublished(
+                    DocsArticleStatus.PUBLISHED.name(), normalizedCategory, normalizedQuery, pageable);
+            if (articles.getTotalElements() == 0) {
+                articles = summaryRepository.searchPublishedContains(
+                        DocsArticleStatus.PUBLISHED, normalizedCategory, normalizedQuery, pageable);
+            }
+        }
+        return articles.map(DocsArticleSummaryResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DocsArticleSummaryResponse> listFeatured() {
+        return summaryRepository
+                .findTop2ByStatusAndFeaturedTrueOrderBySortOrderAscPublishedAtDesc(DocsArticleStatus.PUBLISHED)
                 .stream()
-                .filter(matchesCategory(normalizedCategory))
-                .filter(matchesQuery(normalizedQuery))
                 .map(DocsArticleSummaryResponse::from)
                 .toList();
     }
@@ -41,22 +74,64 @@ public class DocsArticleService {
         return DocsArticleResponse.from(article);
     }
 
+    @Transactional
+    public DocsArticlePageResponse getPublishedPage(String slug) {
+        DocsArticleEntity article = repository.findBySlugAndStatus(normalizeSlug(slug), DocsArticleStatus.PUBLISHED)
+                .orElseThrow(() -> new UserException(UserErrorCode.DOCS_ARTICLE_NOT_FOUND));
+        article.recordView();
+        List<DocsNavigationItemResponse> sameCategory = summaryRepository
+                .findTop100ByStatusAndCategoryIgnoreCaseOrderByFeaturedDescSortOrderAscPublishedAtDesc(
+                        DocsArticleStatus.PUBLISHED, article.getCategory())
+                .stream()
+                .map(DocsNavigationItemResponse::from)
+                .toList();
+        return new DocsArticlePageResponse(DocsArticleResponse.from(article), sameCategory);
+    }
+
     @Transactional(readOnly = true)
     public List<DocsCategoryResponse> listCategories() {
-        Map<String, Long> counts = repository
-                .findAllByStatusOrderByFeaturedDescSortOrderAscPublishedAtDesc(DocsArticleStatus.PUBLISHED)
-                .stream()
-                .collect(Collectors.groupingBy(DocsArticleEntity::getCategory, TreeMap::new, Collectors.counting()));
-        return counts.entrySet().stream()
-                .map(entry -> new DocsCategoryResponse(entry.getKey(), entry.getValue()))
+        return summaryRepository.countByCategory(DocsArticleStatus.PUBLISHED).stream()
+                .map(row -> new DocsCategoryResponse(row.getName(), row.getArticleCount()))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<DocsArticleSummaryResponse> listAdmin() {
-        return repository.findAllByOrderByUpdatedAtDesc().stream()
-                .map(DocsArticleSummaryResponse::from)
-                .toList();
+        return listAdminPage(null, null, 1, 100).getContent();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DocsArticleSummaryResponse> listAdminPage(
+            String query, DocsArticleStatus status, int page, int size
+    ) {
+        String normalizedQuery = normalizeSearch(query);
+        PageRequest pageable = pageRequest(page, size, 100);
+        Page<DocsArticleSummaryEntity> articles;
+        if (normalizedQuery.isBlank()) {
+            articles = status == null
+                    ? summaryRepository.findAllByOrderByUpdatedAtDesc(pageable)
+                    : summaryRepository.findAllByStatusOrderByUpdatedAtDesc(status, pageable);
+        } else if (normalizedQuery.length() < 2) {
+            articles = summaryRepository.searchAdminContains(status, normalizedQuery, pageable);
+        } else {
+            articles = summaryRepository.searchAdmin(
+                    status == null ? "" : status.name(), normalizedQuery, pageable);
+            if (articles.getTotalElements() == 0) {
+                articles = summaryRepository.searchAdminContains(status, normalizedQuery, pageable);
+            }
+        }
+        return articles.map(DocsArticleSummaryResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public DocsAdminStatsResponse getAdminStats() {
+        long published = summaryRepository.countByStatus(DocsArticleStatus.PUBLISHED);
+        long drafts = summaryRepository.countByStatus(DocsArticleStatus.DRAFT);
+        return new DocsAdminStatsResponse(
+                published + drafts,
+                published,
+                drafts,
+                summaryRepository.countDistinctCategories());
     }
 
     @Transactional(readOnly = true)
@@ -130,20 +205,6 @@ public class DocsArticleService {
                 .orElseThrow(() -> new UserException(UserErrorCode.DOCS_ARTICLE_NOT_FOUND));
     }
 
-    private Predicate<DocsArticleEntity> matchesCategory(String category) {
-        if (category.isBlank()) return ignored -> true;
-        return article -> normalizeSearch(article.getCategory()).equals(category);
-    }
-
-    private Predicate<DocsArticleEntity> matchesQuery(String query) {
-        if (query.isBlank()) return ignored -> true;
-        return article -> {
-            String searchable = String.join(" ",
-                    article.getTitle(), article.getSummary(), article.getCategory(), String.join(" ", article.getTags()));
-            return normalizeSearch(searchable).contains(query);
-        };
-    }
-
     private String resolveSlug(String requested, String title) {
         String source = requested == null || requested.isBlank() ? title : requested;
         String normalized = normalizeSlug(source);
@@ -180,5 +241,11 @@ public class DocsArticleService {
                 .distinct()
                 .limit(12)
                 .toList();
+    }
+
+    private PageRequest pageRequest(int page, int size, int maxSize) {
+        int safePage = Math.max(page, 1) - 1;
+        int safeSize = Math.max(1, Math.min(size, maxSize));
+        return PageRequest.of(safePage, safeSize);
     }
 }

@@ -15,7 +15,14 @@ public interface DeploymentEventRepository extends JpaRepository<DeploymentEvent
 
     List<DeploymentEventEntity> findTop1000ByDeploymentIdOrderBySequenceDesc(String deploymentId);
 
-    List<DeploymentEventEntity> findAllByDeploymentIdInOrderByDeploymentIdAscSequenceDesc(List<String> deploymentIds);
+    @Query(value = """
+            SELECT DISTINCT ON (deployment_id) event.*
+              FROM deployment_events event
+             WHERE event.deployment_id IN (:deploymentIds)
+             ORDER BY event.deployment_id ASC, event.sequence DESC
+            """, nativeQuery = true)
+    List<DeploymentEventEntity> findLatestByDeploymentIdIn(
+            @Param("deploymentIds") List<String> deploymentIds);
 
     @Query("SELECT MAX(e.sequence) FROM DeploymentEventEntity e WHERE e.deploymentId = :deploymentId")
     Optional<Long> findMaxSequence(@Param("deploymentId") String deploymentId);

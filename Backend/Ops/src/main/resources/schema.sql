@@ -72,11 +72,19 @@ CREATE TABLE IF NOT EXISTS deployment_targets (
 );
 
 CREATE INDEX IF NOT EXISTS idx_deployment_targets_vm_id ON deployment_targets(vm_id);
+CREATE INDEX IF NOT EXISTS idx_deployment_targets_updated_at
+    ON deployment_targets(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deployment_targets_active_created_at
+    ON deployment_targets(created_at ASC) WHERE active;
+CREATE INDEX IF NOT EXISTS idx_deployment_targets_active_vm_created_at
+    ON deployment_targets(vm_id, created_at ASC) WHERE active;
 ALTER TABLE deployment_targets DROP CONSTRAINT IF EXISTS uq_deployment_target_vm_name;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_deployment_target_vm_name_ci
     ON deployment_targets(vm_id, lower(name)) WHERE active;
-CREATE INDEX IF NOT EXISTS idx_deployment_targets_github_repo
-    ON deployment_targets(github_installation_id, github_repository_id);
+CREATE INDEX IF NOT EXISTS idx_deployment_targets_auto_github_repo
+    ON deployment_targets(github_installation_id, github_repository_id)
+    WHERE active AND auto_deploy_enabled;
+DROP INDEX IF EXISTS idx_deployment_targets_github_repo;
 ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS latest_requested_at TIMESTAMP;
 ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS orphaned_at TIMESTAMP;
 ALTER TABLE deployment_targets ADD COLUMN IF NOT EXISTS orphan_reason VARCHAR(80);
@@ -151,10 +159,25 @@ ALTER TABLE deployments ADD CONSTRAINT chk_deployment_status CHECK (status IN (
     'STOPPING', 'STOPPED'
 ));
 
-CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_vm_id_created_at ON deployments(vm_id, created_at DESC);
+DROP INDEX IF EXISTS idx_deployments_vm_id;
 CREATE INDEX IF NOT EXISTS idx_deployments_target_created_at
     ON deployments(deployment_target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deployments_target_requested_revision_created_at
+    ON deployments(deployment_target_id, requested_revision, created_at DESC)
+    WHERE requested_revision IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_deployments_created_at
+    ON deployments(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deployments_stopping
+    ON deployments(created_at ASC) WHERE status = 'STOPPING';
+CREATE INDEX IF NOT EXISTS idx_deployments_legacy_succeeded
+    ON deployments(vm_id, created_at DESC)
+    WHERE deployment_target_id IS NULL AND status = 'SUCCEEDED';
+DROP INDEX IF EXISTS idx_deployments_target_revision_created_at;
+CREATE INDEX IF NOT EXISTS idx_deployments_git_push_incomplete
+    ON deployments(created_at ASC)
+    WHERE trigger_type = 'GIT_PUSH'
+      AND status NOT IN ('SUCCEEDED','FAILED','ROLLED_BACK','STOPPING','STOPPED');
 
 CREATE TABLE IF NOT EXISTS github_webhook_deliveries (
     id         VARCHAR(100) PRIMARY KEY,
@@ -176,7 +199,9 @@ CREATE TABLE IF NOT EXISTS deployment_events (
     CONSTRAINT chk_deployment_event_type CHECK (event_type IN ('STAGE_CHANGE', 'BUILD_LOG', 'ERROR', 'DONE'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id_sequence ON deployment_events(deployment_id, sequence);
+CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_sequence_desc
+    ON deployment_events(deployment_id ASC, sequence DESC);
+DROP INDEX IF EXISTS idx_deployment_events_deployment_id_sequence;
 
 -- VM 서비스의 정본과 Ops 볼륨이 어긋났을 때 수행한 고아 배포 대상 정리 감사 이력.
 -- 운영 대상 자체를 hard delete해도 누가/무엇이/왜 정리됐는지는 ControlBox에서 확인할 수 있게 남긴다.

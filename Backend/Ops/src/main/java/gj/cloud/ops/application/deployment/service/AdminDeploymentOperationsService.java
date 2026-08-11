@@ -35,8 +35,8 @@ public class AdminDeploymentOperationsService {
         Map<String, String> latestEvents = new HashMap<>();
         if (!deploymentIds.isEmpty()) {
             for (DeploymentEventEntity event : deploymentEventRepository
-                    .findAllByDeploymentIdInOrderByDeploymentIdAscSequenceDesc(deploymentIds)) {
-                latestEvents.putIfAbsent(event.getDeploymentId(), event.getMessage());
+                    .findLatestByDeploymentIdIn(deploymentIds)) {
+                latestEvents.put(event.getDeploymentId(), event.getMessage());
             }
         }
 

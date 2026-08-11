@@ -6,6 +6,7 @@ import gj.cloud.vm.application.ssh.client.UserServiceClient;
 import gj.cloud.vm.application.ssh.dto.SshKeyInternalResponse;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse.PlanAvailability;
+import gj.cloud.vm.application.vm.dto.AdminVmPageResponse;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
 import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
@@ -441,9 +442,25 @@ public class VmServiceImpl implements VmService {
 
     @Override
     public Flux<VmResponse> getAllVms() {
-        return vmRepository.findAll()
-                .filter(vm -> vm.getDeletedAt() == null)
+        return vmRepository.findAllNotDeleted()
                 .map(VmResponse::from);
+    }
+
+    @Override
+    public Mono<AdminVmPageResponse> getAllVmsPage(int page, int size) {
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.max(1, Math.min(size, 100));
+        long offset = (long) (safePage - 1) * safeSize;
+        return Mono.zip(
+                vmRepository.findAdminPage(safeSize, offset).map(VmResponse::from).collectList(),
+                vmRepository.countNotDeleted()
+        ).map(tuple -> {
+            List<VmResponse> content = tuple.getT1();
+            long totalElements = tuple.getT2();
+            int totalPages = (int) ((totalElements + safeSize - 1) / safeSize);
+            return new AdminVmPageResponse(
+                    content, totalPages, totalElements, safePage - 1, safeSize, content.isEmpty());
+        });
     }
 
     @Override

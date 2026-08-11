@@ -42,3 +42,49 @@ CREATE TABLE IF NOT EXISTS security_audit_logs (
     INDEX idx_security_audit_logs_actor (actor_id),
     INDEX idx_security_audit_logs_occurred_at (occurred_at)
 );
+
+-- MySQL은 CREATE INDEX IF NOT EXISTS를 지원하지 않으므로 information_schema로
+-- 확인한 뒤 동적 DDL을 실행한다. schema.sql이 매 기동 실행돼도 안전하다.
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'users'
+       AND index_name = 'idx_users_status_created') = 0,
+    'CREATE INDEX idx_users_status_created ON users(status, created_at)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'users'
+       AND index_name = 'idx_users_status_deleted') = 0,
+    'CREATE INDEX idx_users_status_deleted ON users(status, deleted_at)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'security_audit_logs'
+       AND index_name = 'idx_security_audit_actor_occurred') = 0,
+    'CREATE INDEX idx_security_audit_actor_occurred ON security_audit_logs(actor_id, occurred_at DESC)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'account_deletion_jobs'
+       AND index_name = 'idx_deletion_jobs_status_updated') = 0,
+    'CREATE INDEX idx_deletion_jobs_status_updated ON account_deletion_jobs(status, updated_at)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;

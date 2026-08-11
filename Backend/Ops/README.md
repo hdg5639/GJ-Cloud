@@ -91,6 +91,14 @@ VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한
 - OpenAI API: 불확실한 배포 스펙과 Preview 의미 계획 보조
 - Elasticsearch: Blueprint 검색 인덱스(기능 플래그로 제어)
 
+### 배포 조회·복구 최적화
+
+- 관리자 배포 개요는 최근 deployment 100건의 최신 event만 PostgreSQL `DISTINCT ON` 으로 일괄 조회한다. event 전체를 가져와 JVM에서 걸러내지 않는다.
+- 관리형 Preview 포트 할당은 점유 엔티티 전체를 로드하지 않고 `generate_series`+anti-join으로 첫 빈 포트 하나만 반환한다.
+- 30초 자동 재배포 재시도는 활성 대상 전체가 아니라 `latest_requested_revision`에 해당하는 deployment가 아직 없는 ID/revision projection만 조회한다.
+- Ops 재시작 시 대상별 최신 deployment를 개별 조회하던 N+1을 제거하고, 활성 포인터가 변경되어야 하는 행만 set-based 쿼리로 선별한다. rollback의 이전 배포도 일괄 조회한다.
+- 최근순, STOPPING 복구, legacy 성공 이력, Git push 미완료, target/revision 검사에 맞춘 복합/partial 인덱스를 사용하며 동일 prefix의 중복 인덱스는 제거한다.
+
 ### Auto Preview Worker 유실 복구
 
 ControlBox 조회는 등록된 Worker의 예약 VMID가 Proxmox에 실제로 존재하는지 확인한다. VM이 없으면 저장 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR`였더라도 `MISSING`으로 갱신하고 내부 IP를 제거한다. 재생성 API도 요청 시점의 Proxmox 상태를 다시 검사하므로 DB 상태가 늦게 갱신된 경우에도 실제 VM이 없으면 재생성할 수 있다. 단, `PROVISIONING` 상태이거나 예약 VMID에 VM이 존재하면 중복 생성을 막는다. VM 서비스 조회 자체가 실패한 경우에는 부재로 간주하지 않는다.

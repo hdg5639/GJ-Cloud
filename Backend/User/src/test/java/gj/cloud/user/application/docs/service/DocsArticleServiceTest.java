@@ -2,8 +2,10 @@ package gj.cloud.user.application.docs.service;
 
 import gj.cloud.user.application.docs.dto.DocsArticleUpsertRequest;
 import gj.cloud.user.domain.docs.entity.DocsArticleEntity;
+import gj.cloud.user.domain.docs.entity.DocsArticleSummaryEntity;
 import gj.cloud.user.domain.docs.enums.DocsArticleStatus;
 import gj.cloud.user.domain.docs.repository.DocsArticleRepository;
+import gj.cloud.user.domain.docs.repository.DocsArticleSummaryRepository;
 import gj.cloud.user.global.exception.UserException;
 import gj.cloud.user.global.exception.enums.UserErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,13 +13,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class DocsArticleServiceTest {
@@ -25,11 +32,14 @@ class DocsArticleServiceTest {
     @Mock
     private DocsArticleRepository repository;
 
+    @Mock
+    private DocsArticleSummaryRepository summaryRepository;
+
     private DocsArticleService service;
 
     @BeforeEach
     void setUp() {
-        service = new DocsArticleService(repository);
+        service = new DocsArticleService(repository, summaryRepository);
     }
 
     @Test
@@ -55,17 +65,32 @@ class DocsArticleServiceTest {
     }
 
     @Test
-    void publishedListFiltersByCategoryAndSearchTerm() {
-        DocsArticleEntity instance = article("instance-create", "인스턴스 생성", "인스턴스", List.of("VM", "시작"));
-        DocsArticleEntity deploy = article("deploy-guide", "자동 배포", "배포", List.of("GitHub"));
-        instance.publish();
-        deploy.publish();
-        when(repository.findAllByStatusOrderByFeaturedDescSortOrderAscPublishedAtDesc(DocsArticleStatus.PUBLISHED))
-                .thenReturn(List.of(instance, deploy));
+    void legacyPublishedListIsCappedAndFiltersByCategoryInDatabase() {
+        DocsArticleSummaryEntity instance = summary(
+                "instance-create", "인스턴스 생성", "인스턴스", List.of("VM", "시작"));
+        when(summaryRepository
+                .findAllByStatusAndCategoryIgnoreCaseOrderByFeaturedDescSortOrderAscPublishedAtDesc(
+                        eq(DocsArticleStatus.PUBLISHED), eq("인스턴스"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(instance)));
 
-        var result = service.listPublished("vm", "인스턴스");
+        var result = service.listPublished(null, "인스턴스");
 
         assertThat(result).extracting(item -> item.slug()).containsExactly("instance-create");
+    }
+
+    @Test
+    void publishedPageUsesFulltextSearchAndReturnsOnlyRequestedPage() {
+        DocsArticleSummaryEntity instance = summary(
+                "instance-create", "인스턴스 생성", "인스턴스", List.of("VM", "시작"));
+        when(summaryRepository.searchPublished(
+                eq(DocsArticleStatus.PUBLISHED.name()), eq(""), eq("인스턴스"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(instance)));
+
+        var result = service.listPublishedPage("인스턴스", null, 1, 18);
+
+        assertThat(result.getContent()).extracting(item -> item.slug()).containsExactly("instance-create");
+        verify(summaryRepository).searchPublished(
+                eq(DocsArticleStatus.PUBLISHED.name()), eq(""), eq("인스턴스"), any(Pageable.class));
     }
 
     private DocsArticleUpsertRequest request(String slug, List<String> tags) {
@@ -82,18 +107,14 @@ class DocsArticleServiceTest {
         );
     }
 
-    private DocsArticleEntity article(String slug, String title, String category, List<String> tags) {
-        return DocsArticleEntity.create(
-                "admin-id",
-                slug,
-                title,
-                title + " 설명",
-                category,
-                null,
-                "## 본문",
-                tags,
-                false,
-                0
-        );
+    private DocsArticleSummaryEntity summary(String slug, String title, String category, List<String> tags) {
+        DocsArticleSummaryEntity summary = mock(DocsArticleSummaryEntity.class);
+        when(summary.getSlug()).thenReturn(slug);
+        when(summary.getTitle()).thenReturn(title);
+        when(summary.getSummary()).thenReturn(title + " 설명");
+        when(summary.getCategory()).thenReturn(category);
+        when(summary.getTags()).thenReturn(tags);
+        when(summary.getStatus()).thenReturn(DocsArticleStatus.PUBLISHED);
+        return summary;
     }
 }

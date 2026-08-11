@@ -19,6 +19,17 @@ CREATE TABLE IF NOT EXISTS vms (
 
 CREATE INDEX IF NOT EXISTS idx_vms_user_id ON vms(user_id);
 CREATE INDEX IF NOT EXISTS idx_vms_status  ON vms(status);
+-- 활성 VMID 조회는 대부분의 행을 반환해 sequential scan이 더 싸다.
+-- 확인용으로 추가했던 partial index는 쓰기 비용만 늘어 제거한다.
+DROP INDEX IF EXISTS idx_vms_active_vmid;
+CREATE INDEX IF NOT EXISTS idx_vms_active_user_plan
+    ON vms(user_id, plan_type)
+    WHERE deleted_at IS NULL AND status NOT IN ('PENDING', 'FAILED', 'DELETED');
+CREATE INDEX IF NOT EXISTS idx_vms_active_plan
+    ON vms(plan_type)
+    WHERE status NOT IN ('DELETED', 'FAILED');
+CREATE INDEX IF NOT EXISTS idx_vms_active_created_at
+    ON vms(created_at DESC) WHERE deleted_at IS NULL;
 
 ALTER TABLE vms DROP CONSTRAINT IF EXISTS chk_status;
 ALTER TABLE vms ADD CONSTRAINT chk_status CHECK (status IN ('PENDING', 'CREATING', 'BOOTING', 'RUNNING', 'STARTING', 'STOPPING', 'STOPPED', 'SUSPENDING', 'SUSPENDED', 'FAILED', 'DELETING', 'DELETED'));
@@ -153,7 +164,11 @@ CREATE TABLE IF NOT EXISTS collaboration_items (
     CONSTRAINT chk_collab_status     CHECK (status IS NULL OR status IN ('UNSOLVED', 'SOLVED'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_collab_scope ON collaboration_items(scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_collab_scope_pinned_created
+    ON collaboration_items(scope_type, scope_id, pinned DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_collab_scope_type_pinned_created
+    ON collaboration_items(scope_type, scope_id, type, pinned DESC, created_at DESC);
+DROP INDEX IF EXISTS idx_collab_scope;
 
 CREATE TABLE IF NOT EXISTS collaboration_tags (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -169,4 +184,7 @@ CREATE TABLE IF NOT EXISTS collaboration_tags (
     CONSTRAINT uq_tag_scope_name  UNIQUE (scope_type, scope_id, name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_collab_tags_scope ON collaboration_tags(scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_collab_tags_scope_usage
+    ON collaboration_tags(scope_type, scope_id, usage_count DESC, last_used_at DESC);
+DROP INDEX IF EXISTS idx_collab_tags_scope;
+DROP INDEX IF EXISTS idx_collab_tags_scope_name_pattern;

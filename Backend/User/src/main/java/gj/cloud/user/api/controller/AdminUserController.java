@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.data.domain.Page;
 
 @Tag(name = "Admin - Users")
 @RestController
@@ -22,6 +23,21 @@ public class AdminUserController {
     @GetMapping
     public ApiResponse<List<AdminUserResponse>> listUsers() {
         return ApiResponse.ok(adminUserService.listUsers());
+    }
+
+    @GetMapping("/page")
+    public ApiResponse<Page<AdminUserResponse>> listUsersPage(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size
+    ) {
+        return ApiResponse.ok(adminUserService.listUsers(page, size));
+    }
+
+    @GetMapping("/batch")
+    public ApiResponse<List<AdminUserResponse>> listUsersByIds(
+            @RequestParam List<String> userIds
+    ) {
+        return ApiResponse.ok(adminUserService.listUsersByIds(userIds));
     }
 
     @GetMapping("/{userId}")

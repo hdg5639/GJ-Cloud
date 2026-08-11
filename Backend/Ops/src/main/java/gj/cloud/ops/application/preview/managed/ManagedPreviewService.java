@@ -31,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Set;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -56,10 +56,7 @@ public class ManagedPreviewService {
     @Transactional
     public synchronized ManagedPreviewDeploymentEntity allocate(String bearerToken, String userId) {
         SystemWorkerEntity worker = systemWorkerService.requireActive();
-        Set<Integer> used = repository.findAllByStatusIn(OCCUPYING).stream()
-                .map(ManagedPreviewDeploymentEntity::getInternalPort).collect(java.util.stream.Collectors.toSet());
-        int port = java.util.stream.IntStream.rangeClosed(properties.getPortStart(), properties.getPortEnd())
-                .filter(candidate -> !used.contains(candidate)).findFirst()
+        int port = repository.findFirstAvailablePort(properties.getPortStart(), properties.getPortEnd())
                 .orElseThrow(() -> new OpsException(OpsErrorCode.MANAGED_PREVIEW_CAPACITY_EXHAUSTED));
         int ttl = userPlanClient.isPro(bearerToken) ? properties.getProTtlHours() : properties.getFreeTtlHours();
         return repository.saveAndFlush(ManagedPreviewDeploymentEntity.allocate(userId, worker.getId(), port, ttl));

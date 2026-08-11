@@ -27,7 +27,8 @@ public class AccountDeletionRetryScheduler {
     @Transactional
     public void retryFailedJobs() {
         List<AccountDeletionJobEntity> jobs =
-                accountDeletionJobRepository.findAllByStatus(AccountDeletionJobStatus.FAILED_RETRYABLE);
+                accountDeletionJobRepository.findTop100ByStatusOrderByUpdatedAtAsc(
+                        AccountDeletionJobStatus.FAILED_RETRYABLE);
         if (jobs.isEmpty()) {
             return;
         }

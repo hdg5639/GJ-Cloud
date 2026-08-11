@@ -5,7 +5,7 @@ import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { DocsArticle, DocsArticleSummary } from "@/lib/types";
+import type { DocsArticle, DocsNavigationItem } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import { MarkdownRenderer } from "@/components/docs/MarkdownRenderer";
 import { extractMarkdownHeadings } from "@/components/docs/markdown";
@@ -14,24 +14,22 @@ export default function DocsArticlePage({ params }: { params: Promise<{ slug: st
   const { slug } = use(params);
   const { accessToken } = useAuth();
   const [article, setArticle] = useState<DocsArticle | null>(null);
-  const [articles, setArticles] = useState<DocsArticleSummary[]>([]);
+  const [sameCategory, setSameCategory] = useState<DocsNavigationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
-    Promise.all([api.docs.get(accessToken, slug), api.docs.list(accessToken)])
-      .then(([articleData, listData]) => {
-        setArticle(articleData);
-        setArticles(listData);
+    api.docs.getPage(accessToken, slug)
+      .then((data) => {
+        setArticle(data.article);
+        setSameCategory(data.sameCategory);
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다."))
       .finally(() => setLoading(false));
   }, [accessToken, slug]);
 
   const headings = useMemo(() => extractMarkdownHeadings(article?.content ?? ""), [article?.content]);
-  const sameCategory = articles.filter((item) => item.category === article?.category);
-
   if (loading) return <PageLoader />;
   if (!article || error) {
     return <div className="mx-auto max-w-2xl rounded-[18px] border border-line bg-panel p-8 text-center"><h1 className="text-xl font-black">문서를 열 수 없습니다</h1><p className="mt-2 text-sm text-muted">{error ?? "삭제되었거나 아직 발행되지 않은 문서입니다."}</p><Link href="/docs" className="mt-5 inline-flex rounded-[10px] bg-brand px-4 py-2 text-sm font-bold text-black">설명서로 돌아가기</Link></div>;

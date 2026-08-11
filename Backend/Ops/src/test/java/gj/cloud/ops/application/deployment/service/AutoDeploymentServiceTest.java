@@ -9,6 +9,8 @@ import gj.cloud.ops.domain.deployment.enums.DeploymentTriggerType;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
 import gj.cloud.ops.domain.deployment.repository.DeploymentTargetRepository;
+import gj.cloud.ops.domain.deployment.repository.ActiveDeploymentPointerProjection;
+import gj.cloud.ops.domain.deployment.repository.PendingAutomaticTarget;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,21 +64,19 @@ class AutoDeploymentServiceTest {
                 org.mockito.ArgumentMatchers.eq(DeploymentTriggerType.GIT_PUSH),
                 org.mockito.ArgumentMatchers.anyList()))
                 .thenReturn(List.of());
+        when(targetRepository.findStoppedActiveDeploymentPointers()).thenReturn(List.of());
+        when(deploymentRepository.findLatestDeploymentsNeedingActivePointerSync()).thenReturn(List.of());
     }
 
     @Test
     void restoresTheRollbackTargetAsTheActiveDeploymentAfterRestart() {
-        DeploymentTargetEntity target = target("target-1", "newer");
-        DeploymentEntity newer = deployment("newer", "target-1", DeploymentStatus.SUCCEEDED, null);
         DeploymentEntity older = deployment("older", "target-1", DeploymentStatus.SUCCEEDED, null);
         DeploymentEntity rollback = deployment(
                 "rollback", "target-1", DeploymentStatus.ROLLED_BACK, "older");
 
-        when(targetRepository.findAll()).thenReturn(List.of(target));
-        when(deploymentRepository.findById("newer")).thenReturn(Optional.of(newer));
-        when(deploymentRepository.findById("older")).thenReturn(Optional.of(older));
-        when(deploymentRepository.findTopByDeploymentTargetIdOrderByCreatedAtDesc("target-1"))
-                .thenReturn(Optional.of(rollback));
+        when(deploymentRepository.findLatestDeploymentsNeedingActivePointerSync())
+                .thenReturn(List.of(rollback));
+        when(deploymentRepository.findAllById(any())).thenReturn(List.of(older));
 
         service.recoverInterruptedAutomaticDeployments();
 
@@ -85,16 +85,10 @@ class AutoDeploymentServiceTest {
 
     @Test
     void clearsAnActivePointerWhoseDeploymentWasStopped() {
-        DeploymentTargetEntity target = target("target-1", "stopped");
-        DeploymentEntity stopped = deployment(
-                "stopped", "target-1", DeploymentStatus.STOPPED, null);
-        DeploymentEntity failed = deployment(
-                "failed", "target-1", DeploymentStatus.FAILED, "stopped");
-
-        when(targetRepository.findAll()).thenReturn(List.of(target));
-        when(deploymentRepository.findById("stopped")).thenReturn(Optional.of(stopped));
-        when(deploymentRepository.findTopByDeploymentTargetIdOrderByCreatedAtDesc("target-1"))
-                .thenReturn(Optional.of(failed));
+        ActiveDeploymentPointerProjection pointer = mock(ActiveDeploymentPointerProjection.class);
+        when(pointer.getTargetId()).thenReturn("target-1");
+        when(pointer.getDeploymentId()).thenReturn("stopped");
+        when(targetRepository.findStoppedActiveDeploymentPointers()).thenReturn(List.of(pointer));
 
         service.recoverInterruptedAutomaticDeployments();
 
@@ -103,23 +97,7 @@ class AutoDeploymentServiceTest {
 
     @Test
     void doesNotRescheduleAWebhookRequestThatAlreadyCreatedADeployment() {
-        LocalDateTime requestedAt = LocalDateTime.now();
-        String revision = "0123456789abcdef0123456789abcdef01234567";
-        DeploymentTargetEntity target = DeploymentTargetEntity.builder()
-                .id("target-1")
-                .active(true)
-                .autoDeployEnabled(true)
-                .latestRequestedRevision(revision)
-                .latestRequestedAt(requestedAt)
-                .createdAt(requestedAt)
-                .updatedAt(requestedAt)
-                .build();
-        when(targetRepository.findAll()).thenReturn(List.of(target));
-        when(redisTemplate.hasKey("auto-deploy-pending:target-1")).thenReturn(false);
-        when(deploymentRepository
-                .existsByDeploymentTargetIdAndRequestedRevisionAndCreatedAtGreaterThanEqual(
-                        "target-1", revision, requestedAt))
-                .thenReturn(true);
+        when(targetRepository.findPendingAutomaticTargets()).thenReturn(List.of());
 
         service.retryPendingDeployments();
 
@@ -128,12 +106,8 @@ class AutoDeploymentServiceTest {
 
     @Test
     void removesStalePendingKeyForInactiveTarget() {
-        DeploymentTargetEntity target = DeploymentTargetEntity.builder()
-                .id("target-inactive")
-                .active(false)
-                .autoDeployEnabled(false)
-                .build();
-        when(targetRepository.findAll()).thenReturn(List.of(target));
+        when(targetRepository.findDisabledTargetIdsWithRequestedRevision())
+                .thenReturn(List.of("target-inactive"));
 
         service.retryPendingDeployments();
 
@@ -157,9 +131,9 @@ class AutoDeploymentServiceTest {
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
-        when(targetRepository.findAll()).thenReturn(List.of(target));
+        when(targetRepository.findPendingAutomaticTargets())
+                .thenReturn(List.of(new PendingAutomaticTarget(target.getId(), revision)));
         when(targetRepository.findById(target.getId())).thenReturn(Optional.of(target));
-        when(redisTemplate.hasKey("auto-deploy-pending:" + target.getId())).thenReturn(true);
         @SuppressWarnings("unchecked")
         ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
@@ -176,17 +150,6 @@ class AutoDeploymentServiceTest {
 
         verify(orphanReconciler).handleConfirmedMissingVm(target.getId());
         verify(githubAppService, never()).resolveRepositoryAccess(any(), any());
-    }
-
-    private DeploymentTargetEntity target(String id, String latestDeploymentId) {
-        LocalDateTime now = LocalDateTime.now();
-        return DeploymentTargetEntity.builder()
-                .id(id)
-                .active(true)
-                .latestDeploymentId(latestDeploymentId)
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
     }
 
     private DeploymentEntity deployment(

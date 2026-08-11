@@ -1266,6 +1266,24 @@ export interface DocsArticle extends DocsArticleSummary {
   authorId: string;
 }
 
+export interface DocsNavigationItem {
+  id: string;
+  slug: string;
+  title: string;
+}
+
+export interface DocsArticlePageResponse {
+  article: DocsArticle;
+  sameCategory: DocsNavigationItem[];
+}
+
+export interface DocsAdminStats {
+  total: number;
+  published: number;
+  drafts: number;
+  categories: number;
+}
+
 export interface DocsCategory {
   name: string;
   articleCount: number;

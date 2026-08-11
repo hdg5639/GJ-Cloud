@@ -91,3 +91,139 @@ CREATE TABLE IF NOT EXISTS support_inquiries (
     INDEX idx_support_inquiries_user_created (user_id, created_at DESC),
     INDEX idx_support_inquiries_status_created (status, created_at DESC)
 );
+
+-- MySQL은 CREATE INDEX IF NOT EXISTS를 지원하지 않으므로 information_schema로
+-- 확인한 뒤 동적 DDL을 실행한다. schema.sql이 매 기동 실행돼도 안전하다.
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'user_profiles'
+       AND index_name = 'idx_user_profiles_created_at') = 0,
+    'CREATE INDEX idx_user_profiles_created_at ON user_profiles(created_at DESC)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'docs_articles'
+       AND index_name = 'idx_docs_articles_fulltext') = 0,
+    'CREATE FULLTEXT INDEX idx_docs_articles_fulltext ON docs_articles(title, summary, category) WITH PARSER ngram',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'docs_article_tags'
+       AND index_name = 'idx_docs_article_tags_fulltext') = 0,
+    'CREATE FULLTEXT INDEX idx_docs_article_tags_fulltext ON docs_article_tags(tag) WITH PARSER ngram',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'docs_article_tags'
+       AND index_name = 'idx_docs_article_tags_tag_article') > 0,
+    'DROP INDEX idx_docs_article_tags_tag_article ON docs_article_tags',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+-- 정렬 방향이 모두 ASC인 기존 인덱스는 복합 정렬에서 filesort를
+-- 유발하고 신규 정렬 인덱스와 중복되므로 제거한다.
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'docs_articles'
+       AND index_name = 'idx_docs_articles_status_sort') > 0,
+    'DROP INDEX idx_docs_articles_status_sort ON docs_articles',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'user_profiles'
+       AND index_name = 'idx_user_profiles_email') = 0,
+    'CREATE INDEX idx_user_profiles_email ON user_profiles(email)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'user_profiles'
+       AND index_name = 'idx_user_profiles_nickname') = 0,
+    'CREATE INDEX idx_user_profiles_nickname ON user_profiles(nickname)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'upgrade_requests'
+       AND index_name = 'idx_upgrade_requests_user_status') = 0,
+    'CREATE INDEX idx_upgrade_requests_user_status ON upgrade_requests(user_id, status)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'docs_articles'
+       AND index_name = 'idx_docs_articles_published_order') = 0,
+    'CREATE INDEX idx_docs_articles_published_order ON docs_articles(status, featured DESC, sort_order ASC, published_at DESC)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'docs_articles'
+       AND index_name = 'idx_docs_articles_updated_at') = 0,
+    'CREATE INDEX idx_docs_articles_updated_at ON docs_articles(updated_at DESC)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'docs_articles'
+       AND index_name = 'idx_docs_articles_status_category_order') = 0,
+    'CREATE INDEX idx_docs_articles_status_category_order ON docs_articles(status, category, featured DESC, sort_order ASC, published_at DESC)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;
+
+SET @index_sql = IF(
+    (SELECT COUNT(*) FROM information_schema.statistics
+     WHERE table_schema = DATABASE() AND table_name = 'support_inquiries'
+       AND index_name = 'idx_support_inquiries_created_at') = 0,
+    'CREATE INDEX idx_support_inquiries_created_at ON support_inquiries(created_at DESC)',
+    'SELECT 1'
+);
+PREPARE index_stmt FROM @index_sql;
+EXECUTE index_stmt;
+DEALLOCATE PREPARE index_stmt;

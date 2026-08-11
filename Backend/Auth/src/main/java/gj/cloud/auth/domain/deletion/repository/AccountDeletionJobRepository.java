@@ -8,4 +8,6 @@ import java.util.List;
 
 public interface AccountDeletionJobRepository extends JpaRepository<AccountDeletionJobEntity, String> {
     List<AccountDeletionJobEntity> findAllByStatus(AccountDeletionJobStatus status);
+
+    List<AccountDeletionJobEntity> findTop100ByStatusOrderByUpdatedAtAsc(AccountDeletionJobStatus status);
 }

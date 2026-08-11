@@ -16,6 +16,20 @@ public interface VmRepository extends ReactiveCrudRepository<VmEntity, UUID> {
     @Query("SELECT vmid FROM vms WHERE vmid IS NOT NULL AND deleted_at IS NULL")
     Flux<Integer> findAllActiveVmids();
 
+    @Query("SELECT * FROM vms WHERE deleted_at IS NULL ORDER BY created_at DESC")
+    Flux<VmEntity> findAllNotDeleted();
+
+    @Query("""
+            SELECT * FROM vms
+             WHERE deleted_at IS NULL
+             ORDER BY created_at DESC
+             LIMIT :limit OFFSET :offset
+            """)
+    Flux<VmEntity> findAdminPage(int limit, long offset);
+
+    @Query("SELECT COUNT(*) FROM vms WHERE deleted_at IS NULL")
+    Mono<Long> countNotDeleted();
+
     @Query("SELECT COUNT(*) FROM vms WHERE user_id = :userId AND deleted_at IS NULL AND status NOT IN ('PENDING', 'FAILED', 'DELETED')")
     Mono<Long> countActiveByUserId(String userId);
 
