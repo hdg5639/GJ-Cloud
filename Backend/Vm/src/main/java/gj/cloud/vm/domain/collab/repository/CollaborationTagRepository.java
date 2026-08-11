@@ -10,7 +10,8 @@ import java.util.UUID;
 
 public interface CollaborationTagRepository extends ReactiveCrudRepository<CollaborationTagEntity, UUID> {
 
-    @Query("SELECT * FROM collaboration_tags WHERE scope_type = :scopeType AND scope_id = :scopeId AND name ILIKE :query || '%' " +
+    // 태그는 저장 시 소문자로 정규화되므로 ILIKE의 함수 비용 없이 prefix index를 사용한다.
+    @Query("SELECT * FROM collaboration_tags WHERE scope_type = :scopeType AND scope_id = :scopeId AND name LIKE :query || '%' " +
            "ORDER BY usage_count DESC, last_used_at DESC LIMIT 8")
     Flux<CollaborationTagEntity> searchByPrefix(String scopeType, UUID scopeId, String query);
 

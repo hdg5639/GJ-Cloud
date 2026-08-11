@@ -2,15 +2,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import type { DocsArticleSummary, DocsArticleStatus } from "@/lib/types";
+import type { DocsAdminStats, DocsArticleSummary, DocsArticleStatus } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
 import { buttonClass, Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { toAdminDocsImageUrl } from "@/components/docs/admin-image-url";
+import { Pager } from "@/components/ui/pager";
 
 type StatusFilter = "ALL" | DocsArticleStatus;
 
@@ -19,34 +20,61 @@ export default function AdminDocsPage() {
   const [articles, setArticles] = useState<DocsArticleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("ALL");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [stats, setStats] = useState<DocsAdminStats>({ total: 0, published: 0, drafts: 0, categories: 0 });
+  const [reloadKey, setReloadKey] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<DocsArticleSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
-    api.admin.docs.list(accessToken)
-      .then(setArticles)
+    api.admin.docs.stats(accessToken)
+      .then(setStats)
       .catch((cause) => setError(cause instanceof Error ? cause.message : "문서 목록을 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
-  }, [accessToken]);
+  }, [accessToken, reloadKey]);
 
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return articles.filter((article) => {
-      if (status !== "ALL" && article.status !== status) return false;
-      if (!normalized) return true;
-      return [article.title, article.summary, article.category, ...article.tags].join(" ").toLowerCase().includes(normalized);
-    });
-  }, [articles, query, status]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    api.admin.docs.listPage(accessToken, {
+      query: debouncedQuery,
+      status: status === "ALL" ? undefined : status,
+      page,
+      size: 20,
+    })
+      .then((data) => {
+        if (cancelled) return;
+        setArticles(data.content);
+        setTotalPages(data.totalPages);
+        setError(null);
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "문서 목록을 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [accessToken, debouncedQuery, page, reloadKey, status]);
 
   async function handleDelete() {
     if (!accessToken || !deleteTarget) return;
     setDeleting(true);
     try {
       await api.admin.docs.delete(accessToken, deleteTarget.id);
-      setArticles((current) => current.filter((article) => article.id !== deleteTarget.id));
+      if (articles.length === 1 && page > 1) setPage((current) => current - 1);
+      setReloadKey((current) => current + 1);
       setDeleteTarget(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "문서를 삭제하지 못했습니다.");
@@ -54,10 +82,6 @@ export default function AdminDocsPage() {
       setDeleting(false);
     }
   }
-
-  const published = articles.filter((article) => article.status === "PUBLISHED").length;
-  const drafts = articles.length - published;
-  const categories = new Set(articles.map((article) => article.category)).size;
 
   if (loading) return <PageLoader />;
 
@@ -74,10 +98,10 @@ export default function AdminDocsPage() {
 
       <section className="mt-7 grid gap-3 sm:grid-cols-4">
         {[
-          ["전체 문서", articles.length, "▤"],
-          ["발행됨", published, "●"],
-          ["초안", drafts, "◌"],
-          ["카테고리", categories, "◇"],
+          ["전체 문서", stats.total, "▤"],
+          ["발행됨", stats.published, "●"],
+          ["초안", stats.drafts, "◌"],
+          ["카테고리", stats.categories, "◇"],
         ].map(([label, value, icon]) => (
           <div key={String(label)} className="rounded-[16px] border border-[#dce5de] bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between"><span className="text-xs font-bold text-muted">{label}</span><span className="text-[#77a482]">{icon}</span></div>
@@ -88,15 +112,15 @@ export default function AdminDocsPage() {
 
       <section className="mt-6 overflow-hidden rounded-[18px] border border-[#dce5de] bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-[#e4ebe6] p-4 sm:flex-row">
-          <div className="relative min-w-0 flex-1"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-soft">⌕</span><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="제목, 카테고리, 태그 검색" className="border-[#d7e0d9] bg-[#fbfdfb] pl-9 text-[#253029]" /></div>
-          <Select value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} className="w-full border-[#d7e0d9] bg-[#fbfdfb] text-[#3d4941] sm:w-40"><option value="ALL">전체 상태</option><option value="PUBLISHED">발행됨</option><option value="DRAFT">초안</option></Select>
+          <div className="relative min-w-0 flex-1"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-soft">⌕</span><Input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="제목, 카테고리, 태그 검색" className="border-[#d7e0d9] bg-[#fbfdfb] pl-9 text-[#253029]" /></div>
+          <Select value={status} onChange={(event) => { setStatus(event.target.value as StatusFilter); setPage(1); }} className="w-full border-[#d7e0d9] bg-[#fbfdfb] text-[#3d4941] sm:w-40"><option value="ALL">전체 상태</option><option value="PUBLISHED">발행됨</option><option value="DRAFT">초안</option></Select>
         </div>
 
         {error && <div className="border-b border-[#f0cccc] bg-[#fff5f5] px-5 py-3 text-sm text-danger">{error}</div>}
 
-        {filtered.length > 0 ? (
+        {articles.length > 0 ? (
           <div className="divide-y divide-[#edf1ee]">
-            {filtered.map((article) => (
+            {articles.map((article) => (
               <article key={article.id} className="group grid gap-4 p-4 transition hover:bg-[#f9fcfa] sm:grid-cols-[108px_minmax(0,1fr)_auto] sm:items-center">
                 <div className="aspect-[16/10] overflow-hidden rounded-[11px] border border-[#e0e7e2] bg-[linear-gradient(135deg,#edf8f0,#f8fbf9)]">
                   {article.coverImageUrl ? <img src={toAdminDocsImageUrl(article.coverImageUrl)} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-xl text-[#90b298]">▤</div>}
@@ -118,6 +142,8 @@ export default function AdminDocsPage() {
           <div className="grid min-h-72 place-items-center text-center"><div><span className="text-3xl text-[#9eaaa1]">▤</span><h2 className="mt-3 font-extrabold text-[#27322b]">표시할 문서가 없습니다</h2><p className="mt-1 text-sm text-muted">필터를 바꾸거나 첫 문서를 작성해 보세요.</p></div></div>
         )}
       </section>
+
+      <Pager page={page} totalPages={totalPages} onChange={setPage} />
 
       <Modal open={Boolean(deleteTarget)} onClose={() => !deleting && setDeleteTarget(null)}>
         <section className="mx-auto w-full max-w-md overflow-hidden rounded-[18px] border border-[#eadada] bg-white text-[#1e2822] shadow-2xl">

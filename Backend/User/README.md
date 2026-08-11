@@ -64,6 +64,10 @@ Auth 회원가입
 | 관리자 문의 | `/admin/users/support-inquiries/**` | 전체 문의 조회·답변·상태 관리 |
 | 내부 API | `/internal/profiles`, `/internal/ssh-keys/**`, `/internal/automation/**` | 서비스 간 프로필·키·플랜 조회 |
 
+ControlBox 사용자 목록은 `/admin/users/page?page=1&size=50`으로 DB 페이징하며, VM 목록의 현재 페이지 소유자만 `/admin/users/batch?userIds=...`로 일괄 조회한다. 기존 `/admin/users` 전체 목록은 호환성을 위해 유지하지만 신규 화면에서 사용하지 않는다. 프로필 검색은 인덱스를 탈는 prefix 검색을 먼저 실행하고, 결과가 부족할 때만 기존 contains 검색으로 보완한다.
+
+Docs 목록은 `MEDIUMTEXT` 본문을 로드하지 않는 read-only summary 엔티티를 사용한다. 공개 목록은 `/users/docs/page`에서 18건, ControlBox는 `/admin/docs/page`에서 20건씩 DB 페이징하며, 상세 화면은 같은 카테고리 navigation 최대 100건만 받는다. 한국어 검색은 `(title, summary, category)`와 `tag` 각각의 `WITH PARSER ngram` FULLTEXT index를 우선 사용하고, 1글자이거나 FULLTEXT 결과가 없을 때만 contains 검색으로 fallback한다. 카테고리 필터·집계와 발행·추천·정렬·발행 시각, 관리자 최근 수정 순서는 각 복합 인덱스로 처리한다.
+
 ## 데이터와 보안
 
 - MySQL: 프로필, SSH 키, 플랜 요청, Docs 문서, 사용자 문의와 답변

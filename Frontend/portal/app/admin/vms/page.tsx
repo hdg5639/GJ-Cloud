@@ -10,6 +10,7 @@ import { Table, Th, Td } from "@/components/ui/table";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { Pager } from "@/components/ui/pager";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
   RUNNING: "ok",
@@ -24,22 +25,33 @@ export default function AdminVmsPage() {
   const [vms, setVms] = useState<AdminVmResponse[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<AdminVmResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
-    Promise.all([
-      api.admin.vms.list(accessToken),
-      api.admin.users.list(accessToken),
-    ])
-      .then(([vmData, userData]) => {
-        setVms(vmData);
+    api.admin.vms.listPage(accessToken, page, 50)
+      .then(async (vmData) => {
+        const ownerIds = Array.from(new Set(vmData.content.map((vm) => vm.userId)));
+        const userData = ownerIds.length > 0
+          ? await api.admin.users.batch(accessToken, ownerIds)
+          : [];
+        setVms(vmData.content);
+        setTotalPages(vmData.totalPages);
+        setTotalElements(vmData.totalElements);
         setUserMap(Object.fromEntries(userData.map((u: AdminUserResponse) => [u.userId, u.email])));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [accessToken]);
+  }, [accessToken, page]);
+
+  function changePage(nextPage: number) {
+    setLoading(true);
+    setPage(nextPage);
+  }
 
   async function handleForceDelete() {
     if (!accessToken || !deleteTarget) return;
@@ -47,6 +59,7 @@ export default function AdminVmsPage() {
     try {
       await api.admin.vms.forceDelete(accessToken, deleteTarget.id);
       setVms((prev) => prev.filter((v) => v.id !== deleteTarget.id));
+      setTotalElements((current) => Math.max(0, current - 1));
       setDeleteTarget(null);
     } catch {
     } finally {
@@ -58,7 +71,7 @@ export default function AdminVmsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-extrabold">VM 관리</h1>
-        <span className="text-sm text-muted-soft">{vms.length}대</span>
+        <span className="text-sm text-muted-soft">{totalElements.toLocaleString("ko-KR")}대</span>
       </div>
 
       <Panel className="overflow-hidden">
@@ -118,6 +131,7 @@ export default function AdminVmsPage() {
           </tbody>
         </Table>
       </Panel>
+      <Pager page={page} totalPages={totalPages} onChange={changePage} />
 
       {/* 강제 삭제 확인 모달 */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>

@@ -16,10 +16,26 @@ public interface UserRepository extends JpaRepository<UserEntity, String> {
     boolean existsByEmailAndStatusNot(String email, UserStatus status);
 
     @Modifying
-    @Query("DELETE FROM UserEntity u WHERE u.status = 'PENDING_VERIFICATION' AND u.createdAt < :threshold")
-    int deleteExpiredPendingUsers(@Param("threshold") LocalDateTime threshold);
+    @Query(value = """
+            DELETE FROM users
+             WHERE status = 'PENDING_VERIFICATION'
+               AND created_at < :threshold
+             ORDER BY created_at ASC
+             LIMIT :batchSize
+            """, nativeQuery = true)
+    int deleteExpiredPendingUsers(
+            @Param("threshold") LocalDateTime threshold,
+            @Param("batchSize") int batchSize);
 
     @Modifying
-    @Query("DELETE FROM UserEntity u WHERE u.status = 'DELETED' AND u.deletedAt < :threshold")
-    int deleteExpiredDeletedUsers(@Param("threshold") LocalDateTime threshold);
+    @Query(value = """
+            DELETE FROM users
+             WHERE status = 'DELETED'
+               AND deleted_at < :threshold
+             ORDER BY deleted_at ASC
+             LIMIT :batchSize
+            """, nativeQuery = true)
+    int deleteExpiredDeletedUsers(
+            @Param("threshold") LocalDateTime threshold,
+            @Param("batchSize") int batchSize);
 }

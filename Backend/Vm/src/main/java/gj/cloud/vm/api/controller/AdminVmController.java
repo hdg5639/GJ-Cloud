@@ -1,6 +1,7 @@
 package gj.cloud.vm.api.controller;
 
 import gj.cloud.vm.application.vm.dto.VmResponse;
+import gj.cloud.vm.application.vm.dto.AdminVmPageResponse;
 import gj.cloud.vm.application.vm.service.VmService;
 import gj.cloud.vm.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,6 +25,14 @@ public class AdminVmController {
         return vmService.getAllVms()
                 .collectList()
                 .map(ApiResponse::ok);
+    }
+
+    @GetMapping("/page")
+    public Mono<ApiResponse<AdminVmPageResponse>> listAllVmsPage(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size
+    ) {
+        return vmService.getAllVmsPage(page, size).map(ApiResponse::ok);
     }
 
     @GetMapping("/{vmId}")

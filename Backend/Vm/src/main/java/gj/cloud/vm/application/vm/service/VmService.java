@@ -7,6 +7,7 @@ import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
 import gj.cloud.vm.application.vm.dto.VmMetricsCurrentResponse;
 import gj.cloud.vm.application.vm.dto.VmMetricsHistoryResponse;
+import gj.cloud.vm.application.vm.dto.AdminVmPageResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -20,6 +21,7 @@ public interface VmService {
     Mono<VmResponse> getVm(String userId, String email, UUID vmId);
     Mono<Void> deleteVm(String userId, UUID vmId);
     Flux<VmResponse> getAllVms();
+    Mono<AdminVmPageResponse> getAllVmsPage(int page, int size);
     Mono<VmResponse> getVmAdmin(UUID vmId);
     Mono<Void> forceDeleteVm(UUID vmId);
     Mono<Void> deleteVmInternal(UUID vmId);

@@ -68,6 +68,8 @@ import type {
   RegressionSuiteView,
   DocsArticle,
   DocsArticleSummary,
+  DocsArticlePageResponse,
+  DocsAdminStats,
   DocsCategory,
   DocsArticleInput,
   DocsImageUpload,
@@ -426,10 +428,33 @@ export const api = {
       const suffix = params.size > 0 ? `?${params.toString()}` : "";
       return request<DocsArticleSummary[]>("user", `/users/docs${suffix}`, { accessToken });
     },
+    listPage: (
+      accessToken: string,
+      filters?: { query?: string; category?: string; page?: number; size?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (filters?.query?.trim()) params.set("query", filters.query.trim());
+      if (filters?.category?.trim()) params.set("category", filters.category.trim());
+      params.set("page", String(filters?.page ?? 1));
+      params.set("size", String(filters?.size ?? 18));
+      return request<PagedResponse<DocsArticleSummary>>(
+        "user",
+        `/users/docs/page?${params.toString()}`,
+        { accessToken },
+      );
+    },
+    featured: (accessToken: string) =>
+      request<DocsArticleSummary[]>("user", "/users/docs/featured", { accessToken }),
     categories: (accessToken: string) =>
       request<DocsCategory[]>("user", "/users/docs/categories", { accessToken }),
     get: (accessToken: string, slug: string) =>
       request<DocsArticle>("user", `/users/docs/${encodeURIComponent(slug)}`, { accessToken }),
+    getPage: (accessToken: string, slug: string) =>
+      request<DocsArticlePageResponse>(
+        "user",
+        `/users/docs/${encodeURIComponent(slug)}/page`,
+        { accessToken },
+      ),
   },
   support: {
     list: (accessToken: string, page: number = 1, size: number = 20) =>
@@ -1228,6 +1253,23 @@ export const api = {
     docs: {
       list: (accessToken: string) =>
         request<DocsArticleSummary[]>("adminUser", "/admin/docs", { accessToken }),
+      listPage: (
+        accessToken: string,
+        filters?: { query?: string; status?: string; page?: number; size?: number },
+      ) => {
+        const params = new URLSearchParams();
+        if (filters?.query?.trim()) params.set("query", filters.query.trim());
+        if (filters?.status?.trim()) params.set("status", filters.status.trim());
+        params.set("page", String(filters?.page ?? 1));
+        params.set("size", String(filters?.size ?? 20));
+        return request<PagedResponse<DocsArticleSummary>>(
+          "adminUser",
+          `/admin/docs/page?${params.toString()}`,
+          { accessToken },
+        );
+      },
+      stats: (accessToken: string) =>
+        request<DocsAdminStats>("adminUser", "/admin/docs/stats", { accessToken }),
       get: (accessToken: string, id: string) =>
         request<DocsArticle>("adminUser", `/admin/docs/${id}`, { accessToken }),
       create: (accessToken: string, body: DocsArticleInput) =>
@@ -1261,6 +1303,21 @@ export const api = {
     users: {
       list: (accessToken: string) =>
         request<AdminUserResponse[]>("adminUser", "/admin/users", { accessToken }),
+      listPage: (accessToken: string, page: number = 1, size: number = 50) =>
+        request<PagedResponse<AdminUserResponse>>(
+          "adminUser",
+          `/admin/users/page?page=${page}&size=${size}`,
+          { accessToken },
+        ),
+      batch: (accessToken: string, userIds: string[]) => {
+        const params = new URLSearchParams();
+        userIds.forEach((userId) => params.append("userIds", userId));
+        return request<AdminUserResponse[]>(
+          "adminUser",
+          `/admin/users/batch?${params.toString()}`,
+          { accessToken },
+        );
+      },
       get: (accessToken: string, userId: string) =>
         request<AdminUserResponse>("adminUser", `/admin/users/${userId}`, { accessToken }),
       suspend: (accessToken: string, userId: string) =>
@@ -1277,6 +1334,12 @@ export const api = {
     vms: {
       list: (accessToken: string) =>
         request<AdminVmResponse[]>("adminVm", "/admin/vms", { accessToken }),
+      listPage: (accessToken: string, page: number = 1, size: number = 50) =>
+        request<PagedResponse<AdminVmResponse>>(
+          "adminVm",
+          `/admin/vms/page?page=${page}&size=${size}`,
+          { accessToken },
+        ),
       get: (accessToken: string, vmId: string) =>
         request<AdminVmResponse>("adminVm", `/admin/vms/${vmId}`, { accessToken }),
       forceDelete: (accessToken: string, vmId: string) =>

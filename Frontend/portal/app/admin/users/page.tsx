@@ -8,20 +8,33 @@ import { SkeletonRow } from "@/components/ui/loader";
 import { Panel } from "@/components/ui/panel";
 import { Table, Th, Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
+import { Pager } from "@/components/ui/pager";
 
 export default function AdminUsersPage() {
   const { accessToken } = useAuth();
   const [users, setUsers] = useState<AdminUserResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
-    api.admin.users.list(accessToken)
-      .then((data) => setUsers(data))
+    api.admin.users.listPage(accessToken, page, 50)
+      .then((data) => {
+        setUsers(data.content);
+        setTotalPages(data.totalPages);
+        setTotalElements(data.totalElements);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [accessToken]);
+  }, [accessToken, page]);
+
+  function changePage(nextPage: number) {
+    setLoading(true);
+    setPage(nextPage);
+  }
 
   async function toggleSuspend(user: AdminUserResponse) {
     if (!accessToken) return;
@@ -53,7 +66,7 @@ export default function AdminUsersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-extrabold">사용자 관리</h1>
-        <span className="text-sm text-muted-soft">{users.length}명</span>
+        <span className="text-sm text-muted-soft">{totalElements.toLocaleString("ko-KR")}명</span>
       </div>
 
       <Panel className="overflow-hidden">
@@ -120,6 +133,7 @@ export default function AdminUsersPage() {
           </tbody>
         </Table>
       </Panel>
+      <Pager page={page} totalPages={totalPages} onChange={changePage} />
     </div>
   );
 }

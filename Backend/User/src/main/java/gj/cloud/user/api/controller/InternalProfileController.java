@@ -41,9 +41,15 @@ public class InternalProfileController {
         if (trimmed.length() < MIN_QUERY_LENGTH) {
             return ApiResponse.ok(List.of());
         }
-        List<ProfileSearchResult> results = profileRepository
-                .findTop10ByNicknameContainingIgnoreCaseOrEmailContainingIgnoreCase(trimmed, trimmed)
-                .stream()
+        var prefixMatches = profileRepository.findTop10ByEmailOrNicknamePrefix(trimmed);
+        var merged = new java.util.LinkedHashMap<String, UserProfileEntity>();
+        prefixMatches.forEach(profile -> merged.put(profile.getUserId(), profile));
+        if (merged.size() < 10) {
+            profileRepository.findTop10ByNicknameContainingIgnoreCaseOrEmailContainingIgnoreCase(trimmed, trimmed)
+                    .forEach(profile -> merged.putIfAbsent(profile.getUserId(), profile));
+        }
+        List<ProfileSearchResult> results = merged.values().stream()
+                .limit(10)
                 .map(ProfileSearchResult::from)
                 .toList();
         return ApiResponse.ok(results);

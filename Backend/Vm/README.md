@@ -49,6 +49,8 @@ cloud-init 네트워크는 `ipconfig0=ip=dhcp`로 설정하여 개발·운영이
 | Ops 내부 API | `/internal/ops/**`, `/internal/automation/**` | 권한 문맥과 배포 라우트 동기화 |
 | 시스템 워커 | `/internal/automation/system-workers/auto-preview/**` | 고정 사양 프로비저닝·전원·관리형 Preview CNAME/Tunnel |
 
+ControlBox는 `/admin/vms/page?page=1&size=50`로 삭제되지 않은 VM을 DB 페이징한다. 기존 `/admin/vms` 전체 목록은 호환성을 위해 유지하지만 신규 화면에서 사용하지 않는다. 활성 VM 수와 관리자 최근순, 협업 항목의 pinned+최근순, 태그의 사용량+최근순 조회는 해당 필터·정렬에 맞춘 복합/partial 인덱스를 사용한다. 대부분의 행을 반환하는 활성 Proxmox VMID 조회는 커버링 인덱스보다 sequential scan이 싸다는 실측 결과에 따라 불필요한 인덱스를 두지 않는다.
+
 ## 데이터와 외부 의존성
 
 - PostgreSQL/R2DBC: VM, 포트, 조직, 협업 데이터

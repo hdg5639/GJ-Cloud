@@ -2,11 +2,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import type { DocsArticleSummary, DocsCategory } from "@/lib/types";
 import { PageLoader } from "@/components/ui/loader";
+import { Pager } from "@/components/ui/pager";
 
 const CATEGORY_ICONS = ["◫", "⌘", "◇", "▤", "↗", "◎"];
 
@@ -55,36 +56,60 @@ function GuideCard({ article, featured = false }: { article: DocsArticleSummary;
 export default function DocsPage() {
   const { accessToken } = useAuth();
   const [articles, setArticles] = useState<DocsArticleSummary[]>([]);
+  const [featured, setFeatured] = useState<DocsArticleSummary[]>([]);
   const [categories, setCategories] = useState<DocsCategory[]>([]);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [category, setCategory] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
-    Promise.all([api.docs.list(accessToken), api.docs.categories(accessToken)])
-      .then(([articleData, categoryData]) => {
-        setArticles(articleData);
+    Promise.all([api.docs.categories(accessToken), api.docs.featured(accessToken)])
+      .then(([categoryData, featuredData]) => {
         setCategories(categoryData);
+        setFeatured(featuredData);
       })
       .catch((cause) => setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
   }, [accessToken]);
 
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return articles.filter((article) => {
-      if (category !== "ALL" && article.category !== category) return false;
-      if (!normalized) return true;
-      return [article.title, article.summary, article.category, ...article.tags]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized);
-    });
-  }, [articles, category, query]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
-  const featured = articles.filter((article) => article.featured).slice(0, 2);
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    api.docs.listPage(accessToken, {
+      query: debouncedQuery,
+      category: category === "ALL" ? undefined : category,
+      page,
+      size: 18,
+    })
+      .then((data) => {
+        if (cancelled) return;
+        setArticles(data.content);
+        setTotalPages(data.totalPages);
+        setTotalElements(data.totalElements);
+        setError(null);
+      })
+      .catch((cause) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "문서를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [accessToken, category, debouncedQuery, page]);
+
+  const allArticleCount = categories.reduce((sum, item) => sum + item.articleCount, 0);
 
   if (loading) return <PageLoader />;
 
@@ -103,11 +128,14 @@ export default function DocsPage() {
             <span aria-hidden className="text-xl text-muted-soft">⌕</span>
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+              }}
               placeholder="기능, 화면, 문제 해결 방법 검색"
               className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-soft"
             />
-            {query && <button type="button" onClick={() => setQuery("")} className="text-xs font-bold text-muted hover:text-foreground">지우기</button>}
+            {query && <button type="button" onClick={() => { setQuery(""); setPage(1); }} className="text-xs font-bold text-muted hover:text-foreground">지우기</button>}
           </label>
         </div>
         <div className="pointer-events-none absolute -bottom-24 -right-16 h-80 w-80 rounded-full border border-brand/10 bg-brand/[0.035]" />
@@ -119,16 +147,16 @@ export default function DocsPage() {
         <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none]">
           <button
             type="button"
-            onClick={() => setCategory("ALL")}
+            onClick={() => { setCategory("ALL"); setPage(1); }}
             className={`shrink-0 rounded-full border px-4 py-2 text-xs font-extrabold transition ${category === "ALL" ? "border-brand bg-brand text-black" : "border-line bg-panel text-muted hover:border-line-strong hover:text-foreground"}`}
           >
-            전체 <span className="ml-1 opacity-60">{articles.length}</span>
+            전체 <span className="ml-1 opacity-60">{allArticleCount}</span>
           </button>
           {categories.map((item) => (
             <button
               key={item.name}
               type="button"
-              onClick={() => setCategory(item.name)}
+              onClick={() => { setCategory(item.name); setPage(1); }}
               className={`shrink-0 rounded-full border px-4 py-2 text-xs font-extrabold transition ${category === item.name ? "border-brand bg-brand text-black" : "border-line bg-panel text-muted hover:border-line-strong hover:text-foreground"}`}
             >
               {item.name} <span className="ml-1 opacity-60">{item.articleCount}</span>
@@ -152,17 +180,18 @@ export default function DocsPage() {
       <section className="mt-12 pb-8">
         <div className="mb-5 flex items-end justify-between gap-4">
           <div><p className="text-[10px] font-extrabold tracking-[.14em] text-muted-soft">ALL GUIDES</p><h2 className="mt-1 text-xl font-black">{category === "ALL" ? "전체 사용 설명서" : category}</h2></div>
-          <span className="text-xs text-muted-soft">{filtered.length}개의 문서</span>
+          <span className="text-xs text-muted-soft">{totalElements.toLocaleString("ko-KR")}개의 문서</span>
         </div>
-        {filtered.length > 0 ? (
+        {articles.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((article) => <GuideCard key={article.id} article={article} />)}
+            {articles.map((article) => <GuideCard key={article.id} article={article} />)}
           </div>
         ) : (
           <div className="grid min-h-72 place-items-center rounded-[20px] border border-dashed border-line-strong bg-panel/40 text-center">
             <div><span className="text-3xl text-muted-soft">⌕</span><h3 className="mt-3 text-base font-extrabold">찾는 문서가 없습니다</h3><p className="mt-1 text-sm text-muted">검색어를 줄이거나 다른 카테고리를 선택해 보세요.</p></div>
           </div>
         )}
+        <Pager page={page} totalPages={totalPages} onChange={setPage} />
       </section>
     </div>
   );

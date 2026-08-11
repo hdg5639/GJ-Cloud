@@ -12,6 +12,7 @@ import gj.cloud.ops.domain.deployment.enums.DeploymentStatus;
 import gj.cloud.ops.domain.deployment.enums.DeploymentTriggerType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentRepository;
 import gj.cloud.ops.domain.deployment.repository.DeploymentTargetRepository;
+import gj.cloud.ops.domain.deployment.repository.PendingAutomaticTarget;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -70,12 +72,17 @@ public class AutoDeploymentService {
 
     @Scheduled(fixedDelayString = "${ops.auto-deployment.retry-delay-ms:30000}")
     public void retryPendingDeployments() {
-        for (DeploymentTargetEntity target : targetRepository.findAll()) {
-            if (!target.isActive() || !target.isAutoDeployEnabled()) {
-                redisTemplate.delete(pendingKey(target.getId()));
+        // 비활성 대상은 암호화된 compose 등 큰 엔티티 전체를 읽지 않고 ID만 조회해 stale pending을 지운다.
+        for (String targetId : targetRepository.findDisabledTargetIdsWithRequestedRevision()) {
+            redisTemplate.delete(pendingKey(targetId));
+        }
+        for (PendingAutomaticTarget target : targetRepository.findPendingAutomaticTargets()) {
+            if (!COMMIT_SHA.matcher(target.revision()).matches()) {
                 continue;
             }
-            if (hasPendingRevision(target)) submitSchedule(target.getId());
+            // Redis에 더 최신 요청이 이미 있으면 덮어쓰지 않고, 재시작으로 키만 유실된 경우에만 복구한다.
+            redisTemplate.opsForValue().setIfAbsent(pendingKey(target.id()), target.revision());
+            submitSchedule(target.id());
         }
     }
 
@@ -132,36 +139,37 @@ public class AutoDeploymentService {
     }
 
     private void reconcileActiveDeployments() {
-        for (DeploymentTargetEntity target : targetRepository.findAll()) {
-            if (!target.isActive()) {
-                continue;
-            }
-            DeploymentEntity current = target.getLatestDeploymentId() != null
-                    ? deploymentRepository.findById(target.getLatestDeploymentId()).orElse(null)
-                    : null;
-            if (current != null && current.getStatus() == DeploymentStatus.STOPPED) {
-                targetService.clearActiveDeployment(target.getId(), current.getId());
-            }
+        targetRepository.findStoppedActiveDeploymentPointers().forEach(pointer ->
+                targetService.clearActiveDeployment(pointer.getTargetId(), pointer.getDeploymentId()));
 
-            deploymentRepository.findTopByDeploymentTargetIdOrderByCreatedAtDesc(target.getId())
-                    .ifPresent(latest -> {
-                        if (latest.getStatus() == DeploymentStatus.SUCCEEDED) {
-                            targetService.markActiveDeployment(
-                                    target.getId(), latest.getId(), latest.getSourceRevision());
-                            return;
-                        }
-                        if (latest.getStatus() == DeploymentStatus.ROLLED_BACK
-                                && latest.getPreviousDeploymentId() != null) {
-                            deploymentRepository.findById(latest.getPreviousDeploymentId())
-                                    .filter(previous ->
-                                            previous.getStatus() == DeploymentStatus.SUCCEEDED)
-                                    .ifPresent(previous -> targetService.markActiveDeployment(
-                                            target.getId(),
-                                            previous.getId(),
-                                            previous.getSourceRevision()));
-                        }
-                    });
+        List<DeploymentEntity> latestDeployments =
+                deploymentRepository.findLatestDeploymentsNeedingActivePointerSync();
+        latestDeployments.stream()
+                .filter(deployment -> deployment.getStatus() == DeploymentStatus.SUCCEEDED)
+                .forEach(deployment -> targetService.markActiveDeployment(
+                        deployment.getDeploymentTargetId(),
+                        deployment.getId(),
+                        deployment.getSourceRevision()));
+
+        Map<String, DeploymentEntity> rollbackTargets = latestDeployments.stream()
+                .filter(deployment -> deployment.getStatus() == DeploymentStatus.ROLLED_BACK)
+                .filter(deployment -> deployment.getPreviousDeploymentId() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        DeploymentEntity::getPreviousDeploymentId,
+                        deployment -> deployment,
+                        (left, ignored) -> left));
+        if (rollbackTargets.isEmpty()) {
+            return;
         }
+        deploymentRepository.findAllById(rollbackTargets.keySet()).stream()
+                .filter(previous -> previous.getStatus() == DeploymentStatus.SUCCEEDED)
+                .forEach(previous -> {
+                    DeploymentEntity rollback = rollbackTargets.get(previous.getId());
+                    targetService.markActiveDeployment(
+                            rollback.getDeploymentTargetId(),
+                            previous.getId(),
+                            previous.getSourceRevision());
+                });
     }
 
     private void submitSchedule(String targetId) {
@@ -226,25 +234,6 @@ public class AutoDeploymentService {
             log.warn("자동 배포 시작 보류: targetId={}, revision={}, error={}",
                     targetId, revision, e.getMessage());
         }
-    }
-
-    private boolean hasPendingRevision(DeploymentTargetEntity target) {
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(pendingKey(target.getId())))) {
-            return true;
-        }
-        String requested = target.getLatestRequestedRevision();
-        if (requested == null || !COMMIT_SHA.matcher(requested).matches()) {
-            return false;
-        }
-        boolean alreadyCreated = target.getLatestRequestedAt() != null
-                && deploymentRepository.existsByDeploymentTargetIdAndRequestedRevisionAndCreatedAtGreaterThanEqual(
-                        target.getId(), requested, target.getLatestRequestedAt());
-        if (alreadyCreated) {
-            return false;
-        }
-        // Redis가 재시작돼 pending 키만 사라졌어도 DB의 latestRequestedRevision으로 복구한다.
-        redisTemplate.opsForValue().set(pendingKey(target.getId()), requested);
-        return true;
     }
 
     private boolean isTargetBusy(String targetId) {

@@ -35,6 +35,8 @@ GamjaBox 사용자 포털과 ControlBox 관리자 콘솔을 함께 제공하는 
 - Recharts 메트릭 시각화
 - xterm.js 웹 SSH 터미널
 - react-markdown + remark-gfm Docs 렌더링
+
+Docs 허브와 ControlBox 문서 목록은 전체 문서를 클라이언트에 로드하지 않고 각각 18건·20건씩 서버 페이징한다. 검색어는 300ms debounce 후 User 서비스에 전달하며, 문서 상세의 좌측 navigation은 현재 카테고리 최대 100건만 받는다.
 - SSE 상태·메트릭·배포 로그, WebSocket 터미널
 - `output: standalone` 프로덕션 빌드
 
