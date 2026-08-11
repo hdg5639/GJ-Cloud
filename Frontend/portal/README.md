@@ -106,13 +106,13 @@ ADMIN_DOMAIN=admin.localhost:3000
 개발 서버 API를 사용해 포털 화면만 로컬에서 개발할 때는 다음처럼 모든 사용자 API base를 Next 개발 서버의 동일 origin으로 둔다. `next.config.ts`의 external rewrite가 HTTP·SSE·WebSocket을 개발 API로 프록시하므로 CORS와 `SameSite=Strict` Refresh Cookie 제약을 피한다. `DEV_API_PROXY_TARGET`은 서버 전용 변수이며 `next dev`에서만 프록시를 활성화한다.
 
 ```dotenv
-DEV_API_PROXY_TARGET=https://dev-api.gamjabox.cloud
+DEV_API_PROXY_TARGET=https://api.dev.example.test
 NEXT_PUBLIC_AUTH_API=http://localhost:3000
 NEXT_PUBLIC_USER_API=http://localhost:3000
 NEXT_PUBLIC_VM_API=http://localhost:3000
 NEXT_PUBLIC_OPS_API=http://localhost:3000
 # /admin은 포털의 실제 페이지 경로와 겹치므로 개발 API를 직접 호출한다.
-NEXT_PUBLIC_ADMIN_API=https://dev-api.gamjabox.cloud
+NEXT_PUBLIC_ADMIN_API=https://api.dev.example.test
 ADMIN_DOMAIN=admin.localhost:3000
 ```
 
@@ -123,8 +123,8 @@ NEXT_PUBLIC_AUTH_API=https://portal.gamjabox.cloud
 NEXT_PUBLIC_USER_API=https://portal.gamjabox.cloud
 NEXT_PUBLIC_VM_API=https://portal.gamjabox.cloud
 NEXT_PUBLIC_OPS_API=https://portal.gamjabox.cloud
-NEXT_PUBLIC_ADMIN_API=https://admin.gamjabox.cloud
-ADMIN_DOMAIN=admin.gamjabox.cloud
+NEXT_PUBLIC_ADMIN_API=https://admin.example.test
+ADMIN_DOMAIN=admin.example.test
 ```
 
 `ADMIN_DOMAIN`에는 scheme과 path 없이 Host만 넣는다. `NEXT_PUBLIC_*`는 빌드 시 브라우저 번들에 고정되므로 값을 바꾼 뒤 Portal 이미지를 반드시 재빌드하고, secret은 절대 넣지 않는다. 루트 Compose용 전체 예시는 `env.example`을 기준으로 한다.

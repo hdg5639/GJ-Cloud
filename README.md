@@ -934,7 +934,80 @@ Ops 배포 워크플로우는 `Backend/Ops/**`뿐만 아니라 `compose.yaml`과
 
 기본 `compose.yaml`과 `env.example`은 배포 구조와 환경변수 계약만 담아 Git으로 관리한다. `env.example`에는 secret 생성 명령, Proxmox·Cloudflare·GitHub 값 형식, 호스트/컨테이너 경로 예시를 함께 기록한다. `CHANGE_ME_*`는 실제 배포 전에 모두 교체해야 하며, 실제 값이 들어가는 `.env*`, 로컬 override·프록시 설정과 운영 자격증명은 Git에서 제외하고 서버 런타임 환경에서 관리한다.
 
-개발 API 문서는 `docs` 오버레이 프로파일로만 활성화한다. Auth·User·VM은 OpenAPI JSON만 제공하고 Ops의 Swagger UI WebJar 자산을 `api-docs-ui`의 GamjaBox 전용 콘솔이 사용한다. `API Reference`는 연결 상태·Try it out 서버·태그/경로 검색·operation/tag 통계를 하나의 압축 도구막으로 제공하고, Swagger의 중복 제목·서버·필터 블록은 노출하지 않는다. `API Flows`는 현재 선택한 서비스의 기능별 호출 순서를 카테고리와 검색으로 탐색하며, 각 단계를 클릭하면 해당 경로로 Reference를 바로 필터링한다. 플로우 단계는 불러온 OpenAPI 스펙과 대조해 사라진 경로를 표시한다. `Caddyfile.example`은 문서 도메인의 `/openapi/*`를 각 서비스의 `/v3/api-docs`로 연결하고, Try it out은 Cloudflare Access 뒤의 동일 출처 `/try/*` 프록시로 실행해 CORS를 발생시키지 않는다. 로컬 포털 개발은 `DEV_API_PROXY_TARGET`을 설정하고 `NEXT_PUBLIC_AUTH_API`·`USER_API`·`VM_API`·`OPS_API`를 Next 개발 서버 origin으로 두면 HTTP·SSE·WebSocket과 Strict Refresh Cookie를 동일 출처 프록시로 개발 API에 연결한다. 개발 Caddy의 직접 호출은 `ENABLE_LOCAL_DEV_CORS=true`일 때만 localhost·`*.localhost`·127.0.0.1·`[::1]` Origin을 허용한다. 기본 프로파일은 `prod`, 기본 문서 호스트는 `docs.invalid`, 로컬 CORS는 `false`이므로 같은 파일을 운영에 배치해도 문서·로컬 Origin이 열리지 않는다. 개발 문서 도메인은 Cloudflare Access 등 별도 접근 제어 뒤에 둔다.
+### 개발 API Console과 로컬 원격 API 연동
+
+> 아래 `api.dev.example.test`, `docs.dev.example.test`는 구조 설명을 위한 예약 목업 도메인이다. 실제 개발·운영 호스트, CNAME, 자격증명은 저장소 문서에 기록하지 않는다.
+
+개발 API 문서는 `docs` 오버레이 프로파일로만 활성화한다. Auth·User·VM은 OpenAPI JSON을 제공하고, Ops의 Swagger UI WebJar 자산과 루트 `api-docs-ui`의 정적 파일을 Caddy가 하나의 GamjaBox API Console로 조합한다.
+
+| 경로 | 역할 |
+|---|---|
+| `/openapi/auth` | Auth의 `/v3/api-docs` 전달 |
+| `/openapi/user` | User의 `/v3/api-docs` 전달 |
+| `/openapi/vm` | VM의 `/v3/api-docs` 전달 |
+| `/openapi/ops` | Ops의 `/v3/api-docs` 전달 |
+| `/swagger-ui/*` | Ops 이미지에 포함된 Swagger UI WebJar 자산 |
+| `/try/*` | Try it out용 동일 출처 API 프록시 |
+
+`API Reference`는 서비스·서버 선택, 태그·경로·설명 검색, operation/tag 통계, Swagger 인증, Schema 접기를 제공한다. `API Flows`는 인증, VM, 배포, Preview 같은 기능별 호출 순서를 카테고리와 검색으로 탐색하며, 각 단계를 클릭하면 Reference의 실제 operation으로 연결한다. 플로우 단계는 현재 OpenAPI 스펙과 대조하므로 제거된 경로도 식별할 수 있다.
+
+Try it out 서버는 문서 origin의 `/try`를 사용한다. Caddy가 `/try` prefix를 제거해 실제 서비스로 전달하고 Swagger 요청에는 쿠키를 포함한다. Auth Refresh Cookie의 path도 `/try/auth/token`에 맞게 보정하므로 별도 CORS 없이 인증 흐름을 시험할 수 있다. 문서 호스트는 Cloudflare Access 같은 별도 접근 제어 뒤에 두는 것을 권장한다.
+
+Portal 화면만 로컬에서 실행하고 원격 개발 API를 사용할 때의 공개 가능한 `.env.local` 예시는 다음과 같다.
+
+```dotenv
+# 서버 전용 변수이며 next dev에서만 사용한다.
+DEV_API_PROXY_TARGET=https://api.dev.example.test
+
+NEXT_PUBLIC_AUTH_API=http://localhost:3000
+NEXT_PUBLIC_USER_API=http://localhost:3000
+NEXT_PUBLIC_VM_API=http://localhost:3000
+NEXT_PUBLIC_OPS_API=http://localhost:3000
+
+# /admin은 로컬 ControlBox 페이지 경로와 겹치므로 개발 Gateway를 직접 호출한다.
+NEXT_PUBLIC_ADMIN_API=https://api.dev.example.test
+ADMIN_DOMAIN=admin.localhost:3000
+```
+
+```text
+일반 HTTP·SSE·WebSocket
+브라우저 localhost:3000
+  → Next 개발 전용 /auth·/users·/vms·/ops·/ws rewrite
+  → 개발 API Gateway
+
+ControlBox /admin API
+브라우저 admin.localhost:3000
+  → 개발 API Gateway 직접 호출
+  → 개발 Caddy의 제한된 localhost CORS
+```
+
+`DEV_API_PROXY_TARGET`은 `NODE_ENV=development`에서만 rewrite를 만들며 path 없는 HTTP(S) origin만 허용한다. `/admin/**`은 Next의 실제 페이지 경로와 충돌하므로 프록시 대상에서 제외한다. 개발 Caddy는 `ENABLE_LOCAL_DEV_CORS=true`일 때만 localhost·`*.localhost`·127.0.0.1·`[::1]` Origin을 정확히 반사하고, Ops WebSocket은 `LOCAL_DEV_ORIGINS`에 명시된 Origin만 추가 허용한다. wildcard CORS는 사용하지 않는다.
+
+기본 검증은 공개 키처럼 인증이 필요 없는 API로 라우팅부터 확인한다. 아래 원격 주소는 모두 목업이므로 실제 환경값으로 교체해야 한다.
+
+```bash
+# Next HTTP 프록시: 200과 한 개 이상의 key를 기대
+curl -sS http://localhost:3000/auth/.well-known/jwks.json | jq '.keys | length'
+
+# 허용 Origin: 응답에 정확한 Access-Control-Allow-Origin을 기대
+curl -sS -D - -o /dev/null \
+  -H 'Origin: http://localhost:3000' \
+  https://api.dev.example.test/auth/.well-known/jwks.json
+
+# 비허용 Origin: Access-Control-Allow-Origin이 없어야 함
+curl -sS -D - -o /dev/null \
+  -H 'Origin: https://untrusted.example.test' \
+  https://api.dev.example.test/auth/.well-known/jwks.json
+
+# API Docs 동일 출처 프록시
+curl -sS \
+  https://docs.dev.example.test/try/auth/.well-known/jwks.json \
+  | jq '.keys | length'
+```
+
+웹 콘솔은 잘못된 단기 티켓으로 WebSocket handshake를 보냈을 때 Origin 거부인 `403`이 아니라 인증 단계의 `401`까지 도달하면 Next proxy, Caddy route, Ops Origin allowlist가 연결된 것이다. 실제 콘솔 연결은 정상 발급된 일회성 티켓으로 다시 확인한다.
+
+운영은 추가 설정이 필요 없다. `SPRING_PROFILES_ACTIVE=prod`, `DOCS_DOMAIN=docs.invalid`, `ENABLE_LOCAL_DEV_CORS=false`, 빈 `LOCAL_DEV_ORIGINS`가 안전한 기본값이며, `DEV_API_PROXY_TARGET`은 production build에서 무시된다. 실제 `.env`, `.env.local`, 개발 CNAME, Authorization 헤더, 쿠키와 토큰은 Git에 올리지 않는다.
 
 Ops의 저장소 분석 clone은 기본 Squid allowlist egress proxy, 저장소·프로세스·메모리·CPU·시간 한계와 `--filter=blob:none`을 적용한다. 사용자 VM 내 Git에는 그 VM에서 도달 가능한 원격 proxy URL을 별도로 설정할 수 있다.
 
