@@ -2,6 +2,7 @@ package gj.cloud.user.api.controller;
 
 import gj.cloud.user.global.storage.ProfileImageStorage;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -23,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 // 서비스까지 도달한다 — `/uploads/profile-images`로만 매핑했다가 Caddy가 어떤 서비스로도 안
 // 보내고 프론트 catch-all로 흘려보내 이미지가 조용히 깨지던 문제(에러 없이 로드만 실패)로 발견.
 @Tag(name = "ProfileImage", description = "프로필 이미지 공개 서빙")
+@SecurityRequirements
 @RestController
 @RequestMapping("/users/uploads/profile-images")
 @RequiredArgsConstructor
@@ -30,7 +32,7 @@ public class ProfileImageController {
 
     private final ProfileImageStorage profileImageStorage;
 
-    @Operation(summary = "프로필 이미지 조회")
+    @Operation(summary = "프로필 이미지 조회", description = "UUID 파일명의 공개 프로필 이미지를 1년 immutable 캐시 정책으로 반환합니다.")
     @GetMapping("/{filename}")
     public ResponseEntity<Resource> getImage(@PathVariable String filename) {
         Resource resource = profileImageStorage.loadAsResource(filename);
