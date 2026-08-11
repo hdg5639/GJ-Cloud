@@ -83,6 +83,7 @@ Auth는 사용자 프로필이나 VM 데이터를 직접 소유하지 않는다.
 | 인증 기능 | `EMAIL_VERIFICATION_ENABLED` | 이메일 인증 기능 활성화 |
 | 연동 URL | `USER_SERVICE_URL`, `VM_SERVICE_URL` | 후속 서비스 호출 주소 |
 | 서비스 인증 | `USER_SERVICE_CLIENT_SECRET`, `VM_SERVICE_CLIENT_SECRET`, `OPS_SERVICE_CLIENT_SECRET` | 서비스별 client secret |
+| API 문서 | `OPENAPI_SERVER_URL` | `docs` 프로파일의 Try it out 대상 API Gateway URL |
 
 `JWT_PRIVATE_KEY`는 PKCS#8 DER, `JWT_PUBLIC_KEY`는 X.509 DER를 Base64 한 줄로 인코딩한 값이다. 다음처럼 한 쌍을 생성하고 출력값만 `.env`에 붙여넣는다. `JWT_PRIVATE_KEY`와 메일·서비스 secret을 로그나 Git에 남기지 않는다.
 
@@ -93,6 +94,8 @@ openssl pkey -in jwt-private.pem -pubout -outform DER | base64 | tr -d '\n'
 ```
 
 서비스별 client secret과 일반 비밀번호는 `openssl rand -base64 48`처럼 충분히 긴 난수로 각각 생성한다. Gmail SMTP를 사용하면 일반 계정 비밀번호가 아니라 2단계 인증 후 발급한 앱 비밀번호를 `MAIL_PASSWORD`에 넣는다. 전체 형식과 예시는 루트 `env.example`을 기준으로 한다.
+
+배포 환경의 OpenAPI JSON은 `prod,docs` 프로파일에서만 활성화되며 Swagger UI는 Ops 통합 문서에서 제공한다. 운영은 `prod`만 유지한다.
 
 ## 로컬 실행과 검증
 

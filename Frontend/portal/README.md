@@ -93,13 +93,26 @@ ControlBox의 `/deployment-operations`는 전체 사용자의 배포 대상·자
 | `NEXT_PUBLIC_ADMIN_API` | 관리자 API base URL. 없으면 User·VM URL로 fallback |
 | `ADMIN_DOMAIN` | 서버 middleware가 ControlBox 도메인을 구분하는 Host |
 
-개발용 `.env.local` 예시는 다음과 같다. 실제 주소는 환경에 맞게 바꾼다.
+로컬 백엔드까지 함께 실행하는 `.env.local` 예시는 다음과 같다.
 
 ```dotenv
 NEXT_PUBLIC_AUTH_API=http://localhost:8080
 NEXT_PUBLIC_USER_API=http://localhost:8081
 NEXT_PUBLIC_VM_API=http://localhost:8082
 NEXT_PUBLIC_OPS_API=http://localhost:8083
+ADMIN_DOMAIN=admin.localhost:3000
+```
+
+개발 서버 API를 사용해 포털 화면만 로컬에서 개발할 때는 다음처럼 모든 사용자 API base를 Next 개발 서버의 동일 origin으로 둔다. `next.config.ts`의 external rewrite가 HTTP·SSE·WebSocket을 개발 API로 프록시하므로 CORS와 `SameSite=Strict` Refresh Cookie 제약을 피한다. `DEV_API_PROXY_TARGET`은 서버 전용 변수이며 `next dev`에서만 프록시를 활성화한다.
+
+```dotenv
+DEV_API_PROXY_TARGET=https://dev-api.gamjabox.cloud
+NEXT_PUBLIC_AUTH_API=http://localhost:3000
+NEXT_PUBLIC_USER_API=http://localhost:3000
+NEXT_PUBLIC_VM_API=http://localhost:3000
+NEXT_PUBLIC_OPS_API=http://localhost:3000
+# /admin은 포털의 실제 페이지 경로와 겹치므로 개발 API를 직접 호출한다.
+NEXT_PUBLIC_ADMIN_API=https://dev-api.gamjabox.cloud
 ADMIN_DOMAIN=admin.localhost:3000
 ```
 
@@ -126,7 +139,7 @@ npm ci
 npm run dev
 ```
 
-기본 주소는 `http://localhost:3000`이다. 인증 이후 기능을 확인하려면 Auth·User·VM·Ops API와 각 서비스의 CORS 설정이 포털 origin을 허용해야 한다.
+기본 주소는 `http://localhost:3000`이다. 개발 API를 직접 호출하는 ControlBox 관리자 API와 별도 로컬 클라이언트는 개발 Caddy의 `ENABLE_LOCAL_DEV_CORS=true`와 필요한 WebSocket `LOCAL_DEV_ORIGINS`에 해당 origin이 허용되어야 한다. 운영은 두 값을 각각 `false`, 빈 값으로 유지한다.
 
 ## 검증 명령
 

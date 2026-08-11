@@ -1,0 +1,21 @@
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+    display-request-duration: true
+    operations-sorter: method
+    urls-primary-name: Ops
+    urls:
+      - name: Auth
+        url: /openapi/auth
+      - name: User
+        url: /openapi/user
+      - name: VM
+        url: /openapi/vm
+      - name: Ops
+        url: /openapi/ops
+  server-url: ${OPENAPI_SERVER_URL:http://localhost:9000}

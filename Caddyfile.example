@@ -20,6 +20,11 @@
 	# ─────────────────────────────────────
 	@admin_origin header Origin "https://{$ADMIN_DOMAIN}"
 	@user_origin header Origin "https://portal.gamjabox.cloud"
+	@docs_origin header Origin "https://{$DOCS_DOMAIN:docs.invalid}"
+	@local_dev_origin {
+		expression `"{$ENABLE_LOCAL_DEV_CORS:false}" == "true"`
+		header_regexp local_dev_origin Origin ^https?://(([a-z0-9-]+\.)*localhost|127\.0\.0\.1|\[::1\])(:[0-9]{1,5})?$
+	}
 
 	header @admin_origin Access-Control-Allow-Origin "https://{$ADMIN_DOMAIN}"
 	header @admin_origin Access-Control-Allow-Credentials "true"
@@ -27,13 +32,104 @@
 	header @user_origin Access-Control-Allow-Origin "https://portal.gamjabox.cloud"
 	header @user_origin Access-Control-Allow-Credentials "true"
 	header @user_origin Access-Control-Expose-Headers "Retry-After"
+	header @docs_origin Access-Control-Allow-Origin "https://{$DOCS_DOMAIN:docs.invalid}"
+	header @docs_origin Access-Control-Allow-Credentials "true"
+	header @docs_origin Access-Control-Expose-Headers "Retry-After"
+	header @local_dev_origin Access-Control-Allow-Origin "{http.request.header.Origin}"
+	header @local_dev_origin Access-Control-Allow-Credentials "true"
+	header @local_dev_origin Access-Control-Expose-Headers "Retry-After"
+	header @local_dev_origin +Vary "Origin"
 
 	@options method OPTIONS
 	handle @options {
 		header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-		header Access-Control-Allow-Headers "Authorization, Content-Type"
+		header Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With"
 		header Access-Control-Max-Age "86400"
 		respond 204
+	}
+
+	# ─────────────────────────────────────
+	# 개발 API 문서 — prod,docs 프로파일에서만 백엔드 문서가 활성화됨
+	# DOCS_DOMAIN 기본값은 라우팅되지 않는 docs.invalid라 운영에 영향을 주지 않음
+	# ─────────────────────────────────────
+	@docs_host host {$DOCS_DOMAIN:docs.invalid}
+	handle @docs_host {
+		@docs_root path /
+		handle @docs_root {
+			rewrite * /index.html
+			root * /srv/api-docs-ui
+			header Cache-Control "no-cache"
+			file_server
+		}
+
+		@docs_ui_assets path /index.html /styles.css /app.js
+		handle @docs_ui_assets {
+			root * /srv/api-docs-ui
+			header Cache-Control "no-cache"
+			file_server
+		}
+
+		@docs_auth path /openapi/auth /openapi/auth/
+		handle @docs_auth {
+			rewrite * /v3/api-docs
+			reverse_proxy auth:8080
+		}
+
+		@docs_user path /openapi/user /openapi/user/
+		handle @docs_user {
+			rewrite * /v3/api-docs
+			reverse_proxy user:8080
+		}
+
+		@docs_vm path /openapi/vm /openapi/vm/
+		handle @docs_vm {
+			rewrite * /v3/api-docs
+			reverse_proxy vm:8080
+		}
+
+		@docs_ops path /openapi/ops /openapi/ops/
+		handle @docs_ops {
+			rewrite * /v3/api-docs
+			reverse_proxy ops:8080
+		}
+
+		# Try it out은 문서 도메인의 동일 출처 프록시를 사용한다. /try만 제거하면
+		# 실제 Gateway 경로와 같아지므로 CORS 없이 쿠키와 Authorization을 전달할 수 있다.
+		@docs_try_auth path /try/auth /try/auth/*
+		handle @docs_try_auth {
+			uri strip_prefix /try
+			reverse_proxy auth:8080 {
+				header_down Set-Cookie "Path=/auth/token" "Path=/try/auth/token"
+			}
+		}
+
+		@docs_try_users path /try/users /try/users/* /try/admin/users /try/admin/users/* /try/admin/docs /try/admin/docs/*
+		handle @docs_try_users {
+			uri strip_prefix /try
+			reverse_proxy user:8080
+		}
+
+		@docs_try_vms path /try/vms /try/vms/* /try/admin/vms /try/admin/vms/*
+		handle @docs_try_vms {
+			uri strip_prefix /try
+			reverse_proxy vm:8080
+		}
+
+		@docs_try_ops path /try/ops /try/ops/* /try/ws/terminal/* /try/admin/system-workers /try/admin/system-workers/* /try/admin/deployment-operations /try/admin/deployment-operations/*
+		handle @docs_try_ops {
+			uri strip_prefix /try
+			reverse_proxy ops:8080
+		}
+
+		@legacy_swagger path /swagger-ui.html
+		redir @legacy_swagger / 302
+
+		@swagger_assets path /swagger-ui/*
+		handle @swagger_assets {
+			reverse_proxy ops:8080
+		}
+
+		respond 404
 	}
 
 	# ─────────────────────────────────────

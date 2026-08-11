@@ -53,7 +53,7 @@ ops:
   vm-ssh-username: ${VM_SSH_USERNAME:ubuntu}
   terminal-idle-timeout-minutes: 30
   allowed-origin: ${PORTAL_ORIGIN}
-  allowed-origins: ${PORTAL_ORIGIN},${ADMIN_ORIGIN}
+  allowed-origins: ${PORTAL_ORIGIN},${ADMIN_ORIGIN},${LOCAL_DEV_ORIGINS:}
   file-browser-max-edit-size-bytes: ${OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES:5242880}
   file-browser-max-upload-size-bytes: ${OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES:26214400}
   deployment-lock-ttl-seconds: 1800
