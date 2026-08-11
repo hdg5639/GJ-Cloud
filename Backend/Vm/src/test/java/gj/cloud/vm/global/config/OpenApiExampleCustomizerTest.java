@@ -16,6 +16,8 @@ import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OpenApiExampleCustomizerTest {
@@ -29,10 +31,10 @@ class OpenApiExampleCustomizerTest {
         requestSchema.addProperty("password", new StringSchema().example("keep-this-example"));
         requestSchema.addProperty("vmId", new StringSchema().format("uuid"));
         requestSchema.addProperty("inquiryId", new IntegerSchema());
-        ObjectSchema responseSchema = new ObjectSchema();
-        responseSchema.addProperty("nickname", new StringSchema());
-        responseSchema.addProperty("createdAt", new StringSchema().format("date-time"));
-        responseSchema.addProperty("success", new Schema<Boolean>().type("boolean"));
+        ObjectSchema responseDataSchema = new ObjectSchema();
+        responseDataSchema.addProperty("nickname", new StringSchema());
+        responseDataSchema.addProperty("createdAt", new StringSchema().format("date-time"));
+        ObjectSchema responseSchema = responseWrapper("PublicResponse");
 
         Parameter page = new Parameter()
                 .name("page")
@@ -41,11 +43,12 @@ class OpenApiExampleCustomizerTest {
         Operation operation = new Operation()
                 .addParametersItem(page)
                 .requestBody(requestBody("PublicRequest"))
-                .responses(responses("PublicResponse"));
+                .responses(responses("ApiResponsePublicResponse"));
         OpenAPI openApi = new OpenAPI()
                 .components(new Components()
                         .addSchemas("PublicRequest", requestSchema)
-                        .addSchemas("PublicResponse", responseSchema))
+                        .addSchemas("PublicResponse", responseDataSchema)
+                        .addSchemas("ApiResponsePublicResponse", responseSchema))
                 .path("/users/example", new PathItem().post(operation));
 
         customizer.customise(openApi);
@@ -58,10 +61,33 @@ class OpenApiExampleCustomizerTest {
                 .isEqualTo("8b7e1f6a-3d5c-4a9b-8c2e-1f0a9d7c6b5e");
         assertThat(requestSchema.getProperties().get("inquiryId").getExample()).isEqualTo(1);
         assertThat(page.getExample()).isEqualTo(1);
-        assertThat(responseSchema.getProperties().get("nickname").getExample()).isEqualTo("감자개발자");
-        assertThat(responseSchema.getProperties().get("createdAt").getExample())
+        assertThat(responseDataSchema.getProperties().get("nickname").getExample()).isEqualTo("감자개발자");
+        assertThat(responseDataSchema.getProperties().get("createdAt").getExample())
                 .isEqualTo("2026-08-12T12:00:00Z");
-        assertThat(responseSchema.getProperties().get("success").getExample()).isEqualTo(true);
+        Map<?, ?> responseExample = (Map<?, ?>) responseSchema.getExample();
+        assertThat(responseExample.get("success")).isEqualTo(true);
+        assertThat(responseExample.get("message")).isNull();
+        assertThat(responseExample.get("errorCode")).isNull();
+        Map<?, ?> responseData = (Map<?, ?>) responseExample.get("data");
+        assertThat(responseData.get("nickname")).isEqualTo("감자개발자");
+        assertThat(responseData.get("createdAt")).isEqualTo("2026-08-12T12:00:00Z");
+    }
+
+    @Test
+    void rendersVoidResponseDataAndSuccessMetadataAsNull() {
+        ObjectSchema responseSchema = responseWrapper(null);
+        OpenAPI openApi = new OpenAPI()
+                .components(new Components().addSchemas("ApiResponseVoid", responseSchema))
+                .path("/auth/register", new PathItem().post(
+                        new Operation().responses(responses("ApiResponseVoid"))));
+
+        customizer.customise(openApi);
+
+        Map<?, ?> responseExample = (Map<?, ?>) responseSchema.getExample();
+        assertThat(responseExample.get("success")).isEqualTo(true);
+        assertThat(responseExample.get("data")).isNull();
+        assertThat(responseExample.get("message")).isNull();
+        assertThat(responseExample.get("errorCode")).isNull();
     }
 
     @Test
@@ -97,5 +123,16 @@ class OpenApiExampleCustomizerTest {
                 .description("성공")
                 .content(new Content().addMediaType(
                         "application/json", new MediaType().schema(reference))));
+    }
+
+    private ObjectSchema responseWrapper(String dataSchemaName) {
+        ObjectSchema wrapper = new ObjectSchema();
+        wrapper.addProperty("success", new Schema<Boolean>().type("boolean"));
+        wrapper.addProperty("data", dataSchemaName == null
+                ? new ObjectSchema()
+                : new Schema<>().$ref("#/components/schemas/" + dataSchemaName));
+        wrapper.addProperty("message", new StringSchema());
+        wrapper.addProperty("errorCode", new StringSchema());
+        return wrapper;
     }
 }

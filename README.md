@@ -951,7 +951,7 @@ Ops 배포 워크플로우는 `Backend/Ops/**`뿐만 아니라 `compose.yaml`과
 
 `API Reference`는 서비스·서버 선택, 태그·경로·설명 검색, operation/tag 통계, Swagger 인증, Schema 접기를 제공한다. `API Flows`는 인증, VM, 배포, Preview 같은 기능별 호출 순서를 카테고리와 검색으로 탐색하며, 각 단계를 클릭하면 Reference의 실제 operation으로 연결한다. 플로우 단계는 현재 OpenAPI 스펙과 대조하므로 제거된 경로도 식별할 수 있다.
 
-Auth·User·VM·Ops는 `OpenApiExampleCustomizer`로 공개 비관리자 API의 요청 본문, path/query/header/cookie 입력과 응답 DTO에 안전한 목업 예시를 채운다. DTO에 직접 선언한 `@Schema(example=...)`가 있으면 그 값을 보존하고, 나머지는 필드명·자료형·format·enum을 기준으로 생성한다. 요청과 응답의 중첩 객체·배열·Map, `$ref` 스키마도 순회하되 `/admin/**`, `/internal/**`와 binary 파일은 자동 생성 대상에서 제외한다. 예시에는 `example.test`, 고정 UUID와 명백한 placeholder만 사용하며 실제 호스트·토큰·비밀번호를 넣지 않는다.
+Auth·User·VM·Ops는 `OpenApiExampleCustomizer`로 공개 비관리자 API의 요청 본문, path/query/header/cookie 입력과 응답 DTO에 안전한 목업 예시를 채운다. DTO에 직접 선언한 `@Schema(example=...)`가 있으면 그 값을 보존하고, 나머지는 필드명·자료형·format·enum을 기준으로 생성한다. 요청과 응답의 중첩 객체·배열·Map, `$ref` 스키마도 순회하며 `ApiResponse<T>`에는 실제 `T`를 펼친 완성형 응답 예시를 넣는다. 성공 응답의 `message`·`errorCode`와 `Void`의 `data`는 실제 계약처럼 `null`로 표시한다. `/admin/**`, `/internal/**`와 binary 파일은 자동 생성 대상에서 제외하며, 예시에는 `example.test`, 고정 UUID와 명백한 placeholder만 사용하고 실제 호스트·토큰·비밀번호를 넣지 않는다.
 
 Try it out 서버는 문서 origin의 `/try`를 사용한다. Caddy가 `/try` prefix를 제거해 실제 서비스로 전달하고 Swagger 요청에는 쿠키를 포함한다. Auth Refresh Cookie의 path도 `/try/auth/token`에 맞게 보정하므로 별도 CORS 없이 인증 흐름을 시험할 수 있다. 문서 호스트는 Cloudflare Access 같은 별도 접근 제어 뒤에 두는 것을 권장한다.
 

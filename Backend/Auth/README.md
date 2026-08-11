@@ -97,7 +97,7 @@ openssl pkey -in jwt-private.pem -pubout -outform DER | base64 | tr -d '\n'
 
 배포 환경의 OpenAPI JSON은 `prod,docs` 프로파일에서만 활성화되며 Swagger UI는 Ops 통합 문서에서 제공한다. 운영은 `prod`만 유지한다.
 
-`OpenApiExampleCustomizer`는 공개 비관리자 API의 요청 DTO, path/query/header/cookie 입력과 응답 DTO에 안전한 목업 예시를 자동 보완한다. 명시적 `@Schema(example=...)`는 덮어쓰지 않으며 `/admin/**`, `/internal/**`에는 적용하지 않는다.
+`OpenApiExampleCustomizer`는 공개 비관리자 API의 요청 DTO, path/query/header/cookie 입력과 응답 DTO에 안전한 목업 예시를 자동 보완한다. `ApiResponse<T>` 응답은 실제 `T`를 펼친 완성형 예시로 만들고 `Void`와 성공 메타데이터는 `null` 계약을 반영한다. 명시적 `@Schema(example=...)`는 덮어쓰지 않으며 `/admin/**`, `/internal/**`에는 적용하지 않는다.
 
 ## 로컬 실행과 검증
 
