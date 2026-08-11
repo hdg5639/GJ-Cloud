@@ -39,17 +39,27 @@ class SystemWorkerServiceTest {
     }
 
     @Test
-    void getMarksWorkerMissingImmediatelyWhenProxmoxVmWasDeleted() {
+    void getReturnsStoredStateWithoutBlockingOnProxmox() {
+        SystemWorkerEntity worker = activeWorker();
+        when(repository.findByRole(SystemWorkerRole.AUTO_PREVIEW)).thenReturn(Optional.of(worker));
+
+        var response = service.get();
+
+        assertThat(response.status()).isEqualTo("ACTIVE");
+        assertThat(response.internalIp()).isEqualTo("192.0.2.30");
+        verifyNoInteractions(vmClient);
+    }
+
+    @Test
+    void scheduledReconcileMarksWorkerMissingWhenProxmoxVmWasDeleted() {
         SystemWorkerEntity worker = activeWorker();
         when(repository.findByRole(SystemWorkerRole.AUTO_PREVIEW)).thenReturn(Optional.of(worker));
         when(vmClient.status(300)).thenReturn(missingVm());
 
-        var response = service.get();
+        service.scheduledReconcile();
 
-        assertThat(response.status()).isEqualTo("MISSING");
-        assertThat(response.internalIp()).isNull();
-        assertThat(response.provisioningStage()).isEqualTo("MISSING");
-        assertThat(response.lastError()).isEqualTo("Proxmox VM이 없습니다.");
+        verify(repository).save(argThat(saved ->
+                saved.getStatus().name().equals("MISSING") && saved.getInternalIp() == null));
     }
 
     @Test

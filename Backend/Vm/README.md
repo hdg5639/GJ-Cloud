@@ -46,10 +46,12 @@ cloud-init 네트워크는 `ipconfig0=ip=dhcp`로 설정하여 개발·운영이
 | 조직 | `/vms/organizations/**` | 조직·초대·멤버 역할·VM 공유 |
 | 협업 | `/vms/collaborations/**`, `/vms/collaboration-tags/**` | 메모·공지·요청과 태그 |
 | 관리자 | `/admin/vms/**` | 전체 VM 조회와 강제 삭제 |
-| Ops 내부 API | `/internal/ops/**`, `/internal/automation/**` | 권한 문맥과 배포 라우트 동기화 |
+| Ops 내부 API | `/internal/ops/**`, `/internal/automation/**` | 권한 문맥, 최대 500개 VM 존재 여부 일괄 조회, 배포 라우트 동기화 |
 | 시스템 워커 | `/internal/automation/system-workers/auto-preview/**` | 고정 사양 프로비저닝·전원·관리형 Preview CNAME/Tunnel |
 
 ControlBox는 `/admin/vms/page?page=1&size=50`로 삭제되지 않은 VM을 DB 페이징한다. 기존 `/admin/vms` 전체 목록은 호환성을 위해 유지하지만 신규 화면에서 사용하지 않는다. 활성 VM 수와 관리자 최근순, 협업 항목의 pinned+최근순, 태그의 사용량+최근순 조회는 해당 필터·정렬에 맞춘 복합/partial 인덱스를 사용한다. 대부분의 행을 반환하는 활성 Proxmox VMID 조회는 커버링 인덱스보다 sequential scan이 싸다는 실측 결과에 따라 불필요한 인덱스를 두지 않는다.
+
+Ops의 고아 배포 조정은 `/internal/automation/vms/existence`에 UUID를 최대 500개씩 전달해 삭제되지 않은 VM ID만 한 번에 확인한다. VM 서비스가 다른 내부 서비스를 호출할 때 사용하는 client-credentials 토큰은 만료 전 안전 여유를 두고 client ID별로 캐시하며, 동시 갱신 요청은 하나의 발급 요청을 공유한다.
 
 ## 데이터와 외부 의존성
 
@@ -83,7 +85,7 @@ ControlBox는 `/admin/vms/page?page=1&size=50`로 삭제되지 않은 VM을 DB �
 | CNAME 정책 | `RESERVED_SUBDOMAINS` | 사용자 지정 서브도메인 금지 목록 |
 | 시스템 워커 | `SYSTEM_WORKER_AUTO_PREVIEW_ENABLED`, `SYSTEM_WORKER_AUTO_PREVIEW_VMID`, `SYSTEM_WORKER_AUTO_PREVIEW_CORES`, `SYSTEM_WORKER_AUTO_PREVIEW_MEMORY_MB`, `SYSTEM_WORKER_AUTO_PREVIEW_DISK_GB`, `SYSTEM_WORKER_AUTO_PREVIEW_TEMPLATE_VMID` | Ops 서비스와 공유하는 고정 워커 계약 |
 
-Auto Preview Worker 기본값은 VMID 300, 4 vCPU, 5120MB RAM, 80GB disk, template VMID 9026이다. VM 서비스는 요청과 서버 설정이 정확히 일치할 때만 생성하며, 예약 VMID의 VM 이름이 전용 worker 식별자와 다르면 조작을 거부한다. 활성 worker 삭제 API는 없고, 클론이 완료된 최초 생성 실패 보상에서만 생성 중인 VM을 정리한다.
+Auto Preview Worker 기본값은 VMID 300, 4 vCPU, 5120MB RAM, 80GB disk, template VMID 9026이다. VM 서비스는 요청과 서버 설정이 정확히 일치할 때만 생성하며, 예약 VMID의 VM 이름이 전용 worker 식별자와 다르면 조작을 거부한다. 활성 worker 삭제 API는 없고, 클론이 완료된 최초 생성 실패 보상에서만 생성 중인 VM을 정리한다. 생성 파이프라인은 Guest Agent IP가 준비될 때까지 대기하지만, 운영 상태 조회는 최초 20초 대기·재시도 없이 IP를 한 번만 확인하고 전체 요청을 10초로 제한한다.
 
 `PROXMOX_URL`은 `https://pve.example.internal:8006/api2/json`처럼 API root까지 포함하고, Token ID는 `<user>@<realm>!<token-name>` 형식으로 넣는다. VMID 범위는 Proxmox에서 이미 사용하거나 다른 환경에 예약한 범위와 겹치지 않게 개발·운영별로 분리한다.
 

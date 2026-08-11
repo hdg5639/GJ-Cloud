@@ -35,27 +35,11 @@ public class SystemWorkerService {
         this.vmClient = vmClient; this.runtime = runtime; this.executor = executor;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public SystemWorkerResponse get() {
-        var worker = repository.findByRole(SystemWorkerRole.AUTO_PREVIEW);
-        if (worker.isEmpty()) return SystemWorkerResponse.notConfigured();
-        SystemWorkerEntity current = worker.get();
-        if (current.getStatus() == SystemWorkerStatus.PROVISIONING) return SystemWorkerResponse.from(current);
-
-        try {
-            SystemWorkerVmResponse vm = vmClient.status(current.getVmId());
-            if (!vm.exists()) return SystemWorkerResponse.from(repository.save(current.missing(vm.node())));
-            if (current.getStatus() == SystemWorkerStatus.MISSING) {
-                SystemWorkerStatus recoveredStatus = "RUNNING".equals(vm.powerState())
-                        ? SystemWorkerStatus.DEGRADED : SystemWorkerStatus.STOPPED;
-                current = repository.save(current.observed(recoveredStatus, vm.node(), vm.internalIp(),
-                        "Proxmox VM이 다시 확인되었습니다. Reconcile로 Runtime 상태를 확인해주세요."));
-            }
-        } catch (Exception e) {
-            // ControlBox 자체를 막지 않는다. VM 서비스 장애와 실제 VM 부재를 혼동해 재생성을 허용해서도 안 된다.
-            log.warn("Auto Preview Worker 존재 여부 확인 실패, 마지막 저장 상태를 반환합니다: {}", e.getMessage());
-        }
-        return SystemWorkerResponse.from(current);
+        return repository.findByRole(SystemWorkerRole.AUTO_PREVIEW)
+                .map(SystemWorkerResponse::from)
+                .orElseGet(SystemWorkerResponse::notConfigured);
     }
 
     @Transactional
@@ -112,25 +96,29 @@ public class SystemWorkerService {
     public SystemWorkerResponse reconcile() {
         SystemWorkerEntity worker = requireWorker();
         SystemWorkerVmResponse vm = vmClient.status(worker.getVmId());
+        return reconcileObserved(worker, vm);
+    }
+
+    private SystemWorkerResponse reconcileObserved(SystemWorkerEntity worker, SystemWorkerVmResponse vm) {
         if (!vm.exists()) return SystemWorkerResponse.from(repository.save(worker.missing(vm.node())));
         if (!"RUNNING".equals(vm.powerState())) return SystemWorkerResponse.from(repository.save(worker.observed(SystemWorkerStatus.STOPPED, vm.node(), null, null)));
-        SystemWorkerEntity observed = worker.observed(SystemWorkerStatus.DEGRADED, vm.node(), vm.internalIp(), null);
+        // Guest Agent의 단발 IP 조회가 잠시 실패해도 이미 검증된 주소를 버리지 않는다.
+        String effectiveIp = vm.internalIp() == null ? worker.getInternalIp() : vm.internalIp();
+        SystemWorkerEntity observed = worker.observed(SystemWorkerStatus.DEGRADED, vm.node(), effectiveIp, null);
         boolean resourceMatches = vm.cores() == worker.getCores() && vm.memoryMb() == worker.getMemoryMb()
                 && vm.diskGb() >= worker.getDiskGb();
         if (!resourceMatches) {
-            observed = observed.observed(SystemWorkerStatus.DEGRADED, vm.node(), vm.internalIp(),
+            observed = observed.observed(SystemWorkerStatus.DEGRADED, vm.node(), effectiveIp,
                     "워커 리소스가 등록된 사양과 다릅니다.");
-        } else if (runtime.healthy(observed)) observed = observed.healthy(vm.node(), vm.internalIp());
-        else observed = observed.observed(SystemWorkerStatus.DEGRADED, vm.node(), vm.internalIp(), "SSH 또는 Docker Runtime 검사에 실패했습니다.");
+        } else if (runtime.healthy(observed)) observed = observed.healthy(vm.node(), effectiveIp);
+        else observed = observed.observed(SystemWorkerStatus.DEGRADED, vm.node(), effectiveIp, "SSH 또는 Docker Runtime 검사에 실패했습니다.");
         return SystemWorkerResponse.from(repository.save(observed));
     }
 
     public SystemWorkerResponse action(String action) {
         SystemWorkerEntity worker = requireWorker();
         SystemWorkerVmResponse vm = vmClient.action(worker.getVmId(), action);
-        SystemWorkerStatus status = "STOPPED".equals(vm.powerState()) ? SystemWorkerStatus.STOPPED : SystemWorkerStatus.DEGRADED;
-        repository.save(worker.observed(status, vm.node(), vm.internalIp(), null));
-        return "stop".equals(action) ? get() : reconcile();
+        return reconcileObserved(worker, vm);
     }
 
     public SystemWorkerResponse repair() {
@@ -155,7 +143,7 @@ public class SystemWorkerService {
         repository.findByRole(SystemWorkerRole.AUTO_PREVIEW)
                 .filter(worker -> worker.getStatus() != SystemWorkerStatus.PROVISIONING)
                 .ifPresent(worker -> {
-                    try { reconcile(); }
+                    try { reconcileObserved(worker, vmClient.status(worker.getVmId())); }
                     catch (Exception e) { log.warn("Auto Preview Worker 주기 조정 실패: {}", e.getMessage()); }
                 });
     }

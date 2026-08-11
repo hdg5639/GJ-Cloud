@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +35,7 @@ class SystemWorkerProvisioningServiceTest {
         lenient().when(proxmoxClient.resizeDisk(300, 80)).thenReturn(Mono.empty());
         lenient().when(proxmoxClient.startVm(300)).thenReturn(Mono.empty());
         lenient().when(proxmoxClient.waitForIpAssignment(300)).thenReturn(Mono.just("192.0.2.10"));
+        lenient().when(proxmoxClient.findVmIpOnce(300)).thenReturn(Mono.just(Optional.of("192.0.2.10")));
         lenient().when(proxmoxClient.getSystemVmInfo(300))
                 .thenReturn(Mono.just(new ProxmoxClient.SystemVmInfo(properties.getName(), 4, 5120, 80, "running")));
     }
@@ -72,6 +74,17 @@ class SystemWorkerProvisioningServiceTest {
                 .isInstanceOf(IllegalStateException.class);
 
         verify(proxmoxClient).deleteVm(300);
+    }
+
+    @Test
+    void statusUsesSingleIpProbeWithoutProvisioningWait() {
+        when(proxmoxClient.getProxmoxVmids()).thenReturn(Mono.just(Set.of(300)));
+
+        var response = service.status(300).block();
+
+        org.assertj.core.api.Assertions.assertThat(response.internalIp()).isEqualTo("192.0.2.10");
+        verify(proxmoxClient).findVmIpOnce(300);
+        verify(proxmoxClient, never()).waitForIpAssignment(300);
     }
 
     private SystemWorkerProvisionRequest request(int vmId) {

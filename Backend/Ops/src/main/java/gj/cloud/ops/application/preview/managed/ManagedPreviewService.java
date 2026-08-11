@@ -30,7 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -94,7 +96,18 @@ public class ManagedPreviewService {
 
     @Transactional
     public List<ManagedPreviewResponse> list(String userId) {
-        return repository.findAllByUserIdOrderByCreatedAtDesc(userId).stream().map(this::refresh)
+        List<ManagedPreviewDeploymentEntity> previews = repository.findAllByUserIdOrderByCreatedAtDesc(userId);
+        List<String> deploymentIds = previews.stream()
+                .filter(preview -> preview.getDeploymentId() != null && OCCUPYING.contains(preview.getStatus()))
+                .map(ManagedPreviewDeploymentEntity::getDeploymentId)
+                .distinct()
+                .toList();
+        Map<String, DeploymentEntity> deployments = new HashMap<>();
+        if (!deploymentIds.isEmpty()) {
+            deploymentRepository.findAllById(deploymentIds)
+                    .forEach(deployment -> deployments.put(deployment.getId(), deployment));
+        }
+        return previews.stream().map(preview -> refresh(preview, deployments.get(preview.getDeploymentId())))
                 .map(ManagedPreviewResponse::from).toList();
     }
 
@@ -106,6 +119,14 @@ public class ManagedPreviewService {
     private ManagedPreviewDeploymentEntity refresh(ManagedPreviewDeploymentEntity preview) {
         if (preview.getDeploymentId() == null || !OCCUPYING.contains(preview.getStatus())) return preview;
         DeploymentEntity deployment = deploymentRepository.findById(preview.getDeploymentId()).orElse(null);
+        return refresh(preview, deployment);
+    }
+
+    private ManagedPreviewDeploymentEntity refresh(
+            ManagedPreviewDeploymentEntity preview,
+            DeploymentEntity deployment
+    ) {
+        if (preview.getDeploymentId() == null || !OCCUPYING.contains(preview.getStatus())) return preview;
         if (deployment == null) return preview;
         ManagedPreviewStatus mapped = switch (deployment.getStatus()) {
             case QUEUED -> ManagedPreviewStatus.QUEUED;

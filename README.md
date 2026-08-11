@@ -135,6 +135,8 @@ Redis — 웹 콘솔/미디어 스트리밍 티켓, 배포 동시 실행 락, AI
 - 사용자·VM 관리자 목록은 50건씩 DB에서 페이징하고, VM 화면은 현재 페이지에 포함된 소유자만 User 서비스에서 batch 조회한다.
 - Docs는 `MEDIUMTEXT` 본문을 제외한 summary 모델로 사용자 18건·관리자 20건씩 페이징한다. 한국어 검색은 제목·요약·카테고리와 태그의 MySQL n-gram FULLTEXT index를 사용한다.
 - Ops의 최근 배포 이벤트는 전체 이력을 JVM에서 거르지 않고 PostgreSQL `DISTINCT ON`으로 최신 event만 일괄 조회한다. 자동 재배포와 재시작 복구도 전체 target 및 대상별 N+1 조회 대신 projection과 set-based query를 사용한다.
+- 고아 배포 조정은 target마다 VM 서비스를 호출하지 않고 ID projection과 최대 500개 단위 존재 여부 API를 사용한다. 관리형 Preview 목록의 deployment 상태도 한 번에 조회해 N+1을 제거한다.
+- Ops·VM의 client-credentials 토큰은 만료 전 안전 여유를 두고 메모리에 캐시하며, 동시 갱신은 하나로 합쳐 Auth 토큰 발급이 내부 호출마다 반복되지 않게 한다.
 - Auth의 만료 계정 정리와 탈퇴 재시도는 상태·시각 복합 index를 사용해 각각 최대 1,000건·100건 단위로 처리한다.
 
 개발 서버와 같은 DB 버전에서 동일한 10만~100만 건 합성 데이터로 `EXPLAIN ANALYZE`를 실행한 결과다. 수치는 DB 내부 실행 시간이며 HTTP·인증·직렬화·네트워크 지연은 포함하지 않는다.
@@ -350,7 +352,7 @@ AI 검수 결과는 읽기 전용 조언으로 끝나지 않는다. 검수 내�
 
 사용자는 배포 대상 이름과 실제 API Base URL을 지정한다. VM을 가진 사용자는 기존 VM Target으로, VM이 없는 사용자는 GamjaBox 관리형 Worker로 배포할 수 있다. 관리형 Preview는 배포별 컨테이너·Compose project·포트·호스트명을 격리하고 FREE 6시간, PRO 24시간 TTL 후 자동 정리한다. 사용자에게는 Preview URL·상태·만료 시각만 보이며 worker VMID·내부 IP·SSH 정보는 노출하지 않는다.
 
-ControlBox의 **시스템 인프라** 화면에서는 `AUTO_PREVIEW` Worker의 VMID 300, 4 vCPU, 5GB RAM, 80GB 사양과 프로비저닝 단계를 확인하고 시작·정지·재부팅·Reconcile·Runtime Repair·일회용 콘솔을 실행할 수 있다. 화면 진입 시 저장된 상태만 표시하지 않고 Proxmox에 예약 VMID가 실제로 존재하는지 다시 확인한다. VM이 직접 삭제됐다면 기존 DB 상태가 `ACTIVE`, `DEGRADED`, `STOPPED`, `ERROR` 중 무엇이었든 `MISSING`으로 전환해 **Worker 재생성** 버튼을 노출하며, 요청 시점에도 실제 부재를 재검증한다. 실제 프로비저닝 중이거나 예약 VMID에 VM이 존재하면 중복 생성은 거부한다.
+ControlBox의 **시스템 인프라** 화면에서는 `AUTO_PREVIEW` Worker의 VMID 300, 4 vCPU, 5GB RAM, 80GB 사양과 프로비저닝 단계를 확인하고 시작·정지·재부팅·Reconcile·Runtime Repair·일회용 콘솔을 실행할 수 있다. 일반 화면 조회는 마지막 조정 상태를 DB에서 즉시 반환하고, Proxmox·Guest Agent·SSH/Docker 확인은 기본 60초 주기 조정 또는 수동 Reconcile에서 수행해 화면 폴링이 인프라 조회 대기에 묶이지 않는다. VM이 직접 삭제됐다면 다음 자동 조정 또는 Reconcile에서 `MISSING`으로 전환해 **Worker 재생성** 버튼을 노출하며, 재생성 요청 시점에도 실제 부재를 재검증한다. 실제 프로비저닝 중이거나 예약 VMID에 VM이 존재하면 중복 생성은 거부한다.
 
 <details>
 <summary><strong>🔍 분석 엔진 상세</strong> — 입력 보안, OpenAPI 정규화, 서비스 이해와 Scenario 의미 계획</summary>

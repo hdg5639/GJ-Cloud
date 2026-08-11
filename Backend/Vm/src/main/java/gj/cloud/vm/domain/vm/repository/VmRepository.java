@@ -6,6 +6,7 @@ import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
 import java.util.UUID;
 
 public interface VmRepository extends ReactiveCrudRepository<VmEntity, UUID> {
@@ -15,6 +16,9 @@ public interface VmRepository extends ReactiveCrudRepository<VmEntity, UUID> {
 
     @Query("SELECT vmid FROM vms WHERE vmid IS NOT NULL AND deleted_at IS NULL")
     Flux<Integer> findAllActiveVmids();
+
+    @Query("SELECT id FROM vms WHERE id IN (:ids) AND deleted_at IS NULL")
+    Flux<UUID> findExistingIds(Collection<UUID> ids);
 
     @Query("SELECT * FROM vms WHERE deleted_at IS NULL ORDER BY created_at DESC")
     Flux<VmEntity> findAllNotDeleted();

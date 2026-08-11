@@ -295,6 +295,22 @@ public class ProxmoxClient {
                 .doOnError(e -> log.error("IP 획득 실패: vmid={}", vmid));
     }
 
+    /**
+     * 상태 조회용 단발 IP 확인.
+     *
+     * 프로비저닝 경로의 {@link #waitForIpAssignment(int)}와 달리 최초 20초 대기나 재시도를 하지 않는다.
+     * Guest Agent가 잠시 응답하지 않더라도 상태 조회 전체를 오래 붙잡지 않고 IP 없음으로 반환한다.
+     */
+    public Mono<Optional<String>> findVmIpOnce(int vmid) {
+        return getVmIp(vmid)
+                .map(Optional::of)
+                .timeout(Duration.ofSeconds(3))
+                .onErrorResume(error -> {
+                    log.debug("VM 상태 조회 중 IP 단발 확인 실패: vmid={}, error={}", vmid, error.getMessage());
+                    return Mono.just(Optional.empty());
+                });
+    }
+
     private Mono<String> getVmIp(int vmid) {
         return proxmoxWebClient.get()
                 .uri("/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces", props.getNode(), vmid)
