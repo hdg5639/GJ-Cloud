@@ -2,6 +2,7 @@ package gj.cloud.vm.global.auth;
 
 import gj.cloud.vm.global.config.AuthProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -13,6 +14,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ServiceTokenClientTest {
+
+    @Test
+    void startsAsSpringBeanWithoutDefaultConstructor() {
+        AuthProperties properties = new AuthProperties();
+        new ApplicationContextRunner()
+                .withBean(AuthProperties.class, () -> properties)
+                .withBean(ServiceTokenClient.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ServiceTokenClient.class);
+                });
+    }
 
     @Test
     void sharesOneRefreshAndReusesToken() {

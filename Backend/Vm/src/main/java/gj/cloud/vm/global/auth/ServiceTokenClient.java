@@ -4,6 +4,7 @@ import gj.cloud.vm.global.auth.dto.ServiceTokenRequest;
 import gj.cloud.vm.global.auth.dto.ServiceTokenResponse;
 import gj.cloud.vm.global.config.AuthProperties;
 import gj.cloud.vm.global.response.ApiResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -28,6 +29,7 @@ public class ServiceTokenClient {
     private final ConcurrentMap<String, CachedToken> cache = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Mono<String>> refreshes = new ConcurrentHashMap<>();
 
+    @Autowired
     public ServiceTokenClient(AuthProperties authProperties) {
         this(authProperties, WebClient.create(), Clock.systemUTC());
     }
