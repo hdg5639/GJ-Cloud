@@ -20,6 +20,7 @@
 	# ─────────────────────────────────────
 	@admin_origin header Origin "https://{$ADMIN_DOMAIN}"
 	@user_origin header Origin "https://portal.gamjabox.cloud"
+	@docs_origin header Origin "https://{$DOCS_DOMAIN:docs.invalid}"
 
 	header @admin_origin Access-Control-Allow-Origin "https://{$ADMIN_DOMAIN}"
 	header @admin_origin Access-Control-Allow-Credentials "true"
@@ -27,6 +28,9 @@
 	header @user_origin Access-Control-Allow-Origin "https://portal.gamjabox.cloud"
 	header @user_origin Access-Control-Allow-Credentials "true"
 	header @user_origin Access-Control-Expose-Headers "Retry-After"
+	header @docs_origin Access-Control-Allow-Origin "https://{$DOCS_DOMAIN:docs.invalid}"
+	header @docs_origin Access-Control-Allow-Credentials "true"
+	header @docs_origin Access-Control-Expose-Headers "Retry-After"
 
 	@options method OPTIONS
 	handle @options {
@@ -34,6 +38,44 @@
 		header Access-Control-Allow-Headers "Authorization, Content-Type"
 		header Access-Control-Max-Age "86400"
 		respond 204
+	}
+
+	# ─────────────────────────────────────
+	# 개발 API 문서 — prod,docs 프로파일에서만 백엔드 문서가 활성화됨
+	# DOCS_DOMAIN 기본값은 라우팅되지 않는 docs.invalid라 운영에 영향을 주지 않음
+	# ─────────────────────────────────────
+	@docs_host host {$DOCS_DOMAIN:docs.invalid}
+	handle @docs_host {
+		@docs_auth path /openapi/auth /openapi/auth/
+		handle @docs_auth {
+			rewrite * /v3/api-docs
+			reverse_proxy auth:8080
+		}
+
+		@docs_user path /openapi/user /openapi/user/
+		handle @docs_user {
+			rewrite * /v3/api-docs
+			reverse_proxy user:8080
+		}
+
+		@docs_vm path /openapi/vm /openapi/vm/
+		handle @docs_vm {
+			rewrite * /v3/api-docs
+			reverse_proxy vm:8080
+		}
+
+		@docs_ops path /openapi/ops /openapi/ops/
+		handle @docs_ops {
+			rewrite * /v3/api-docs
+			reverse_proxy ops:8080
+		}
+
+		@docs_root path /
+		redir @docs_root /swagger-ui.html 302
+
+		handle {
+			reverse_proxy ops:8080
+		}
 	}
 
 	# ─────────────────────────────────────

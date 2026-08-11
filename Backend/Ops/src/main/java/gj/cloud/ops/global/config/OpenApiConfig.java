@@ -1,4 +1,4 @@
-package gj.cloud.vm.global.config;
+package gj.cloud.ops.global.config;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -23,8 +23,8 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .addServersItem(new Server().url(serverUrl).description("API Gateway"))
                 .info(new Info()
-                        .title("GJ Cloud VM API")
-                        .description("VM 관리 서비스 API")
+                        .title("GJ Cloud Ops API")
+                        .description("운영 자동화 서비스 API")
                         .version("v1"))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))
                 .components(new Components()

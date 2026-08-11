@@ -137,6 +137,7 @@ Ops는 활성 배포 대상을 기본 5분마다 VM 서비스 정본과 대조�
 | 포털 | `PORTAL_ORIGIN`, `ADMIN_ORIGIN` | 사용자 콘솔·ControlBox worker 콘솔 WebSocket Origin allowlist |
 | 관리형 Preview | `SYSTEM_WORKER_AUTO_PREVIEW_*`, `MANAGED_PREVIEW_PORT_*`, `MANAGED_PREVIEW_*_TTL_HOURS` | 전용 워커 사양·VMID·포트 풀·플랜별 TTL |
 | 고아 배포 조정 | `OPS_DEPLOYMENT_ORPHAN_RECONCILE_INTERVAL_MS` | VM 정본과 활성 배포 대상을 대조하는 주기(기본 300000ms) |
+| API 문서 | `OPENAPI_SERVER_URL` | `docs` 프로파일의 Try it out 대상 API Gateway URL |
 
 `OPS_KEY_ENCRYPTION_SECRET`와 `OPS_BACKUP_ENCRYPTION_SECRET`은 각각 `openssl rand -base64 24`로 생성한 서로 다른 UTF-8 32바이트 값을 사용한다. 관리 SSH 키나 암호화 백업이 생성된 뒤에 이 값을 변경하면 기존 데이터를 복호화할 수 없으므로 서버 재배포 때도 동일한 값을 유지한다.
 
@@ -145,6 +146,8 @@ Ops는 활성 배포 대상을 기본 5분마다 VM 서비스 정본과 대조�
 GitHub App ID는 숫자이고 OAuth Client ID는 보통 `Iv1...` 형식인 서로 다른 값이다. `GITHUB_APP_PRIVATE_KEY`에는 GitHub App에서 발급한 PEM 전체를 `\n` 문자로 연결해 넣고, OAuth client secret과 webhook secret도 각각 Dashboard 값으로 설정한다. installation token 404가 발생하면 App ID와 private key가 해당 installation의 App과 일치하는지 먼저 확인한다. `PORTAL_ORIGIN`은 브라우저가 실제로 접속하는 `https://portal.gamjabox.cloud` 같은 origin만 넣고 path는 포함하지 않는다.
 
 Blueprint 검색은 기본 Registry fallback이므로 Elasticsearch가 없으면 `BLUEPRINT_SEARCH_ENABLED=false`를 유지한다. 사용할 때만 연결 URL과 인증 정보를 설정하고, 시작 시 재색인은 관리된 단일 인스턴스에서만 활성화한다. 전체 값 예시는 루트 `env.example`을 기준으로 하며 모든 `CHANGE_ME_*`를 배포 전에 교체한다.
+
+배포 환경에서 `prod,docs` 프로파일을 활성화하면 Ops가 Auth·User·VM·Ops 스펙을 선택할 수 있는 통합 Swagger UI를 제공한다. 다른 세 서비스는 OpenAPI JSON만 제공하며 운영은 `prod`만 유지해 문서 엔드포인트를 비활성화한다.
 
 ## 로컬 실행과 검증
 

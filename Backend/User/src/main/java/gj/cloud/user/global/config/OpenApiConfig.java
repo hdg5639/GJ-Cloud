@@ -21,7 +21,7 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI openAPI() {
         return new OpenAPI()
-                .addServersItem(new Server().url(serverUrl).description("Local"))
+                .addServersItem(new Server().url(serverUrl).description("API Gateway"))
                 .info(new Info()
                         .title("GJ Cloud User API")
                         .description("사용자 서버 API")

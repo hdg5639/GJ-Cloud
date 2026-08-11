@@ -84,12 +84,15 @@ Ops의 고아 배포 조정은 `/internal/automation/vms/existence`에 UUID를 �
 | Cloudflare | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_BASE_DOMAIN` | DNS·Tunnel·Access와 기본 도메인 |
 | CNAME 정책 | `RESERVED_SUBDOMAINS` | 사용자 지정 서브도메인 금지 목록 |
 | 시스템 워커 | `SYSTEM_WORKER_AUTO_PREVIEW_ENABLED`, `SYSTEM_WORKER_AUTO_PREVIEW_VMID`, `SYSTEM_WORKER_AUTO_PREVIEW_CORES`, `SYSTEM_WORKER_AUTO_PREVIEW_MEMORY_MB`, `SYSTEM_WORKER_AUTO_PREVIEW_DISK_GB`, `SYSTEM_WORKER_AUTO_PREVIEW_TEMPLATE_VMID` | Ops 서비스와 공유하는 고정 워커 계약 |
+| API 문서 | `OPENAPI_SERVER_URL` | `docs` 프로파일의 Try it out 대상 API Gateway URL |
 
 Auto Preview Worker 기본값은 VMID 300, 4 vCPU, 5120MB RAM, 80GB disk, template VMID 9026이다. VM 서비스는 요청과 서버 설정이 정확히 일치할 때만 생성하며, 예약 VMID의 VM 이름이 전용 worker 식별자와 다르면 조작을 거부한다. 활성 worker 삭제 API는 없고, 클론이 완료된 최초 생성 실패 보상에서만 생성 중인 VM을 정리한다. 생성 파이프라인은 Guest Agent IP가 준비될 때까지 대기하지만, 운영 상태 조회는 최초 20초 대기·재시도 없이 IP를 한 번만 확인하고 전체 요청을 10초로 제한한다.
 
 `PROXMOX_URL`은 `https://pve.example.internal:8006/api2/json`처럼 API root까지 포함하고, Token ID는 `<user>@<realm>!<token-name>` 형식으로 넣는다. VMID 범위는 Proxmox에서 이미 사용하거나 다른 환경에 예약한 범위와 겹치지 않게 개발·운영별로 분리한다.
 
 Cloudflare의 Account ID, Zone ID, Tunnel UUID는 Dashboard에서 확인하고 API Token 권한은 DNS·Tunnel·Access 관리에 필요한 최소 범위로 제한한다. `RESERVED_SUBDOMAINS`는 `www,portal,admin,api,ssh`처럼 쉼표로 구분한다. DB·Redis 비밀번호와 서비스 secret은 서버별로 별도 생성하며, 전체 형식과 예시는 루트 `env.example`을 기준으로 한다.
+
+배포 환경의 OpenAPI JSON은 `prod,docs` 프로파일에서만 활성화되며 Swagger UI는 Ops 통합 문서에서 제공한다. 운영은 `prod`만 유지한다.
 
 ## 로컬 실행과 검증
 
