@@ -10,6 +10,7 @@ services:
     volumes:
       - "${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile:ro"
       - "${LANDING_PATH:-./gamjabox-landing}:/srv/gamjabox-landing:ro"
+      - "${API_DOCS_UI_PATH:-./api-docs-ui}:/srv/api-docs-ui:ro"
     restart: unless-stopped
     networks:
       - loc-net
@@ -267,6 +268,7 @@ services:
       VM_SSH_USERNAME: ${VM_SSH_USERNAME:-ubuntu}
       PORTAL_ORIGIN: ${PORTAL_ORIGIN:?PORTAL_ORIGIN is required}
       ADMIN_ORIGIN: ${ADMIN_ORIGIN:-https://admin.gamjabox.cloud}
+      LOCAL_DEV_ORIGINS: ${LOCAL_DEV_ORIGINS:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
       AI_MODEL_STANDARD: ${AI_MODEL_STANDARD:?AI_MODEL_STANDARD is required}
       AI_MODEL_ESCALATED: ${AI_MODEL_ESCALATED:?AI_MODEL_ESCALATED is required}

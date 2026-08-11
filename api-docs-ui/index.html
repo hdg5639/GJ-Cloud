@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#0b110d">
+    <title>GamjaBox API Console</title>
+    <link rel="stylesheet" href="/swagger-ui/swagger-ui.css">
+    <link rel="stylesheet" href="/styles.css?v=12">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand" aria-label="GamjaBox">
+          <span class="brand-symbol" aria-hidden="true">
+            <svg viewBox="0 0 38 38" role="img">
+              <path d="M19 2.5 32.8 10v16L19 33.5 5.2 26V10L19 2.5Z" fill="currentColor"/>
+              <path d="M12.2 13.2h13.6v3.1H16v5.4h6.6v-2.1h-3v-2.8h6.2v7.8c-1.7 1.2-4 1.9-6.8 1.9-5.2 0-8.8-3-8.8-7.7 0-2.2.7-4.1 2-5.6Z" fill="#07100a"/>
+            </svg>
+          </span>
+          <span class="brand-name">Gamja<span>Box</span></span>
+        </div>
+
+        <div class="sidebar-intro">
+          <span class="eyebrow">Developer platform</span>
+          <h1>API Console</h1>
+          <p>서비스 계약을 살펴보고 개발 API를 바로 실행해 보세요.</p>
+        </div>
+
+        <nav class="service-nav" aria-label="API 서비스 선택">
+          <p class="nav-label">Services</p>
+          <div id="service-list" class="service-list"></div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="environment-card">
+            <span class="status-dot" aria-hidden="true"></span>
+            <div>
+              <strong>Development</strong>
+              <span>Protected by Cloudflare Access</span>
+            </div>
+          </div>
+          <p>내부 개발 및 배포 검증 전용</p>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="title-group">
+            <div class="breadcrumb">
+              <span>API Console</span>
+              <span aria-hidden="true">/</span>
+              <strong id="breadcrumb-service">Ops</strong>
+            </div>
+            <div class="page-title-row">
+              <div>
+                <h2 id="service-title">Ops API</h2>
+                <p id="service-description">배포, 터미널, 파일, Preview 자동화</p>
+              </div>
+              <span id="service-badge" class="service-badge">OPS</span>
+            </div>
+            <div class="view-tabs" role="tablist" aria-label="문서 보기 선택">
+              <button id="reference-tab" class="view-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="reference-view">
+                API Reference
+              </button>
+              <button id="flows-tab" class="view-tab" type="button" role="tab" aria-selected="false" aria-controls="flows-view">
+                API Flows
+              </button>
+            </div>
+          </div>
+
+          <div class="topbar-actions">
+            <button id="toggle-schemas" class="button button-secondary" type="button" disabled aria-expanded="true">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4.5h14v3H3v-3Zm0 4h14v3H3v-3Zm0 4h14v3H3v-3Z"/></svg>
+              <span>Schemas 접기</span>
+            </button>
+            <a id="raw-spec-link" class="button button-secondary" href="/openapi/ops" target="_blank" rel="noreferrer">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 4.5h7v2h2v9h-11v-9h2v-2Zm1.5 2h4v-1H8v1Zm-2 1.5v6h8V8H6Zm2 1.5h4v1.4H8V9.5Zm0 2.5h3v1.4H8V12Z"/></svg>
+              Raw spec
+            </a>
+            <button id="refresh-spec" class="button button-primary" type="button">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.4 6.1A6 6 0 1 0 16 12h-2a4 4 0 1 1-.3-3.5L11 11h6V5l-1.6 1.1Z"/></svg>
+              새로고침
+            </button>
+          </div>
+        </header>
+
+        <section class="content-area">
+          <div id="reference-view" role="tabpanel" aria-labelledby="reference-tab">
+            <div class="reference-toolbar" aria-live="polite">
+              <div class="connection-cluster">
+                <span id="spec-state" class="spec-state is-loading"><i></i>스펙 확인 중</span>
+                <label class="server-control" for="server-select">
+                  <span>Server</span>
+                  <select id="server-select" disabled>
+                    <option>불러오는 중…</option>
+                  </select>
+                </label>
+                <button id="authorize-api" class="authorization-button" type="button" hidden disabled>
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8V6a4 4 0 1 1 8 0v2h1.5v9h-11V8H6Zm2 0h4V6a2 2 0 1 0-4 0v2Zm-1.5 2v5h7v-5h-7Z"/></svg>
+                  <span>API 인증</span>
+                </button>
+              </div>
+
+              <label class="reference-search" for="reference-search-input">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m14.2 12.8 4 4-1.4 1.4-4-4a6.5 6.5 0 1 1 1.4-1.4ZM3 8.5a4.5 4.5 0 1 0 9 0 4.5 4.5 0 0 0-9 0Z"/></svg>
+                <input id="reference-search-input" type="search" placeholder="태그, 경로, 설명 검색" autocomplete="off">
+                <kbd>/</kbd>
+              </label>
+
+              <dl class="summary-stats" aria-label="OpenAPI 요약">
+                <div>
+                  <dt>OpenAPI</dt>
+                  <dd id="openapi-version">—</dd>
+                </div>
+                <div>
+                  <dt>Operations</dt>
+                  <dd id="operation-count">—</dd>
+                </div>
+                <div>
+                  <dt>Tags</dt>
+                  <dd id="tag-count">—</dd>
+                </div>
+              </dl>
+            </div>
+            <p id="spec-message" class="spec-message" role="status">OpenAPI 문서를 불러오고 있습니다.</p>
+
+            <div class="swagger-card">
+              <div id="swagger-loading" class="swagger-loading" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </div>
+              <div id="swagger-ui"></div>
+            </div>
+          </div>
+
+          <div id="flows-view" role="tabpanel" aria-labelledby="flows-tab" hidden>
+            <div class="flows-heading">
+              <div>
+                <span class="section-kicker">WORKFLOW CATALOG</span>
+                <h3>기능별 API 호출 플로우</h3>
+                <p>한 기능을 완성하는 호출 순서와 데이터 연결 지점을 한눈에 확인합니다.</p>
+              </div>
+              <span id="flow-result-count" class="flow-result-count">0 flows</span>
+            </div>
+
+            <div class="flow-tools">
+              <label class="flow-search" for="flow-search-input">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m14.2 12.8 4 4-1.4 1.4-4-4a6.5 6.5 0 1 1 1.4-1.4ZM3 8.5a4.5 4.5 0 1 0 9 0 4.5 4.5 0 0 0-9 0Z"/></svg>
+                <input id="flow-search-input" type="search" placeholder="기능, API 경로, 메서드 검색" autocomplete="off">
+              </label>
+              <div id="flow-categories" class="flow-categories" role="group" aria-label="플로우 카테고리"></div>
+            </div>
+
+            <div id="flow-grid" class="flow-grid"></div>
+            <div id="flow-empty" class="flow-empty" hidden>
+              <strong>조건에 맞는 플로우가 없습니다.</strong>
+              <span>검색어나 카테고리를 바꿔 보세요.</span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <noscript>API Console을 사용하려면 JavaScript를 활성화해야 합니다.</noscript>
+    <script src="/swagger-ui/swagger-ui-bundle.js"></script>
+    <script src="/swagger-ui/swagger-ui-standalone-preset.js"></script>
+    <script src="/app.js?v=12"></script>
+  </body>
+</html>

@@ -135,6 +135,7 @@ Ops는 활성 배포 대상을 기본 5분마다 VM 서비스 정본과 대조�
 | Elasticsearch | `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | Blueprint 검색 연결 |
 | 파일 제한 | `OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES`, `OPS_FILE_BROWSER_MAX_UPLOAD_SIZE_BYTES` | 편집·업로드 최대 크기 |
 | 포털 | `PORTAL_ORIGIN`, `ADMIN_ORIGIN` | 사용자 콘솔·ControlBox worker 콘솔 WebSocket Origin allowlist |
+| 로컬 개발 | `LOCAL_DEV_ORIGINS` | 개발 서버 Ops 터미널에 추가로 허용할 localhost Origin 목록(운영은 빈 값) |
 | 관리형 Preview | `SYSTEM_WORKER_AUTO_PREVIEW_*`, `MANAGED_PREVIEW_PORT_*`, `MANAGED_PREVIEW_*_TTL_HOURS` | 전용 워커 사양·VMID·포트 풀·플랜별 TTL |
 | 고아 배포 조정 | `OPS_DEPLOYMENT_ORPHAN_RECONCILE_INTERVAL_MS` | VM 정본과 활성 배포 대상을 대조하는 주기(기본 300000ms) |
 | API 문서 | `OPENAPI_SERVER_URL` | `docs` 프로파일의 Try it out 대상 API Gateway URL |
@@ -147,7 +148,7 @@ GitHub App ID는 숫자이고 OAuth Client ID는 보통 `Iv1...` 형식인 서�
 
 Blueprint 검색은 기본 Registry fallback이므로 Elasticsearch가 없으면 `BLUEPRINT_SEARCH_ENABLED=false`를 유지한다. 사용할 때만 연결 URL과 인증 정보를 설정하고, 시작 시 재색인은 관리된 단일 인스턴스에서만 활성화한다. 전체 값 예시는 루트 `env.example`을 기준으로 하며 모든 `CHANGE_ME_*`를 배포 전에 교체한다.
 
-배포 환경에서 `prod,docs` 프로파일을 활성화하면 Ops가 Auth·User·VM·Ops 스펙을 선택할 수 있는 통합 Swagger UI를 제공한다. 다른 세 서비스는 OpenAPI JSON만 제공하며 운영은 `prod`만 유지해 문서 엔드포인트를 비활성화한다.
+배포 환경에서 `prod,docs` 프로파일을 활성화하면 Ops가 Swagger UI WebJar 자산과 자체 OpenAPI JSON을 제공한다. 루트 `api-docs-ui`의 GamjaBox 전용 콘솔이 이 자산과 Auth·User·VM·Ops 스펙을 조합하며, 다른 세 서비스는 OpenAPI JSON만 제공한다. 콘솔은 서버·검색·스펙 통계를 합친 `API Reference`와 카테고리/검색을 제공하는 기능별 `API Flows`를 분리해 제공한다. 플로우 단계는 현재 OpenAPI 경로와 대조하고 클릭 시 Reference의 해당 경로 검색으로 연결된다. Try it out은 문서 도메인의 `/try/*` 동일 출처 프록시를 사용하고 인증 쿠키도 포함한다. 운영은 `prod`만 유지해 문서 엔드포인트를 비활성화한다.
 
 ## 로컬 실행과 검증
 

@@ -1,10 +1,13 @@
-name: Deploy landing page to dev-01
+name: Deploy static sites to dev-01
 
 on:
   push:
     branches: [develop]
     paths:
       - 'gamjabox-landing/**'
+      - 'api-docs-ui/**'
+      - 'compose.yaml'
+      - '.github/workflows/deploy-landing.yml'
 
 concurrency:
   group: deploy-landing-dev
@@ -28,7 +31,7 @@ jobs:
           git fetch origin develop
           git reset --hard origin/develop
 
-      # 정적 파일이라 빌드/헬스체크 없이 Caddy가 새 파일을 읽도록 재시작만 하면 됨.
-      # Caddy도 compose로 떠 있으므로 systemctl이 아닌 docker compose restart 사용.
-      - name: Restart Caddy
-        run: docker compose restart caddy
+      # 정적 파일은 bind mount로 바로 읽는다. compose에 새 정적 경로가 추가된 경우에도
+      # mount가 갱신되도록 restart가 아니라 Caddy 컨테이너를 재생성한다.
+      - name: Recreate Caddy
+        run: docker compose up -d --force-recreate caddy

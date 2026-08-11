@@ -928,13 +928,13 @@ npm run build
 
 GitHub Actions는 서비스별 path filter로 필요한 워크플로우만 실행한다. `develop`은 `gamjabox-dev`, `main`은 `gamjabox-prod` 라벨의 self-hosted Linux/X64 runner를 사용하며, 모든 배포 명령은 서버의 `/home/ubuntu/GJ-Cloud`에서 실행된다. 백엔드와 포털 배포는 새 이미지를 기동한 뒤 컨테이너 내부 IP의 health endpoint를 확인하고, 실패하면 보존한 이전 이미지로 자동 롤백한다.
 
-랜딩페이지는 `gamjabox-landing/**` 변경 시 `develop`의 `deploy-landing.yml`과 `main`의 `deploy-main-landing.yml`이 각각 실행된다. 별도 빌드 없이 대상 브랜치로 작업 디렉터리를 맞춘 뒤, bind mount된 정적 파일을 Caddy가 다시 읽도록 `docker compose restart caddy`를 수행한다. 워크플로우 성공은 서버 파일 갱신과 Caddy 재시작을 뜻하며 Cloudflare Edge 캐시 갱신까지 보장하지는 않으므로, 배포 확인 시 HTML뿐 아니라 버전이 붙은 CSS·JavaScript 응답도 함께 비교한다.
+랜딩페이지는 `gamjabox-landing/**` 변경 시 `develop`의 `deploy-landing.yml`과 `main`의 `deploy-main-landing.yml`이 각각 실행된다. 개발 전용 `api-docs-ui/**`도 develop 정적 배포가 처리한다. 별도 빌드 없이 대상 브랜치로 작업 디렉터리를 맞춘 뒤 bind mount 변경까지 반영하도록 개발 Caddy 컨테이너를 재생성한다. 워크플로우 성공은 서버 파일 갱신과 Caddy 재기동을 뜻하며 Cloudflare Edge 캐시 갱신까지 보장하지는 않으므로, 배포 확인 시 HTML뿐 아니라 버전이 붙은 CSS·JavaScript 응답도 함께 비교한다.
 
 Ops 배포 워크플로우는 `Backend/Ops/**`뿐만 아니라 `compose.yaml`과 빌드 시 하나의 이미지에 포함하는 포털 `lib/types.ts`, `components/ui/**`, `components/preview-runtime/**`도 감시한다. 포털과 Auto Preview 배포본이 항상 같은 Runtime을 포함하도록 Ops 이미지를 함께 재빌드한다.
 
 기본 `compose.yaml`과 `env.example`은 배포 구조와 환경변수 계약만 담아 Git으로 관리한다. `env.example`에는 secret 생성 명령, Proxmox·Cloudflare·GitHub 값 형식, 호스트/컨테이너 경로 예시를 함께 기록한다. `CHANGE_ME_*`는 실제 배포 전에 모두 교체해야 하며, 실제 값이 들어가는 `.env*`, 로컬 override·프록시 설정과 운영 자격증명은 Git에서 제외하고 서버 런타임 환경에서 관리한다.
 
-개발 API 문서는 `docs` 오버레이 프로파일로만 활성화한다. Auth·User·VM은 OpenAPI JSON만 제공하고 Ops가 통합 Swagger UI를 제공한다. `Caddyfile.example`은 문서 도메인의 `/openapi/auth`, `/openapi/user`, `/openapi/vm`, `/openapi/ops`를 각 서비스의 `/v3/api-docs`로 연결한다. 기본 프로파일은 `prod`, 기본 문서 호스트는 라우팅되지 않는 `docs.invalid`이므로 같은 파일을 운영에 배치해도 문서가 활성화되지 않는다. 개발 문서 도메인은 Cloudflare Access 등 별도 접근 제어 뒤에 두는 것을 권장한다.
+개발 API 문서는 `docs` 오버레이 프로파일로만 활성화한다. Auth·User·VM은 OpenAPI JSON만 제공하고 Ops의 Swagger UI WebJar 자산을 `api-docs-ui`의 GamjaBox 전용 콘솔이 사용한다. `API Reference`는 연결 상태·Try it out 서버·태그/경로 검색·operation/tag 통계를 하나의 압축 도구막으로 제공하고, Swagger의 중복 제목·서버·필터 블록은 노출하지 않는다. `API Flows`는 현재 선택한 서비스의 기능별 호출 순서를 카테고리와 검색으로 탐색하며, 각 단계를 클릭하면 해당 경로로 Reference를 바로 필터링한다. 플로우 단계는 불러온 OpenAPI 스펙과 대조해 사라진 경로를 표시한다. `Caddyfile.example`은 문서 도메인의 `/openapi/*`를 각 서비스의 `/v3/api-docs`로 연결하고, Try it out은 Cloudflare Access 뒤의 동일 출처 `/try/*` 프록시로 실행해 CORS를 발생시키지 않는다. 로컬 포털 개발은 `DEV_API_PROXY_TARGET`을 설정하고 `NEXT_PUBLIC_AUTH_API`·`USER_API`·`VM_API`·`OPS_API`를 Next 개발 서버 origin으로 두면 HTTP·SSE·WebSocket과 Strict Refresh Cookie를 동일 출처 프록시로 개발 API에 연결한다. 개발 Caddy의 직접 호출은 `ENABLE_LOCAL_DEV_CORS=true`일 때만 localhost·`*.localhost`·127.0.0.1·`[::1]` Origin을 허용한다. 기본 프로파일은 `prod`, 기본 문서 호스트는 `docs.invalid`, 로컬 CORS는 `false`이므로 같은 파일을 운영에 배치해도 문서·로컬 Origin이 열리지 않는다. 개발 문서 도메인은 Cloudflare Access 등 별도 접근 제어 뒤에 둔다.
 
 Ops의 저장소 분석 clone은 기본 Squid allowlist egress proxy, 저장소·프로세스·메모리·CPU·시간 한계와 `--filter=blob:none`을 적용한다. 사용자 VM 내 Git에는 그 VM에서 도달 가능한 원격 proxy URL을 별도로 설정할 수 있다.
 
