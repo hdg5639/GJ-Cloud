@@ -5,6 +5,7 @@ import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.process.LocalCommandExecutor;
 import gj.cloud.ops.global.process.LocalCommandResult;
+import gj.cloud.ops.global.process.LocalProcessLimits;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,7 +71,7 @@ public class RepositorySnapshotBuilder {
     @Value("${ops.repo-analysis.max-cpu-seconds:60}")
     private long maxCloneCpuSeconds;
     @Value("${ops.repo-analysis.max-processes:64}")
-    private long maxCloneProcesses;
+    private long cloneProcessHeadroom;
 
     public Map<String, RepositoryEvidence> analyze(String repoUrl, String branch, String patToken, List<String> contexts) {
         return withClonedRepository(repoUrl, branch, patToken, repositoryRoot -> {
@@ -124,7 +125,9 @@ public class RepositorySnapshotBuilder {
                     "--as=" + maxCloneMemoryBytes,
                     "--fsize=" + maxCloneSizeBytes,
                     "--cpu=" + maxCloneCpuSeconds,
-                    "--nproc=" + maxCloneProcesses,
+                    // RLIMIT_NPROC는 같은 UID의 Ops JVM 스레드도 함께 센다. 현재 컨테이너 task 수를
+                    // 기준값으로 포함하고, 설정값은 clone 프로세스가 추가로 쓸 수 있는 여유로 적용한다.
+                    "--nproc=" + LocalProcessLimits.nprocLimitWithHeadroom(cloneProcessHeadroom),
                     "--nofile=256",
                     "--",
                     "git", "-c", "http.followRedirects=false", "clone", "--depth", "1", "--single-branch",

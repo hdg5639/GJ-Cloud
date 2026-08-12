@@ -127,7 +127,7 @@ Ops는 활성 배포 대상을 기본 5분마다 VM 서비스 정본과 대조�
 | 인증 | `AUTH_SERVER_URL`, `OPS_SERVICE_CLIENT_SECRET` | JWT·서비스 인증 |
 | 서비스 연동 | `VM_SERVICE_URL`, `USER_SERVICE_URL` | VM 문맥·라우트와 플랜 조회 |
 | SSH·티켓 암호화 | `OPS_KEY_ENCRYPTION_SECRET`, `VM_SSH_USERNAME` | 관리 키·Redis 스트림 티켓 AES-GCM 암호화와 접속 사용자 |
-| Git 방어 | `OPS_GIT_ALLOWED_HOSTS`, `OPS_GIT_LOCAL_EGRESS_PROXY_URL`, `OPS_GIT_REMOTE_EGRESS_PROXY_URL`, `OPS_REPO_ANALYSIS_MAX_CLONE_SIZE_BYTES` | clone allowlist·egress proxy와 분석용 clone 자원 한계 |
+| Git 방어 | `OPS_GIT_ALLOWED_HOSTS`, `OPS_GIT_LOCAL_EGRESS_PROXY_URL`, `OPS_GIT_REMOTE_EGRESS_PROXY_URL`, `OPS_REPO_ANALYSIS_MAX_CLONE_SIZE_BYTES`, `OPS_REPO_ANALYSIS_MAX_PROCESSES` | clone allowlist·egress proxy와 분석용 clone 자원 한계. 프로세스 값은 Ops JVM의 현재 task 수에 더하는 clone 전용 여유 |
 | 백업 보호 | `OPS_BACKUP_ENCRYPTION_SECRET`, `OPS_BACKUP_RETENTION_DAYS`, `OPS_BACKUP_MAX_FILES_PER_VM` | AES-256-GCM 암호화 키와 보관 기간·개수 |
 | GitHub App | `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_SLUG`, `GITHUB_WEBHOOK_SECRET` | App 인증·설치·웹훅 검증 |
 | AI | `OPENAI_API_KEY`, `AI_MODEL_STANDARD`, `AI_MODEL_ESCALATED` | 모델 호출과 난이도별 모델 선택 |
