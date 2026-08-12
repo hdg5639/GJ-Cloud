@@ -79,14 +79,34 @@ public class PreviewDeployController {
     private final VmServiceClient vmServiceClient;
     private final ManagedPreviewService managedPreviewService;
 
-    @Operation(summary = "Auto Preview 배포", description = "검증된 Product Blueprint를 Vite 프로젝트로 생성해 새 배포 대상으로 배포합니다.")
-    @PostMapping({"/{vmId}/preview/deploy", "/preview/deploy"})
+    @Operation(summary = "Auto Preview 사용자 VM 배포", description = "검증된 Product Blueprint를 Vite 프로젝트로 생성해 선택한 사용자 VM의 새 배포 대상으로 배포합니다.")
+    @PostMapping("/{vmId}/preview/deploy")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public ApiResponse<?> deploy(
+    public ApiResponse<DeploymentResponse> deployToVm(
             HttpServletRequest request,
-            @PathVariable(required = false) UUID vmId,
+            @PathVariable UUID vmId,
             @AuthenticationPrincipal OpsPrincipal principal,
             @Valid @RequestBody PreviewDeployRequest body
+    ) {
+        return ApiResponse.ok(deploy(request, vmId, principal, body).userVm());
+    }
+
+    @Operation(summary = "Auto Preview 관리형 배포", description = "검증된 Product Blueprint를 Vite 프로젝트로 생성해 GamjaBox 관리형 Worker에 배포합니다.")
+    @PostMapping("/preview/deploy")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<ManagedPreviewResponse> deployManaged(
+            HttpServletRequest request,
+            @AuthenticationPrincipal OpsPrincipal principal,
+            @Valid @RequestBody PreviewDeployRequest body
+    ) {
+        return ApiResponse.ok(deploy(request, null, principal, body).managed());
+    }
+
+    private PreviewDeploymentResult deploy(
+            HttpServletRequest request,
+            UUID vmId,
+            OpsPrincipal principal,
+            PreviewDeployRequest body
     ) {
         boolean managed = vmId == null;
         String bearerToken = managed ? bearerToken(request) : requireDeployPermission(request, vmId);
@@ -190,7 +210,7 @@ public class PreviewDeployController {
                     managedAllocation, principal.email(), body.targetName(), artifact);
             managedPreviewService.findDeployment(response.deploymentId())
                     .ifPresent(deployment -> deploymentExecutor.attachPreviewBlueprint(deployment, snapshot));
-            return ApiResponse.ok(response);
+            return new PreviewDeploymentResult(null, response);
         }
 
         DeploymentTargetEntity target = deploymentTargetService.create(
@@ -212,8 +232,13 @@ public class PreviewDeployController {
                 bearerToken, vmId.toString(), target, repoConfig, artifact);
 
         deployment = deploymentExecutor.attachPreviewBlueprint(deployment, snapshot);
-        return ApiResponse.ok(DeploymentResponse.from(deployment));
+        return new PreviewDeploymentResult(DeploymentResponse.from(deployment), null);
     }
+
+    private record PreviewDeploymentResult(
+            DeploymentResponse userVm,
+            ManagedPreviewResponse managed
+    ) {}
 
     private boolean hasErrorFinding(List<PageDraft> pages, Map<String, List<Block>> pageBlocks,
                                     List<Capability> capabilities) {

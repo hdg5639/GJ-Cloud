@@ -3,6 +3,8 @@ package gj.cloud.vm.api.controller;
 import gj.cloud.vm.application.port.dto.SshAccessAddRequest;
 import gj.cloud.vm.application.vm.dto.VmAvailabilityResponse;
 import gj.cloud.vm.application.vm.dto.VmCreateRequest;
+import gj.cloud.vm.application.vm.dto.VmMetricsCurrentResponse;
+import gj.cloud.vm.application.vm.dto.VmMetricsHistoryResponse;
 import gj.cloud.vm.application.vm.dto.VmPlanUpdateRequest;
 import gj.cloud.vm.application.vm.dto.VmPowerRequest;
 import gj.cloud.vm.application.vm.dto.VmResponse;
@@ -146,7 +148,7 @@ public class VmController {
 
     @Operation(summary = "VM 실시간 메트릭")
     @GetMapping("/{vmId}/metrics/current")
-    public Mono<ApiResponse<Object>> getVmMetricsCurrent(
+    public Mono<ApiResponse<VmMetricsCurrentResponse>> getVmMetricsCurrent(
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId
     ) {
@@ -156,7 +158,7 @@ public class VmController {
 
     @Operation(summary = "VM 메트릭 히스토리", description = "timeframe: hour, day, week, month, year")
     @GetMapping("/{vmId}/metrics/history")
-    public Mono<ApiResponse<Object>> getVmMetricsHistory(
+    public Mono<ApiResponse<VmMetricsHistoryResponse>> getVmMetricsHistory(
             @AuthenticationPrincipal VmPrincipal principal,
             @PathVariable UUID vmId,
             @RequestParam(defaultValue = "hour") String timeframe

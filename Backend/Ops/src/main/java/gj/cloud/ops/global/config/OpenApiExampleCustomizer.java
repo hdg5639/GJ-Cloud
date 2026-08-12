@@ -14,6 +14,7 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -105,12 +106,15 @@ public class OpenApiExampleCustomizer implements OpenApiCustomizer {
         if (responses == null) {
             return;
         }
-        responses.values().forEach(response -> {
+        responses.forEach((statusCode, response) -> {
             ApiResponse resolved = resolveResponse(response, components);
             Content content = resolved != null ? resolved.getContent() : null;
             if (content != null) {
-                content.values().forEach(mediaType ->
-                        enrichSchema(mediaType.getSchema(), "response", schemas, new HashSet<>()));
+                content.values().forEach(mediaType -> {
+                    Schema<?> responseSchema = mediaType.getSchema();
+                    enrichSchema(responseSchema, "response", schemas, new HashSet<>());
+                    addWrappedResponseExample(responseSchema, statusCode, schemas);
+                });
             }
         });
     }
@@ -120,6 +124,144 @@ public class OpenApiExampleCustomizer implements OpenApiCustomizer {
             return response;
         }
         return components.getResponses().getOrDefault(refName(response.get$ref()), response);
+    }
+
+    private void addWrappedResponseExample(
+            Schema<?> responseSchema,
+            String statusCode,
+            Map<String, Schema> schemas
+    ) {
+        String schemaName = responseSchema != null && responseSchema.get$ref() != null
+                ? refName(responseSchema.get$ref())
+                : "response";
+        Schema<?> target = resolveSchema(responseSchema, schemas);
+        if (target == null || target.getExample() != null || !isApiResponseWrapper(target)) {
+            return;
+        }
+        Object example = buildSchemaExample(
+                target,
+                schemaName,
+                schemas,
+                new HashSet<>(),
+                statusCode != null && statusCode.startsWith("2"),
+                schemaName.toLowerCase(Locale.ROOT).contains("void")
+        );
+        if (example != null) {
+            target.setExample(example);
+        }
+    }
+
+    private Schema<?> resolveSchema(Schema<?> schema, Map<String, Schema> schemas) {
+        if (schema == null || schema.get$ref() == null) {
+            return schema;
+        }
+        return schemas.get(refName(schema.get$ref()));
+    }
+
+    private boolean isApiResponseWrapper(Schema<?> schema) {
+        return schema.getProperties() != null
+                && schema.getProperties().containsKey("success")
+                && schema.getProperties().containsKey("data")
+                && schema.getProperties().containsKey("message");
+    }
+
+    private Object buildSchemaExample(
+            Schema<?> schema,
+            String propertyName,
+            Map<String, Schema> schemas,
+            Set<String> visiting,
+            boolean successResponse,
+            boolean voidData
+    ) {
+        if (schema == null || "binary".equals(schema.getFormat())) {
+            return null;
+        }
+        if (schema.getExample() != null) {
+            return schema.getExample();
+        }
+        if (schema.get$ref() != null) {
+            String name = refName(schema.get$ref());
+            if (!visiting.add(name)) {
+                return null;
+            }
+            Object example = buildSchemaExample(
+                    schemas.get(name), name, schemas, visiting, successResponse, voidData);
+            visiting.remove(name);
+            return example;
+        }
+
+        Object composed = buildComposedExample(
+                schema, propertyName, schemas, visiting, successResponse, voidData);
+        if (composed != null) {
+            return composed;
+        }
+
+        if (schema.getProperties() != null && !schema.getProperties().isEmpty()) {
+            boolean wrapper = isApiResponseWrapper(schema);
+            Map<String, Object> example = new LinkedHashMap<>();
+            schema.getProperties().forEach((name, property) -> {
+                Object value;
+                if (wrapper && "success".equals(name)) {
+                    value = successResponse;
+                } else if (wrapper && "message".equals(name)) {
+                    value = successResponse ? null : "요청을 처리할 수 없습니다.";
+                } else if (wrapper && "errorCode".equals(name)) {
+                    value = successResponse ? null : "RESOURCE_NOT_FOUND";
+                } else if (wrapper && "data".equals(name) && voidData) {
+                    value = null;
+                } else {
+                    value = buildSchemaExample((Schema<?>) property, name, schemas, visiting,
+                            successResponse, false);
+                }
+                example.put(name, value);
+            });
+            return example;
+        }
+        if (schema.getItems() != null) {
+            Object item = buildSchemaExample(schema.getItems(), singular(propertyName), schemas,
+                    visiting, successResponse, false);
+            return item == null ? List.of() : List.of(item);
+        }
+        if (schema.getAdditionalProperties() instanceof Schema<?> additionalSchema) {
+            Object value = buildSchemaExample(additionalSchema, "value", schemas, visiting,
+                    successResponse, false);
+            Map<String, Object> example = new LinkedHashMap<>();
+            example.put("key", value);
+            return example;
+        }
+        if ("object".equals(schema.getType())) {
+            return new LinkedHashMap<>();
+        }
+        return exampleFor(propertyName, schema);
+    }
+
+    private Object buildComposedExample(
+            Schema<?> schema,
+            String propertyName,
+            Map<String, Schema> schemas,
+            Set<String> visiting,
+            boolean successResponse,
+            boolean voidData
+    ) {
+        if (schema.getAllOf() != null && !schema.getAllOf().isEmpty()) {
+            Map<String, Object> merged = new LinkedHashMap<>();
+            for (Schema<?> part : schema.getAllOf()) {
+                Object value = buildSchemaExample(part, propertyName, schemas, visiting,
+                        successResponse, voidData);
+                if (value instanceof Map<?, ?> map) {
+                    map.forEach((key, item) -> merged.put(String.valueOf(key), item));
+                }
+            }
+            return merged;
+        }
+        List<Schema> alternatives = schema.getOneOf() != null && !schema.getOneOf().isEmpty()
+                ? schema.getOneOf()
+                : schema.getAnyOf();
+        if (alternatives != null && !alternatives.isEmpty()) {
+            return buildSchemaExample(alternatives.get(0), propertyName, schemas, visiting,
+                    successResponse, voidData);
+        }
+        return null;
     }
 
     private void enrichSchema(
