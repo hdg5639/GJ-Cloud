@@ -229,7 +229,7 @@ public class OpenApiExampleCustomizer implements OpenApiCustomizer {
             example.put("key", value);
             return example;
         }
-        if ("object".equals(schema.getType())) {
+        if ("object".equals(schemaType(schema))) {
             return new LinkedHashMap<>();
         }
         return exampleFor(propertyName, schema);
@@ -341,7 +341,7 @@ public class OpenApiExampleCustomizer implements OpenApiCustomizer {
         if ("byte".equals(format)) return "eyJleGFtcGxlIjp0cnVlfQ==";
         if ("binary".equals(format)) return null;
 
-        String type = schema.getType();
+        String type = schemaType(schema);
         if ("boolean".equals(type)) return true;
         if ("integer".equals(type)) return integerExample(key);
         if ("number".equals(type)) return 1.0;
@@ -354,7 +354,7 @@ public class OpenApiExampleCustomizer implements OpenApiCustomizer {
     }
 
     private boolean isCompatible(Object example, Schema<?> schema) {
-        return switch (schema.getType() == null ? "" : schema.getType()) {
+        return switch (schemaType(schema)) {
             case "string" -> example instanceof String;
             case "integer", "number" -> example instanceof Number;
             case "boolean" -> example instanceof Boolean;
@@ -373,6 +373,8 @@ public class OpenApiExampleCustomizer implements OpenApiCustomizer {
             case "resettoken" -> "reset_token_example";
             case "refreshtoken" -> "refresh_token_example";
             case "accesstoken", "token" -> "access_token_example";
+            case "tokentype" -> "Bearer";
+            case "expiresin" -> 900L;
             case "authorization" -> "Bearer <access-token>";
             case "clientid" -> "example-service";
             case "clientsecret" -> "example-client-secret";
@@ -438,6 +440,16 @@ public class OpenApiExampleCustomizer implements OpenApiCustomizer {
         if ("size".equals(key)) return 20;
         if ("page".equals(key)) return 1;
         return 1;
+    }
+
+    private String schemaType(Schema<?> schema) {
+        if (schema.getType() != null) {
+            return schema.getType();
+        }
+        return schema.getTypes() == null
+                ? ""
+                : schema.getTypes().stream().filter(type -> type != null && !"null".equals(type))
+                        .findFirst().orElse("");
     }
 
     private String singular(String value) {

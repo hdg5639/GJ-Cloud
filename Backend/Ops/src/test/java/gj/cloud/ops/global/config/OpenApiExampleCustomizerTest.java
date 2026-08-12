@@ -17,6 +17,7 @@ import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,6 +35,8 @@ class OpenApiExampleCustomizerTest {
         ObjectSchema responseDataSchema = new ObjectSchema();
         responseDataSchema.addProperty("nickname", new StringSchema());
         responseDataSchema.addProperty("createdAt", new StringSchema().format("date-time"));
+        responseDataSchema.addProperty("tokenType", new Schema<>().types(Set.of("string")));
+        responseDataSchema.addProperty("expiresIn", new Schema<>().types(Set.of("integer")).format("int64"));
         ObjectSchema responseSchema = responseWrapper("PublicResponse");
 
         Parameter page = new Parameter()
@@ -71,6 +74,8 @@ class OpenApiExampleCustomizerTest {
         Map<?, ?> responseData = (Map<?, ?>) responseExample.get("data");
         assertThat(responseData.get("nickname")).isEqualTo("감자개발자");
         assertThat(responseData.get("createdAt")).isEqualTo("2026-08-12T12:00:00Z");
+        assertThat(responseData.get("tokenType")).isEqualTo("Bearer");
+        assertThat(responseData.get("expiresIn")).isEqualTo(900L);
     }
 
     @Test
