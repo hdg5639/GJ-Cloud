@@ -1,3 +1,7 @@
 spring:
   application:
     name: Ops
+  jpa:
+    # SSE 같은 장기 HTTP 요청의 수명과 EntityManager/DB 커넥션 수명을 분리한다.
+    # 조회가 끝난 커넥션은 즉시 풀로 반환하고 필요한 조회는 서비스/리포지토리 트랜잭션 안에서 완료한다.
+    open-in-view: false
