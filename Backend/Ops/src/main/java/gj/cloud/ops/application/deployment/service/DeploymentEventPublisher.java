@@ -7,6 +7,7 @@ import gj.cloud.ops.domain.deployment.enums.DeploymentEventType;
 import gj.cloud.ops.domain.deployment.repository.DeploymentEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -24,6 +25,9 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 @RequiredArgsConstructor
 public class DeploymentEventPublisher {
+
+    static final long STREAM_TIMEOUT_MS = 5 * 60 * 1000L;
+    static final long HEARTBEAT_INTERVAL_MS = 15 * 1000L;
 
     private final DeploymentEventRepository repository;
     private final ObjectMapper objectMapper;
@@ -45,12 +49,15 @@ public class DeploymentEventPublisher {
 
     // 재연결 시 afterSequence 이후 누락 이벤트를 먼저 재전송한 뒤, 실시간 emitter로 등록
     public SseEmitter subscribe(String deploymentId, long afterSequence) {
-        SseEmitter emitter = new SseEmitter(0L);
+        SseEmitter emitter = createEmitter();
         List<SseEmitter> list = emitters.computeIfAbsent(deploymentId, id -> new CopyOnWriteArrayList<>());
         list.add(emitter);
 
         emitter.onCompletion(() -> removeEmitter(deploymentId, emitter));
-        emitter.onTimeout(() -> removeEmitter(deploymentId, emitter));
+        emitter.onTimeout(() -> {
+            removeEmitter(deploymentId, emitter);
+            emitter.complete();
+        });
         emitter.onError(e -> removeEmitter(deploymentId, emitter));
 
         try {
@@ -61,8 +68,32 @@ public class DeploymentEventPublisher {
             }
         } catch (IOException e) {
             removeEmitter(deploymentId, emitter);
+            emitter.completeWithError(e);
+        } catch (RuntimeException e) {
+            removeEmitter(deploymentId, emitter);
+            emitter.completeWithError(e);
+            throw e;
         }
         return emitter;
+    }
+
+    SseEmitter createEmitter() {
+        return new SseEmitter(STREAM_TIMEOUT_MS);
+    }
+
+    // 쓰기 이벤트가 없는 배포에서도 끊어진 프록시/브라우저 연결을 감지한다. comment frame은
+    // 클라이언트의 data 이벤트로 노출되지 않으며, 실패한 emitter는 즉시 구독 목록에서 제거한다.
+    @Scheduled(fixedDelay = HEARTBEAT_INTERVAL_MS)
+    void sendHeartbeats() {
+        emitters.forEach((deploymentId, list) -> {
+            for (SseEmitter emitter : list) {
+                try {
+                    emitter.send(SseEmitter.event().comment("keepalive"));
+                } catch (IOException | IllegalStateException e) {
+                    removeEmitter(deploymentId, emitter);
+                }
+            }
+        });
     }
 
     // 배포가 종료(SUCCEEDED/FAILED/ROLLED_BACK)되면 연결된 emitter들을 정상 종료하고 시퀀스 카운터를 정리
@@ -101,6 +132,9 @@ public class DeploymentEventPublisher {
         List<SseEmitter> list = emitters.get(deploymentId);
         if (list != null) {
             list.remove(emitter);
+            if (list.isEmpty()) {
+                emitters.remove(deploymentId, list);
+            }
         }
     }
 

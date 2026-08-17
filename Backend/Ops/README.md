@@ -102,6 +102,16 @@ VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한
 
 서비스 간 client-credentials 토큰은 Auth가 반환한 만료 시각보다 최대 30초 먼저 갱신하도록 메모리에 보관한다. 동시에 여러 내부 호출이 발생해도 발급 요청은 하나로 직렬화하므로 Auth 호출과 JWT 서명 비용이 내부 API 요청 수만큼 반복되지 않는다.
 
+### 배포 이벤트 SSE와 DB 풀 격리
+
+Ops는 `spring.jpa.open-in-view=false`로 요청 수명과 EntityManager 수명을 분리한다. 배포 이벤트 SSE를 열 때 과거 이벤트 조회가 끝나면 JDBC 커넥션을 즉시 풀로 반환하며, 장기 스트림이 커넥션을 점유하지 않는다.
+
+- 스트림은 5분 후 정상 종료되고 포털이 마지막 `afterSequence`부터 재연결한다.
+- 15초 comment heartbeat로 이벤트가 없는 동안에도 프록시·브라우저 단절을 감지한다.
+- 완료, timeout, 전송 오류와 재생 조회 실패 시 emitter를 구독 목록에서 제거한다.
+- 운영 Hikari는 60초 leak detection을 사용해 비정상 장기 점유의 커넥션 획득 스택을 기록한다.
+- 풀 크기 증가는 근본 해결로 사용하지 않는다. PostgreSQL은 idle인데 Hikari active가 계속 증가하면 장기 요청과 OSIV/트랜잭션 경계를 먼저 확인한다.
+
 ### Auto Preview Worker 유실 복구
 
 ControlBox의 일반 조회는 Ops DB에 마지막으로 조정된 Worker 상태만 즉시 반환한다. 브라우저의 15초 폴링마다 Proxmox Guest Agent IP 대기를 반복하지 않으며, 실제 VM·Runtime 상태 확인은 기본 60초 주기 조정과 관리자가 누른 Reconcile에서 수행한다. 따라서 평상시 조회는 DB 1회로 끝나고, 외부에서 VM을 직접 삭제한 상태는 자동 조정 기준 최대 약 1분 뒤 또는 Reconcile 직후 반영된다.

@@ -4,6 +4,9 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # 정상 요청이 60초 넘게 커넥션을 점유하면 획득 스택을 남겨 재발 원인을 추적한다.
+      leak-detection-threshold: 60000
   jpa:
     hibernate:
       ddl-auto: validate
