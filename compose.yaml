@@ -228,6 +228,9 @@ services:
       context: .
       dockerfile: Backend/Ops/Dockerfile
     image: ${OPS_IMAGE:-gj-cloud-ops:latest}
+    # Ops는 저장소 분석을 위해 git 자식 프로세스를 실행한다. Java가 PID 1이면 종료된 고아 helper를
+    # 회수하지 못해 zombie가 누적되므로 Docker의 작은 init 프로세스가 PID 1과 reaper를 맡는다.
+    init: true
     ports:
       - "${OPS_BIND_ADDRESS:-127.0.0.1}:${OPS_HOST_PORT:-8083}:8080"
     environment:

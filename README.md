@@ -1032,6 +1032,7 @@ Ops Blueprint 검색은 기본적으로 Registry fallback 상태다. Elasticsear
 | 대용량 조회 최적화 | 실행 계획·인덱스·DB 페이징 | 대표 조회를 수백 ms에서 1ms 안팎으로 단축 |
 | Git clone fork 실패 | Linux RLIMIT·cgroup·JVM thread | Compose 탐지의 간헐적 프로세스 생성 실패 해결 |
 | 배포 SSE의 DB 풀 고갈 | OSIV·비동기 요청 수명·heartbeat | 장기 스트림 10개가 JDBC 풀 전체를 점유하던 장애 제거 |
+| Git 자식 프로세스 zombie 누적 | 컨테이너 PID 1·process reaping | 종료된 Git helper의 PID 누수와 재발성 fork 실패 방지 |
 
 ### 1. Refresh Token Rotation이 여러 탭에서 정상 세션을 폐기
 
@@ -1116,6 +1117,18 @@ Ops Blueprint 검색은 기본적으로 Registry fallback 상태다. Elasticsear
 **검증과 판단.** 운영 DB에서 Hikari `active=10`과 PostgreSQL `idle=10`의 불일치, 각 연결의 마지막 SQL과 SSE 요청 시각을 교차 확인했다. 회귀 테스트는 유한 timeout, heartbeat 전송, 실패한 연결 제거와 DB 조회 실패 정리를 검증한다. 풀 크기를 늘리지 않고 연결의 잘못된 수명 자체를 제거했기 때문에 동시 요청 한도가 늘어나도 같은 방식으로 풀 전체가 잠기지 않는다.
 
 **대안과 선택 근거.** Hikari maximum pool size를 늘리면 재발 시점만 늦추고 PostgreSQL 연결 수와 장애 반경을 키운다. SSE를 polling으로 바꾸면 장기 연결 문제는 사라지지만 실시간성과 불필요한 반복 조회 비용이 나빠진다. WebFlux로 Ops 전체를 전환하거나 이벤트 브로커를 도입하는 방법도 있지만, SSH·JPA 중심의 기존 Spring MVC 서비스에는 변경 범위가 과도하다. 따라서 현재 DB 재생형 SSE 계약을 유지하면서 OSIV를 끄고 유한 스트림·heartbeat로 HTTP와 DB 자원 수명만 분리했다.
+
+### 8. Git helper가 종료된 뒤 zombie 프로세스로 누적
+
+**증상.** Ops 호스트에서 `[git] <defunct>` 프로세스가 발견됐고 PPID는 Ops의 Java 프로세스였다. 저장소 분석을 반복할수록 종료된 Git 프로세스가 사라지지 않으면 컨테이너의 `pids_limit`을 소모해 결국 새로운 clone이 `cannot fork()`로 실패할 수 있었다.
+
+**진단.** `/proc`과 Docker 상태를 대조한 결과 zombie의 exit code는 모두 0으로 정상 종료였고, Ops Java의 컨테이너 namespace PID는 1, Docker `Init` 설정은 비어 있었다. Java `ProcessBuilder`는 자신이 추적하는 직접 자식은 기다리지만 컨테이너 PID 1이 된 Java가 종료된 임의의 고아 Git helper까지 init처럼 회수하지는 않는다.
+
+**해결.** Ops 서비스에 Compose `init: true`를 적용해 Docker init이 PID 1과 고아 자식 reaper를 맡게 했다. Java는 init의 자식으로 실행되며 Git helper가 고아가 되어도 init이 회수한다. `LocalCommandExecutor`도 직접 시작한 프로세스를 정상 종료 후 명시적으로 `waitFor`하고, 강제 종료 뒤 한 번 더 대기하도록 보강했다.
+
+**검증과 판단.** 배포 전에는 Java의 namespace PID가 1이고 `Init=<nil>`인 상태에서 정상 종료한 Git zombie가 누적되는 것을 확인했다. 배포 후에는 컨테이너 PID 1이 `/sbin/docker-init`인지, Java가 그 자식인지, 반복 clone 뒤 zombie 수가 0으로 유지되는지를 확인한다.
+
+**대안과 선택 근거.** 애플리케이션에서 주기적으로 `waitpid`를 호출하는 별도 native reaper를 구현할 수도 있지만 Java가 생성·추적하지 않은 고아 프로세스까지 다루려면 JNI/JNA와 신호 처리가 필요하다. Git 실행을 별도 worker 컨테이너로 격리하는 방식은 더 강하지만 현재 저장소 분석 하나를 위해 이미지·큐·정리 계층이 추가된다. Compose의 init은 컨테이너 런타임이 제공하는 표준적인 PID 1 역할만 추가하므로 가장 작고 일반적인 해결이다. `pids_limit`을 늘리는 것은 누수를 늦출 뿐이라 선택하지 않았다.
 
 ### 공통 문제 해결 원칙
 

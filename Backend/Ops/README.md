@@ -194,6 +194,7 @@ npm run blueprint:check
 
 ## 운영 시 주의점
 
+- Ops 컨테이너는 저장소 분석용 Git 자식 프로세스를 실행하므로 Compose의 `init: true`를 유지한다. Docker init이 PID 1에서 종료된 고아 helper를 회수하며, 이를 제거하면 zombie가 `pids_limit`을 소모해 clone의 `cannot fork()`로 이어질 수 있다.
 - SSH 명령 시간 초과가 원격 프로세스 실패를 뜻하지는 않는다. 긴 apt/dpkg 작업은 단계별 제한과 상태 확인을 사용한다.
 - Docker 설치는 dpkg 잠금과 cloud-init 때문에 수 분 걸릴 수 있으며 HTTP 요청 스레드를 점유하지 않는다.
 - DB check constraint에 enum 값을 추가할 때 Java enum과 `schema.sql` 제약을 반드시 함께 갱신한다.

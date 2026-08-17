@@ -82,6 +82,11 @@ public class LocalCommandExecutor {
                 }
             }
 
+            // Process.isAlive() 관측만으로 종료 처리를 끝내지 않고 추적 중인 직접 자식을 명시적으로
+            // 회수한다. git이 남긴 고아 helper는 컨테이너 init이 회수하고, 이 waitFor는 Java가 직접
+            // 시작한 prlimit/git 프로세스의 종료 경계를 보장한다.
+            process.waitFor();
+
             stdoutThread.join(5_000);
             stderrThread.join(5_000);
 
@@ -127,6 +132,11 @@ public class LocalCommandExecutor {
         descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
         if (process.isAlive()) {
             process.destroyForcibly();
+            try {
+                process.waitFor(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
