@@ -16,6 +16,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.ArrayList;
 import java.util.Set;
@@ -102,10 +103,15 @@ public class VmAutomationClient {
                     .body(new AutomationRoutesRequest(ownerUserId, ownerEmail, routes))
                     .retrieve()
                     .toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            OpsException mapped = VmClientErrorMapper.routeSync(e);
+            log.error("자동 배포 라우트 동기화 거부: vmId={}, targetId={}, status={}, error={}",
+                    vmId, deploymentAppId, e.getStatusCode().value(), mapped.getMessage());
+            throw mapped;
         } catch (Exception e) {
             log.error("자동 배포 라우트 동기화 실패: vmId={}, targetId={}, error={}",
                     vmId, deploymentAppId, e.getMessage());
-            throw new OpsException(OpsErrorCode.VM_CONTEXT_FETCH_FAILED);
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_ROUTE_SYNC_FAILED);
         }
     }
 }

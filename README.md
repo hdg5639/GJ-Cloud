@@ -251,6 +251,8 @@ GitHub App으로 저장소를 연결하고 자동 배포를 켜면 지정 브랜
 
 외부 노출을 선택하면 생성된 모든 CNAME이 배포 대상 카드에 링크로 표시된다. 기본 주소는 VM·포트 식별자를 포함하고, PRO 사용자는 사용 가능한 이름을 검증받아 자동 ID가 붙지 않는 커스텀 CNAME을 지정할 수 있다.
 
+배포 라우트 생성은 Cloudflare의 멱등 요청과 중복 상태를 재조회할 수 있는 CNAME 생성에 대해 일시적 네트워크 오류·429·5xx를 지수 backoff로 재시도한다. 중복 생성 위험이 있는 Access App·Policy POST는 무조건 재시도하지 않는다. CNAME·Tunnel ingress·Access·DB 중 중간 단계가 실패하면 이번 시도에서 생성한 리소스만 역순으로 보상 정리한다. 같은 호스트가 이미 있어도 현재 Tunnel을 가리키는 CNAME만 안전하게 채택하며, 배포 대상에 연결한 수동 CNAME이 요청 라우트와 일치하면 중복 생성 없이 재사용한다. 라우트 실패는 VM 서비스의 실제 HTTP 상태와 메시지를 Ops 배포 로그에 유지해, CNAME 충돌을 “VM 정보 조회 실패”로 잘못 안내하지 않는다.
+
 <!-- README IMAGE SLOT
 파일: docs/images/readme/04-deployment-targets.webp
 권장 장면: 여러 배포 대상 카드, 배포 상태, 자동 배포 토글과 CNAME 링크가 함께 보이는 화면

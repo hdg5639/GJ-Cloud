@@ -52,6 +52,9 @@ public enum OpsErrorCode {
             "배포 대상 삭제 중 VM 정리에 실패했습니다. VM 상태를 확인한 뒤 다시 시도해주세요."),
     DEPLOYMENT_CNAME_NOT_FOUND(HttpStatus.NOT_FOUND, "연결할 수동 CNAME을 찾을 수 없습니다."),
     DEPLOYMENT_CNAME_LINK_FAILED(HttpStatus.BAD_REQUEST, "수동 CNAME을 배포 대상에 연결하지 못했습니다."),
+    DEPLOYMENT_ROUTE_INVALID(HttpStatus.BAD_REQUEST, "배포 라우트 설정이 유효하지 않습니다."),
+    DEPLOYMENT_ROUTE_CONFLICT(HttpStatus.CONFLICT, "배포 라우트가 기존 CNAME 또는 포트와 충돌합니다."),
+    DEPLOYMENT_ROUTE_SYNC_FAILED(HttpStatus.BAD_GATEWAY, "VM 서비스의 배포 라우트 동기화에 실패했습니다."),
 
     // GitHub App / push webhook
     GITHUB_APP_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "GitHub App 연동이 설정되지 않았습니다."),

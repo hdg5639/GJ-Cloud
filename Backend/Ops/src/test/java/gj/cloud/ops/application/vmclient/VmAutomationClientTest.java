@@ -1,6 +1,7 @@
 package gj.cloud.ops.application.vmclient;
 
 import gj.cloud.ops.global.auth.ServiceTokenClient;
+import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.util.Set;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -71,6 +73,32 @@ class VmAutomationClientTest {
                 "00000000-0000-0000-0000-000000000002"));
 
         assertThat(result).containsExactly("00000000-0000-0000-0000-000000000001");
+        server.verify();
+    }
+
+    @Test
+    void preservesRouteSyncConflictMessage() {
+        ServiceTokenClient tokenClient = mock(ServiceTokenClient.class);
+        when(tokenClient.getToken()).thenReturn("service-token");
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        VmAutomationClient client = new VmAutomationClient("http://vm-service", tokenClient, builder);
+        server.expect(once(), requestTo("http://vm-service/internal/automation/vms/vm-1/deployment-routes"))
+                .andExpect(method(HttpMethod.PUT))
+                .andRespond(withStatus(HttpStatus.CONFLICT)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .body("{\"success\":false,\"data\":null,\"message\":\"이미 사용 중인 서브도메인입니다.\"}"));
+
+        assertThatThrownBy(() -> client.syncRoutes(
+                "vm-1",
+                "user-1",
+                "owner@example.com",
+                "target-1",
+                new DeploymentRoutesRequest("target-1", "deployment-1", List.of())))
+                .isInstanceOfSatisfying(OpsException.class, error -> {
+                    assertThat(error.getErrorCode()).isEqualTo(OpsErrorCode.DEPLOYMENT_ROUTE_CONFLICT);
+                    assertThat(error.getMessage()).isEqualTo("이미 사용 중인 서브도메인입니다.");
+                });
         server.verify();
     }
 }

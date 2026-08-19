@@ -62,6 +62,10 @@ Ops의 고아 배포 조정은 `/internal/automation/vms/existence`에 UUID를 �
 - User 서비스: 사용자 플랜과 SSH 공개키
 - Ops 서비스: 관리 키 등록과 SSH 준비 검증
 
+Cloudflare의 멱등한 DNS·Tunnel·Access 조회·갱신·삭제 호출은 네트워크 오류, 429, 5xx에 최대 4회 지수 backoff를 적용한다. CNAME 생성은 중복 응답을 재조회할 수 있어 같은 정책을 적용하지만, Access App·Policy 생성 POST는 응답 유실 시 중복 리소스가 생길 수 있어 무조건 재시도하지 않는다. CNAME 생성이 중복으로 거절되면 같은 FQDN이면서 현재 Tunnel을 가리키는 레코드만 재사용하고, 다른 대상의 레코드는 충돌로 처리한다. Tunnel ingress는 같은 hostname 규칙을 교체하는 멱등 동작으로 갱신한다.
+
+포트 프로비저닝은 `CNAME → ingress → Access App/Policy → DB` 순으로 진행하며 중간 실패 시 이번 시도에서 생성한 리소스만 역순으로 정리한다. 기존 CNAME을 안전하게 채택한 경우에는 후속 실패가 나도 해당 DNS 레코드를 삭제하지 않는다. 배포 대상에 연결된 수동 CNAME이 포트·프로토콜·공개 범위·subdomain까지 요청 라우트와 일치하면 새 레코드를 만들지 않고 그 라우트를 사용한다.
+
 ## 권한 모델
 
 - 개인 VM은 소유자 문맥으로 접근한다.
@@ -128,5 +132,6 @@ docker compose config
 - DB 상태만 RUNNING으로 바꾸지 말고 실제 관리 키 SSH와 사용자 키 fingerprint까지 확인한다.
 - 삭제·실패 보상 단계에서는 만들어진 Proxmox, DNS, Tunnel, Access 리소스를 역순으로 정리한다.
 - Ops 배포 라우트 동기화는 빈 목록도 “모든 라우트 제거”라는 유효한 명령이다.
+- 연결된 수동 CNAME은 배포 라우트와 정확히 일치할 때 재사용하며, 동기화가 수동 포트를 삭제·수정하지 않는다.
 - Proxmox 인증서 변경 시 컨테이너 truststore 반영 여부를 먼저 확인한다.
 - 동일 CNAME과 VMID 할당은 경쟁 조건을 고려해 DB 제약과 재검증을 함께 사용한다.
