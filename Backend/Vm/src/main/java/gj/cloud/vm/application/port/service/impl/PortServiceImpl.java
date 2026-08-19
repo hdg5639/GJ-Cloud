@@ -83,14 +83,8 @@ public class PortServiceImpl implements PortService {
                                         }
                                         return Mono.just(vm);
                                     })
-                                    .flatMap(v -> cloudflareClient.registerCname(portSubdomain)
-                                            .flatMap(dnsRecordId ->
-                                                    cloudflareClient.addIngressRule(
-                                                                    portSubdomain, v.getInternalIp(),
-                                                                    request.port(), request.protocol().name())
-                                                            .then(setupVisibility(v.getId(), portSubdomain, dnsRecordId,
-                                                                    request, ownerEmail, request.nickname()))
-                                            )
+                                    .flatMap(v -> provisionManualPort(
+                                            v, portSubdomain, request, ownerEmail)
                                             .onErrorResume(e -> {
                                                 log.error("포트 Cloudflare 설정 실패: vmId={}, port={}, error={}",
                                                         vmId, request.port(), e.getMessage());
@@ -159,30 +153,37 @@ public class PortServiceImpl implements PortService {
                 });
     }
 
-    private Mono<PortResponse> setupVisibility(UUID vmId, String subdomain, String dnsRecordId,
-                                               PortAddRequest request, String ownerEmail, String nickname) {
-        if (request.visibility() == Visibility.PUBLIC) {
-            VmPortEntity port = VmPortEntity.createPublic(vmId, request.port(),
-                    request.protocol(), nickname, subdomain, dnsRecordId);
-            return vmPortRepository.save(port)
-                    .map(saved -> PortResponse.of(saved, List.of(), cloudflareProperties.getBaseDomain()));
-        }
-
+    private Mono<PortResponse> provisionManualPort(
+            VmEntity vm,
+            String subdomain,
+            PortAddRequest request,
+            String ownerEmail
+    ) {
         List<String> emails = (request.initialEmails() != null && !request.initialEmails().isEmpty())
                 ? request.initialEmails()
                 : List.of(ownerEmail);
-
-        return cloudflareClient.createAccessApp(subdomain, "self_hosted")
-                .flatMap(appId -> cloudflareClient.createAccessPolicy(appId, emails)
-                        .flatMap(policyId -> {
-                            VmPortEntity port = VmPortEntity.createPrivate(vmId, request.port(),
-                                    request.protocol(), nickname, subdomain, dnsRecordId, appId, policyId);
-                            return vmPortRepository.save(port)
-                                    .flatMap(saved -> savePortEmails(saved.getId(), emails)
-                                            .thenReturn(PortResponse.of(saved, emails,
-                                                    cloudflareProperties.getBaseDomain())));
-                        })
-                );
+        List<String> accessEmails = request.visibility() == Visibility.PRIVATE ? emails : List.of();
+        return provisionCloudflarePort(
+                subdomain,
+                vm.getInternalIp(),
+                request.port(),
+                request.protocol(),
+                request.visibility(),
+                accessEmails,
+                state -> {
+                    VmPortEntity port = request.visibility() == Visibility.PUBLIC
+                            ? VmPortEntity.createPublic(
+                                    vm.getId(), request.port(), request.protocol(), request.nickname(),
+                                    subdomain, state.dnsRecordId)
+                            : VmPortEntity.createPrivate(
+                                    vm.getId(), request.port(), request.protocol(), request.nickname(),
+                                    subdomain, state.dnsRecordId, state.accessAppId, state.accessPolicyId);
+                    return vmPortRepository.save(port)
+                            .doOnNext(saved -> state.savedPortId = saved.getId())
+                            .flatMap(saved -> savePortEmails(saved.getId(), accessEmails)
+                                    .thenReturn(PortResponse.of(
+                                            saved, accessEmails, cloudflareProperties.getBaseDomain())));
+                });
     }
 
     private Mono<Void> savePortEmails(UUID portId, List<String> emails) {
@@ -368,8 +369,8 @@ public class PortServiceImpl implements PortService {
     }
 
     // 1.5절 규칙1 — Ops는 exposedRoutes만 넘기고, 실제 Cloudflare 조작·중복검사·포트 제한은 여기서 그대로 담당함.
-    // 현재 배포가 원하는 route 집합으로 동기화: 배포가 만든 포트(deployment_id IS NOT NULL)만 add/remove 대상으로 삼고,
-    // 사용자가 수동으로 추가한 포트는 절대 건드리지 않음.
+    // 현재 배포가 원하는 route 집합으로 동기화: 배포가 만든 포트(deployment_id IS NOT NULL)만
+    // add/remove 대상으로 삼는다. 수동 포트는 삭제·수정하지 않고, 해당 대상에 연결된 구성이 일치할 때만 재사용한다.
     @Override
     public Mono<Void> syncDeploymentRoutes(String requesterId, String requesterEmail, UUID vmId,
                                             String deploymentAppId, String deploymentId,
@@ -412,19 +413,40 @@ public class PortServiceImpl implements PortService {
             String requesterEmail,
             Function<String, Mono<Void>> customSubdomainValidator
     ) {
-        return vmPortRepository.findAllByVmIdAndDeploymentAppId(vm.getId(), deploymentAppId)
-                        .collectMap(VmPortEntity::getNickname, p -> p)
-                        .flatMap(existingByNickname -> {
+        return Mono.zip(
+                        vmPortRepository.findAllByVmIdAndDeploymentAppId(vm.getId(), deploymentAppId).collectList(),
+                        vmPortRepository.findAllByVmIdAndLinkedDeploymentTargetId(vm.getId(), deploymentAppId)
+                                .filter(port -> port.getDeploymentAppId() == null)
+                                .collectList())
+                        .flatMap(existing -> {
+                            Map<String, VmPortEntity> existingByNickname = new HashMap<>();
+                            existing.getT1().forEach(port -> existingByNickname.put(port.getNickname(), port));
+                            List<VmPortEntity> linkedManualPorts = existing.getT2();
                             Map<String, DeploymentRouteItem> desiredByNickname = new HashMap<>();
                             for (DeploymentRouteItem route : routes) {
                                 desiredByNickname.put(route.nickname(), route);
                             }
 
                             List<VmPortEntity> toRemove = existingByNickname.values().stream()
-                                    .filter(port -> !desiredByNickname.containsKey(port.getNickname()))
+                                    .filter(port -> {
+                                        DeploymentRouteItem desired = desiredByNickname.get(port.getNickname());
+                                        return desired == null || !matchesRoute(vm, port, desired);
+                                    })
                                     .toList();
                             List<DeploymentRouteItem> toAdd = routes.stream()
-                                    .filter(route -> !existingByNickname.containsKey(route.nickname()))
+                                    .filter(route -> {
+                                        VmPortEntity managed = existingByNickname.get(route.nickname());
+                                        if (managed != null && matchesRoute(vm, managed, route)) {
+                                            return false;
+                                        }
+                                        boolean linkedManualRoute = linkedManualPorts.stream()
+                                                .anyMatch(port -> matchesRoute(vm, port, route));
+                                        if (linkedManualRoute) {
+                                            log.info("연결된 수동 CNAME을 배포 라우트로 재사용: vmId={}, targetId={}, nickname={}",
+                                                    vm.getId(), deploymentAppId, route.nickname());
+                                        }
+                                        return !linkedManualRoute;
+                                    })
                                     .toList();
 
                             Mono<Void> removeMono = Flux.fromIterable(toRemove)
@@ -503,15 +525,24 @@ public class PortServiceImpl implements PortService {
                     if (nickExists > 0) {
                         return Mono.error(new VmException(VmErrorCode.PORT_NICKNAME_ALREADY_EXISTS));
                     }
-                    return cloudflareClient.registerCname(subdomain);
-                })
-                .flatMap(dnsRecordId -> cloudflareClient.addIngressRule(subdomain, vm.getInternalIp(), route.port(), protocol.name())
-                        .then(saveDeploymentPort(vm.getId(), deploymentAppId, deploymentId, route, protocol,
-                                visibility, subdomain, dnsRecordId, requesterEmail))
-                );
+                    List<String> accessEmails = visibility == Visibility.PRIVATE
+                            ? List.of(requesterEmail)
+                            : List.of();
+                    return provisionCloudflarePort(
+                            subdomain,
+                            vm.getInternalIp(),
+                            route.port(),
+                            protocol,
+                            visibility,
+                            accessEmails,
+                            state -> saveDeploymentPort(
+                                    state, vm.getId(), deploymentAppId, deploymentId, route,
+                                    protocol, visibility, subdomain, requesterEmail));
+                });
     }
 
     private Mono<Void> saveDeploymentPort(
+            PortProvisioningState state,
             UUID vmId,
             String deploymentAppId,
             String deploymentId,
@@ -519,26 +550,122 @@ public class PortServiceImpl implements PortService {
             Protocol protocol,
             Visibility visibility,
             String subdomain,
-            String dnsRecordId,
             String requesterEmail
     ) {
         if (visibility == Visibility.PUBLIC) {
-            VmPortEntity port = VmPortEntity.createPublic(vmId, route.port(), protocol, route.nickname(), subdomain, dnsRecordId)
+            VmPortEntity port = VmPortEntity.createPublic(
+                            vmId, route.port(), protocol, route.nickname(), subdomain, state.dnsRecordId)
                     .withDeployment(deploymentAppId, deploymentId);
-            return vmPortRepository.save(port).then();
+            return vmPortRepository.save(port)
+                    .doOnNext(saved -> state.savedPortId = saved.getId())
+                    .then();
         }
 
-        return cloudflareClient.createAccessApp(subdomain, "self_hosted")
-                .flatMap(appId -> cloudflareClient.createAccessPolicy(appId, List.of(requesterEmail))
-                        .flatMap(policyId -> {
-                            VmPortEntity port = VmPortEntity.createPrivate(vmId, route.port(), protocol, route.nickname(),
-                                            subdomain, dnsRecordId, appId, policyId)
-                                    .withDeployment(deploymentAppId, deploymentId);
-                            return vmPortRepository.save(port)
-                                    .flatMap(saved -> portAccessEmailRepository.save(
-                                            VmPortAccessEmailEntity.create(saved.getId(), requesterEmail)));
-                        })
-                ).then();
+        VmPortEntity port = VmPortEntity.createPrivate(
+                        vmId, route.port(), protocol, route.nickname(), subdomain,
+                        state.dnsRecordId, state.accessAppId, state.accessPolicyId)
+                .withDeployment(deploymentAppId, deploymentId);
+        return vmPortRepository.save(port)
+                .doOnNext(saved -> state.savedPortId = saved.getId())
+                .flatMap(saved -> portAccessEmailRepository.save(
+                        VmPortAccessEmailEntity.create(saved.getId(), requesterEmail)))
+                .then();
+    }
+
+    private boolean matchesRoute(VmEntity vm, VmPortEntity port, DeploymentRouteItem route) {
+        String expectedSubdomain = route.customSubdomain() != null && !route.customSubdomain().isBlank()
+                ? route.customSubdomain()
+                : vm.getSubdomain() + "-" + route.nickname();
+        return port.getPort() == route.port()
+                && port.getProtocol().name().equals(route.protocol())
+                && port.getVisibility().name().equals(route.visibility())
+                && expectedSubdomain.equals(port.getSubdomain());
+    }
+
+    private <T> Mono<T> provisionCloudflarePort(
+            String subdomain,
+            String internalIp,
+            int port,
+            Protocol protocol,
+            Visibility visibility,
+            List<String> accessEmails,
+            Function<PortProvisioningState, Mono<T>> persistence
+    ) {
+        PortProvisioningState state = new PortProvisioningState(subdomain);
+        return cloudflareClient.ensureCname(subdomain)
+                .doOnNext(registration -> {
+                    state.dnsRecordId = registration.recordId();
+                    state.dnsCreated = registration.created();
+                })
+                .flatMap(registration -> {
+                    // 응답 유실로 성공 여부를 모르는 경우에도 remove는 멱등하므로 보상 정리 대상으로 표시한다.
+                    state.ingressTouched = true;
+                    return cloudflareClient.addIngressRule(subdomain, internalIp, port, protocol.name());
+                })
+                .then(Mono.defer(() -> {
+                    if (visibility == Visibility.PUBLIC) {
+                        return Mono.empty();
+                    }
+                    return cloudflareClient.createAccessApp(subdomain, "self_hosted")
+                            .doOnNext(appId -> state.accessAppId = appId)
+                            .flatMap(appId -> cloudflareClient.createAccessPolicy(appId, accessEmails))
+                            .doOnNext(policyId -> state.accessPolicyId = policyId)
+                            .then();
+                }))
+                .then(Mono.defer(() -> persistence.apply(state)))
+                .onErrorResume(error -> compensateProvisioning(state)
+                        .then(Mono.error(error)));
+    }
+
+    private Mono<Void> compensateProvisioning(PortProvisioningState state) {
+        Mono<Void> databaseCleanup = state.savedPortId == null
+                ? Mono.empty()
+                : bestEffortCleanup("포트 DB", state.subdomain,
+                        portAccessEmailRepository.deleteAllByVmPortId(state.savedPortId)
+                                .then(vmPortRepository.deleteById(state.savedPortId)));
+        Mono<Void> policyCleanup = state.accessPolicyId == null || state.accessAppId == null
+                ? Mono.empty()
+                : bestEffortCleanup("Access Policy", state.subdomain,
+                        cloudflareClient.deleteAccessPolicy(state.accessAppId, state.accessPolicyId));
+        Mono<Void> appCleanup = state.accessAppId == null
+                ? Mono.empty()
+                : bestEffortCleanup("Access App", state.subdomain,
+                        cloudflareClient.deleteAccessApp(state.accessAppId));
+        Mono<Void> ingressCleanup = !state.ingressTouched
+                ? Mono.empty()
+                : bestEffortCleanup("Ingress", state.subdomain,
+                        cloudflareClient.removeIngressRule(state.subdomain));
+        Mono<Void> cnameCleanup = state.dnsRecordId == null || !state.dnsCreated
+                ? Mono.empty()
+                : bestEffortCleanup("CNAME", state.subdomain,
+                        cloudflareClient.deleteCname(state.dnsRecordId));
+        return databaseCleanup
+                .then(policyCleanup)
+                .then(appCleanup)
+                .then(ingressCleanup)
+                .then(cnameCleanup);
+    }
+
+    private Mono<Void> bestEffortCleanup(String resource, String subdomain, Mono<Void> cleanup) {
+        return cleanup.onErrorResume(error -> {
+            log.warn("포트 프로비저닝 보상 정리 실패(계속 진행): resource={}, subdomain={}, error={}",
+                    resource, subdomain, error.getMessage());
+            return Mono.empty();
+        });
+    }
+
+    private static final class PortProvisioningState {
+        private final String subdomain;
+        private String dnsRecordId;
+        private boolean dnsCreated;
+        private boolean ingressTouched;
+        private String accessAppId;
+        private String accessPolicyId;
+        private UUID savedPortId;
+
+        private PortProvisioningState(String subdomain) {
+            this.subdomain = subdomain;
+        }
     }
 
     private Mono<Void> teardownPortCloudflare(VmPortEntity port) {

@@ -49,6 +49,7 @@ Ops는 VM 서비스에서 사용자 권한과 내부 IP를 확인한 다음 관�
 - 대상 삭제는 컨테이너, 전체 이미지 이력, 저장소·release, 심볼릭 링크와 라우트를 정리하고 이력은 감사 목적으로 남긴다.
 - Compose 다중 서비스의 외부 진입점은 분석 결과에 따라 Caddy 라우터를 계획할 수 있다.
 - 기존 Dockerfile에 숫자 `EXPOSE`가 있으면 프레임워크 기본 포트나 이전 화면 입력값보다 우선한다. 같은 포트를 생성 Compose의 바인딩, Caddy upstream, 헬스체크에 일관되게 사용한다.
+- VM 라우트 동기화가 4xx를 반환하면 Ops는 원격 status와 안전하게 정제한 message를 보존해 유효성·권한·VM 없음·CNAME 충돌을 구분한다. 네트워크·5xx는 `DEPLOYMENT_ROUTE_SYNC_FAILED`로 표기하며 라우트 오류를 일괄적인 “VM 정보 조회 실패”로 바꾸지 않는다.
 
 ## Auto Preview
 
