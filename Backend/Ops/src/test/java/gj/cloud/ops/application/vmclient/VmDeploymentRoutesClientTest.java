@@ -4,6 +4,7 @@ import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,6 +21,17 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class VmDeploymentRoutesClientTest {
+
+    @Test
+    void startsWithoutRestClientBuilderBean() {
+        new ApplicationContextRunner()
+                .withPropertyValues("vm.service-url=http://vm-service")
+                .withBean(VmDeploymentRoutesClient.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(VmDeploymentRoutesClient.class);
+                });
+    }
 
     @Test
     void preservesVmServiceConflictMessage() {

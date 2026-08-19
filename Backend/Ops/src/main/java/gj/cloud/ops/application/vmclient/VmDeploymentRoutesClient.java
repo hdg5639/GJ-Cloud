@@ -4,6 +4,7 @@ import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -20,6 +21,7 @@ public class VmDeploymentRoutesClient {
 
     private final RestClient restClient;
 
+    @Autowired
     public VmDeploymentRoutesClient(@Value("${vm.service-url}") String vmServiceUrl) {
         this(vmServiceUrl, RestClient.builder());
     }
