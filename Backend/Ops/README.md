@@ -203,6 +203,7 @@ npm run blueprint:check
 - 성공한 백업은 VM별 보관 기간과 최대 개수를 적용하고, 실패·기간 초과·개수 초과 파일은 정리한다. 복구 리허설은 [DB 백업 복구 런북](docs/DB_BACKUP_RECOVERY.md)을 따른다.
 - 기존 평문 백업은 전용 API에서 다운로드하지 않으며 새 백업 생성 시 보관 정책에 따라 순차 정리한다. 즉시 일괄 삭제는 수행하지 않는다.
 - 분석용 Git clone은 Squid allowlist proxy를 기본 사용하고 내부·메타데이터 대역을 연결 시점에 차단한다. 사용자 VM의 Git은 해당 VM에서 도달 가능한 `OPS_GIT_REMOTE_EGRESS_PROXY_URL`을 지정했을 때만 프록시를 적용한다.
+- private 저장소 분석 clone의 단기 토큰은 Git 런타임 config 환경변수로만 전달한다. `/tmp`는 `noexec`를 유지하며 토큰을 담은 실행 스크립트나 명령줄 인자를 만들지 않는다.
 - SVG·HTML·XML은 Ops API origin에서 inline 미리보기하지 않고, 다운로드 응답은 `attachment` + `nosniff` + sandbox CSP를 적용한다.
 - `OPS_KEY_ENCRYPTION_SECRET`, GitHub private key, webhook secret, OpenAI key를 로그나 배포 스펙에 포함하지 않는다.
 - Blueprint manifest나 Runtime을 바꾼 뒤에는 포털 검사와 Ops 빌드를 모두 실행한다.
