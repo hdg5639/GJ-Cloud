@@ -97,6 +97,21 @@ class AiSpecGeneratorClientTest {
         assertThat(merged.get(1).containerPort()).isEqualTo(18082);
     }
 
+    @Test
+    void dockerfileExposeOverridesStaleHintPort() {
+        ServiceCard hint = new ServiceCard(
+                "web", "node", ".", 3000,
+                null, null, 22, null, null, null, null, true, null);
+        DiscoveredService discovered = new DiscoveredService(
+                "web", ".", "node", 80,
+                DiscoveredService.PORT_SOURCE_DOCKERFILE_EXPOSE,
+                true, "HIGH", List.of("package.json", "Dockerfile EXPOSE 80"));
+
+        List<ServiceCard> merged = client.mergeDiscoveredServices(List.of(hint), List.of(discovered));
+
+        assertThat(merged).singleElement().satisfies(card -> assertThat(card.containerPort()).isEqualTo(80));
+    }
+
     private ServiceSpec service(gj.cloud.ops.application.deployment.spec.ExposeSpec expose) {
         return new ServiceSpec(
                 "commerce-api",
@@ -116,7 +131,7 @@ class AiSpecGeneratorClientTest {
 
     private DiscoveredService discovered(String name, String context, int port) {
         return new DiscoveredService(
-                name, context, "java", port, true, "HIGH",
+                name, context, "java", port, DiscoveredService.PORT_SOURCE_APPLICATION_CONFIG, true, "HIGH",
                 List.of("pom.xml", "Spring Boot 실행 모듈"));
     }
 }

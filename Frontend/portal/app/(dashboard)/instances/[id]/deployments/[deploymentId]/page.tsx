@@ -12,6 +12,7 @@ import { StatGrid, StatCard } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { formatDeploymentEventDetail } from "@/lib/deployment-log";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
   QUEUED: "off",
@@ -259,13 +260,23 @@ export default function DeploymentDetailPage() {
           </p>
         ) : (
           <div className="space-y-1">
-            {events.map((ev) => (
-              <div key={ev.sequence} className="text-[11px] font-mono flex gap-2">
-                <span className="text-gray-500 shrink-0">{formatDateTime(ev.createdAt)}</span>
-                <span className={`shrink-0 ${EVENT_TYPE_STYLE[ev.eventType] ?? "text-gray-300"}`}>[{ev.eventType}]</span>
-                <span className="text-gray-200 whitespace-pre-wrap break-all">{ev.message}</span>
-              </div>
-            ))}
+            {events.map((ev) => {
+              const detail = formatDeploymentEventDetail(ev.payload);
+              return (
+                <div key={ev.sequence} className="border-b border-white/5 py-1.5 last:border-0">
+                  <div className="flex gap-2 text-[11px] font-mono">
+                    <span className="text-gray-500 shrink-0">{formatDateTime(ev.createdAt)}</span>
+                    <span className={`shrink-0 ${EVENT_TYPE_STYLE[ev.eventType] ?? "text-gray-300"}`}>[{ev.eventType}]</span>
+                    <span className="text-gray-200 whitespace-pre-wrap break-words">{ev.message}</span>
+                  </div>
+                  {detail && (
+                    <pre className="ml-0 mt-1.5 max-w-full whitespace-pre-wrap break-words rounded-md border border-white/10 bg-black/20 px-3 py-2 font-mono text-[10px] leading-[1.55] text-[#cbd6ce] sm:ml-[146px]">
+                      {detail}
+                    </pre>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

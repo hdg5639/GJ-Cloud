@@ -4,6 +4,7 @@ import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
+import gj.cloud.ops.application.deployment.dto.DeploymentCommandLogPayload;
 import gj.cloud.ops.global.exception.OpsException;
 import gj.cloud.ops.global.exception.enums.OpsErrorCode;
 import gj.cloud.ops.global.ssh.CommandResult;
@@ -143,12 +144,19 @@ public class GitReleaseManager {
                 }
                 if (!isTransientGitNetworkFailure(result.stderr())) {
                     log.error("Git 명령 실패(operation={}, exit={}): stderr={}", operation, result.exitStatus(), result.stderr());
-                    throw new OpsException(OpsErrorCode.SSH_COMMAND_FAILED);
+                    throw new OpsException(
+                            OpsErrorCode.SSH_COMMAND_FAILED,
+                            operation + " 실패 (exit=" + result.exitStatus() + "): "
+                                    + DeploymentCommandLogPayload.failureSummary(result));
                 }
                 if (attempt == GIT_NETWORK_RETRY_ATTEMPTS) {
                     log.error("Git 네트워크 오류 재시도 소진(operation={}, attempts={}): stderr={}",
                             operation, GIT_NETWORK_RETRY_ATTEMPTS, result.stderr());
-                    throw new OpsException(OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE);
+                    throw new OpsException(
+                            OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE,
+                            operation + " 네트워크 오류 (" + GIT_NETWORK_RETRY_ATTEMPTS
+                                    + "회 재시도 소진, exit=" + result.exitStatus() + "): "
+                                    + DeploymentCommandLogPayload.failureSummary(result));
                 }
                 log.warn("Git 네트워크 일시 오류 — 재시도 예정: operation={}, attempt={}/{}, stderr={}",
                         operation, attempt, GIT_NETWORK_RETRY_ATTEMPTS, result.stderr());
@@ -159,7 +167,9 @@ public class GitReleaseManager {
                 if (attempt == GIT_NETWORK_RETRY_ATTEMPTS) {
                     log.error("Git 명령 타임아웃 재시도 소진(operation={}, attempts={})",
                             operation, GIT_NETWORK_RETRY_ATTEMPTS);
-                    throw new OpsException(OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE);
+                    throw new OpsException(
+                            OpsErrorCode.REPOSITORY_NETWORK_UNAVAILABLE,
+                            operation + " 시간 초과 (" + GIT_NETWORK_RETRY_ATTEMPTS + "회 재시도 소진)");
                 }
                 log.warn("Git 명령 일시 타임아웃 — 재시도 예정: operation={}, attempt={}/{}",
                         operation, attempt, GIT_NETWORK_RETRY_ATTEMPTS);

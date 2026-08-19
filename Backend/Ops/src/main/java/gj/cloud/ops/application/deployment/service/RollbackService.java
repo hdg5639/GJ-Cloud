@@ -3,6 +3,7 @@ package gj.cloud.ops.application.deployment.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jcraft.jsch.Session;
 import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
+import gj.cloud.ops.application.deployment.dto.DeploymentCommandLogPayload;
 import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.domain.deployment.entity.DeploymentEntity;
@@ -58,10 +59,20 @@ public class RollbackService {
         }
 
         String resolvedFilePath = previous.getReleaseDir() + "/" + RESOLVED_COMPOSE_FILE_NAME;
+        eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                "이전 성공 배포 컨테이너 복구 시작 (deployment: " + previousDeploymentId + ")");
+        long startedAt = System.nanoTime();
         CommandResult upResult = sshCommandExecutor.exec(session,
                 "docker compose -p gj_" + appId + " -f '" + resolvedFilePath + "' up -d", DOCKER_COMPOSE_TIMEOUT_MS);
+        long durationMs = Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
+        eventPublisher.publish(deploymentId, DeploymentEventType.BUILD_LOG,
+                "롤백 Docker Compose up " + (upResult.isSuccess() ? "성공" : "실패")
+                        + " (exit=" + upResult.exitStatus() + ", " + durationMs + "ms)",
+                DeploymentCommandLogPayload.from(
+                        "rollback-compose-up", "gj_" + appId, upResult, durationMs));
         if (!upResult.isSuccess()) {
-            fail(deploymentId, "롤백 중 컨테이너 기동 실패: " + trim(upResult.stderr()));
+            fail(deploymentId, "롤백 중 컨테이너 기동 실패 (exit=" + upResult.exitStatus() + "): "
+                    + DeploymentCommandLogPayload.failureSummary(upResult));
             return;
         }
 
@@ -99,10 +110,4 @@ public class RollbackService {
         }
     }
 
-    private String trim(String text) {
-        if (text == null) {
-            return "";
-        }
-        return text.length() > 500 ? text.substring(0, 500) : text;
-    }
 }

@@ -23,6 +23,7 @@ public class RepositoryServiceDiscoverer {
             ".git", "node_modules", "dist", "build", "target", ".gradle", ".idea", ".vscode", "coverage");
     private static final int MAX_DEPTH = 10;
     private static final int MAX_SERVICES = 50;
+    private static final Pattern DOCKER_FROM = Pattern.compile("(?im)^\\s*FROM\\s+");
     private static final Pattern EXPOSE_PORT = Pattern.compile("(?im)^\\s*EXPOSE\\s+(\\d{1,5})");
     private static final Pattern SERVER_PORT = Pattern.compile(
             "(?im)(?:server\\.port\\s*[=:]\\s*|port\\s*:\\s*|SERVER_PORT[:=])[^\\d]*(\\d{2,5})");
@@ -62,6 +63,7 @@ public class RepositoryServiceDiscoverer {
                     candidate.context(),
                     candidate.runtime(),
                     candidate.containerPort(),
+                    candidate.portSource(),
                     true,
                     candidate.confidence(),
                     candidate.evidence()));
@@ -77,41 +79,59 @@ public class RepositoryServiceDiscoverer {
                 : directory.resolve("build.gradle.kts");
         Path packageJson = directory.resolve("package.json");
         Path dockerfile = directory.resolve("Dockerfile");
+        String dockerfileContent = read(dockerfile);
 
         String pomContent = read(pom);
         if (pomContent != null && isRunnableMavenModule(pomContent)) {
-            return new ServiceCandidate(context, "java", inferServerPort(directory, 8080), "HIGH",
+            PortInference port = inferPort(directory, dockerfileContent, 8080);
+            return candidate(context, "java", port, "HIGH",
                     List.of("pom.xml", "Spring Boot 실행 모듈"));
         }
 
         String gradleContent = read(gradle);
         if (gradleContent != null && isRunnableGradleModule(gradleContent)) {
-            return new ServiceCandidate(context, "java", inferServerPort(directory, 8080), "HIGH",
+            PortInference port = inferPort(directory, dockerfileContent, 8080);
+            return candidate(context, "java", port, "HIGH",
                     List.of(gradle.getFileName().toString(), "Spring Boot 실행 모듈"));
         }
 
         String packageContent = read(packageJson);
         if (packageContent != null && isRunnableNodePackage(packageContent)) {
-            return new ServiceCandidate(context, "node", inferServerPort(directory, 3000), "MEDIUM",
+            PortInference port = inferPort(directory, dockerfileContent, 3000);
+            return candidate(context, "node", port, "MEDIUM",
                     List.of("package.json", "start/build 스크립트 또는 프론트엔드 런타임"));
         }
 
         if (isRunnablePythonModule(directory)) {
-            return new ServiceCandidate(context, "python", inferServerPort(directory, 8000), "MEDIUM",
+            PortInference port = inferPort(directory, dockerfileContent, 8000);
+            return candidate(context, "python", port, "MEDIUM",
                     List.of("Python 의존성 파일", "웹 프레임워크 의존성"));
         }
 
-        String dockerfileContent = read(dockerfile);
         if (dockerfileContent != null) {
-            return new ServiceCandidate(context, "docker", inferDockerPort(dockerfileContent, 3000), "MEDIUM",
-                    List.of("Dockerfile"));
+            PortInference port = inferPort(directory, dockerfileContent, 3000);
+            return candidate(context, "docker", port, "MEDIUM", List.of("Dockerfile"));
         }
 
         if (Files.isRegularFile(directory.resolve("index.html"))
                 && packageContent == null && pomContent == null && gradleContent == null) {
-            return new ServiceCandidate(context, "static", 80, "HIGH", List.of("index.html"));
+            return new ServiceCandidate(context, "static", 80, DiscoveredService.PORT_SOURCE_DEFAULT,
+                    "HIGH", List.of("index.html", "정적 서비스 기본 포트 80"));
         }
         return null;
+    }
+
+    private ServiceCandidate candidate(
+            String context,
+            String runtime,
+            PortInference port,
+            String confidence,
+            List<String> baseEvidence
+    ) {
+        List<String> evidence = new ArrayList<>(baseEvidence);
+        evidence.add(port.evidence());
+        return new ServiceCandidate(
+                context, runtime, port.port(), port.source(), confidence, List.copyOf(evidence));
     }
 
     private List<ServiceCandidate> removeAggregatorCandidates(List<ServiceCandidate> candidates) {
@@ -172,7 +192,30 @@ public class RepositoryServiceDiscoverer {
                 || dependencies.contains("uvicorn");
     }
 
-    private int inferServerPort(Path directory, int fallback) {
+    private PortInference inferPort(Path directory, String dockerfileContent, int fallback) {
+        Integer dockerfilePort = inferDockerPort(dockerfileContent);
+        if (dockerfilePort != null) {
+            return new PortInference(
+                    dockerfilePort,
+                    DiscoveredService.PORT_SOURCE_DOCKERFILE_EXPOSE,
+                    "Dockerfile EXPOSE " + dockerfilePort);
+        }
+
+        Integer configuredPort = inferServerPort(directory);
+        if (configuredPort != null) {
+            return new PortInference(
+                    configuredPort,
+                    DiscoveredService.PORT_SOURCE_APPLICATION_CONFIG,
+                    "애플리케이션 설정 포트 " + configuredPort);
+        }
+
+        return new PortInference(
+                fallback,
+                DiscoveredService.PORT_SOURCE_DEFAULT,
+                "런타임 기본 포트 " + fallback);
+    }
+
+    private Integer inferServerPort(Path directory) {
         List<Path> candidates = List.of(
                 directory.resolve("src/main/resources/application.properties"),
                 directory.resolve("src/main/resources/application.yml"),
@@ -188,14 +231,19 @@ public class RepositoryServiceDiscoverer {
                 if (port != null) return port;
             }
         }
-        return fallback;
+        return null;
     }
 
-    private int inferDockerPort(String dockerfile, int fallback) {
-        Matcher matcher = EXPOSE_PORT.matcher(dockerfile);
-        if (!matcher.find()) return fallback;
-        Integer port = validPort(matcher.group(1));
-        return port == null ? fallback : port;
+    private Integer inferDockerPort(String dockerfile) {
+        if (dockerfile == null) return null;
+        int finalStageStart = 0;
+        Matcher fromMatcher = DOCKER_FROM.matcher(dockerfile);
+        while (fromMatcher.find()) {
+            finalStageStart = fromMatcher.start();
+        }
+        Matcher matcher = EXPOSE_PORT.matcher(dockerfile.substring(finalStageStart));
+        if (!matcher.find()) return null;
+        return validPort(matcher.group(1));
     }
 
     private Integer validPort(String value) {
@@ -256,8 +304,16 @@ public class RepositoryServiceDiscoverer {
             String context,
             String runtime,
             Integer containerPort,
+            String portSource,
             String confidence,
             List<String> evidence
+    ) {
+    }
+
+    private record PortInference(
+            Integer port,
+            String source,
+            String evidence
     ) {
     }
 }

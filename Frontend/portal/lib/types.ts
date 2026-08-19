@@ -563,6 +563,7 @@ export interface DiscoveredService {
   context: string;
   runtime: string;
   containerPort: number;
+  portSource?: "DOCKERFILE_EXPOSE" | "APPLICATION_CONFIG" | "DEFAULT";
   expose: boolean;
   confidence: string;
   evidence: string[];

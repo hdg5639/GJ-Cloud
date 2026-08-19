@@ -33,6 +33,27 @@ class DeploymentSpecRendererTest {
     }
 
     @Test
+    void usesTheSameResolvedPortForComposeRouteAndHealthCheck() {
+        ServiceSpec service = new ServiceSpec(
+                "web",
+                DeploymentMode.SERVICE,
+                new BuildSpec(RuntimeKind.DOCKERFILE, null, BuildRunStrategy.DOCKERFILE, null),
+                new ArtifactSpec(ArtifactType.CONTAINER_IMAGE, "."),
+                new RunSpec(RuntimeKind.DOCKERFILE, BuildRunStrategy.DOCKERFILE, 80),
+                ".",
+                new ExposeSpec(true, "http", "/", null, null, null, null));
+        DeploymentSpec spec = new DeploymentSpec("2.0", List.of(service), List.of(), "app-network", false);
+
+        ComposeArtifact artifact = renderer.render(spec);
+
+        assertThat(artifact.composeContent()).contains("80:80");
+        assertThat(artifact.exposedRoutes()).singleElement()
+                .satisfies(route -> assertThat(route.port()).isEqualTo(80));
+        assertThat(artifact.healthChecks()).singleElement()
+                .satisfies(check -> assertThat(check.hostPort()).isEqualTo(80));
+    }
+
+    @Test
     void addsSingleCaddyGatewayForMultipleHttpServices() {
         ServiceSpec web = service("web", 3000, "/");
         ServiceSpec api = service("api", 8080, "/health");

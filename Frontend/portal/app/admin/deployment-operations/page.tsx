@@ -15,6 +15,7 @@ import { PageLoader } from "@/components/ui/loader";
 import { Modal } from "@/components/ui/modal";
 import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { cn } from "@/components/ui/cn";
+import { formatDeploymentEventDetail } from "@/lib/deployment-log";
 
 type TargetFilter = "ALL" | "AUTO" | "ORPHANED";
 
@@ -222,13 +223,21 @@ export default function DeploymentOperationsPage() {
               <div className="min-h-0 flex-1 overflow-y-auto bg-[#18201b] p-4 font-mono text-[11px] leading-5 text-[#e6eee8]">
                 {logsLoading && <p className="text-[#aebbb1]">로그를 불러오는 중...</p>}
                 {!logsLoading && logEvents.length === 0 && <p className="text-[#aebbb1]">저장된 이벤트 로그가 없습니다.</p>}
-                {!logsLoading && logEvents.map((event) => (
-                  <div key={event.sequence} className="grid grid-cols-[64px_130px_minmax(0,1fr)] gap-3 border-b border-white/5 py-1.5 last:border-0">
-                    <span className="text-[#8fa095]">#{event.sequence}</span>
-                    <span className={event.eventType === "ERROR" ? "text-[#ff9f9f]" : event.eventType === "DONE" ? "text-[#9fe3ad]" : "text-[#b7c5bb]"}>{event.eventType}</span>
-                    <span className="whitespace-pre-wrap break-words">{event.message}</span>
-                  </div>
-                ))}
+                {!logsLoading && logEvents.map((event) => {
+                  const detail = formatDeploymentEventDetail(event.payload);
+                  return (
+                    <div key={event.sequence} className="grid grid-cols-[64px_130px_minmax(0,1fr)] gap-x-3 border-b border-white/5 py-1.5 last:border-0">
+                      <span className="text-[#8fa095]">#{event.sequence}</span>
+                      <span className={event.eventType === "ERROR" ? "text-[#ff9f9f]" : event.eventType === "DONE" ? "text-[#9fe3ad]" : "text-[#b7c5bb]"}>{event.eventType}</span>
+                      <span className="whitespace-pre-wrap break-words">{event.message}</span>
+                      {detail && (
+                        <pre className="col-start-3 mt-1.5 max-w-full whitespace-pre-wrap break-words rounded-md border border-white/10 bg-black/20 px-3 py-2 text-[10px] leading-[1.55] text-[#cbd6ce]">
+                          {detail}
+                        </pre>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </section>
           </Modal>

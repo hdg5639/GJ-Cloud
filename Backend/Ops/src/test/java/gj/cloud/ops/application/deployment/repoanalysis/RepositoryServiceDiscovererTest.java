@@ -66,6 +66,29 @@ class RepositoryServiceDiscovererTest {
                 .containsExactly(3000, 8000);
     }
 
+    @Test
+    void dockerfileExposeOverridesFrameworkDefaultPort() throws IOException {
+        Files.writeString(repositoryRoot.resolve("package.json"), """
+                {"scripts":{"start":"next start"},"dependencies":{"next":"latest"}}
+                """);
+        Files.writeString(repositoryRoot.resolve("Dockerfile"), """
+                FROM node:22-alpine AS builder
+                EXPOSE 3000
+                RUN npm run build
+                FROM nginx:alpine
+                EXPOSE 80/tcp
+                """);
+
+        ServiceDiscoveryResult result = discoverer.discover(repositoryRoot);
+
+        assertThat(result.services()).singleElement().satisfies(service -> {
+            assertThat(service.runtime()).isEqualTo("node");
+            assertThat(service.containerPort()).isEqualTo(80);
+            assertThat(service.portSource()).isEqualTo(DiscoveredService.PORT_SOURCE_DOCKERFILE_EXPOSE);
+            assertThat(service.evidence()).contains("Dockerfile EXPOSE 80");
+        });
+    }
+
     private void createMavenModule(String name, String content) throws IOException {
         Path module = Files.createDirectories(repositoryRoot.resolve(name));
         Files.writeString(module.resolve("pom.xml"), "<project>" + content + "</project>");
