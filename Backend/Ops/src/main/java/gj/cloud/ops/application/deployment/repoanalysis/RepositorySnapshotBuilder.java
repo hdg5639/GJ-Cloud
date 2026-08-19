@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.Iterator;
@@ -25,7 +26,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -113,10 +113,8 @@ public class RepositorySnapshotBuilder {
         gitCloneSecurityValidator.assertHostNotInternal(repoUrl);
 
         Path tempDir = null;
-        Path askpassScript = null;
         try {
             tempDir = Files.createTempDirectory("gj-repo-analysis-");
-            askpassScript = patToken != null && !patToken.isBlank() ? writeAskpassScript(patToken) : null;
 
             // DEP-001: 최초 연결 시 사전 DNS 검증을 통과해도, 서버가 응답에서 내부 주소로 리다이렉트하면
             // 그 우회 경로로 SSRF가 가능하므로 리다이렉트 자체를 비활성화
@@ -134,8 +132,8 @@ public class RepositorySnapshotBuilder {
                     "--filter=blob:none", "--no-tags", "--branch", branch, repoUrl, tempDir.toString());
             Map<String, String> env = new LinkedHashMap<>();
             env.put("GIT_TERMINAL_PROMPT", "0");
-            if (askpassScript != null) {
-                env.put("GIT_ASKPASS", askpassScript.toString());
+            if (patToken != null && !patToken.isBlank()) {
+                env.putAll(gitHttpAuthenticationEnvironment(patToken));
             }
             if (gitLocalEgressProxyUrl != null && !gitLocalEgressProxyUrl.isBlank()) {
                 validateProxyUrl(gitLocalEgressProxyUrl);
@@ -157,9 +155,6 @@ public class RepositorySnapshotBuilder {
         } catch (IOException e) {
             throw new OpsException(OpsErrorCode.REPOSITORY_CLONE_FAILED);
         } finally {
-            if (askpassScript != null) {
-                deleteQuietly(askpassScript);
-            }
             if (tempDir != null) {
                 deleteRecursivelyQuietly(tempDir);
             }
@@ -321,21 +316,16 @@ public class RepositorySnapshotBuilder {
         }
     }
 
-    // 로컬 GIT_ASKPASS 스크립트 — GitReleaseManager.withAskpass()와 동일한 기법을 로컬 프로세스용으로
-    // 적용: PAT는 명령줄 인자에 절대 나타나지 않고(ps aux 노출 방지) 파일 내용으로만 전달, 사용 직후 삭제.
-    private Path writeAskpassScript(String patToken) throws IOException {
-        String escapedPat = patToken.replace("'", "'\\''");
-        String content = "#!/bin/sh\n"
-                + "case \"$1\" in\n"
-                + "  Username*) echo 'oauth2' ;;\n"
-                + "  *) echo '" + escapedPat + "' ;;\n"
-                + "esac\n";
-        Path script = Files.createTempFile("gj-askpass-" + UUID.randomUUID(), ".sh");
-        Files.writeString(script, content, StandardCharsets.UTF_8);
-        if (!script.toFile().setExecutable(true, true)) {
-            log.warn("askpass 스크립트 실행 권한 설정 실패: {}", script);
-        }
-        return script;
+    // 분석 clone은 noexec /tmp를 쓰는 읽기 전용 컨테이너 내부에서 실행된다. 실행 가능한
+    // GIT_ASKPASS 임시 스크립트를 만들지 않고 Git의 런타임 config 환경변수로 Authorization
+    // 헤더를 주입한다. 토큰은 argv·로그에 포함되지 않고 해당 clone 프로세스와 자식에만 전달된다.
+    static Map<String, String> gitHttpAuthenticationEnvironment(String token) {
+        String credentials = "oauth2:" + token;
+        String encoded = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+        return Map.of(
+                "GIT_CONFIG_COUNT", "1",
+                "GIT_CONFIG_KEY_0", "http.extraHeader",
+                "GIT_CONFIG_VALUE_0", "Authorization: Basic " + encoded);
     }
 
     private void deleteQuietly(Path path) {
