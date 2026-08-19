@@ -1,6 +1,7 @@
 package gj.cloud.ops.application.deployment.service;
 
 import gj.cloud.ops.application.deployment.dto.ResolvedCompose;
+import gj.cloud.ops.application.deployment.dto.DeploymentCommandLogPayload;
 import gj.cloud.ops.application.deployment.dto.ServiceImageRef;
 import gj.cloud.ops.domain.deployment.enums.DeploymentEventType;
 import gj.cloud.ops.global.exception.OpsException;
@@ -35,9 +36,6 @@ public class ComposeImageBuilder {
     // OPS-SEC-003: serviceName은 ComposeValidator에서 이미 검증되지만, 이 클래스가 그 검증에 의존하지 않고
     // 자체적으로도 확인함 — 여기서 바로 docker build -t 셸 문자열에 꽂히기 때문
     private static final Pattern SAFE_SERVICE_NAME = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,62}$");
-
-    // 로그 전체를 한 번에 담기엔 이벤트 payload가 너무 커질 수 있어 마지막 일부만 발행 (D.8 "로그 펼치기" 데이터 소스)
-    private static final int BUILD_LOG_TAIL_CHARS = 4000;
 
     private final SshCommandExecutor sshCommandExecutor;
     private final DeploymentEventPublisher eventPublisher;
@@ -86,11 +84,24 @@ public class ComposeImageBuilder {
             }
             buildCmd.append(" '").append(contextPath).append("'");
 
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "[" + serviceName + "] 이미지 빌드 시작 (context: " + buildContext
+                            + (dockerfile != null ? ", dockerfile: " + dockerfile : "") + ")");
+            long startedAt = System.nanoTime();
             CommandResult buildResult = sshCommandExecutor.exec(session, buildCmd.toString(), BUILD_TIMEOUT_MS);
+            long durationMs = (System.nanoTime() - startedAt) / 1_000_000;
             eventPublisher.publish(deploymentId, DeploymentEventType.BUILD_LOG,
-                    "[" + serviceName + "] 빌드 로그", tail(buildResult.stdout() + buildResult.stderr()));
+                    "[" + serviceName + "] 이미지 빌드 "
+                            + (buildResult.isSuccess() ? "성공" : "실패")
+                            + " (exit=" + buildResult.exitStatus() + ", " + durationMs + "ms)",
+                    DeploymentCommandLogPayload.from(
+                            "docker-build", serviceName, buildResult, durationMs));
             if (!buildResult.isSuccess()) {
-                throw new OpsException(OpsErrorCode.SSH_COMMAND_FAILED);
+                throw new OpsException(
+                        OpsErrorCode.SSH_COMMAND_FAILED,
+                        "서비스 '" + serviceName + "' 이미지 빌드 실패 (exit="
+                                + buildResult.exitStatus() + "): "
+                                + DeploymentCommandLogPayload.failureSummary(buildResult));
             }
 
             CommandResult inspect = sshCommandExecutor.execOrThrow(session,
@@ -182,13 +193,6 @@ public class ComposeImageBuilder {
             return df != null ? String.valueOf(df) : null;
         }
         return null;
-    }
-
-    private String tail(String log) {
-        if (log == null) {
-            return "";
-        }
-        return log.length() > BUILD_LOG_TAIL_CHARS ? log.substring(log.length() - BUILD_LOG_TAIL_CHARS) : log;
     }
 
     private String sanitize(String pathSegment) {

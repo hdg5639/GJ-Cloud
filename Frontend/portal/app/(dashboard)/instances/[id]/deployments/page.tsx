@@ -758,6 +758,9 @@ function mergeDiscoveredServiceCards(
       ...discoveredServiceCard(service),
       ...hint,
       context: service.context,
+      containerPort: service.portSource === "DOCKERFILE_EXPOSE"
+        ? service.containerPort
+        : hint.containerPort,
     };
   });
   const hasSubmodules = discovered.some((service) => normalizeServiceContext(service.context) !== ".");

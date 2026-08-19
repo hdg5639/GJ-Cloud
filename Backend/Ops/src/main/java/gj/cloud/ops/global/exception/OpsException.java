@@ -11,4 +11,9 @@ public class OpsException extends RuntimeException {
         super(errorCode.getMessage());
         this.errorCode = errorCode;
     }
+
+    public OpsException(OpsErrorCode errorCode, String message) {
+        super(message == null || message.isBlank() ? errorCode.getMessage() : message);
+        this.errorCode = errorCode;
+    }
 }

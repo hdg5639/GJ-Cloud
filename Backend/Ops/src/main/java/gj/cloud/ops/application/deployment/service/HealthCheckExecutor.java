@@ -27,6 +27,10 @@ public class HealthCheckExecutor {
     private final SshCommandExecutor sshCommandExecutor;
 
     public boolean check(Session session, String appId, HealthCheck healthCheck) {
+        return checkDetailed(session, appId, healthCheck).healthy();
+    }
+
+    HealthCheckResult checkDetailed(Session session, String appId, HealthCheck healthCheck) {
         String path = sanitizePath(healthCheck.path());
         String command;
         if (healthCheck.hostPort() != null) {
@@ -38,14 +42,26 @@ public class HealthCheckExecutor {
                     + " curl -s -o /dev/null -w '%{http_code}' --max-time 10 'http://localhost:"
                     + healthCheck.containerPort() + path + "'";
         } else {
-            return false;
+            return new HealthCheckResult(false, null, new CommandResult(-1, "", "포트가 지정되지 않음"));
         }
 
         CommandResult result = sshCommandExecutor.exec(session, command, CURL_TIMEOUT_MS);
+        Integer httpStatus = parseHttpStatus(result.stdout());
         if (!result.isSuccess()) {
-            return false;
+            return new HealthCheckResult(false, httpStatus, result);
         }
-        return result.stdout().trim().startsWith("2");
+        return new HealthCheckResult(
+                httpStatus != null && httpStatus >= 200 && httpStatus < 300,
+                httpStatus,
+                result);
+    }
+
+    private Integer parseHttpStatus(String stdout) {
+        String value = stdout == null ? "" : stdout.trim();
+        if (!value.matches("\\d{3}")) {
+            return null;
+        }
+        return Integer.parseInt(value);
     }
 
     private String sanitizeServiceName(String serviceName) {

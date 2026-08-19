@@ -10,6 +10,7 @@ import com.jcraft.jsch.SftpException;
 import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
 import gj.cloud.ops.application.deployment.dto.ComposeSpecResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentRoutesRequest;
+import gj.cloud.ops.application.deployment.dto.DeploymentCommandLogPayload;
 import gj.cloud.ops.application.deployment.dto.EnvironmentFile;
 import gj.cloud.ops.application.deployment.dto.ExposedRoute;
 import gj.cloud.ops.application.deployment.dto.HealthCheck;
@@ -762,22 +763,35 @@ public class DeploymentExecutor {
             String requestedRevision
     ) {
         Session session = null;
+        long pipelineStartedAt = System.nanoTime();
         try {
             session = sshSessionFactory.createSession(vmId, internalIp);
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "VM SSH 연결 완료 (배포 파이프라인 세션 준비됨)");
 
             String releaseDir;
             boolean hasRepository = repoConfig.repoUrl() != null && !repoConfig.repoUrl().isBlank();
             if (hasRepository) {
-                updateStatus(deploymentId, DeploymentStatus.CLONING, "소스 체크아웃 시작 (branch: " + repoConfig.branch() + ")");
+                updateStatus(deploymentId, DeploymentStatus.CLONING,
+                        "저장소 준비 시작 (branch: " + repoConfig.branch() + ")");
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                        "bare mirror 확인 및 최초 clone 준비: " + repoConfig.repoUrl());
                 gitReleaseManager.ensureBareRepo(session, appId, repoConfig.repoUrl(), repoConfig.patToken());
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                        "원격 변경사항 fetch 시작 (branch: " + repoConfig.branch() + ")");
                 String commitSha = gitReleaseManager.fetchAndResolveCommit(
                         session, appId, repoConfig.branch(), repoConfig.patToken(), requestedRevision);
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                        "배포 리비전 고정 완료: " + commitSha);
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                        "release worktree 생성 시작");
                 gitReleaseManager.createWorktree(
                         session, appId, deploymentId, commitSha, repoConfig.patToken());
                 releaseDir = gitReleaseManager.releaseDir(appId, deploymentId);
                 updateEntity(deploymentId, e -> e.withSourceRevision(commitSha, releaseDir));
                 eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
-                        "소스 체크아웃 완료 (" + repoConfig.branch() + " → " + shortSha(commitSha) + ")");
+                        "소스 체크아웃 완료 (" + repoConfig.branch() + " → " + shortSha(commitSha)
+                                + ", release: " + releaseDir + ")");
             } else {
                 // Auto Preview처럼 Git 저장소 없이 전부 생성된 파일(artifact.uploadedFiles())만으로
                 // 배포하는 경우 — clone/worktree 없이 release 디렉토리만 만들고 그 아래로 바로 업로드한다.
@@ -790,21 +804,37 @@ public class DeploymentExecutor {
 
             String contextDir = resolveContextDir(releaseDir, repoConfig.context());
 
-            updateStatus(deploymentId, DeploymentStatus.UPLOADING, "파일 전송 중...");
+            updateStatus(deploymentId, DeploymentStatus.UPLOADING,
+                    "배포 파일 전송 중 (compose 1, env " + artifact.environmentFiles().size()
+                            + ", 생성 파일 " + artifact.uploadedFiles().size() + ")");
             uploadFiles(session, releaseDir, contextDir, artifact);
-            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "파일 전송 완료");
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "배포 파일 전송 완료 (context: " + contextDir + ")");
 
-            updateStatus(deploymentId, DeploymentStatus.VALIDATING, "compose 검증 중...");
+            updateStatus(deploymentId, DeploymentStatus.VALIDATING, "Docker Compose 설정 검증 중");
             String composeFilePath = contextDir + "/" + COMPOSE_FILE_NAME;
+            long configStartedAt = System.nanoTime();
             CommandResult configCheck = sshCommandExecutor.exec(session,
                     "docker compose -p gj_" + appId + " -f '" + composeFilePath + "' config", 60_000);
+            long configDurationMs = elapsedMs(configStartedAt);
             if (!configCheck.isSuccess()) {
-                failImmediately(deploymentId, "compose 검증 실패: " + trim(configCheck.stderr()));
+                CommandResult safeConfigResult = new CommandResult(
+                        configCheck.exitStatus(), "", configCheck.stderr());
+                eventPublisher.publish(deploymentId, DeploymentEventType.BUILD_LOG,
+                        "Docker Compose 검증 실패 (exit=" + configCheck.exitStatus() + ", "
+                                + configDurationMs + "ms)",
+                        DeploymentCommandLogPayload.from(
+                                "compose-config", "gj_" + appId, safeConfigResult, configDurationMs));
+                failImmediately(deploymentId,
+                        "Docker Compose 검증 실패 (exit=" + configCheck.exitStatus() + "): "
+                                + DeploymentCommandLogPayload.failureSummary(safeConfigResult));
                 return;
             }
-            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "compose 검증 완료");
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "Docker Compose 설정 검증 완료 (project: gj_" + appId + ", "
+                            + configDurationMs + "ms)");
 
-            updateStatus(deploymentId, DeploymentStatus.BUILDING, "이미지 빌드 중...");
+            updateStatus(deploymentId, DeploymentStatus.BUILDING, "서비스별 Docker 이미지 빌드 중");
             ResolvedCompose resolved;
             try {
                 resolved = composeImageBuilder.buildAndResolve(session, appId, deploymentId, contextDir, artifact.composeContent());
@@ -817,12 +847,21 @@ public class DeploymentExecutor {
             String imageRefsJson = objectMapper.writeValueAsString(resolved.serviceImageRefs());
             String resolvedCiphertext = cipher.encrypt(resolved.resolvedComposeContent().getBytes(StandardCharsets.UTF_8));
             updateEntity(deploymentId, e -> e.withResolvedCompose(resolvedCiphertext, imageRefsJson));
-            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "이미지 빌드 완료");
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "이미지 빌드 완료 (" + resolved.serviceImageRefs().size() + "개 서비스)");
 
             // ---- 여기서부터는 실패 시 즉시 중단이 아니라 롤백 (기존 컨테이너 교체 절차가 이미 시작됐으므로) ----
-            updateStatus(deploymentId, DeploymentStatus.SWAPPING, "컨테이너 교체 중...");
+            updateStatus(deploymentId, DeploymentStatus.SWAPPING,
+                    "Docker Compose 컨테이너 교체 중 (project: gj_" + appId + ")");
+            long upStartedAt = System.nanoTime();
             CommandResult upResult = sshCommandExecutor.exec(session,
                     "docker compose -p gj_" + appId + " -f '" + resolvedFilePath + "' up -d", DOCKER_COMPOSE_TIMEOUT_MS);
+            long upDurationMs = elapsedMs(upStartedAt);
+            eventPublisher.publish(deploymentId, DeploymentEventType.BUILD_LOG,
+                    "Docker Compose up " + (upResult.isSuccess() ? "성공" : "실패")
+                            + " (exit=" + upResult.exitStatus() + ", " + upDurationMs + "ms)",
+                    DeploymentCommandLogPayload.from(
+                            "compose-up", "gj_" + appId, upResult, upDurationMs));
             if (!upResult.isSuccess()) {
                 rollbackService.rollback(
                         session,
@@ -830,13 +869,17 @@ public class DeploymentExecutor {
                         appId,
                         request -> syncRoutes(
                                 useAutomationAuth, bearerToken, vmId, ownerUserId, ownerEmail, appId, request),
-                        "컨테이너 교체 실패: " + trim(upResult.stderr()));
+                        "컨테이너 교체 실패 (exit=" + upResult.exitStatus() + "): "
+                                + DeploymentCommandLogPayload.failureSummary(upResult));
                 return;
             }
-            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "컨테이너 교체 완료");
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "컨테이너 교체 완료 (" + upDurationMs + "ms)");
 
-            updateStatus(deploymentId, DeploymentStatus.HEALTH_CHECKING, "헬스체크 중...");
-            if (!runHealthChecks(session, appId, artifact.healthChecks())) {
+            updateStatus(deploymentId, DeploymentStatus.HEALTH_CHECKING,
+                    "헬스체크 시작 (" + artifact.healthChecks().size() + "개 대상, 대상별 최대 "
+                            + HEALTH_CHECK_MAX_ATTEMPTS + "회)");
+            if (!runHealthChecks(session, appId, deploymentId, artifact.healthChecks())) {
                 rollbackService.rollback(
                         session,
                         deploymentId,
@@ -846,9 +889,11 @@ public class DeploymentExecutor {
                         "헬스체크 실패");
                 return;
             }
-            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "헬스체크 통과");
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "모든 헬스체크 통과 (" + artifact.healthChecks().size() + "개)");
 
-            updateStatus(deploymentId, DeploymentStatus.ROUTING, "라우트 등록 중...");
+            updateStatus(deploymentId, DeploymentStatus.ROUTING,
+                    "외부 라우트 동기화 중 (" + artifact.exposedRoutes().size() + "개)");
             try {
                 syncRoutes(
                         useAutomationAuth,
@@ -858,7 +903,8 @@ public class DeploymentExecutor {
                         ownerEmail,
                         appId,
                         new DeploymentRoutesRequest(appId, deploymentId, artifact.exposedRoutes()));
-                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE, "라우트 등록 완료");
+                eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                        "외부 라우트 동기화 완료 (" + artifact.exposedRoutes().size() + "개)");
             } catch (Exception e) {
                 // D.7 실패 처리 표: Cloudflare 등록 실패는 배포 완료 처리, Cloudflare만 재시도 안내
                 eventPublisher.publish(deploymentId, DeploymentEventType.ERROR,
@@ -880,7 +926,8 @@ public class DeploymentExecutor {
             }
 
             updateEntity(deploymentId, DeploymentEntity::withSucceeded);
-            eventPublisher.publish(deploymentId, DeploymentEventType.DONE, "배포 완료");
+            eventPublisher.publish(deploymentId, DeploymentEventType.DONE,
+                    "배포 완료 (총 " + elapsedMs(pipelineStartedAt) + "ms)");
             if (useAutomationAuth && ownerUserId != null) {
                 regressionSuiteServiceProvider.ifAvailable(service -> {
                     try {
@@ -968,21 +1015,44 @@ public class DeploymentExecutor {
         eventPublisher.publish(deploymentId, DeploymentEventType.ERROR, message);
     }
 
-    private boolean runHealthChecks(Session session, String appId, List<HealthCheck> healthChecks) {
+    private boolean runHealthChecks(
+            Session session,
+            String appId,
+            String deploymentId,
+            List<HealthCheck> healthChecks
+    ) {
         if (healthChecks == null || healthChecks.isEmpty()) {
+            eventPublisher.publish(deploymentId, DeploymentEventType.STAGE_CHANGE,
+                    "설정된 헬스체크가 없어 건너뜁니다.");
             return true;
         }
         for (HealthCheck healthCheck : healthChecks) {
-            if (!waitForHealthy(session, appId, healthCheck)) {
+            if (!waitForHealthy(session, appId, deploymentId, healthCheck)) {
                 return false;
             }
         }
         return true;
     }
 
-    private boolean waitForHealthy(Session session, String appId, HealthCheck healthCheck) {
+    private boolean waitForHealthy(
+            Session session,
+            String appId,
+            String deploymentId,
+            HealthCheck healthCheck
+    ) {
+        String subject = healthCheckSubject(healthCheck);
         for (int attempt = 1; attempt <= HEALTH_CHECK_MAX_ATTEMPTS; attempt++) {
-            if (healthCheckExecutor.check(session, appId, healthCheck)) {
+            long startedAt = System.nanoTime();
+            HealthCheckResult result = healthCheckExecutor.checkDetailed(session, appId, healthCheck);
+            long durationMs = elapsedMs(startedAt);
+            eventPublisher.publish(deploymentId, DeploymentEventType.BUILD_LOG,
+                    "헬스체크 " + (result.healthy() ? "통과" : "대기") + " [" + attempt + "/"
+                            + HEALTH_CHECK_MAX_ATTEMPTS + "] " + subject
+                            + (result.httpStatus() != null ? " → HTTP " + result.httpStatus() : "")
+                            + " (exit=" + result.commandResult().exitStatus() + ", " + durationMs + "ms)",
+                    DeploymentCommandLogPayload.from(
+                            "health-check", subject, result.commandResult(), durationMs));
+            if (result.healthy()) {
                 return true;
             }
             try {
@@ -993,6 +1063,14 @@ public class DeploymentExecutor {
             }
         }
         return false;
+    }
+
+    private String healthCheckSubject(HealthCheck healthCheck) {
+        String path = healthCheck.path() == null || healthCheck.path().isBlank() ? "/" : healthCheck.path();
+        if (healthCheck.hostPort() != null) {
+            return "host 127.0.0.1:" + healthCheck.hostPort() + path;
+        }
+        return "service " + healthCheck.serviceName() + ":" + healthCheck.containerPort() + path;
     }
 
     // compose 원문 + 업로드 파일들을 release 디렉토리에 SFTP로 전송. 소스 체크아웃 "이후"에 전송해
@@ -1092,6 +1170,10 @@ public class DeploymentExecutor {
 
     private String shortSha(String commitSha) {
         return commitSha.substring(0, Math.min(7, commitSha.length()));
+    }
+
+    private long elapsedMs(long startedAtNanos) {
+        return Math.max(0, (System.nanoTime() - startedAtNanos) / 1_000_000);
     }
 
     private String trim(String text) {

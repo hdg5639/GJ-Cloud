@@ -48,6 +48,7 @@ Ops는 VM 서비스에서 사용자 권한과 내부 IP를 확인한 다음 관�
 - 같은 대상의 연속 push는 최신 commit SHA 하나만 pending으로 유지한다.
 - 대상 삭제는 컨테이너, 전체 이미지 이력, 저장소·release, 심볼릭 링크와 라우트를 정리하고 이력은 감사 목적으로 남긴다.
 - Compose 다중 서비스의 외부 진입점은 분석 결과에 따라 Caddy 라우터를 계획할 수 있다.
+- 기존 Dockerfile에 숫자 `EXPOSE`가 있으면 프레임워크 기본 포트나 이전 화면 입력값보다 우선한다. 같은 포트를 생성 Compose의 바인딩, Caddy upstream, 헬스체크에 일관되게 사용한다.
 
 ## Auto Preview
 
@@ -109,6 +110,9 @@ Ops는 `spring.jpa.open-in-view=false`로 요청 수명과 EntityManager 수명�
 - 스트림은 5분 후 정상 종료되고 포털이 마지막 `afterSequence`부터 재연결한다.
 - 15초 comment heartbeat로 이벤트가 없는 동안에도 프록시·브라우저 단절을 감지한다.
 - 완료, timeout, 전송 오류와 재생 조회 실패 시 emitter를 구독 목록에서 제거한다.
+- 배포 단계는 Git mirror·fetch·worktree, 파일 전송, Compose 검증, 서비스별 빌드, Compose up, 헬스체크 시도, 라우트, 롤백으로 나눠 이벤트를 남긴다.
+- 원격 명령 결과는 안전한 작업명·대상·종료 코드·소요 시간과 stdout/stderr 각 마지막 20,000자를 구조화 payload로 저장한다. 실제 명령 문자열은 저장하지 않는다.
+- Authorization, GitHub token, `password`/`token`/`secret`/`api_key` 형태의 할당문은 백엔드 저장 전과 프론트 표시 전에 각각 마스킹한다.
 - 운영 Hikari는 60초 leak detection을 사용해 비정상 장기 점유의 커넥션 획득 스택을 기록한다.
 - 풀 크기 증가는 근본 해결로 사용하지 않는다. PostgreSQL은 idle인데 Hikari active가 계속 증가하면 장기 요청과 OSIV/트랜잭션 경계를 먼저 확인한다.
 

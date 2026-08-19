@@ -57,7 +57,13 @@ class GitReleaseManagerTest {
 
         assertThatThrownBy(() -> manager.execGitNetworkCommandWithRetry(session, command, "fetch"))
                 .isInstanceOfSatisfying(OpsException.class,
-                        e -> assertThat(e.getErrorCode()).isEqualTo(OpsErrorCode.SSH_COMMAND_FAILED));
+                        e -> {
+                            assertThat(e.getErrorCode()).isEqualTo(OpsErrorCode.SSH_COMMAND_FAILED);
+                            assertThat(e.getMessage())
+                                    .contains("fetch 실패")
+                                    .contains("exit=128")
+                                    .contains("Authentication failed");
+                        });
         verify(sshCommandExecutor).exec(eq(session), eq(command), anyLong());
     }
 

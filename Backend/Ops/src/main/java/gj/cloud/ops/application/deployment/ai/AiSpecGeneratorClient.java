@@ -196,11 +196,14 @@ public class AiSpecGeneratorClient {
                     .orElse(null);
             if (matchingHint != null) {
                 consumedHints.add(matchingHint);
+                Integer containerPort = DiscoveredService.PORT_SOURCE_DOCKERFILE_EXPOSE.equals(service.portSource())
+                        ? service.containerPort()
+                        : matchingHint.containerPort();
                 merged.add(new ServiceCard(
                         matchingHint.name(),
                         matchingHint.runtime(),
                         service.context(),
-                        matchingHint.containerPort(),
+                        containerPort,
                         matchingHint.javaVersion(),
                         matchingHint.buildTool(),
                         matchingHint.nodeVersion(),
