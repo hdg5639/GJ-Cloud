@@ -34,6 +34,7 @@ import { Table, Th, Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { DeploymentTargetCard } from "@/components/deployments/deployment-target-card";
 
 type NetworkMode = "create" | "reuse";
 
@@ -2197,7 +2198,7 @@ export default function DeploymentsPage() {
   if (!accessToken) return <PageLoader />;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-170px)]">
+    <div className="min-w-0">
       <InstanceSectionNav vmId={vmId} />
       <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
         <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
@@ -2228,7 +2229,7 @@ export default function DeploymentsPage() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+      <div className="flex min-w-0 flex-col gap-4">
         {loading ? (
           <div className="flex-1 rounded-panel border border-line">
             <PageLoader label="불러오는 중" />
@@ -2236,20 +2237,12 @@ export default function DeploymentsPage() {
         ) : (
           <>
             {deploymentTargets.length > 0 && (
-              <section className="rounded-panel border border-line bg-panel p-5">
-                <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-strong">Applications</p>
-                    <h2 className="mt-1 text-base font-extrabold">운영 중인 배포</h2>
-                    <p className="mt-1 text-xs text-muted">
-                      앱별 배포 상태와 자동·수동 CNAME을 한곳에서 관리합니다.
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-line-strong bg-white/[0.035] px-2.5 py-1 text-[11px] font-bold text-muted">
-                    {deploymentTargets.length}개 앱
-                  </span>
+              <section className="min-w-0 rounded-panel border border-line bg-panel" aria-labelledby="deployment-targets-heading">
+                <div className="flex items-center gap-2 border-b border-line px-4 py-3 sm:px-5">
+                  <h2 id="deployment-targets-heading" className="text-sm font-bold">운영 중인 배포</h2>
+                  <span className="text-xs text-muted">{deploymentTargets.length}개 앱</span>
                 </div>
-                <div className="grid gap-3 xl:grid-cols-2">
+                <div className="divide-y divide-line">
                   {deploymentTargets.map((target) => {
                     const automaticPorts = deploymentPorts.filter(
                       (port) => port.deploymentAppId === target.id && port.visibility === "PUBLIC"
@@ -2263,166 +2256,38 @@ export default function DeploymentsPage() {
                     const latestDeployment = deployments.find((deployment) => deployment.id === target.latestDeploymentId)
                       ?? deployments.find((deployment) => deployment.deploymentTargetId === target.id);
                     return (
-                    <article key={target.id} className="overflow-hidden rounded-[12px] border border-line-strong bg-white/[0.025]">
-                      <div className="border-b border-line bg-white/[0.018] p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="truncate text-[15px] font-extrabold">{target.name}</h3>
-                              <StatusBadge tone={latestDeployment && STATUS_TONE[latestDeployment.status] === "ok" ? "ok" : "off"}>
-                                {latestDeployment?.status ?? "배포 대기"}
-                              </StatusBadge>
-                              <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-muted">
-                                {SOURCE_TYPE_LABEL[target.sourceType] ?? target.sourceType}
-                              </span>
-                            </div>
-                            <p className="mt-1.5 truncate font-mono text-[11px] text-muted-soft">
-                              {target.repositoryFullName ?? target.repositoryUrl}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => openDeleteTargetModal(target)}
-                            disabled={deletingTargetId === target.id}
-                            aria-label={`${target.name} 배포 대상 삭제`}
-                            title="배포 대상 완전 삭제 (컨테이너·이미지·저장소·라우트 전체 정리)"
-                            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-soft transition-colors hover:text-danger disabled:cursor-not-allowed disabled:opacity-45"
-                          >
-                            {deletingTargetId === target.id ? (
-                              <span className="text-[10px] font-bold">...</span>
-                            ) : (
-                              <svg aria-hidden className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z" />
-                              </svg>
-                            )}
-                          </button>
-                        </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">Branch</p>
-                            <p className="mt-1 truncate font-mono text-[11px] text-foreground">{target.branch}</p>
-                          </div>
-                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">Active</p>
-                            <p className="mt-1 font-mono text-[11px] text-foreground">
-                              {target.latestDeployedRevision?.slice(0, 8) ?? "—"}
-                            </p>
-                          </div>
-                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">Updated</p>
-                            <p className="mt-1 text-[11px] text-foreground">{formatDate(target.updatedAt).slice(5, 16)}</p>
-                          </div>
-                          <div className="rounded-md border border-line bg-black/10 px-2.5 py-2">
-                            <p className="text-[9px] font-bold uppercase tracking-wide text-muted-soft">CNAME</p>
-                            <p className="mt-1 text-[11px] font-bold text-foreground">{publicPorts.length}개 연결</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-4">
-                        <div className="mb-2.5 flex items-center justify-between gap-2">
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-soft">연결된 공개 CNAME</p>
-                            <p className="mt-0.5 text-[10px] text-muted-soft">자동 생성 주소와 수동 등록 주소를 함께 표시합니다.</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => openCnameManager(target)}
-                            className="shrink-0 rounded-md border border-brand/30 bg-brand/[0.07] px-2.5 py-1.5 text-[11px] font-bold text-brand-strong transition-colors hover:bg-brand/[0.13]"
-                          >
-                            ＋ CNAME 연결
-                          </button>
-                        </div>
-                        {publicPorts.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {publicPorts.map((port) => (
-                              <div key={port.id} className="flex min-w-0 items-center gap-2 rounded-md border border-line bg-black/10 px-2.5 py-2">
-                                <span className={cn(
-                                  "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-extrabold",
-                                  port.deploymentAppId
-                                    ? "bg-brand/10 text-brand-strong"
-                                    : "bg-[#e8b657]/10 text-[#e8b657]"
-                                )}>
-                                  {port.deploymentAppId ? "자동" : "수동"}
-                                </span>
-                                {port.protocol === "HTTP" ? (
-                                <a
-                                  href={`https://${port.fullDomain}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title={`${port.nickname} · ${port.port} 포트를 새 창에서 열기`}
-                                  className="flex min-w-0 flex-1 items-center gap-1 font-mono text-[11px] text-foreground hover:text-brand-strong"
-                                >
-                                  <span className="truncate">{port.fullDomain}</span>
-                                  <svg aria-hidden className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5h5m0 0v5m0-5L10 14M19 14v5H5V5h5" />
-                                  </svg>
-                                </a>
-                              ) : (
-                                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
-                                  <span className="truncate">{port.fullDomain}</span>
-                                </span>
-                              )
-                                }
-                                <span className="shrink-0 font-mono text-[10px] text-muted-soft">:{port.port}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => openCnameManager(target)}
-                            className="flex w-full items-center justify-center rounded-md border border-dashed border-line-strong bg-black/5 py-4 text-xs text-muted-soft transition-colors hover:border-brand/30 hover:text-brand-strong"
-                          >
-                            연결된 CNAME이 없습니다 · 수동 CNAME 연결하기
-                          </button>
-                        )}
-
-                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
-                          <Button
-                            type="button"
-                            variant="primary"
-                            onClick={() => handleRedeployTarget(target)}
-                            disabled={redeployingTargetId === target.id}
-                          >
-                            {redeployingTargetId === target.id ? "재배포 요청 중..." : "지금 재배포"}
-                          </Button>
-                          {latestDeployment && (
-                            <Button type="button" onClick={() => router.push(`/instances/${vmId}/deployments/${latestDeployment.id}`)}>
-                              최근 배포 보기
-                            </Button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleAutoDeployToggle(target)}
-                            disabled={togglingTargetId === target.id || !target.repositoryFullName}
-                            className={cn(
-                              "ml-auto rounded-full border px-2.5 py-1.5 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-                              target.autoDeployEnabled
-                                ? "border-brand/35 bg-brand/10 text-brand-strong"
-                                : "border-line-strong text-muted"
-                            )}
-                            title={!target.repositoryFullName ? "GitHub App으로 연결된 대상만 자동 배포를 사용할 수 있습니다." : undefined}
-                          >
-                            {togglingTargetId === target.id
-                              ? "변경 중..."
-                              : target.autoDeployEnabled ? "자동 배포 ON" : "자동 배포 OFF"}
-                          </button>
-                        </div>
-                      </div>
-                    </article>
+                      <DeploymentTargetCard
+                        key={target.id}
+                        target={target}
+                        publicPorts={publicPorts}
+                        status={latestDeployment?.status}
+                        sourceLabel={SOURCE_TYPE_LABEL[target.sourceType] ?? target.sourceType}
+                        updatedLabel={formatDate(target.updatedAt)}
+                        redeploying={redeployingTargetId === target.id}
+                        toggling={togglingTargetId === target.id}
+                        deleting={deletingTargetId === target.id}
+                        onRedeploy={() => handleRedeployTarget(target)}
+                        onViewLatest={latestDeployment ? () => router.push(`/instances/${vmId}/deployments/${latestDeployment.id}`) : undefined}
+                        onToggleAutoDeploy={() => handleAutoDeployToggle(target)}
+                        onManageCnames={() => openCnameManager(target)}
+                        onDelete={() => openDeleteTargetModal(target)}
+                      />
                     );
                   })}
                 </div>
               </section>
             )}
 
-            <section className="min-h-[280px] flex-1 overflow-auto rounded-panel border border-line">
+            <section className="min-w-0 rounded-panel border border-line" aria-labelledby="deployment-history-heading">
+              <div className="flex items-center gap-2 border-b border-line px-4 py-3 sm:px-5">
+                <h2 id="deployment-history-heading" className="text-sm font-bold">배포 이력</h2>
+                <span className="text-xs text-muted">{deployments.length}건</span>
+              </div>
               {deployments.length === 0 ? (
                 <p className="py-16 text-center text-sm text-muted-soft">배포 이력이 없습니다</p>
               ) : (
-                <Table>
-                  <thead className="sticky top-0">
+                <Table className="[&_td]:py-3 [&_th]:py-3">
+                  <thead>
                     <tr>
                       <Th>생성일시</Th>
                       <Th>배포 대상</Th>
