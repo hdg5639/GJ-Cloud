@@ -141,8 +141,18 @@ public final class ScenarioModels {
             List<String> inputs,
             List<String> outputs,
             List<String> nextStageIds,
-            VerificationType verificationIntent
+            VerificationType verificationIntent,
+            String actionLabel
     ) {
+        public ScenarioStagePlan(
+                String id, StageRole role, String intent, String capabilityRequirement, boolean required,
+                List<String> inputs, List<String> outputs, List<String> nextStageIds,
+                VerificationType verificationIntent
+        ) {
+            this(id, role, intent, capabilityRequirement, required, inputs, outputs, nextStageIds,
+                    verificationIntent, null);
+        }
+
         public ScenarioStagePlan {
             inputs = immutable(inputs);
             outputs = immutable(outputs);
@@ -187,8 +197,19 @@ public final class ScenarioModels {
             List<StageInputBinding> inputBindings,
             List<StageOutputBinding> outputBindings,
             VerificationContract verification,
-            RiskLevel risk
+            RiskLevel risk,
+            String actionLabel
     ) {
+        public CompiledScenarioStage(
+                String id, StageRole role, String intent, String capabilityId, String operationId,
+                boolean optional, List<String> inputs, List<String> outputs, List<String> nextStageIds,
+                List<StageInputBinding> inputBindings, List<StageOutputBinding> outputBindings,
+                VerificationContract verification, RiskLevel risk
+        ) {
+            this(id, role, intent, capabilityId, operationId, optional, inputs, outputs, nextStageIds,
+                    inputBindings, outputBindings, verification, risk, null);
+        }
+
         public CompiledScenarioStage {
             inputs = immutable(inputs);
             outputs = immutable(outputs);

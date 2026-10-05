@@ -23,8 +23,19 @@ public record ApiOperationEvidence(
         List<String> arrayFieldPaths,
         // 응답 스키마에서 뽑은 문자열 enum 필드(dot-path + 허용값). 상태 전이 폴링(AC-4) 감지에 쓰인다 —
         // CapabilityExtractor가 "status"류 필드의 enum에 전이값과 종료값이 함께 있는지 결정론적으로 본다.
-        List<EnumFieldEvidence> enumFields
+        List<EnumFieldEvidence> enumFields,
+        InputSchema requestSchema
 ) {
+    public ApiOperationEvidence(
+            String path, String method, String operationId, String summary, List<String> tags,
+            List<ApiParameterEvidence> parameters, List<String> requestBodyFields, boolean requiresAuth,
+            boolean responseIsArray, List<String> responseFieldPaths, List<String> arrayFieldPaths,
+            List<EnumFieldEvidence> enumFields
+    ) {
+        this(path, method, operationId, summary, tags, parameters, requestBodyFields, requiresAuth,
+                responseIsArray, responseFieldPaths, arrayFieldPaths, enumFields, null);
+    }
+
     // 응답 스키마 안의 한 enum 문자열 필드. values는 OpenAPI에 선언된 원본 표기 그대로 보존한다
     // (런타임 poll 조건이 실제 API가 돌려주는 대문자 값과 매칭돼야 하므로 정규화하지 않는다).
     public record EnumFieldEvidence(String path, List<String> values) {

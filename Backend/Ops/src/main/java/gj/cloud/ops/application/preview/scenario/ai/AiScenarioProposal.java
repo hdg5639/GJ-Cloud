@@ -57,7 +57,17 @@ public record AiScenarioProposal(
             List<String> inputs,
             List<String> outputs,
             List<String> nextStageIds,
-            VerificationType verificationIntent
+            VerificationType verificationIntent,
+            String actionLabel
     ) {
+        public AiScenarioStage(
+                String id, StageRole role, String intent, String capabilityRequirement, boolean required,
+                List<String> inputs, List<String> outputs, List<String> nextStageIds,
+                VerificationType verificationIntent
+        ) {
+            this(id, role, intent, capabilityRequirement, required, inputs, outputs, nextStageIds,
+                    verificationIntent, null);
+        }
+
     }
 }

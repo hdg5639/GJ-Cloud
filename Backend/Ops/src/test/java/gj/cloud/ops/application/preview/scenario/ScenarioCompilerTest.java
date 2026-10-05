@@ -24,6 +24,36 @@ class ScenarioCompilerTest {
     private final ScenarioCompiler compiler = new ScenarioCompiler();
 
     @Test
+    void preservesUserActionLabelAndOptionalBodyContract() {
+        var schema = new gj.cloud.ops.application.preview.analysis.InputSchema("object", null, null, null,
+                List.of("name"), java.util.Map.of(), null, List.of(), null, null);
+        var create = capability("projects.create", "projects", CapabilityType.CREATE, "createProject",
+                "/projects", "POST", List.of("name", "note"), CapabilityKind.MUTATION).withInputSchema(schema);
+        var plan = new ScenarioPlan("create-project", "프로젝트 생성", "사용자", "프로젝트 생성", List.of(),
+                List.of(
+                        new ScenarioStagePlan("prepare", StageRole.PREPARE, "입력", null, true,
+                                List.of(), List.of("name", "note"), List.of("review"), null),
+                        new ScenarioStagePlan("review", StageRole.REVIEW, "확인", null, true,
+                                List.of("name", "note"), List.of(), List.of("commit"), null),
+                        new ScenarioStagePlan("commit", StageRole.COMMIT, "생성", create.id(), true,
+                                List.of("name", "note"), List.of("createdId"), List.of("done"), null, "프로젝트 만들기"),
+                        new ScenarioStagePlan("done", StageRole.COMPLETE, "완료", null, true,
+                                List.of("createdId"), List.of(), List.of(), null)),
+                List.of("name", "note", "createdId"), 0.9, List.of());
+        var result = compiler.compile(List.of(plan), List.of(create));
+        var commit = result.scenarios().get(0).stages().stream()
+                .filter(stage -> stage.role() == StageRole.COMMIT).findFirst().orElseThrow();
+        assertThat(commit.actionLabel()).isEqualTo("프로젝트 만들기");
+        assertThat(commit.inputBindings()).anySatisfy(binding -> {
+            assertThat(binding.target()).isEqualTo("name");
+            assertThat(binding.required()).isTrue();
+        }).anySatisfy(binding -> {
+            assertThat(binding.target()).isEqualTo("note");
+            assertThat(binding.required()).isFalse();
+        });
+    }
+
+    @Test
     void compilesCreateOutputIntoFollowUpPathBinding() {
         List<Capability> capabilities = sampleCapabilities();
         RuleBasedScenarioPlanner.PlanningResult planned = planner.plan(

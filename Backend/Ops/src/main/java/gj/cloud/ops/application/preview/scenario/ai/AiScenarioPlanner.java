@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AiScenarioPlanner {
 
-    public static final String PROMPT_VERSION = "scenario-planner-v3-contract-complete";
+    public static final String PROMPT_VERSION = "scenario-planner-v4-product-interactions";
     private static final int MAX_CAPABILITY_INPUTS = 120;
     private static final int MAX_OPERATION_INPUTS = 160;
     private static final String SYSTEM_PROMPT = """
@@ -58,6 +58,14 @@ public class AiScenarioPlanner {
             - Use only the supplied capability ids as capabilityRequirement. Never emit an HTTP path, method,
               operationId, URL, component id, page id, JavaScript, shell command, or direct runtime binding.
             - A scenario is semantic. Do not choose UI components or layouts.
+            - Each stage actionLabel is a short Korean user-facing verb (e.g. select an item, book, add,
+              send, place an order). Never label it test/execute/API/COMMIT. The action must describe the
+              user intent at this boundary, not the whole scenario. Keep technical intent in intent.
+              Treat internal resource creation plus a follow-up command as one user action when no new
+              input is needed; do not turn each endpoint into another customer screen.
+            - Order PREPARE stages at the moment their input is needed. Selecting a documented resource
+              produces its actual id; do not ask users to retype that id. Never fabricate option codes or
+              missing selection contracts. Use supplied nested request schemas for real input requirements.
             - Each scenario must have 2..16 unique stages in topological order and exactly one reachable COMPLETE
               stage. nextStageIds must reference only stages in the same scenario. Do not create cycles.
             - Every state input must be listed in scenarioState and produced by an earlier stage. PREPARE,
@@ -159,7 +167,7 @@ public class AiScenarioPlanner {
                         capability.id(), capability.resourceName(),
                         capability.kind() == null ? null : capability.kind().name(),
                         capability.type() == null ? null : capability.type().name(),
-                        capability.action(), capability.fields(), capability.dependencies(),
+                        capability.action(), capability.fields(), capability.inputSchema(), capability.dependencies(),
                         capability.risk().name(),
                         capability.pollHint() == null ? null : capability.pollHint().statusPath(),
                         capability.pollHint() == null ? List.of() : capability.pollHint().terminalValues(),
@@ -217,6 +225,7 @@ public class AiScenarioPlanner {
             String type,
             String action,
             List<String> requestFields,
+            gj.cloud.ops.application.preview.analysis.InputSchema inputSchema,
             List<String> dependencies,
             String risk,
             String statusPath,

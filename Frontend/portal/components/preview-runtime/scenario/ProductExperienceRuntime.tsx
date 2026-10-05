@@ -5,10 +5,9 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
-  type ReactNode,
 } from "react";
 import type {
+  PreviewInputSchema,
   PreviewCompiledScenario,
   PreviewPagePlan,
   PreviewScenarioDiagnostic,
@@ -16,13 +15,13 @@ import type {
   PreviewScenarioStageExecution,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/field";
+import { Input } from "@/components/ui/field";
 import { BlueprintModalFrame } from "../blueprints/modals";
 import {
   callCapability,
   extractArray,
-  isPasswordLikeField,
   rowId,
+  unwrapEnvelope,
 } from "../api";
 import type { PreviewCapability, PreviewRuntimeConfig } from "../types";
 import {
@@ -42,7 +41,7 @@ import {
   runApiStage,
   type ScenarioState,
 } from "./runtime";
-import { UserFlowTrace } from "./UserFlowTrace";
+import { SchemaField, ResourceDetails, resourceImage } from "./SchemaFields";
 import { ProductExperienceInspector } from "./ProductExperienceInspector";
 import {
   selectProductExperienceTheme,
@@ -50,9 +49,6 @@ import {
 } from "./productTheme";
 
 type Row = Record<string, unknown>;
-
-const DAYS = ["월", "화", "수", "목", "금", "토", "일"];
-const CALENDAR_DATES = Array.from({ length: 35 }, (_, index) => index - 2);
 
 function executionTimestamp(): number {
   return Date.now();
@@ -82,15 +78,6 @@ function subtitleOf(row: Row): string {
   }
   return "자세한 내용을 확인하고 다음 작업을 이어갈 수 있습니다.";
 }
-
-function humanize(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replaceAll("_", " ")
-    .replaceAll("-", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 
 function ProductActionButton({
   action,
@@ -129,407 +116,30 @@ function Card({
   onSelect: () => void;
   visual?: boolean;
 }) {
+  const image = resourceImage(row);
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`group overflow-hidden rounded-[22px] border bg-[var(--px-surface)] text-left shadow-[var(--px-shadow-sm)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[var(--px-shadow-md)] ${
+      className={`group overflow-hidden rounded-[14px] border bg-[var(--px-surface)] text-left shadow-[var(--px-shadow-sm)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[var(--px-shadow-md)] ${
         selected ? "border-[var(--px-accent)] ring-2 ring-[color-mix(in_srgb,var(--px-accent)_14%,transparent)]" : "border-[var(--px-line)]"
       }`}
     >
-      {visual && (
-        <div
-          className="h-32 border-b border-black/[0.04]"
-          style={{
-            background: [
-              "linear-gradient(135deg,var(--px-visual-a),var(--px-visual-b))",
-              "linear-gradient(135deg,var(--px-visual-c),var(--px-visual-d))",
-              "linear-gradient(135deg,var(--px-visual-b),var(--px-visual-c))",
-              "linear-gradient(135deg,var(--px-visual-d),var(--px-visual-a))",
-            ][index % 4],
-          }}
-        >
-          <div className="flex h-full items-end justify-between p-4">
-            <span className="rounded-full bg-[color-mix(in_srgb,var(--px-surface)_82%,transparent)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[.1em] text-[var(--px-ink)] backdrop-blur">
-              {textValue(row.category) || textValue(row.type) || "서버 데이터"}
-            </span>
-            <span className="translate-y-2 text-2xl opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">↗</span>
-          </div>
-        </div>
+      {visual && image && (
+        // eslint-disable-next-line @next/next/no-img-element -- shared with the standalone Vite runtime
+        <img src={image} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-44 w-full object-cover" />
       )}
       <div className="p-4">
         <h3 className="line-clamp-1 text-[15px] font-black text-[var(--px-ink)]">{titleOf(row, index)}</h3>
         <p className="mt-1 line-clamp-2 min-h-10 text-xs leading-5 text-[var(--px-muted)]">{subtitleOf(row)}</p>
         <div className="mt-4 flex items-center justify-between gap-2">
           <span className="text-xs font-extrabold text-[var(--px-ink)]">
-            {textValue(row.price) || textValue(row.author) || textValue(row.updatedAt) || "자세히 보기"}
+            {typeof row.price === "number" ? `${row.price.toLocaleString()} ${textValue(row.currency)}` : textValue(row.author) || textValue(row.updatedAt) || "자세히 보기"}
           </span>
-          <span className="rounded-full bg-[var(--px-tint)] px-2.5 py-1 text-[10px] font-bold text-[var(--px-accent)]">
-            {textValue(row.status) || "상태 미제공"}
-          </span>
+          {Boolean(row.status) && <span className="rounded-full bg-[var(--px-tint)] px-2.5 py-1 text-[10px] font-bold text-[var(--px-accent)]">{textValue(row.status)}</span>}
         </div>
       </div>
     </button>
-  );
-}
-
-function HomeScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
-  return (
-    <div className="space-y-8">
-      <section className="grid gap-4 md:grid-cols-[1.35fr_.65fr]">
-        <button
-          type="button"
-          className="group min-h-72 overflow-hidden rounded-[28px] bg-[var(--px-hero)] p-7 text-left text-[var(--px-hero-ink)] shadow-xl"
-          onClick={() => onSelect(rows[0])}
-        >
-          <p className="text-xs font-black uppercase tracking-[.18em] text-[var(--px-hero-muted)]">For you</p>
-          <h2 className="mt-12 max-w-lg text-3xl font-black leading-tight md:text-4xl">
-            오늘의 흐름을<br />가볍게 시작해 보세요.
-          </h2>
-          <p className="mt-4 max-w-md text-sm leading-6 text-[color-mix(in_srgb,var(--px-hero-ink)_62%,transparent)]">{subtitleOf(rows[0])}</p>
-          <span className="mt-8 inline-flex items-center gap-2 text-sm font-bold text-[var(--px-hero-muted)]">
-            이어서 보기 <span className="transition-transform group-hover:translate-x-1">→</span>
-          </span>
-        </button>
-        <div className="grid gap-4">
-          <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-tint)] p-6">
-            <p className="text-xs font-bold text-[var(--px-muted)]">이번 주 활동</p>
-            <strong className="mt-3 block text-4xl font-black text-[var(--px-ink)]">{Math.max(rows.length, 6)}</strong>
-            <p className="mt-2 text-xs text-[var(--px-muted)]">지난주보다 활발하게 진행 중이에요.</p>
-          </div>
-          <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-secondary-tint)] p-6">
-            <p className="text-xs font-bold text-[var(--px-muted)]">다음 할 일</p>
-            <strong className="mt-3 block text-lg font-black text-[var(--px-ink)]">{titleOf(rows[1], 1)}</strong>
-            <p className="mt-2 text-xs text-[var(--px-muted)]">필요한 작업을 이어서 완료하세요.</p>
-          </div>
-        </div>
-      </section>
-      <section>
-        <div className="mb-4 flex items-end justify-between">
-          <div>
-            <p className="text-xs font-bold text-[var(--px-muted)]">최근 항목</p>
-            <h2 className="mt-1 text-xl font-black text-[var(--px-ink)]">다시 이어서 하기</h2>
-          </div>
-          <span className="text-xs font-bold text-[var(--px-subtle)]">최근 {Math.min(rows.length, 3)}개</span>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.slice(0, 3).map((row, index) => (
-            <Card key={rowId(row)} row={row} index={index} selected={false} onSelect={() => onSelect(row)} />
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function CalendarScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
-  const [monthOffset, setMonthOffset] = useState(0);
-  const visibleMonth = new Date(2026, 6 + monthOffset, 1);
-  return (
-    <section className="overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm">
-      <div className="flex items-center justify-between border-b border-[var(--px-line)] px-6 py-5">
-        <div>
-          <p className="text-xs font-bold text-[var(--px-muted)]">{visibleMonth.getFullYear()}년</p>
-          <h2 className="mt-1 text-xl font-black text-[var(--px-ink)]">{visibleMonth.getMonth() + 1}월</h2>
-        </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setMonthOffset((value) => value - 1)} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">‹</button>
-          <button type="button" onClick={() => setMonthOffset((value) => value + 1)} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)]">›</button>
-        </div>
-      </div>
-      <div className="grid grid-cols-7 border-b border-[var(--px-line)] bg-[var(--px-surface-soft)]">
-        {DAYS.map((day) => <div key={day} className="px-2 py-3 text-center text-[11px] font-black text-[var(--px-muted)]">{day}</div>)}
-      </div>
-      <div className="grid grid-cols-7">
-        {CALENDAR_DATES.map((date, index) => {
-          const row = rows[index % rows.length];
-          const active = index === 17;
-          return (
-            <button
-              type="button"
-              key={`${date}-${index}`}
-              onClick={() => onSelect(row)}
-              className={`min-h-24 border-b border-r border-[var(--px-line)] p-2 text-left transition-colors hover:bg-[var(--px-surface-soft)] ${
-                date < 1 || date > 31 ? "text-[var(--px-subtle)]" : "text-[var(--px-ink)]"
-              }`}
-            >
-              <span className={`grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold ${active ? "bg-[var(--px-accent)] text-[var(--px-on-accent)]" : ""}`}>
-                {date < 1 ? 30 + date : date > 31 ? date - 31 : date}
-              </span>
-              {index % 6 === 1 && (
-                <span className="mt-2 block truncate rounded-md bg-[var(--px-tint)] px-2 py-1 text-[9px] font-bold text-[var(--px-accent)]">
-                  {titleOf(row, index)}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function FeedScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
-  return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div className="rounded-[22px] border border-[var(--px-line)] bg-[var(--px-surface)] p-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--px-tint-strong)] text-sm font-black text-[var(--px-accent)]">나</span>
-          <span className="flex h-11 flex-1 items-center rounded-full bg-[var(--px-surface-soft)] px-5 text-sm text-[var(--px-subtle)]">
-            새 글 작성은 상단의 실행 가능한 작업에서 시작할 수 있어요.
-          </span>
-        </div>
-      </div>
-      {rows.map((row, index) => (
-        <article key={rowId(row)} className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
-          <button type="button" onClick={() => onSelect(row)} className="w-full text-left">
-            <div className="flex items-center gap-3">
-              <span className="grid h-11 w-11 place-items-center rounded-full bg-[var(--px-secondary-tint)] font-black text-[var(--px-secondary)]">
-                {textValue(row.author).slice(0, 1) || titleOf(row, index).slice(0, 1)}
-              </span>
-              <div>
-                <strong className="text-sm text-[var(--px-ink)]">{textValue(row.author) || "새로운 이웃"}</strong>
-                <p className="text-[11px] text-[var(--px-subtle)]">{index + 2}시간 전 · 모두에게 공개</p>
-              </div>
-            </div>
-            <h3 className="mt-5 text-lg font-black text-[var(--px-ink)]">{titleOf(row, index)}</h3>
-            <p className="mt-2 text-sm leading-6 text-[var(--px-muted)]">{subtitleOf(row)}</p>
-            <div className="mt-5 h-48 rounded-[18px]" style={{ background: index % 2 ? "linear-gradient(135deg,var(--px-visual-c),var(--px-visual-d))" : "linear-gradient(135deg,var(--px-visual-a),var(--px-visual-b))" }} />
-          </button>
-          <FeedEngagement row={row} />
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function FeedEngagement({ row }: { row: Row }) {
-  const [liked, setLiked] = useState(false);
-  const [commenting, setCommenting] = useState(false);
-  const [shared, setShared] = useState(false);
-
-  async function share() {
-    try {
-      await navigator.clipboard?.writeText(`${titleOf(row)} — ${window.location.href}`);
-      setShared(true);
-      window.setTimeout(() => setShared(false), 1800);
-    } catch {
-      setShared(false);
-    }
-  }
-
-  return (
-    <div className="mt-4 border-t border-[var(--px-line)] pt-4 text-xs font-bold text-[var(--px-muted)]">
-      <div className="flex items-center gap-5">
-        <button type="button" onClick={() => setLiked((value) => !value)} className={liked ? "text-[var(--px-accent)]" : undefined}>
-          {liked ? "♥" : "♡"} 좋아요
-        </button>
-        <button type="button" onClick={() => setCommenting((value) => !value)}>◯ 댓글</button>
-        <button type="button" onClick={() => void share()}>{shared ? "✓ 복사됨" : "↗ 공유"}</button>
-      </div>
-      {commenting && <Input autoFocus className="mt-3 bg-[var(--px-surface-soft)] text-[var(--px-ink)]" placeholder="댓글을 입력하세요" />}
-    </div>
-  );
-}
-
-function InboxScreen({ rows, selected, onSelect }: { rows: Row[]; selected: Row | null; onSelect: (row: Row) => void }) {
-  const active = selected ?? rows[0];
-  const [message, setMessage] = useState("");
-  const [sentMessages, setSentMessages] = useState<string[]>([]);
-
-  function sendMessage() {
-    const value = message.trim();
-    if (!value) return;
-    setSentMessages((current) => [...current, value]);
-    setMessage("");
-  }
-  return (
-    <section className="grid min-h-[560px] overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm md:grid-cols-[320px_1fr]">
-      <div className="border-r border-[var(--px-line)]">
-        <div className="border-b border-[var(--px-line)] p-4">
-          <Input className="border-0 bg-[var(--px-surface-soft)] text-[var(--px-ink)]" placeholder="대화 검색" />
-        </div>
-        <div className="divide-y divide-[var(--px-line)]">
-          {rows.map((row, index) => (
-            <button
-              type="button"
-              key={rowId(row)}
-              onClick={() => onSelect(row)}
-              className={`flex w-full items-start gap-3 p-4 text-left transition-colors ${
-                rowId(active) === rowId(row) ? "bg-[var(--px-tint)]" : "hover:bg-[var(--px-surface-soft)]"
-              }`}
-            >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--px-secondary-tint)] text-xs font-black text-[var(--px-secondary)]">
-                {titleOf(row, index).slice(0, 1)}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex justify-between gap-2">
-                  <strong className="truncate text-sm text-[var(--px-ink)]">{titleOf(row, index)}</strong>
-                  <span className="shrink-0 text-[9px] text-[var(--px-subtle)]">{textValue(row.status)}</span>
-                </div>
-                <p className="mt-1 truncate text-xs text-[var(--px-muted)]">{textValue(row.message) || subtitleOf(row)}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex min-w-0 flex-col">
-        <header className="flex items-center justify-between border-b border-[var(--px-line)] px-6 py-4">
-          <div>
-            <strong className="text-sm text-[var(--px-ink)]">{titleOf(active)}</strong>
-            <p className="text-[10px] text-[var(--px-muted)]">지금 대화 가능</p>
-          </div>
-          <span className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)] text-[var(--px-subtle)]" aria-hidden>•••</span>
-        </header>
-        <div className="flex flex-1 flex-col justify-end gap-3 bg-[var(--px-surface-soft)] p-6">
-          <div className="max-w-[72%] rounded-[18px_18px_18px_4px] bg-[var(--px-surface)] p-4 text-sm leading-6 text-[var(--px-muted)] shadow-sm">
-            {textValue(active.message) || subtitleOf(active)}
-          </div>
-          <div className="ml-auto max-w-[72%] rounded-[18px_18px_4px_18px] bg-[var(--px-accent)] p-4 text-sm leading-6 text-[var(--px-on-accent)]">
-            확인했어요. 조금 더 자세한 내용을 알려드릴게요.
-          </div>
-          {sentMessages.map((item, index) => (
-            <div key={`${item}-${index}`} className="ml-auto max-w-[72%] rounded-[18px_18px_4px_18px] bg-[var(--px-accent)] p-4 text-sm leading-6 text-[var(--px-on-accent)]">
-              {item}
-            </div>
-          ))}
-        </div>
-        <div className="border-t border-[var(--px-line)] bg-[var(--px-surface)] p-4">
-          <div className="flex items-end gap-2 rounded-[18px] bg-[var(--px-surface-soft)] p-2 pl-4">
-            <textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); }
-            }} className="min-h-10 flex-1 resize-none bg-transparent py-2 text-sm text-[var(--px-ink)] outline-none" placeholder="메시지 입력" />
-            <button type="button" disabled={!message.trim()} onClick={sendMessage} className="grid h-10 w-10 place-items-center rounded-full bg-[var(--px-accent)] text-[var(--px-on-accent)] disabled:opacity-40">↑</button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function EditorScreen() {
-  const [bold, setBold] = useState(false);
-  const [italic, setItalic] = useState(false);
-  return (
-    <section className="grid min-h-[580px] overflow-hidden rounded-[26px] border border-[var(--px-line)] bg-[var(--px-surface)] shadow-sm lg:grid-cols-[1fr_280px]">
-      <div className="p-7 md:p-10">
-        <div className="mx-auto max-w-3xl">
-          <input
-            defaultValue="제목 없는 이야기"
-            className="w-full bg-transparent text-3xl font-black text-[var(--px-ink)] outline-none placeholder:text-[var(--px-subtle)]"
-          />
-          <div className="mt-5 flex items-center gap-3 border-b border-[var(--px-line)] pb-5 text-xs font-bold text-[var(--px-muted)]">
-            <button type="button" aria-pressed={bold} onClick={() => setBold((value) => !value)} className={bold ? "text-[var(--px-accent)]" : undefined}>B</button>
-            <button type="button" aria-pressed={italic} onClick={() => setItalic((value) => !value)} className={italic ? "italic text-[var(--px-accent)]" : "italic"}>I</button>
-            <span className="h-4 w-px bg-[var(--px-line-strong)]" />
-            <span className="text-[var(--px-subtle)]">링크 · 이미지 · 인용은 API 작업에서 설정</span>
-          </div>
-          <textarea
-            className={`mt-7 min-h-[390px] w-full resize-none bg-transparent text-base leading-8 text-[var(--px-muted)] outline-none ${bold ? "font-bold" : ""} ${italic ? "italic" : ""}`}
-            placeholder="당신의 이야기를 시작하세요..."
-          />
-        </div>
-      </div>
-      <aside className="border-l border-[var(--px-line)] bg-[var(--px-surface-soft)] p-5">
-        <p className="text-[10px] font-black uppercase tracking-[.15em] text-[var(--px-subtle)]">Document</p>
-        <div className="mt-5 space-y-5">
-          <Field label="상태"><Input defaultValue="초안" className="bg-[var(--px-surface)] text-[var(--px-ink)]" /></Field>
-          <Field label="카테고리"><Input placeholder="카테고리 선택" className="bg-[var(--px-surface)] text-[var(--px-ink)]" /></Field>
-          <Field label="요약"><Textarea placeholder="독자에게 보일 짧은 설명" className="bg-[var(--px-surface)] text-[var(--px-ink)]" /></Field>
-        </div>
-      </aside>
-    </section>
-  );
-}
-
-function FilesScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
-  const [view, setView] = useState<"GRID" | "LIST">("GRID");
-  return (
-    <div>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-[var(--px-muted)]">
-          <span>내 파일</span><span>/</span><span className="text-[var(--px-ink)]">모든 항목</span>
-        </div>
-        <div className="flex rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] p-1 text-xs font-bold">
-          <button type="button" onClick={() => setView("GRID")} className={`rounded-full px-3 py-1.5 ${view === "GRID" ? "bg-[var(--px-tint)]" : "text-[var(--px-muted)]"}`}>격자</button>
-          <button type="button" onClick={() => setView("LIST")} className={`rounded-full px-3 py-1.5 ${view === "LIST" ? "bg-[var(--px-tint)]" : "text-[var(--px-muted)]"}`}>목록</button>
-        </div>
-      </div>
-      <div className={view === "GRID" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-4" : "space-y-2"}>
-        {rows.map((row, index) => (
-          <button
-            key={rowId(row)}
-            type="button"
-            onClick={() => onSelect(row)}
-            className="rounded-[20px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 text-left shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
-          >
-            <span className={`grid h-12 w-12 place-items-center rounded-[14px] text-xl ${index % 2 ? "bg-[var(--px-secondary-tint)] text-[var(--px-secondary)]" : "bg-[var(--px-tint)] text-[var(--px-accent)]"}`}>
-              {textValue(row.type) === "폴더" ? "▰" : "◇"}
-            </span>
-            <strong className="mt-5 block truncate text-sm text-[var(--px-ink)]">{titleOf(row, index)}</strong>
-            <p className="mt-1 text-[10px] text-[var(--px-subtle)]">{textValue(row.status) || "최근 업데이트"}</p>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BookingScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
-  const times = ["09:00", "10:30", "12:00", "13:30", "15:00", "16:30", "18:00"];
-  const dates = ["30", "31", "1"];
-  const [selectedDate, setSelectedDate] = useState(dates[0]);
-  const [selectedTime, setSelectedTime] = useState(times[3]);
-  return (
-    <div className="grid gap-5 lg:grid-cols-[.75fr_1.25fr]">
-      <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
-        <p className="text-xs font-black text-[var(--px-muted)]">공간</p>
-        <div className="mt-4 space-y-2">
-          {rows.slice(0, 4).map((row, index) => (
-            <button key={rowId(row)} type="button" onClick={() => onSelect(row)} className={`w-full rounded-[16px] border p-4 text-left ${index === 0 ? "border-[var(--px-accent)] bg-[var(--px-tint)]" : "border-[var(--px-line)]"}`}>
-              <strong className="text-sm text-[var(--px-ink)]">{titleOf(row, index)}</strong>
-              <p className="mt-1 text-[10px] text-[var(--px-muted)]">{textValue(row.category) || textValue(row.status)}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="rounded-[24px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div><p className="text-xs text-[var(--px-muted)]">선택한 날짜 · {selectedDate}일</p><h3 className="mt-1 text-lg font-black text-[var(--px-ink)]">가능한 시간</h3></div>
-          <div className="flex gap-1">{dates.map((date) => <button key={date} type="button" onClick={() => setSelectedDate(date)} className={`grid h-10 w-10 place-items-center rounded-full text-xs font-bold ${selectedDate === date ? "bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "bg-[var(--px-surface-soft)] text-[var(--px-muted)]"}`}>{date}</button>)}</div>
-        </div>
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {times.map((time) => (
-            <button key={time} type="button" onClick={() => setSelectedTime(time)} className={`rounded-[14px] border px-4 py-4 text-sm font-bold transition-colors ${selectedTime === time ? "border-[var(--px-accent)] bg-[var(--px-accent)] text-[var(--px-on-accent)]" : "border-[var(--px-line)] text-[var(--px-ink)] hover:bg-[var(--px-surface-soft)]"}`}>{time}</button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProfileScreen({ rows, onSelect }: { rows: Row[]; onSelect: (row: Row) => void }) {
-  return (
-    <div className="space-y-5">
-      <section className="rounded-[28px] border border-[var(--px-line)] bg-[var(--px-surface)] p-7 shadow-sm">
-        <div className="flex flex-wrap items-center gap-5">
-          <span className="grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-[var(--px-visual-a)] to-[var(--px-visual-b)] text-2xl font-black text-[var(--px-accent)]">ME</span>
-          <div className="flex-1">
-            <h2 className="text-2xl font-black text-[var(--px-ink)]">나의 공간</h2>
-            <p className="mt-1 text-sm text-[var(--px-muted)]">내 활동과 저장된 기록을 한곳에서 확인하세요.</p>
-          </div>
-          <span className="rounded-full border border-[var(--px-line)] px-4 py-2 text-xs font-bold text-[var(--px-subtle)]">미리보기 프로필</span>
-        </div>
-        <div className="mt-7 grid grid-cols-3 gap-3 border-t border-[var(--px-line)] pt-6 text-center">
-          {[["활동", rows.length], ["완료", Math.max(2, rows.length - 1)], ["저장됨", Math.max(3, rows.length + 2)]].map(([label, value]) => (
-            <div key={String(label)}><strong className="block text-xl text-[var(--px-ink)]">{value}</strong><span className="text-[10px] font-bold text-[var(--px-subtle)]">{label}</span></div>
-          ))}
-        </div>
-      </section>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.slice(0, 3).map((row, index) => <Card key={rowId(row)} row={row} index={index} selected={false} onSelect={() => onSelect(row)} visual={false} />)}
-      </div>
-    </div>
   );
 }
 
@@ -544,16 +154,8 @@ function ScreenContent({
   selected: Row | null;
   onSelect: (row: Row) => void;
 }) {
-  if (screen.kind === "HOME") return <HomeScreen rows={rows} onSelect={onSelect} />;
-  if (screen.kind === "CALENDAR") return <CalendarScreen rows={rows} onSelect={onSelect} />;
-  if (screen.kind === "FEED") return <FeedScreen rows={rows} onSelect={onSelect} />;
-  if (screen.kind === "INBOX") return <InboxScreen rows={rows} selected={selected} onSelect={onSelect} />;
-  if (screen.kind === "EDITOR") return <EditorScreen />;
-  if (screen.kind === "FILES") return <FilesScreen rows={rows} onSelect={onSelect} />;
-  if (screen.kind === "BOOKING") return <BookingScreen rows={rows} onSelect={onSelect} />;
-  if (screen.kind === "PROFILE") return <ProfileScreen rows={rows} onSelect={onSelect} />;
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className={screen.kind === "FEED" ? "mx-auto grid max-w-3xl gap-4" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"}>
       {rows.map((row, index) => (
         <Card
           key={rowId(row)}
@@ -561,6 +163,7 @@ function ScreenContent({
           index={index}
           selected={selected ? rowId(selected) === rowId(row) : false}
           onSelect={() => onSelect(row)}
+          visual={screen.kind !== "FEED"}
         />
       ))}
     </div>
@@ -570,6 +173,8 @@ function ScreenContent({
 function DetailOverlay({
   row,
   open,
+  loading,
+  error,
   actions,
   theme,
   onClose,
@@ -577,39 +182,34 @@ function DetailOverlay({
 }: {
   row: Row | null;
   open: boolean;
+  loading: boolean;
+  error: string | null;
   actions: ExperienceAction[];
   theme: ProductExperienceTheme;
   onClose: () => void;
   onAction: (action: ExperienceAction) => void;
 }) {
   if (!row) return null;
-  const entries = Object.entries(row).filter(([, value]) => value !== null && value !== undefined).slice(0, 12);
   return (
     <BlueprintModalFrame
       open={open}
       onClose={onClose}
       title={titleOf(row)}
       description={subtitleOf(row)}
-      eyebrow="Details"
+      eyebrow="상세"
       size="lg"
       style={theme.style}
       themeId={theme.blueprintThemeId}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        {entries.map(([key, value]) => (
-          <div key={key} className="rounded-[14px] border border-line bg-panel p-4">
-            <p className="text-[10px] font-black uppercase tracking-[.1em] text-muted-soft">{humanize(key)}</p>
-            <p className="mt-2 break-words text-sm font-semibold">
-              {typeof value === "object" ? JSON.stringify(value) : String(value)}
-            </p>
-          </div>
-        ))}
-      </div>
+      {loading && <p role="status" className="mb-4 text-sm text-muted">상세 정보를 불러오는 중…</p>}
+      {error && <p role="alert" className="mb-4 text-sm text-danger">{error}</p>}
+      <ResourceDetails value={row} />
       {actions.length > 0 && (
         <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-5">
           {actions.map((action) => (
             <Button
               key={action.id}
+              disabled={loading || Boolean(error)}
               variant={action.tone === "DANGER" ? "danger" : action.tone === "PRIMARY" ? "primary" : "secondary"}
               onClick={() => onAction(action)}
             >
@@ -629,160 +229,68 @@ function overlayFields(
 ): string[] {
   const stages = scenario.stages.filter((stage) => overlay.stageIds.includes(stage.id));
   const local = stages.flatMap((stage) => ["ENTRY", "PREPARE", "CONFIGURE", "SELECT_CONTEXT"].includes(stage.role)
-    ? stage.outputs : stage.inputs);
-  const capabilityFields = stages.flatMap((stage) =>
-    capabilities.find((capability) => capability.id === stage.capabilityId)?.fields ?? []
-  );
-  return Array.from(new Set([...local, ...capabilityFields]))
-    .filter((field) => !/^(collection|authenticatedCollection|selectedRecord|selectedResource|verifiedResource|authToken|createdId|trackedStatus)$/i.test(field));
+    ? stage.outputs : stage.role === "AUTHENTICATE" ? capabilities.find(cap => cap.id === stage.capabilityId)?.fields ?? [] : []);
+  return Array.from(new Set(local)).filter(field => !/^(collection|authenticatedCollection|selectedId|selectedRecord|selectedResource|verifiedResource|authToken|createdId|trackedStatus)$/i.test(field));
 }
 
-function ActionOverlay({
-  action,
-  overlay,
-  scenario,
-  capabilities,
-  draft,
-  selected,
-  busy,
-  error,
-  theme,
-  onDraft,
-  onClose,
-  onContinue,
-  onExecute,
-}: {
-  action: ExperienceAction;
-  overlay: ExperienceOverlay;
-  scenario: PreviewCompiledScenario;
-  capabilities: PreviewCapability[];
-  draft: Record<string, string>;
-  selected: Row | null;
-  busy: boolean;
-  error: string | null;
-  theme: ProductExperienceTheme;
-  onDraft: (field: string, value: string) => void;
-  onClose: () => void;
-  onContinue: () => void;
-  onExecute: () => void;
+function inputContract(field: string, capabilities: PreviewCapability[]): { schema?: PreviewInputSchema; required: boolean } {
+  const capability = capabilities.find(cap => cap.inputSchema?.properties[field]);
+  return { schema: capability?.inputSchema?.properties[field], required: capability?.inputSchema ? capability.inputSchema.required.includes(field) : true };
+}
+
+function parseProductInput(value: string, schema?: PreviewInputSchema): unknown {
+  if (schema?.type === "string") return value;
+  return parseScenarioInput(value);
+}
+
+function ActionOverlay({ action, overlay, scenario, capabilities, draft, selected, state, busy, error,
+  onDraft, onClose, onContinue, onExecute, onBack }: {
+  action: ExperienceAction; overlay: ExperienceOverlay; scenario: PreviewCompiledScenario;
+  capabilities: PreviewCapability[]; draft: Record<string, string>; selected: Row | null; state: ScenarioState;
+  busy: boolean; error: string | null; theme: ProductExperienceTheme;
+  onDraft: (field: string, value: string) => void; onClose: () => void; onContinue: () => void; onExecute: () => void; onBack?: () => void;
 }) {
-  const fields = overlayFields(overlay, scenario, capabilities);
-  const isForm = overlay.kind === "FORM_MODAL";
-  const isDanger = overlay.kind === "DANGER_CONFIRM";
-  const isReview = overlay.kind === "REVIEW_MODAL";
-  const isProgress = overlay.kind === "PROGRESS_MODAL";
-  const isResult = overlay.kind === "RESULT_TOAST";
-  const isDetail = overlay.kind === "DETAIL_DRAWER";
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    onContinue();
-  }
-
-  let content: ReactNode;
-  if (isForm) {
-    content = (
-      <form id={`experience-form-${overlay.id}`} onSubmit={submit}>
-        {fields.length === 0 ? (
-          <p className="rounded-[14px] border border-line bg-panel p-4 text-sm text-muted">
-            추가 입력 없이 다음 단계로 진행할 수 있습니다.
-          </p>
-        ) : fields.map((field) => (
-          <Field key={field} label={humanize(field)} htmlFor={`${overlay.id}-${field}`}>
-            {/(description|content|message|reason|note|body)/i.test(field) ? (
-              <Textarea id={`${overlay.id}-${field}`} value={draft[field] ?? ""} onChange={(event) => onDraft(field, event.target.value)} />
-            ) : (
-              <Input id={`${overlay.id}-${field}`} type={isPasswordLikeField(field) ? "password" : "text"} value={draft[field] ?? ""} onChange={(event) => onDraft(field, event.target.value)} />
-            )}
-          </Field>
-        ))}
-      </form>
-    );
-  } else if (isProgress) {
-    content = (
-      <div className="rounded-[16px] border border-line bg-panel p-5">
-        <div className="flex items-center gap-4">
-          <span className={`h-10 w-10 rounded-full border-[3px] border-line border-t-brand ${busy ? "animate-spin" : ""}`} />
-          <div>
-            <strong className="text-sm">{error ? "작업을 완료하지 못했습니다" : busy ? "변경 사항을 반영하고 있어요" : "실행할 준비가 되었습니다"}</strong>
-            <p className={`mt-1 text-xs leading-5 ${error ? "text-danger" : "text-muted-soft"}`}>
-              {error ?? (busy ? "완료될 때까지 이 화면에서 상태를 확인할 수 있습니다." : "아래 버튼을 눌러 작업을 시작하세요.")}
-            </p>
-          </div>
-        </div>
+  const related = capabilities.filter(cap => scenario.stages.some(stage => stage.capabilityId === cap.id));
+  const boundIds = new Set(scenario.stages.filter(stage => stage.role === "SELECT").flatMap(stage => stage.outputs));
+  const fields = overlayFields(overlay, scenario, related).filter(field =>
+    (!boundIds.has(field) || state[field] === undefined) && !(field.endsWith("Id") && state[field] !== undefined && state[field] === state.selectedId));
+  const result = overlay.kind === "RESULT_TOAST";
+  const review = overlay.kind === "REVIEW_MODAL" || overlay.kind === "DANGER_CONFIRM";
+  const detail = overlay.kind === "DETAIL_DRAWER";
+  const formId = `experience-form-${overlay.id}`;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { headingRef.current?.focus(); }, [overlay.id]);
+  return <section className="min-w-0" aria-label={overlay.title}>
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div><h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold outline-none">{result ? "완료되었습니다" : overlay.title}</h1><p className="mt-1 text-sm text-[var(--px-muted)]">{selected ? titleOf(selected) : action.label}</p></div>
+      <Button type="button" disabled={busy} onClick={onClose}>{result ? "목록으로" : "목록으로 돌아가기"}</Button>
+    </div>
+    {error && <div role="alert" className="mb-5 border-l-2 border-danger bg-danger/10 p-4 text-sm text-danger">{error}</div>}
+    {overlay.kind === "DANGER_CONFIRM" && <p className="mb-4 text-sm text-danger">이 작업은 데이터를 삭제하거나 중요한 상태를 변경합니다. 대상을 확인해주세요.</p>}
+    <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(240px,.5fr)]">
+      <div className="min-w-0">
+        {result ? <div role="status"><ResourceDetails value={state.verifiedResource ?? state.lastResponse ?? state.selectedResource} /></div>
+          : review ? <><ResourceDetails value={state.lastResponse ?? selected} /><div className="mt-5 border-t border-[var(--px-line)] pt-4"><ResourceDetails value={Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseProductInput(value, inputContract(key, related).schema)]))} /></div></>
+          : <form id={formId} onSubmit={event => { event.preventDefault(); onContinue(); }} className="min-w-0 space-y-4">
+            {detail && selected && <div className="mb-6"><ResourceDetails value={state.selectedResource ?? selected} /></div>}
+            {fields.map(field => { const contract = inputContract(field, related); const raw = draft[field];
+              let value: unknown = raw ?? state[field];
+              if (raw !== undefined && contract.schema?.type !== "string") value = parseScenarioInput(raw);
+              return <SchemaField key={field} name={field} schema={contract.schema} required={contract.required} value={value}
+                onChange={next => onDraft(field, typeof next === "object" ? JSON.stringify(next) : String(next))} />;
+            })}
+          </form>}
       </div>
-    );
-  } else if (isResult) {
-    content = (
-      <div className="flex items-start gap-4 rounded-[16px] border border-brand/30 bg-brand/10 p-5">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-xl font-black text-[var(--px-on-accent)]">✓</span>
-        <div><strong className="text-sm">요청한 작업을 완료했습니다.</strong><p className="mt-1 text-xs leading-5 text-muted">화면 데이터에도 최신 결과를 반영했습니다.</p></div>
-      </div>
-    );
-  } else if (isDanger) {
-    content = (
-      <div className="space-y-4">
-        <div className="rounded-[15px] border border-danger/30 bg-danger/10 p-4 text-sm leading-6 text-danger">
-          이 작업은 데이터에 중요한 변경을 만들 수 있습니다. 대상과 내용을 다시 확인해 주세요.
-        </div>
-        <div className="rounded-[14px] border border-line bg-panel p-4">
-          <p className="text-[10px] font-black uppercase tracking-[.1em] text-muted-soft">선택한 대상</p>
-          <strong className="mt-2 block text-sm">{selected ? titleOf(selected) : "현재 선택된 항목"}</strong>
-        </div>
-      </div>
-    );
-  } else if (isReview) {
-    content = (
-      <div className="space-y-3">
-        {Object.entries(draft).length > 0 && Object.entries(draft).map(([key, value]) => (
-          <div key={key} className="flex items-start justify-between gap-4 rounded-[13px] border border-line bg-panel px-4 py-3">
-            <span className="text-xs font-bold text-muted">{humanize(key)}</span>
-            <span className="max-w-[65%] break-words text-right text-xs font-semibold">{isPasswordLikeField(key) ? "••••••" : value}</span>
-          </div>
-        ))}
-        {Object.keys(draft).length === 0 && <p className="rounded-[14px] border border-line bg-panel p-4 text-sm text-muted">선택한 항목과 현재 설정으로 작업을 진행합니다.</p>}
-      </div>
-    );
-  } else if (isDetail) {
-    content = selected ? (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {Object.entries(selected).slice(0, 10).map(([key, value]) => (
-          <div key={key} className="rounded-[13px] border border-line bg-panel p-4">
-            <p className="text-[10px] font-black uppercase tracking-[.1em] text-muted-soft">{humanize(key)}</p>
-            <p className="mt-2 break-words text-sm font-semibold">{typeof value === "object" ? JSON.stringify(value) : String(value)}</p>
-          </div>
-        ))}
-      </div>
-    ) : <p className="rounded-[14px] border border-line bg-panel p-4 text-sm text-muted">목록에서 확인할 항목을 먼저 선택해 주세요.</p>;
-  } else {
-    content = null;
-  }
-
-  const footer = isForm ? (
-    <><Button onClick={onClose}>취소</Button><Button type="submit" form={`experience-form-${overlay.id}`} variant="primary">계속</Button></>
-  ) : isProgress ? (
-    <><Button onClick={onClose}>닫기</Button><Button variant="primary" disabled={busy} onClick={onExecute}>{error ? "다시 시도" : busy ? "처리 중..." : "실행"}</Button></>
-  ) : isResult ? (
-    <Button variant="primary" onClick={onClose}>완료</Button>
-  ) : (
-    <><Button onClick={onClose}>취소</Button><Button variant={isDanger ? "danger-solid" : "primary"} onClick={isDetail ? onExecute : onContinue}>{isDanger ? "확인하고 진행" : isDetail ? "최신 정보 확인" : "계속"}</Button></>
-  );
-
-  return (
-    <BlueprintModalFrame
-      open
-      onClose={onClose}
-      title={action.label}
-      description={overlay.title}
-      eyebrow={isDanger ? "Please confirm" : undefined}
-      size={isDetail ? "lg" : "md"}
-      footer={footer}
-      style={theme.style}
-      themeId={theme.blueprintThemeId}
-    >
-      {content}
-    </BlueprintModalFrame>
-  );
+      <aside className="min-w-0 self-start border-t border-[var(--px-line)] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        <h2 className="text-sm font-semibold">{result ? "저장된 결과" : review ? "내용 확인" : "선택한 항목"}</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--px-muted)]">{selected ? titleOf(selected) : action.label}</p>
+        {onBack && !busy && !error && <Button type="button" size="small" className="mt-4" onClick={onBack}>입력 수정</Button>}
+        {!result && <div className="mt-6"><Button type={review ? "button" : "submit"} form={review ? undefined : formId}
+          variant={overlay.kind === "DANGER_CONFIRM" ? "danger-solid" : "primary"} disabled={busy}
+          onClick={review ? onExecute : undefined}>{busy ? "처리 중…" : error && review ? "다시 시도" : overlay.submitLabel}</Button></div>}
+      </aside>
+    </div>
+  </section>;
 }
 
 export function ProductExperienceRuntime({
@@ -790,7 +298,6 @@ export function ProductExperienceRuntime({
   capabilities,
   config,
   pagePlans = [],
-  diagnostics = [],
 }: {
   pagePlans?: PreviewPagePlan[];
   diagnostics?: PreviewScenarioDiagnostic[];
@@ -822,6 +329,9 @@ export function ProductExperienceRuntime({
   const [loadingCollections, setLoadingCollections] = useState(false);
   const [selected, setSelected] = useState<Row | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const detailAbortRef = useRef<AbortController | null>(null);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [lastActionId, setLastActionId] = useState<string | null>(null);
   const [overlayIndex, setOverlayIndex] = useState(0);
@@ -886,10 +396,17 @@ export function ProductExperienceRuntime({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.apiBaseUrl, config.authToken, listCapabilities]);
 
+  useEffect(() => () => { abortRef.current?.abort(); detailAbortRef.current?.abort(); }, []);
+
   useEffect(() => {
     const syncScreenFromHistory = () => {
       const requested = new URLSearchParams(window.location.search).get("experience");
       if (requested && graph.screens.some((screen) => screen.id === requested)) {
+        abortRef.current?.abort(); detailAbortRef.current?.abort();
+        setBusy(false); setActiveActionId(null); setDetailOpen(false); setSelected(null);
+        setDraft({}); setActionError(null); setActiveCollectionId(null);
+        const next = { ...stateRef.current }; delete next.selectedId; delete next.selectedRecord;
+        stateRef.current = next; setScenarioState(next);
         setActiveScreenId(requested);
       }
     };
@@ -904,12 +421,14 @@ export function ProductExperienceRuntime({
   const liveRows = activeCollection ? rowsByCapability[activeCollection.id] ?? [] : [];
   const screenErrors = screenLists.flatMap((capability) => collectionErrors[capability.id] ? [collectionErrors[capability.id]] : []);
   const visibleRows = liveRows;
-  const screenScenario = scenarios.find((scenario) => activeScreen?.id === `flow-${scenario.id}`) ?? null;
   const normalizedQuery = screenQuery.trim().toLowerCase();
   const rows = normalizedQuery
     ? visibleRows.filter((row, index) => `${titleOf(row, index)} ${subtitleOf(row)}`.toLowerCase().includes(normalizedQuery))
     : visibleRows;
   const screenActions = graph.actions.filter((action) => action.screenId === activeScreen?.id);
+  const needsSelection = (action: ExperienceAction) => scenarios.find(scenario => scenario.id === action.scenarioId)?.stages.some(stage => stage.role === "SELECT" && stage.inputs.some(input => input === "collection" || input === "authenticatedCollection"));
+  const primaryActions = screenActions.filter(action => !needsSelection(action));
+  const contextualActions = screenActions.filter(needsSelection);
   const activeAction = graph.actions.find((action) => action.id === activeActionId) ?? null;
   const activeScenario = scenarios.find((scenario) => scenario.id === activeAction?.scenarioId) ?? null;
   const inspectedAction = activeAction
@@ -925,7 +444,9 @@ export function ProductExperienceRuntime({
   const activeOverlay = actionOverlays[overlayIndex] ?? null;
 
   function navigateScreen(screenId: string) {
-    if (screenId === activeScreenId) return;
+    if (busy || screenId === activeScreenId) return;
+    closeAction();
+    detailAbortRef.current?.abort();
     const query = new URLSearchParams(window.location.search);
     query.set("experience", screenId);
     window.history.pushState(null, "", `${window.location.pathname}?${query.toString()}`);
@@ -942,12 +463,33 @@ export function ProductExperienceRuntime({
     setDetailOpen(false);
   }
 
-  function selectRow(row: Row, open = true) {
+  async function selectRow(row: Row, open = true) {
+    detailAbortRef.current?.abort();
     setSelected(row);
+    setDetailError(null);
     const next = { ...stateRef.current, selectedId: rowId(row), selectedRecord: row };
     stateRef.current = next;
     setScenarioState(next);
     if (open && activeScreen.kind !== "INBOX") setDetailOpen(true);
+    const detail = capabilities.find(cap => cap.type === "DETAIL" && cap.risk === "SAFE" && cap.resourceName === activeCollection?.resourceName);
+    const parameters = [...(detail?.path ?? "").matchAll(/\{([^}]+)\}/g)].map(match => match[1]);
+    if (!detail || parameters.length !== 1) { setLoadingDetail(false); return; }
+    const controller = new AbortController(); detailAbortRef.current = controller;
+    setLoadingDetail(true);
+    try {
+      const response = await callCapability(config, detail, { pathParams: { [parameters[0]]: rowId(row) }, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const record = unwrapEnvelope(response);
+      if (!record || typeof record !== "object" || Array.isArray(record)) throw new Error("상세 응답에서 항목을 확인할 수 없습니다. Inspector에서 응답 구조를 확인해주세요.");
+      const resolved = { ...row, ...record };
+      setSelected(resolved);
+      const current = { ...stateRef.current, selectedRecord: resolved, selectedResource: record };
+      stateRef.current = current; setScenarioState(current);
+    } catch (cause) {
+      if (!controller.signal.aborted) setDetailError(cause instanceof Error ? cause.message : "상세 정보를 불러오지 못했습니다.");
+    } finally {
+      if (detailAbortRef.current === controller) { detailAbortRef.current = null; setLoadingDetail(false); }
+    }
   }
 
   function openAction(action: ExperienceAction) {
@@ -955,8 +497,9 @@ export function ProductExperienceRuntime({
     failedStepRef.current = null;
     const scenario = scenarios.find((candidate) => candidate.id === action.scenarioId);
     const allowedState = new Set([...(scenario?.scenarioState ?? []), "authToken"]);
+    const produced = new Set((scenario?.stages ?? []).filter(stage => stage.capabilityId || stage.role === "SELECT").flatMap(stage => [...stage.outputs, ...stage.outputBindings.map(binding => binding.to)]));
     const scopedState = Object.fromEntries(
-      Object.entries(stateRef.current).filter(([key]) => allowedState.has(key))
+      Object.entries(stateRef.current).filter(([key]) => allowedState.has(key) && (key === "authToken" || !produced.has(key)))
     );
     if (selected) {
       const selectedId = rowId(selected);
@@ -964,13 +507,20 @@ export function ProductExperienceRuntime({
       scopedState.selectedRecord = selected;
 
     }
-    stateRef.current = scopedState;
-    setScenarioState(scopedState);
     setDetailOpen(false);
     setActiveActionId(action.id);
     setLastActionId(action.id);
     setOverlayIndex(0);
-    setDraft({});
+    const generated: Record<string, string> = {};
+    for (const stage of scenario?.stages ?? []) for (const key of stage.outputs) {
+      if (["PREPARE", "CONFIGURE", "SELECT_CONTEXT"].includes(stage.role) && activeCollection && selected
+          && key.toLowerCase() === `${activeCollection.resourceName.replace(/s$/, "")}id`.toLowerCase()
+          && stage.inputs.includes("selectedId")) scopedState[key] = rowId(selected);
+      const contract = inputContract(key, capabilities.filter(cap => scenario?.stages.some(stage => stage.capabilityId === cap.id)));
+      if (contract.schema?.type === "array" && !contract.required && !scopedState[key]) generated[key] = "[]";
+    }
+    stateRef.current = scopedState; setScenarioState(scopedState);
+    setDraft(generated);
     setActionError(null);
   }
 
@@ -991,7 +541,7 @@ export function ProductExperienceRuntime({
   }
 
   function saveLocalStages(stages: PreviewCompiledScenarioStage[]) {
-    const parsed = Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseScenarioInput(value)]));
+    const parsed = Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseProductInput(value, inputContract(key, capabilities.filter(cap => activeScenario?.stages.some(stage => stage.capabilityId === cap.id))).schema)]));
     const next = { ...stateRef.current, ...parsed };
     for (const stage of stages) {
       for (const output of stage.outputs) {
@@ -1003,30 +553,22 @@ export function ProductExperienceRuntime({
   }
 
   function advanceOverlay() {
-    if (!activeOverlay || !activeScenario) return;
-    const stages = activeScenario.stages.filter((stage) => activeOverlay.stageIds.includes(stage.id));
-    if (activeOverlay.kind === "FORM_MODAL") saveLocalStages(stages);
-    if (actionOverlays[overlayIndex + 1]?.kind === "RESULT_TOAST") {
-      void executeAction();
-      return;
-    }
-    if (overlayIndex < actionOverlays.length - 1) {
-      setOverlayIndex((index) => index + 1);
-      setActionError(null);
-      return;
-    }
+    if (!activeOverlay || !activeScenario || busy) return;
+    const localStages = activeScenario.stages.filter(stage => activeOverlay.stageIds.includes(stage.id));
+    saveLocalStages(localStages);
     void executeAction();
   }
 
   async function executeAction(startStageId?: string) {
     const executionAction = activeAction ?? inspectedAction;
     const executionScenario = activeScenario ?? inspectedScenario;
-    if (!executionAction || !executionScenario || busy) return;
+    if (!executionAction || !executionScenario || busy || abortRef.current) return;
     if (executedScenarioId !== executionScenario.id) { setExecutions({}); setExecutionTimeline([]); }
     setExecutedScenarioId(executionScenario.id);
     const resumeStageId = startStageId ?? (failedStepRef.current?.scenarioId === executionScenario.id
       ? failedStepRef.current.stageId : undefined);
     const executionPath = buildScenarioExecutionPath(executionScenario, resumeStageId);
+    if (activeOverlay) executionPath.stages = executionPath.stages.filter(stage => activeOverlay.stageIds.includes(stage.id));
     if (executionPath.error) {
       setActionError(executionPath.error);
       return;
@@ -1042,9 +584,12 @@ export function ProductExperienceRuntime({
     }
     nextState = {
       ...nextState,
-      ...Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseScenarioInput(value)])),
+      ...Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseProductInput(value, inputContract(key, capabilities.filter(cap => executionScenario.stages.some(stage => stage.capabilityId === cap.id))).schema)])),
     };
-    const preflightErrors = preflightScenarioExecution(executionPath.stages, nextState);
+    const relatedCapabilities = capabilities.filter(cap => executionScenario.stages.some(stage => stage.capabilityId === cap.id));
+    const optionalInputs = new Set(relatedCapabilities.flatMap(cap => cap.inputSchema ? Object.keys(cap.inputSchema.properties).filter(key =>
+      !cap.inputSchema!.required.includes(key) && !executionScenario.stages.some(stage => stage.inputBindings.some(binding => binding.required && binding.source === `$scenario.${key}`))) : []));
+    const preflightErrors = preflightScenarioExecution(executionPath.stages, nextState, optionalInputs);
     if (preflightErrors.length > 0) {
       setActionError(`실행 전 검증 실패: ${preflightErrors.join(" ")}`);
       if (abortRef.current === controller) {
@@ -1129,7 +674,7 @@ export function ProductExperienceRuntime({
         if (result.execution.status !== "SUCCESS") {
           throw new Error(result.execution.error ?? `${stage.intent} 작업에 실패했습니다.`);
         }
-        nextState = result.nextState;
+        nextState = { ...result.nextState, lastResponse: result.execution.response };
         stateRef.current = nextState;
         setScenarioState({ ...nextState });
         const collection = extractArray(result.execution.response, capability.collectionPath);
@@ -1148,7 +693,8 @@ export function ProductExperienceRuntime({
         .map((id) => graph.overlays.find((overlay) => overlay.id === id))
         .filter((overlay): overlay is ExperienceOverlay => Boolean(overlay));
       const resultIndex = executionOverlays.findIndex((overlay) => overlay.kind === "RESULT_TOAST");
-      if (activeAction && resultIndex >= 0) setOverlayIndex(resultIndex);
+      if (activeAction && activeOverlay && overlayIndex < executionOverlays.length - 1) setOverlayIndex(overlayIndex + 1);
+      else if (activeAction && resultIndex >= 0) setOverlayIndex(resultIndex);
       else {
         if (activeAction) closeAction();
         setToast(`${executionAction.label} 작업을 완료했습니다.`);
@@ -1167,8 +713,7 @@ export function ProductExperienceRuntime({
             completedAt: executionTimestamp(),
           });
         }
-        const progressIndex = actionOverlays.findIndex((overlay) => overlay.kind === "PROGRESS_MODAL");
-        if (progressIndex >= 0) setOverlayIndex(progressIndex);
+
       }
     } finally {
       if (abortRef.current === controller) {
@@ -1188,7 +733,7 @@ export function ProductExperienceRuntime({
 
   return (
     <section
-      className="relative overflow-hidden rounded-[30px] border border-[var(--px-line)] bg-[var(--px-bg)] text-[var(--px-ink)] shadow-[var(--px-shadow-lg)]"
+      className="relative overflow-hidden rounded-[14px] border border-[var(--px-line)] bg-[var(--px-bg)] text-[var(--px-ink)] "
       style={theme.style}
       data-product-theme={theme.id}
       data-blueprint-theme={theme.blueprintThemeId}
@@ -1210,6 +755,7 @@ export function ProductExperienceRuntime({
               <button
                 type="button"
                 key={screen.id}
+                disabled={busy}
                 onClick={() => navigateScreen(screen.id)}
                 className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold transition-colors ${
                   activeScreen.id === screen.id ? "bg-[var(--px-tint)] text-[var(--px-accent)]" : "text-[var(--px-muted)] hover:bg-[var(--px-surface-soft)] hover:text-[var(--px-ink)]"
@@ -1225,7 +771,7 @@ export function ProductExperienceRuntime({
               onClick={() => setInspectorOpen(true)}
               className="inline-flex rounded-full border border-[var(--px-line)] px-3 py-2 text-[10px] font-bold text-[var(--px-muted)]"
             >
-              테스트 Inspector
+              Inspector
             </button>
             <button type="button" aria-label="화면 검색" aria-pressed={searchOpen} onClick={() => setSearchOpen((value) => !value)} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] text-xs">⌕</button>
 
@@ -1239,14 +785,38 @@ export function ProductExperienceRuntime({
       </header>
 
       <main className="mx-auto min-h-[440px] max-w-[1380px] px-5 py-8 md:px-8 md:py-8">
+      {activeAction && activeScenario && activeOverlay && (
+        <ActionOverlay
+          action={activeAction}
+          overlay={activeOverlay}
+          scenario={activeScenario}
+          capabilities={capabilities}
+          draft={draft}
+          selected={selected}
+          state={scenarioState}
+          busy={busy}
+          error={actionError}
+          theme={theme}
+          onDraft={(field, value) => setDraft((current) => ({ ...current, [field]: value }))}
+          onClose={closeAction}
+          onContinue={advanceOverlay}
+          onExecute={() => void executeAction()}
+          onBack={overlayIndex > 0 && ["REVIEW_MODAL", "DANGER_CONFIRM"].includes(activeOverlay.kind)
+            && ["FORM_MODAL", "DETAIL_DRAWER"].includes(actionOverlays[overlayIndex - 1]?.kind)
+            && !activeOverlay.stageIds.some(id => executions[id]?.status === "SUCCESS" && activeScenario.stages.find(stage => stage.id === id)?.role === "COMMIT")
+            ? () => { failedStepRef.current = null; setActionError(null); setOverlayIndex(overlayIndex - 1); } : undefined}
+        />
+      )}
+
+        {!activeAction && <>
         <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
           <div>
             <p className="text-xs font-bold text-[var(--px-muted)]">{activeScreen.label}</p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-.035em] text-[var(--px-ink)] md:text-4xl">{activeScreen.title}</h1>
+            <h1 className="mt-2 text-2xl font-bold tracking-[-.02em] text-[var(--px-ink)] md:text-4xl">{activeScreen.title}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--px-muted)]">{activeScreen.description}</p>
           </div>
           <div className="flex max-w-3xl flex-wrap justify-end gap-2">
-            {screenActions.map((action) => (
+            {primaryActions.map((action) => (
               <ProductActionButton key={action.id} action={action} onClick={() => openAction(action)} />
             ))}
             <button
@@ -1281,7 +851,7 @@ export function ProductExperienceRuntime({
           </div>
         )}
 
-        <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
         <div className="min-w-0">
         {screenLists.length > 1 && <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="조회할 데이터">
           {screenLists.map((capability) => <button type="button" key={capability.id}
@@ -1302,15 +872,14 @@ export function ProductExperienceRuntime({
         ) : (
           <div className="grid min-h-72 place-items-center rounded-[24px] border border-dashed border-[var(--px-line)] bg-[var(--px-surface)] text-sm text-[var(--px-muted)]">
             <div className="max-w-md p-5 text-center" role="status">
-              <strong className="block">{loadingCollections ? "실제 서버 데이터를 불러오는 중" : screenErrors.length > 0 ? "목록 요청 실패" : screenLists.length === 0 ? "이 흐름에는 목록 조회가 없습니다" : "서버가 빈 목록을 반환했습니다"}</strong>
-              <p className="mt-2 text-xs leading-5">{screenLists.length === 0 ? "흐름 테스트에서 입력과 API 연결을 확인하세요." : "테스트 데이터를 생성하거나 입력·인증을 확인한 뒤 다시 조회하세요."}</p>
+              <strong className="block">{loadingCollections ? "실제 서버 데이터를 불러오는 중" : screenErrors.length > 0 ? "목록 요청 실패" : screenLists.length === 0 ? "표시할 목록이 없습니다" : "서버가 빈 목록을 반환했습니다"}</strong>
+              <p className="mt-2 text-xs leading-5">{screenLists.length === 0 ? "위 행동을 선택해 내용을 입력하세요." : "테스트 데이터를 생성하거나 입력·인증을 확인한 뒤 다시 조회하세요."}</p>
             </div>
           </div>
         )}
         </div>
-        <UserFlowTrace scenario={screenScenario} capabilities={capabilities} diagnostics={diagnostics}
-          executions={executedScenarioId === screenScenario?.id ? executions : {}} onInspect={() => setInspectorOpen(true)} />
         </div>
+        </>}
       </main>
 
       <footer className="border-t border-[var(--px-line)] bg-[color-mix(in_srgb,var(--px-surface)_62%,transparent)] px-8 py-5">
@@ -1323,29 +892,14 @@ export function ProductExperienceRuntime({
       <DetailOverlay
         row={selected}
         open={detailOpen}
-        actions={screenActions}
+        loading={loadingDetail}
+        error={detailError}
+        actions={contextualActions.filter(action => scenarios.find(scenario => scenario.id === action.scenarioId)?.stages.some(stage => stage.role === "COMMIT" || stage.role === "AUTHENTICATE"))}
         theme={theme}
-        onClose={() => setDetailOpen(false)}
+        onClose={() => { detailAbortRef.current?.abort(); setDetailOpen(false); }}
         onAction={openAction}
       />
 
-      {activeAction && activeScenario && activeOverlay && (
-        <ActionOverlay
-          action={activeAction}
-          overlay={activeOverlay}
-          scenario={activeScenario}
-          capabilities={capabilities}
-          draft={draft}
-          selected={selected}
-          busy={busy}
-          error={actionError}
-          theme={theme}
-          onDraft={(field, value) => setDraft((current) => ({ ...current, [field]: value }))}
-          onClose={closeAction}
-          onContinue={advanceOverlay}
-          onExecute={() => void executeAction()}
-        />
-      )}
 
       <ProductExperienceInspector
         open={inspectorOpen}
