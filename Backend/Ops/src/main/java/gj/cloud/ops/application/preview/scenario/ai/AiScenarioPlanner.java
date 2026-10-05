@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AiScenarioPlanner {
 
-    public static final String PROMPT_VERSION = "scenario-planner-v1";
+    public static final String PROMPT_VERSION = "scenario-planner-v2-user-flow-preview";
     private static final int MAX_CAPABILITY_INPUTS = 120;
     private static final int MAX_OPERATION_INPUTS = 160;
     private static final String SYSTEM_PROMPT = """
@@ -42,6 +42,17 @@ public class AiScenarioPlanner {
             isolated CRUD screens. Prefer these patterns when supported by evidence: authenticate then access
             protected data; query then select and inspect; create then verify through a separate read; update then
             verify; state transition then verify; asynchronous command then track to a terminal state.
+
+            This is a temporary user-flow test frontend for backend developers whose frontend is unfinished.
+            Infer what the server is intended to do from its descriptions, schemas and relationships; do not
+            fabricate a production product, branding, business rules or endpoints. Propose realistic sequences
+            a user can click through to test that purpose, with explicit observable success conditions.
+            Report up to 8 coverageGaps for an intended step that cannot be backed by the supplied contract,
+            such as a missing lookup needed for selection or a missing read to verify a mutation. These are
+            evidence-based hypotheses to inspect, not declarations that the backend is broken. Each gap must
+            reference a proposed scenario id (or null for the service), explain the user intent and the precise
+            missing/ambiguous evidence. Use Korean. Omitted documentation alone is not proof of missing code.
+            Keep unsupported intentions in coverageGaps; never disguise them as successful local/API stages.
 
             Hard rules:
             - Use only the supplied capability ids as capabilityRequirement. Never emit an HTTP path, method,

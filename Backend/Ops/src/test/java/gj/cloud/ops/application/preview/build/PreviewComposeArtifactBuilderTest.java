@@ -16,6 +16,7 @@ import gj.cloud.ops.application.preview.analysis.RiskLevel;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.application.preview.flow.RuleBasedFlowGenerator;
 import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenarioStage;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompilationStatus;
@@ -42,6 +43,30 @@ class PreviewComposeArtifactBuilderTest {
     private final PreviewComposeArtifactBuilder builder =
             new PreviewComposeArtifactBuilder(new ObjectMapper(), new PreviewBlockResolver());
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void editedPagePlanIsPassedToTheSameRuntimeInUserVmAndManagedArtifacts() {
+        var capabilities = sampleCapabilities();
+        var pages = samplePages();
+        var original = PagePlanMapper.from(pages, capabilities).get(0);
+        var edited = new PagePlan(original.id(), "사용자가 수정한 화면", original.route(), original.pageType(),
+                original.layoutRef(), original.capabilityIds(), original.routeParameters(), original.queryParameters(),
+                original.navigationRules(), original.features(), original.confidence(), original.reason(),
+                original.unsupportedCapabilityWarnings());
+        var plans = List.of(edited);
+        var user = builder.build("https://api.example.test", capabilities, pages, List.of(), List.of(),
+                AuthStrategy.apiKeyHeader("X-API-Key"), Purpose.API_TEST,
+                List.of(sampleScenario()), PreviewMode.SCENARIO_PREVIEW, Map.of(), plans);
+        var managed = builder.buildManaged("https://api.example.test", capabilities, pages, List.of(), List.of(),
+                AuthStrategy.apiKeyHeader("X-API-Key"), Purpose.API_TEST,
+                List.of(sampleScenario()), PreviewMode.SCENARIO_PREVIEW, Map.of(), 18080, "test-preview", plans);
+        for (var artifact : List.of(user, managed)) {
+            String app = artifact.uploadedFiles().stream().filter(file -> file.vmPath().equals("src/App.tsx"))
+                    .map(file -> new String(file.content(), StandardCharsets.UTF_8)).findFirst().orElseThrow();
+            assertThat(app).contains("사용자가 수정한 화면", "pagePlans={PAGE_PLANS}")
+                    .doesNotContain("__PAGE_PLANS_JSON__");
+        }
+    }
 
     @Test
     void generatesAllExpectedFilesWithoutLeftoverPlaceholders() {

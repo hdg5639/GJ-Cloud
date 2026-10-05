@@ -18,6 +18,20 @@ class ScenarioProposalNormalizerTest {
     private final ScenarioProposalNormalizer normalizer = new ScenarioProposalNormalizer();
 
     @Test
+    void coverageGapsRemainBoundedHypothesesAndCannotCreateExecutableCapabilities() {
+        var gap = new AiScenarioProposal.AiCoverageGap(null, "생성 후 상태 확인",
+                "OpenAPI에서 후속 조회 계약을 확인할 수 없음", List.of("CREATE만 문서화됨"));
+        var result = normalizer.normalize(new AiScenarioProposal(understanding(0.9), List.of(),
+                List.of(gap, new AiScenarioProposal.AiCoverageGap("unknown-scenario", "알 수 없는 목표",
+                        "누락", List.of()))), Set.of("projects.create"));
+
+        assertThat(result.plans()).isEmpty();
+        assertThat(result.coverageGaps()).hasSize(1);
+        assertThat(result.coverageGaps().get(0).message()).contains("추론", "후속 조회", "CREATE만 문서화됨");
+        assertThat(result.coverageGaps().get(0).replacementCapabilityId()).isNull();
+    }
+
+    @Test
     void convertsValidSemanticProposalWithoutGivingItRuntimeBindingAuthority() {
         AiScenarioProposal proposal = new AiScenarioProposal(
                 understanding(0.91),

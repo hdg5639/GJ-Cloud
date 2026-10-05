@@ -42,7 +42,12 @@ class ScenarioGenerationServiceTest {
                 List.of("Project"), List.of("프로젝트를 조회하고 생성"), 0.91, List.of("Project schema"));
         when(aiPlanner.plan(anyString(), any(), any(), any(), anyList()))
                 .thenReturn(new PlanningAttempt(
-                        new NormalizedProposal(understanding, rule.plans(), List.of()), true, "scenario-planner-v1"));
+                        new NormalizedProposal(understanding, rule.plans(), List.of(), List.of(
+                                new ScenarioModels.ScenarioDiagnostic(null, null,
+                                        ScenarioModels.DiagnosticStatus.PARTIALLY_SUPPORTED,
+                                        "백엔드 확인 제안(추론): 상태 조회 범위를 확인하세요",
+                                        ScenarioModels.ResolutionStrategy.REQUEST_MANUAL_BINDING, null))),
+                        true, "scenario-planner-v1"));
 
         var result = service.generate(
                 "user-1", evidence(), "프로젝트 서비스", Purpose.PRODUCT_LIKE,
@@ -53,6 +58,9 @@ class ScenarioGenerationServiceTest {
         assertThat(result.serviceUnderstanding().domain()).isEqualTo("PROJECT_MANAGEMENT");
         assertThat(result.scenarios()).anyMatch(scenario ->
                 scenario.status() == ScenarioModels.CompilationStatus.EXECUTABLE);
+        assertThat(result.diagnostics()).anyMatch(diagnostic -> diagnostic.message().contains("확인 제안"));
+        assertThat(result.scenarios()).allSatisfy(scenario ->
+                assertThat(scenario.diagnostics()).anyMatch(diagnostic -> diagnostic.message().contains("확인 제안")));
     }
 
     @Test

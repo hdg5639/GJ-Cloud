@@ -16,6 +16,8 @@ import gj.cloud.ops.application.preview.blueprint.BlueprintCompiler;
 import gj.cloud.ops.application.preview.blueprint.BlueprintPartSelector;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.application.preview.flow.FlowBlueprint;
+import gj.cloud.ops.application.preview.planning.model.PagePlan;
+import gj.cloud.ops.application.preview.planning.model.PagePlanMapper;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
 import gj.cloud.ops.domain.deployment.enums.SourceType;
@@ -57,7 +59,7 @@ public class PreviewComposeArtifactBuilder {
             List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides
     ) {
         return buildInternal(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose,
-                scenarios, previewMode, partOverrides, null, null);
+                scenarios, previewMode, partOverrides, null, null, PagePlanMapper.from(pages, capabilities));
     }
 
     public ComposeArtifact buildManaged(
@@ -67,14 +69,34 @@ public class PreviewComposeArtifactBuilder {
             int hostPort, String containerName
     ) {
         return buildInternal(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose,
-                scenarios, previewMode, partOverrides, hostPort, containerName);
+                scenarios, previewMode, partOverrides, hostPort, containerName, PagePlanMapper.from(pages, capabilities));
+    }
+
+    public ComposeArtifact build(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
+            List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides,
+            List<PagePlan> pagePlans
+    ) {
+        return buildInternal(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose,
+                scenarios, previewMode, partOverrides, null, null, pagePlans);
+    }
+
+    public ComposeArtifact buildManaged(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
+            List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides,
+            int hostPort, String containerName, List<PagePlan> pagePlans
+    ) {
+        return buildInternal(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose,
+                scenarios, previewMode, partOverrides, hostPort, containerName, pagePlans);
     }
 
     private ComposeArtifact buildInternal(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
             List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
             List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides,
-            Integer hostPort, String containerName
+            Integer hostPort, String containerName, List<PagePlan> pagePlans
     ) {
         Map<String, List<Block>> pageBlocks = BlueprintPartSelector.select(
                 BlueprintCompiler.compile(blockResolver.resolveAll(pages, capabilities), purpose),
@@ -90,7 +112,7 @@ public class PreviewComposeArtifactBuilder {
         uploadedFiles.add(file("src/index.css", INDEX_CSS));
         uploadedFiles.add(file("src/App.tsx", renderAppTsx(
                 apiBaseUrl, capabilities, pages, pageBlocks, flows, bindings, authStrategy, purpose,
-                scenarios, previewMode)));
+                scenarios, previewMode, pagePlans)));
         // 포털 preview-runtime + ui 프리미티브 + lib/types 실물(build.gradle이 baked).
         uploadedFiles.addAll(readPreviewTemplateFiles());
 
@@ -160,12 +182,14 @@ public class PreviewComposeArtifactBuilder {
     private String renderAppTsx(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages,
             Map<String, List<Block>> pageBlocks, List<FlowBlueprint> flows, List<ApiBinding> bindings,
-            AuthStrategy authStrategy, Purpose purpose, List<CompiledScenario> scenarios, PreviewMode previewMode
+            AuthStrategy authStrategy, Purpose purpose, List<CompiledScenario> scenarios, PreviewMode previewMode,
+            List<PagePlan> pagePlans
     ) {
         return APP_TSX
                 .replace("__API_BASE_URL_JSON__", toJson(apiBaseUrl))
                 .replace("__CAPABILITIES_JSON__", toJson(capabilities))
                 .replace("__PAGES_JSON__", toJson(pages))
+                .replace("__PAGE_PLANS_JSON__", toJson(pagePlans))
                 .replace("__PAGE_BLOCKS_JSON__", toJson(pageBlocks))
                 .replace("__FLOWS_JSON__", toJson(flows))
                 .replace("__BINDINGS_JSON__", toJson(bindings))
@@ -334,11 +358,12 @@ public class PreviewComposeArtifactBuilder {
             import type { PreviewCapability, PreviewPage, PreviewAuthStrategy, Purpose } from "@/components/preview-runtime/types";
             import type { Block } from "@/components/preview-runtime/blueprint";
             import type { ApiBinding, FlowBlueprint } from "@/components/preview-runtime/flow/types";
-            import type { PreviewCompiledScenario, PreviewMode } from "@/lib/types";
+            import type { PreviewCompiledScenario, PreviewMode, PreviewPagePlan } from "@/lib/types";
 
             const API_BASE_URL = __API_BASE_URL_JSON__ as string;
             const CAPABILITIES = __CAPABILITIES_JSON__ as unknown as PreviewCapability[];
             const PAGES = __PAGES_JSON__ as unknown as PreviewPage[];
+            const PAGE_PLANS = __PAGE_PLANS_JSON__ as unknown as PreviewPagePlan[];
             const PAGE_BLOCKS = __PAGE_BLOCKS_JSON__ as unknown as Record<string, Block[]>;
             const FLOWS = __FLOWS_JSON__ as unknown as FlowBlueprint[];
             const BINDINGS = __BINDINGS_JSON__ as unknown as ApiBinding[];
@@ -349,11 +374,12 @@ public class PreviewComposeArtifactBuilder {
 
             export default function App() {
               return (
-                <main style={{ maxWidth: 1120, margin: "0 auto", padding: 24 }}>
+                <main style={{ maxWidth: 1440, margin: "0 auto", padding: "clamp(8px, 2vw, 24px)" }}>
                   <PreviewRuntimeApp
                     apiBaseUrl={API_BASE_URL}
                     capabilities={CAPABILITIES}
                     pages={PAGES}
+                    pagePlans={PAGE_PLANS}
                     pageBlocks={PAGE_BLOCKS}
                     flows={FLOWS}
                     bindings={BINDINGS}

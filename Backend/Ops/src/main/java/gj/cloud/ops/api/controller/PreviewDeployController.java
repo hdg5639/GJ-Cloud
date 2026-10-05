@@ -193,10 +193,10 @@ public class PreviewDeployController {
                 ? previewComposeArtifactBuilder.buildManaged(
                         body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
                         body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides(),
-                        managedAllocation.getInternalPort(), managedAllocation.getContainerName())
+                        managedAllocation.getInternalPort(), managedAllocation.getContainerName(), pagePlans)
                 : previewComposeArtifactBuilder.build(
                         body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
-                        body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides());
+                        body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides(), pagePlans);
 
         GenerationMode generationMode = body.generationMode() == null
                 ? GenerationMode.RULE_BASED : body.generationMode();

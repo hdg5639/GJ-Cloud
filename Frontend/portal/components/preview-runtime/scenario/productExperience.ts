@@ -2,6 +2,7 @@ import type {
   PreviewCompiledScenario,
   PreviewCompiledScenarioStage,
   PreviewScenarioStageRole,
+  PreviewPagePlan,
 } from "@/lib/types";
 import type { PreviewCapability } from "../types";
 
@@ -191,6 +192,7 @@ const FALLBACK_DEFINITION: ArchetypeDefinition = {
 };
 
 const ROLE_PHASE: Partial<Record<PreviewScenarioStageRole, ExperienceOverlayKind>> = {
+  ENTRY: "FORM_MODAL",
   AUTHENTICATE: "FORM_MODAL",
   SELECT_CONTEXT: "FORM_MODAL",
   CONFIGURE: "FORM_MODAL",
@@ -205,13 +207,6 @@ const ROLE_PHASE: Partial<Record<PreviewScenarioStageRole, ExperienceOverlayKind
   VERIFY: "RESULT_TOAST",
   COMPLETE: "RESULT_TOAST",
 };
-
-function normalizeWords(value: string): string[] {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9가-힣]+/)
-    .filter((word) => word.length > 1);
-}
 
 function searchableText(scenarios: PreviewCompiledScenario[], capabilities: PreviewCapability[]): string {
   return [
@@ -248,33 +243,12 @@ function selectDefinition(
   return best.definition;
 }
 
-function slug(value: string): string {
-  const normalized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9가-힣]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "experience";
-}
-
 function humanize(value: string): string {
   return value
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replaceAll("_", " ")
     .replaceAll("-", " ")
     .trim();
-}
-
-function actionLabel(
-  scenario: PreviewCompiledScenario,
-  capability: PreviewCapability | undefined
-): string {
-  if (capability?.action) return humanize(capability.action);
-  if (capability?.type === "CREATE") return `새 ${humanize(capability.resourceName)}`;
-  if (capability?.type === "UPDATE") return "수정하기";
-  if (capability?.type === "DELETE") return "삭제하기";
-  if (capability?.type === "LOGIN") return "로그인";
-  const mutation = scenario.stages.find((stage) => stage.role === "COMMIT");
-  return mutation?.intent || scenario.name;
 }
 
 function actionIcon(capability: PreviewCapability | undefined): string {
@@ -289,39 +263,6 @@ function actionTone(capability: PreviewCapability | undefined): ExperienceAction
   if (capability?.risk === "DESTRUCTIVE" || capability?.type === "DELETE") return "DANGER";
   if (capability?.type === "CREATE" || capability?.type === "LOGIN") return "PRIMARY";
   return "SECONDARY";
-}
-
-function resourceForScenario(
-  scenario: PreviewCompiledScenario,
-  capabilities: PreviewCapability[]
-): string {
-  for (const stage of scenario.stages) {
-    const capability = capabilities.find((candidate) => candidate.id === stage.capabilityId);
-    if (capability?.resourceName) return capability.resourceName;
-  }
-  return normalizeWords(scenario.name)[0] ?? "item";
-}
-
-function selectScreenId(
-  scenario: PreviewCompiledScenario,
-  definition: ArchetypeDefinition,
-  capabilities: PreviewCapability[]
-): string {
-  const text = [
-    scenario.name,
-    scenario.goal,
-    ...scenario.stages.map((stage) => stage.intent),
-    resourceForScenario(scenario, capabilities),
-  ].join(" ").toLowerCase();
-  const scored = definition.screens.map((screen) => ({
-    id: screen.id,
-    score: normalizeWords(`${screen.label} ${screen.title} ${screen.kind}`)
-      .reduce((total, token) => total + (text.includes(token) ? 1 : 0), 0),
-  })).sort((left, right) => right.score - left.score);
-  if (scored[0]?.score) return scored[0].id;
-
-  const mutation = scenario.stages.some((stage) => stage.role === "PREPARE" || stage.role === "COMMIT");
-  return mutation ? definition.screens[0].id : definition.screens[1]?.id ?? definition.screens[0].id;
 }
 
 function groupOverlayStages(
@@ -354,99 +295,60 @@ function groupOverlayStages(
 
 export function composeProductExperience(
   scenarios: PreviewCompiledScenario[],
-  capabilities: PreviewCapability[]
+  capabilities: PreviewCapability[],
+  pagePlans: PreviewPagePlan[] = []
 ): ProductExperienceGraph {
-  const available = scenarios.filter(
-    (scenario) => scenario.status !== "UNSUPPORTED" && scenario.stages.length > 0
-  );
-  const definition = selectDefinition(available, capabilities);
+  const definition = selectDefinition(scenarios, capabilities);
   const actions: ExperienceAction[] = [];
   const overlays: ExperienceOverlay[] = [];
-
-  for (const scenario of available) {
-    const actionId = `action-${slug(scenario.id)}`;
-    const screenId = selectScreenId(scenario, definition, capabilities);
-    const capability = scenario.stages
-      .map((stage) => capabilities.find((candidate) => candidate.id === stage.capabilityId))
-      .find((candidate) => candidate?.type && candidate.type !== "LIST" && candidate.type !== "DETAIL")
-      ?? scenario.stages
-        .map((stage) => capabilities.find((candidate) => candidate.id === stage.capabilityId))
-        .find(Boolean);
-    const actionOverlays = groupOverlayStages(
-      actionId,
-      screenId,
-      scenario,
-      capability?.risk === "DESTRUCTIVE" || capability?.type === "DELETE"
-    );
+  const screens: ExperienceScreen[] = [];
+  // Navigation follows inferred user goals. Archetypes only suggest the data presentation/theme.
+  for (const scenario of scenarios) {
+    const capabilityIds = Array.from(new Set(scenario.stages.flatMap((stage) =>
+      stage.capabilityId && capabilities.some((capability) => capability.id === stage.capabilityId)
+        ? [stage.capabilityId] : []
+    )));
+    const related = capabilities.filter((capability) => capabilityIds.includes(capability.id));
+    const plan = pagePlans.map((plan) => ({
+      plan, score: plan.capabilityIds.filter((id) => capabilityIds.includes(id)).length,
+    })).sort((left, right) => right.score - left.score).find((candidate) => candidate.score > 0)?.plan;
+    const screenId = `flow-${scenario.id}`;
+    const resourceNames = Array.from(new Set(related.map((capability) => capability.resourceName)));
+    const kind: ExperienceScreenKind = definition.archetype === "COMMERCE"
+      || definition.archetype === "BOOKING" ? "CATALOG" : "COLLECTION";
+    const runnable = scenario.status !== "UNSUPPORTED" && scenario.stages.length > 0;
+    const actionId = `action-${scenario.id}`;
+    screens.push({
+      id: screenId, label: scenario.name, title: plan?.title || scenario.name,
+      description: scenario.goal, kind, resourceNames, capabilityIds,
+      actionIds: runnable ? [actionId] : [],
+    });
+    if (!runnable) continue;
+    const capability = related.find((candidate) => candidate.risk !== "SAFE") ?? related[0];
+    const actionOverlays = groupOverlayStages(actionId, screenId, scenario,
+      related.some((candidate) => candidate.risk === "DESTRUCTIVE"));
     overlays.push(...actionOverlays);
     actions.push({
-      id: actionId,
-      scenarioId: scenario.id,
-      screenId,
-      label: actionLabel(scenario, capability),
-      tone: actionTone(capability),
-      icon: actionIcon(capability),
+      id: actionId, scenarioId: scenario.id, screenId,
+      label: "흐름 테스트", tone: actionTone(capability), icon: actionIcon(capability),
       stageIds: scenario.stages.map((stage) => stage.id),
       overlayIds: actionOverlays.map((overlay) => overlay.id),
     });
   }
-
-  const resources = Array.from(new Set(capabilities.map((capability) => capability.resourceName).filter(Boolean)));
-  const screens: ExperienceScreen[] = definition.screens.map((screen) => ({
-    ...screen,
-    resourceNames: [],
-    capabilityIds: [],
-    actionIds: actions.filter((action) => action.screenId === screen.id).map((action) => action.id),
-  }));
-
-  // 생성·수정·삭제가 서로 다른 화면으로 흩어지면 실제 제품의 한 리소스 액션처럼 보이지 않는다.
-  // 화면에 매핑되지 않은 액션은 기본 화면의 퀵 액션으로 합쳐 한 페이지가 여러 기능을 소유하게 한다.
-  const knownScreenIds = new Set(screens.map((screen) => screen.id));
-  for (const action of actions) {
-    if (!knownScreenIds.has(action.screenId)) action.screenId = screens[0].id;
-  }
-  for (const screen of screens) {
-    screen.actionIds = actions.filter((action) => action.screenId === screen.id).map((action) => action.id);
-    const scenarioIds = new Set(
-      actions.filter((action) => action.screenId === screen.id).map((action) => action.scenarioId)
-    );
-    const stageCapabilityIds = available
-      .filter((scenario) => scenarioIds.has(scenario.id))
-      .flatMap((scenario) => scenario.stages.map((stage) => stage.capabilityId))
-      .filter((id): id is string => Boolean(id));
-    const stageResources = stageCapabilityIds
-      .map((id) => capabilities.find((capability) => capability.id === id)?.resourceName)
-      .filter((resource): resource is string => Boolean(resource));
-    screen.capabilityIds = Array.from(new Set(stageCapabilityIds));
-    screen.resourceNames = Array.from(new Set(stageResources));
-  }
-  // 조회-only API는 별도 action이 없을 수 있다. 같은 리소스를 가진 화면에 붙이고, 의미 관계를
-  // 찾을 수 없는 경우에만 기본 탐색 화면이 데이터를 소유한다.
-  for (const capability of capabilities) {
+  // Unassigned read capabilities get real resource screens, never fabricated profile/store menus.
+  for (const capability of capabilities.filter((candidate) => candidate.type === "LIST")) {
     if (screens.some((screen) => screen.capabilityIds.includes(capability.id))) continue;
-    const owner = screens.find((screen) => screen.resourceNames.includes(capability.resourceName))
-      ?? screens.find((screen) => ["HOME", "CATALOG", "COLLECTION", "FEED", "FILES"].includes(screen.kind))
-      ?? screens[0];
-    owner.capabilityIds.push(capability.id);
-    if (capability.resourceName && !owner.resourceNames.includes(capability.resourceName)) {
-      owner.resourceNames.push(capability.resourceName);
-    }
+    const related = capabilities.filter((candidate) => candidate.resourceName === capability.resourceName);
+    screens.push({
+      id: `resource-${capability.id}`, label: humanize(capability.resourceName),
+      title: `${humanize(capability.resourceName)} 조회`, description: "실제 서버 응답을 조회하고 항목을 선택합니다.",
+      kind: "COLLECTION", resourceNames: [capability.resourceName],
+      capabilityIds: related.map((candidate) => candidate.id), actionIds: [],
+    });
   }
-  // 리소스가 많더라도 화면 제목만 늘리지 않고, 의미적으로 연결된 목록/상세/변경 API를 같은
-  // 페이지에 묶는다. 비어 있는 보조 화면에는 대표 리소스를 공유해 실제 내비게이션으로 유지한다.
-  for (const [index, screen] of screens.entries()) {
-    if (screen.resourceNames.length === 0 && resources.length > 0) {
-      screen.resourceNames.push(resources[index % resources.length]);
-    }
-  }
-
   return {
-    id: `product-${definition.archetype.toLowerCase()}`,
-    productName: definition.productName,
-    archetype: definition.archetype,
-    screens,
-    actions,
-    overlays,
+    id: "user-flow-preview", productName: "사용자 흐름 프리뷰",
+    archetype: definition.archetype, screens, actions, overlays,
     defaultScreenId: screens[0]?.id ?? "home",
   };
 }

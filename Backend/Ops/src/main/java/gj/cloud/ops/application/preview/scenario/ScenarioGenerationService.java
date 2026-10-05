@@ -4,6 +4,7 @@ import gj.cloud.ops.application.preview.analysis.Capability;
 import gj.cloud.ops.application.preview.analysis.OpenApiEvidence;
 import gj.cloud.ops.application.preview.dto.PreviewAnalyzeRequest.Purpose;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompilationStatus;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.CompiledScenario;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.DiagnosticStatus;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.PlanningSource;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.PreviewMode;
@@ -72,6 +73,9 @@ public class ScenarioGenerationService {
                     && attempt.proposal().understanding().confidence() >= 0.55
                     && attempt.proposal().plans().stream().anyMatch(plan -> plan.confidence() >= 0.55);
             if (attempt.succeeded() && confident) {
+                diagnostics.addAll(attempt.proposal().coverageGaps());
+            }
+            if (attempt.succeeded() && confident) {
                 ScenarioCompiler.CompilationResult aiCompilation =
                         compiler.compile(attempt.proposal().plans(), capabilities);
                 boolean hasExecutable = aiCompilation.scenarios().stream()
@@ -117,7 +121,19 @@ public class ScenarioGenerationService {
         log.info("EVENT scenario.compile.succeeded mode={} planned={} executable={} partial={} unsupported={} "
                         + "diagnostics={} durationMs={}",
                 mode, planning.plans().size(), executable, partial, unsupported, diagnostics.size(), durationMs);
+        // Keep the coverage evidence in the serialized scenarios so the deployed shared runtime sees it too.
+        List<CompiledScenario> scenariosWithEvidence = compilation.scenarios().stream().map(scenario -> {
+            List<ScenarioDiagnostic> relevant = new ArrayList<>(scenario.diagnostics());
+            diagnostics.stream()
+                    .filter(diagnostic -> diagnostic.scenarioId() == null
+                            || scenario.id().equals(diagnostic.scenarioId()))
+                    .filter(diagnostic -> !relevant.contains(diagnostic))
+                    .forEach(relevant::add);
+            return new CompiledScenario(scenario.id(), scenario.name(), scenario.actor(), scenario.goal(),
+                    scenario.entryStageId(), scenario.stages(), scenario.scenarioState(), scenario.status(),
+                    relevant, scenario.confidence(), scenario.schemaVersion(), scenario.runtimeVersion());
+        }).toList();
         return new ScenarioGenerationResult(understanding, selectedPlans,
-                compilation.scenarios(), diagnostics, mode, planningSource, promptVersion);
+                scenariosWithEvidence, diagnostics, mode, planningSource, promptVersion);
     }
 }

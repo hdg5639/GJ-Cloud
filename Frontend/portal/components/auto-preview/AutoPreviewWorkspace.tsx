@@ -1594,6 +1594,8 @@ export function AutoPreviewWorkspace({ fixedVmId }: { fixedVmId?: string }) {
               <ProductExperienceRuntime
                 scenarios={result.scenarios}
                 capabilities={result.capabilities}
+                pagePlans={result.pagePlans}
+                diagnostics={result.scenarioDiagnostics}
                 config={{
                   apiBaseUrl: apiBaseUrl.trim(),
                   authToken: previewAuthToken,

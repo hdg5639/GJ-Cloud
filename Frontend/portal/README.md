@@ -28,6 +28,8 @@ GamjaBox 사용자 포털과 ControlBox 관리자 콘솔을 함께 제공하는 
 
 `ADMIN_DOMAIN`과 요청 Host가 일치하면 middleware가 일반 경로를 `/admin` 영역으로 rewrite한다. 일반 사용자 도메인에서 `/admin` 직접 접근은 차단하며, 환경변수가 없으면 관리자 라우팅을 fail-safe로 비활성화한다. 최종 권한은 각 백엔드의 `/admin/**` API가 다시 검증한다.
 
+Auto Preview의 기본 화면은 추론된 사용자 목표마다 메뉴·페이지·입력/검토/결과 모달을 구성한다. 실제 목록 데이터만 표시하고 빈 응답·실패를 구분한다. 흐름 옆에서 연결된 API와 단계별 실행 결과·백엔드 확인 제안을 볼 수 있으며, Inspector에서 요청·응답과 상태를 확인한다. `npm run preview:check`는 목표별 화면 구성, 리소스 분리, 수정된 Page Plan 반영과 실행 불가 흐름 처리를 검증한다.
+
 ## 기술 구성
 
 - Next.js 16 App Router, React 19, TypeScript
