@@ -37,6 +37,8 @@ import {
   emptyExecution,
   missingRequiredStageInputs,
   preflightScenarioExecution,
+  resolveSelectionOutputs,
+  parseScenarioInput,
   runApiStage,
   type ScenarioState,
 } from "./runtime";
@@ -89,13 +91,6 @@ function humanize(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function parseValue(value: string): unknown {
-  const trimmed = value.trim();
-  if (trimmed === "true") return true;
-  if (trimmed === "false") return false;
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
-  return value;
-}
 
 function ProductActionButton({
   action,
@@ -996,7 +991,7 @@ export function ProductExperienceRuntime({
   }
 
   function saveLocalStages(stages: PreviewCompiledScenarioStage[]) {
-    const parsed = Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseValue(value)]));
+    const parsed = Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseScenarioInput(value)]));
     const next = { ...stateRef.current, ...parsed };
     for (const stage of stages) {
       for (const output of stage.outputs) {
@@ -1047,7 +1042,7 @@ export function ProductExperienceRuntime({
     }
     nextState = {
       ...nextState,
-      ...Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseValue(value)])),
+      ...Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, parseScenarioInput(value)])),
     };
     const preflightErrors = preflightScenarioExecution(executionPath.stages, nextState);
     if (preflightErrors.length > 0) {
@@ -1071,17 +1066,13 @@ export function ProductExperienceRuntime({
           continue;
         }
         if (stage.role === "SELECT") {
-          if (!nextState.selectedId) {
-            throw new Error("목록에서 실제 항목을 선택한 뒤 다시 실행하세요. 임의의 첫 항목을 자동 선택하지 않습니다.");
-          }
+          const outputs = resolveSelectionOutputs(stage, nextState);
+          nextState = { ...nextState, ...outputs };
           stateRef.current = nextState;
           setScenarioState({ ...nextState });
           recordExecution({
-            ...emptyExecution(stage),
-            status: "SUCCESS",
-            extractedOutputs: { selectedId: nextState.selectedId },
-            durationMs: 0,
-            completedAt: executionTimestamp(),
+            ...emptyExecution(stage), status: "SUCCESS", extractedOutputs: outputs,
+            durationMs: 0, completedAt: executionTimestamp(),
           });
           continue;
         }

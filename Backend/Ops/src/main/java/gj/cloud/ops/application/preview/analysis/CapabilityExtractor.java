@@ -309,7 +309,7 @@ public class CapabilityExtractor {
         return Optional.of(new Capability(
                 resourceName + "." + action, resourceName, null,
                 operation.operationId(), operation.path(), operation.method(),
-                false, false, false, confidence, evidenceLines, List.of(), null, null,
+                false, false, false, confidence, evidenceLines, operation.requestBodyFields(), null, null,
                 RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
                 CapabilityKind.COMMAND, action, dependencies));
     }

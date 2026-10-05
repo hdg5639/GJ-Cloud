@@ -163,6 +163,8 @@ npm run blueprint:generate
 npm run blueprint:check
 ```
 
+배포 대상 구성 편집은 저장소가 없는 Auto Preview에도 적용된다. 기존 대상의 Compose·환경변수·라우트를 수정할 때 Git URL을 요구하지 않으며, 내리기 화면은 해당 대상이 소유한 자동 포트만 정리 후보로 표시한다.
+
 ## Auto Preview Runtime
 
 사이드바의 `/auto-preview`에서는 VM 없이 분석·미리보기를 진행한 뒤 공용 관리형 Worker 또는 실행 중인 내 VM을 배포 대상으로 선택한다. VM 목록은 배포 단계에 들어갈 때만 조회한다. VM 상세의 `/instances/{id}/preview` 진입도 유지하며, 이 경로에서는 별도 선택 없이 해당 VM에 바로 배포한다. 이전 `/preview` 링크는 `/auto-preview`로 리다이렉트한다.

@@ -17,6 +17,22 @@ export interface ScenarioRequest {
   body: Record<string, unknown>;
 }
 
+export function parseScenarioInput(value: string): unknown {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
 export interface StageRunResult {
   execution: PreviewScenarioStageExecution;
   nextState: ScenarioState;
@@ -115,6 +131,24 @@ function scenarioStateKey(source: string): string | null {
   return source.slice("$scenario.".length).split(".")[0] || null;
 }
 
+// SELECT는 사용자의 목록 선택과 앞선 생성 응답의 ID 전달을 구분한다.
+// 선언된 단일 scalar 입력만 alias로 전달하며, 여러 후보를 임의로 선택하지 않는다.
+function selectionSource(stage: PreviewCompiledScenarioStage): string | null {
+  const candidates = stage.inputs.filter((key) => key !== "collection" && key !== "authenticatedCollection");
+  return candidates.length === 1 ? candidates[0] : candidates.length === 0 ? "selectedId" : null;
+}
+
+export function resolveSelectionOutputs(stage: PreviewCompiledScenarioStage, state: ScenarioState): ScenarioState {
+  const source = selectionSource(stage);
+  const value = source ? state[source] : undefined;
+  if ((typeof value !== "string" && typeof value !== "number") || value === "") {
+    throw new Error(`${stage.intent}: 실제 항목을 선택하거나 앞선 단계의 식별자를 확인해주세요.`);
+  }
+  const outputs = stage.outputs.length > 0 ? stage.outputs : ["selectedId"];
+  if (outputs.length !== 1) throw new Error(`${stage.intent}: 선택 결과의 연결을 하나로 확정해주세요.`);
+  return { [outputs[0]]: value };
+}
+
 // 상태 변경 API를 호출하기 전에 전체 실행 경로의 데이터 계보를 검사한다. API 응답으로 생길 값은
 // anticipated로 추적하되, 사용자 입력을 생산하는 로컬 stage의 값은 현재 state에 실제로 있어야 한다.
 export function preflightScenarioExecution(
@@ -143,12 +177,11 @@ export function preflightScenarioExecution(
       }
     }
     if (stage.role === "SELECT") {
-      if (!available.has("selectedId")
-        && !available.has("collection")
-        && !available.has("authenticatedCollection")) {
-        errors.push(`${stage.intent}: 실제 목록 또는 선택된 리소스 ID가 없습니다.`);
+      const source = selectionSource(stage);
+      if (!source || !available.has(source)) {
+        errors.push(`${stage.intent}: 실제 선택 또는 앞선 단계의 식별자 생산자가 없습니다.`);
       }
-      available.add("selectedId");
+      if (stage.outputs.length > 1) errors.push(`${stage.intent}: 선택 결과의 연결을 하나로 확정해주세요.`);
     }
     for (const binding of stage.inputBindings) {
       if (!binding.required) continue;

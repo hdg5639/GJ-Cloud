@@ -46,6 +46,21 @@ public class VmServiceClient {
         }
     }
 
+    public java.util.List<Integer> getOccupiedPorts(String bearerToken, String vmId) {
+        try {
+            ApiResponse<java.util.List<Integer>> response = restClient.get()
+                    .uri("/internal/ops/vms/{vmId}/occupied-ports", vmId)
+                    .header("Authorization", "Bearer " + bearerToken)
+                    .retrieve().body(new ParameterizedTypeReference<ApiResponse<java.util.List<Integer>>>() {});
+            if (response == null || response.data() == null) throw new IllegalStateException("Missing port response");
+            return response.data();
+        } catch (HttpClientErrorException.Forbidden e) {
+            throw new OpsException(OpsErrorCode.FORBIDDEN);
+        } catch (Exception e) {
+            throw new OpsException(OpsErrorCode.VM_CONTEXT_FETCH_FAILED);
+        }
+    }
+
     public void linkManualPortToDeploymentTarget(
             String bearerToken, String vmId, String portId, String deploymentTargetId
     ) {

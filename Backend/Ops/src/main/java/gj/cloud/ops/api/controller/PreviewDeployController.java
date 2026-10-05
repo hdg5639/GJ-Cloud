@@ -72,6 +72,7 @@ public class PreviewDeployController {
     private static final String PERMISSION_DEPLOY = "DEPLOY";
 
     private final PreviewComposeArtifactBuilder previewComposeArtifactBuilder;
+    private final gj.cloud.ops.application.preview.build.PreviewVmPortAllocator previewVmPortAllocator;
     private final PreviewBlueprintService previewBlueprintService;
     private final RuleBasedFlowGenerator ruleBasedFlowGenerator;
     private final DeploymentTargetService deploymentTargetService;
@@ -189,14 +190,10 @@ public class PreviewDeployController {
         // 수행하고 파츠 치환은 아티팩트 생성 단계에서만 적용해 배포가 막히지 않는다.
         ManagedPreviewDeploymentEntity managedAllocation = managed
                 ? managedPreviewService.allocate(bearerToken, principal.userId()) : null;
-        ComposeArtifact artifact = managed
-                ? previewComposeArtifactBuilder.buildManaged(
-                        body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
-                        body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides(),
-                        managedAllocation.getInternalPort(), managedAllocation.getContainerName(), pagePlans)
-                : previewComposeArtifactBuilder.build(
-                        body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
-                        body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides(), pagePlans);
+        ComposeArtifact managedArtifact = managed ? previewComposeArtifactBuilder.buildManaged(
+                body.apiBaseUrl(), runtimeCapabilities, effectivePages, flows, bindings,
+                body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides(),
+                managedAllocation.getInternalPort(), managedAllocation.getContainerName(), pagePlans) : null;
 
         GenerationMode generationMode = body.generationMode() == null
                 ? GenerationMode.RULE_BASED : body.generationMode();
@@ -207,25 +204,22 @@ public class PreviewDeployController {
 
         if (managed) {
             ManagedPreviewResponse response = managedPreviewService.deploy(
-                    managedAllocation, principal.email(), body.targetName(), artifact);
+                    managedAllocation, principal.email(), body.targetName(), managedArtifact);
             managedPreviewService.findDeployment(response.deploymentId())
                     .ifPresent(deployment -> deploymentExecutor.attachPreviewBlueprint(deployment, snapshot));
             return new PreviewDeploymentResult(null, response);
         }
 
-        DeploymentTargetEntity target = deploymentTargetService.create(
-                vmId.toString(),
-                principal.userId(),
-                principal.email(),
-                body.targetName(),
-                "",
-                "",
-                null,
-                artifact,
-                null,
-                null,
-                false
-        );
+        List<FlowBlueprint> finalFlows = flows;
+        List<ApiBinding> finalBindings = bindings;
+        DeploymentTargetEntity target = previewVmPortAllocator.withAvailablePort(bearerToken, vmId.toString(), port -> {
+            ComposeArtifact artifact = previewComposeArtifactBuilder.buildForVm(
+                    body.apiBaseUrl(), runtimeCapabilities, effectivePages, finalFlows, finalBindings,
+                    body.authStrategy(), body.purpose(), scenarios, previewMode, body.partOverrides(), pagePlans, port);
+            return deploymentTargetService.create(vmId.toString(), principal.userId(), principal.email(),
+                    body.targetName(), "", "", null, artifact, null, null, false);
+        });
+        ComposeArtifact artifact = deploymentTargetService.restoreArtifact(target);
 
         RepoConfig repoConfig = new RepoConfig(null, null, null, null, null);
         DeploymentEntity deployment = deploymentExecutor.enqueueForTarget(

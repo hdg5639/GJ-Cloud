@@ -126,7 +126,7 @@ export default function DeploymentDetailPage() {
     }
   }
 
-  // 배포가 만든 포트(deploymentId 있는 것)만 선택 삭제 후보로 보여줌 — 사용자가 직접 추가한 포트는 안 건드림
+  // 현재 대상이 만든 포트만 표시한다. 같은 VM의 다른 앱과 수동 포트는 제외한다.
   async function openTeardownModal() {
     setShowTeardown(true);
     setSelectedRemoveIds(new Set());
@@ -134,7 +134,10 @@ export default function DeploymentDetailPage() {
     setLoadingTeardownPorts(true);
     try {
       const allPorts = await api.vm.getPorts(accessToken, vmId);
-      setTeardownPorts(allPorts.filter((p) => p.deploymentId != null));
+      const appId = deployment?.deploymentTargetId ?? vmId;
+      setTeardownPorts(allPorts.filter((p) => p.deploymentId != null && (
+        p.deploymentAppId ? p.deploymentAppId === appId : p.deploymentId === deploymentId
+      )));
     } catch {
       setTeardownPorts([]);
     } finally {

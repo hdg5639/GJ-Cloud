@@ -35,6 +35,10 @@ jobs:
 
       # CICD-001: 직전 이미지를 보존하고 새 이미지의 헬스체크가 실패하면 자동으로 롤백한다.
       - name: Build and deploy with health check + auto-rollback
+        # Shell environment takes precedence over a legacy deployment .env.
+        env:
+          AI_MODEL_STANDARD: ${{ vars.AI_MODEL_STANDARD || 'gpt-6.1-sol' }}
+          AI_MODEL_ESCALATED: ${{ vars.AI_MODEL_ESCALATED || 'gpt-6.1-sol' }}
         run: |
           set -e
           SERVICE=ops
