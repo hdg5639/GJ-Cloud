@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "preview:check": "node scripts/check-user-flow-preview.mjs",
     "blueprint:generate": "node scripts/generate-blueprint-registry.mjs",
     "blueprint:check": "node scripts/generate-blueprint-registry.mjs --check"
   },

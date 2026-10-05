@@ -187,6 +187,7 @@ export function PreviewRuntimeApp({
         <ProductExperienceRuntime
           scenarios={scenarios}
           capabilities={capabilities}
+          pagePlans={pagePlans}
           config={config}
         />
       ) : runtimeView === "SCENARIO" && hasScenarioView ? (

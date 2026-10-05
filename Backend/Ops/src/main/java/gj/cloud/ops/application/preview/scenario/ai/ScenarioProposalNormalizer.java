@@ -5,6 +5,9 @@ import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioStagePla
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.ServiceActor;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.ServiceUnderstanding;
 import gj.cloud.ops.application.preview.scenario.ScenarioModels.StageRole;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ScenarioDiagnostic;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.DiagnosticStatus;
+import gj.cloud.ops.application.preview.scenario.ScenarioModels.ResolutionStrategy;
 import gj.cloud.ops.application.preview.scenario.ScenarioValidator;
 import gj.cloud.ops.application.preview.scenario.ai.AiScenarioProposal.AiActor;
 import gj.cloud.ops.application.preview.scenario.ai.AiScenarioProposal.AiScenario;
@@ -34,8 +37,12 @@ public class ScenarioProposalNormalizer {
     public record NormalizedProposal(
             ServiceUnderstanding understanding,
             List<ScenarioPlan> plans,
-            List<String> errors
+            List<String> errors,
+            List<ScenarioDiagnostic> coverageGaps
     ) {
+        public NormalizedProposal(ServiceUnderstanding understanding, List<ScenarioPlan> plans, List<String> errors) {
+            this(understanding, plans, errors, List.of());
+        }
     }
 
     public NormalizedProposal normalize(AiScenarioProposal proposal, Set<String> allowedCapabilityIds) {
@@ -64,7 +71,22 @@ public class ScenarioProposalNormalizer {
             }
             plans.add(plan);
         }
-        return new NormalizedProposal(understanding, List.copyOf(plans), List.copyOf(errors));
+        List<ScenarioDiagnostic> gaps = safe(proposal.coverageGaps()).stream()
+                .filter(gap -> gap != null && !blank(gap.intent()) && !blank(gap.reason()))
+                .filter(gap -> gap.scenarioId() == null || scenarioIds.contains(gap.scenarioId()))
+                .limit(8)
+                .map(gap -> new ScenarioDiagnostic(gap.scenarioId(), null, DiagnosticStatus.PARTIALLY_SUPPORTED,
+                        "백엔드 확인 제안(추론): " + bounded(gap.intent(), 200) + " — " + bounded(gap.reason(), 600)
+                                + (safe(gap.evidence()).isEmpty() ? "" : " · 근거: "
+                                + bounded(String.join("; ", safeStrings(gap.evidence(), 4)), 600)),
+                        ResolutionStrategy.REQUEST_MANUAL_BINDING, null))
+                .toList();
+        return new NormalizedProposal(understanding, List.copyOf(plans), List.copyOf(errors), gaps);
+    }
+
+    private static String bounded(String value, int maxLength) {
+        String trimmed = value.trim();
+        return trimmed.substring(0, Math.min(trimmed.length(), maxLength));
     }
 
     private ServiceUnderstanding normalizeUnderstanding(

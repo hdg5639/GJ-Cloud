@@ -34,6 +34,12 @@ public class AiGenerationCache {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
+    @Value("${ai.model.standard}")
+    private String standardModel;
+
+    @Value("${ai.model.escalated}")
+    private String escalatedModel;
+
     @Value("${ops.ai-generation-cache.ttl-seconds:900}")
     private long ttlSeconds;
 
@@ -66,6 +72,7 @@ public class AiGenerationCache {
     private String buildKey(GenerateDeploymentSpecRequest request) {
         StringBuilder raw = new StringBuilder();
         raw.append(CACHE_SCHEMA_VERSION).append('|')
+                .append(standardModel).append('|').append(escalatedModel).append('|')
                 .append(request.repoUrl()).append('|').append(request.branch()).append('|');
         for (ServiceCard card : request.services()) {
             raw.append(card.name()).append(':').append(card.runtime()).append(':').append(card.context())

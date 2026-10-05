@@ -10,6 +10,8 @@ import {
 } from "react";
 import type {
   PreviewCompiledScenario,
+  PreviewPagePlan,
+  PreviewScenarioDiagnostic,
   PreviewCompiledScenarioStage,
   PreviewScenarioStageExecution,
 } from "@/lib/types";
@@ -29,7 +31,6 @@ import {
   type ExperienceAction,
   type ExperienceOverlay,
   type ExperienceScreen,
-  type ProductArchetype,
 } from "./productExperience";
 import {
   buildScenarioExecutionPath,
@@ -39,6 +40,7 @@ import {
   runApiStage,
   type ScenarioState,
 } from "./runtime";
+import { UserFlowTrace } from "./UserFlowTrace";
 import { ProductExperienceInspector } from "./ProductExperienceInspector";
 import {
   selectProductExperienceTheme,
@@ -93,71 +95,6 @@ function parseValue(value: string): unknown {
   if (trimmed === "false") return false;
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
   return value;
-}
-
-function seedRows(archetype: ProductArchetype): Row[] {
-  const common = [
-    { id: "preview-1", name: "첫 번째 컬렉션", status: "진행 중", description: "최근 업데이트된 항목입니다." },
-    { id: "preview-2", name: "함께 만드는 프로젝트", status: "새 소식", description: "팀과 공유된 새로운 활동이 있습니다." },
-    { id: "preview-3", name: "저장한 아이디어", status: "보관됨", description: "나중에 다시 확인할 수 있습니다." },
-    { id: "preview-4", name: "이번 주 추천", status: "추천", description: "취향과 활동을 바탕으로 골랐습니다." },
-    { id: "preview-5", name: "새로운 시작", status: "초안", description: "작업을 이어서 완성해 보세요." },
-    { id: "preview-6", name: "지난 활동", status: "완료", description: "정상적으로 마무리된 기록입니다." },
-  ];
-  if (archetype === "COMMERCE") {
-    return [
-      { id: "product-1", name: "Everyday Chair", category: "Living", price: "₩128,000", status: "오늘 출발" },
-      { id: "product-2", name: "Soft Table Light", category: "Lighting", price: "₩64,000", status: "인기" },
-      { id: "product-3", name: "Sunday Mug Set", category: "Kitchen", price: "₩32,000", status: "새 상품" },
-      { id: "product-4", name: "Quiet Clock", category: "Object", price: "₩49,000", status: "추천" },
-      { id: "product-5", name: "Linen Blanket", category: "Bedroom", price: "₩91,000", status: "재입고" },
-      { id: "product-6", name: "Archive Shelf", category: "Storage", price: "₩175,000", status: "한정" },
-    ];
-  }
-  if (archetype === "COMMUNITY") {
-    return [
-      { id: "post-1", name: "작은 팀에서 제품을 빠르게 만드는 법", author: "민서", status: "128개의 반응", description: "이번 주에 배운 시행착오를 정리해 봤어요." },
-      { id: "post-2", name: "오늘 발견한 조용한 작업 공간", author: "도윤", status: "42개의 반응", description: "집중이 필요할 때 가기 좋은 곳을 공유합니다." },
-      { id: "post-3", name: "사이드 프로젝트 첫 사용자 인터뷰", author: "하린", status: "89개의 반응", description: "예상과 달랐던 답변이 정말 많았습니다." },
-    ];
-  }
-  if (archetype === "CONTENT") {
-    return [
-      { id: "draft-1", name: "좋은 제품 문장은 어디에서 오는가", status: "초안", updatedAt: "방금 전", description: "제품 언어와 사용자 경험에 관한 에세이" },
-      { id: "draft-2", name: "여름호 인터뷰: 만드는 사람들", status: "검토 중", updatedAt: "어제", description: "세 명의 창작자와 나눈 긴 대화" },
-      { id: "draft-3", name: "이번 주 큐레이션", status: "발행됨", updatedAt: "3일 전", description: "팀이 고른 새로운 영감과 도구" },
-    ];
-  }
-  if (archetype === "BOOKING") {
-    return [
-      { id: "space-1", name: "성수 라운드 테이블", category: "6명", status: "예약 가능", price: "₩24,000 / 시간" },
-      { id: "space-2", name: "한남 포커스 룸", category: "4명", status: "2자리 남음", price: "₩18,000 / 시간" },
-      { id: "space-3", name: "을지로 스튜디오", category: "12명", status: "예약 가능", price: "₩45,000 / 시간" },
-    ];
-  }
-  if (archetype === "MESSAGING") {
-    return [
-      { id: "thread-1", name: "제품 디자인 팀", message: "수정된 시안을 확인해 주세요.", status: "2분 전" },
-      { id: "thread-2", name: "민서", message: "내일 미팅 시간을 옮겨도 될까요?", status: "18분 전" },
-      { id: "thread-3", name: "새 고객 문의", message: "요금제에 관해 궁금한 점이 있어요.", status: "1시간 전" },
-    ];
-  }
-  if (archetype === "FILES") {
-    return [
-      { id: "file-1", name: "Brand resources", type: "폴더", status: "12개 항목", updatedAt: "오늘" },
-      { id: "file-2", name: "Product launch.pdf", type: "PDF", status: "4.8 MB", updatedAt: "어제" },
-      { id: "file-3", name: "Interview notes", type: "문서", status: "공유됨", updatedAt: "월요일" },
-      { id: "file-4", name: "Summer campaign", type: "폴더", status: "28개 항목", updatedAt: "지난주" },
-    ];
-  }
-  if (archetype === "LEARNING") {
-    return [
-      { id: "course-1", name: "제품을 설명하는 글쓰기", category: "12개 레슨", status: "68% 완료", description: "짧고 분명한 제품 문장을 연습합니다." },
-      { id: "course-2", name: "데이터로 질문하는 법", category: "8개 레슨", status: "32% 완료", description: "의사결정에 필요한 질문을 설계합니다." },
-      { id: "course-3", name: "작은 팀의 리서치", category: "10개 레슨", status: "시작 전", description: "가볍지만 효과적인 리서치 방법을 배웁니다." },
-    ];
-  }
-  return common;
 }
 
 function ProductActionButton({
@@ -219,7 +156,7 @@ function Card({
         >
           <div className="flex h-full items-end justify-between p-4">
             <span className="rounded-full bg-[color-mix(in_srgb,var(--px-surface)_82%,transparent)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[.1em] text-[var(--px-ink)] backdrop-blur">
-              {textValue(row.category) || textValue(row.type) || "Featured"}
+              {textValue(row.category) || textValue(row.type) || "서버 데이터"}
             </span>
             <span className="translate-y-2 text-2xl opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">↗</span>
           </div>
@@ -233,7 +170,7 @@ function Card({
             {textValue(row.price) || textValue(row.author) || textValue(row.updatedAt) || "자세히 보기"}
           </span>
           <span className="rounded-full bg-[var(--px-tint)] px-2.5 py-1 text-[10px] font-bold text-[var(--px-accent)]">
-            {textValue(row.status) || "활성"}
+            {textValue(row.status) || "상태 미제공"}
           </span>
         </div>
       </div>
@@ -696,13 +633,13 @@ function overlayFields(
   capabilities: PreviewCapability[]
 ): string[] {
   const stages = scenario.stages.filter((stage) => overlay.stageIds.includes(stage.id));
-  const local = stages.flatMap((stage) => [...stage.outputs, ...stage.inputs]);
+  const local = stages.flatMap((stage) => ["ENTRY", "PREPARE", "CONFIGURE", "SELECT_CONTEXT"].includes(stage.role)
+    ? stage.outputs : stage.inputs);
   const capabilityFields = stages.flatMap((stage) =>
     capabilities.find((capability) => capability.id === stage.capabilityId)?.fields ?? []
   );
   return Array.from(new Set([...local, ...capabilityFields]))
-    .filter((field) => !/^(id|createdAt|updatedAt|token|accessToken)$/i.test(field))
-    .slice(0, 8);
+    .filter((field) => !/^(collection|authenticatedCollection|selectedRecord|selectedResource|verifiedResource|authToken|createdId|trackedStatus)$/i.test(field));
 }
 
 function ActionOverlay({
@@ -857,14 +794,18 @@ export function ProductExperienceRuntime({
   scenarios,
   capabilities,
   config,
+  pagePlans = [],
+  diagnostics = [],
 }: {
+  pagePlans?: PreviewPagePlan[];
+  diagnostics?: PreviewScenarioDiagnostic[];
   scenarios: PreviewCompiledScenario[];
   capabilities: PreviewCapability[];
   config: PreviewRuntimeConfig;
 }) {
   const graph = useMemo(
-    () => composeProductExperience(scenarios, capabilities),
-    [scenarios, capabilities]
+    () => composeProductExperience(scenarios, capabilities, pagePlans),
+    [scenarios, capabilities, pagePlans]
   );
   const theme = useMemo(
     () => selectProductExperienceTheme(graph.archetype, scenarios, capabilities),
@@ -879,11 +820,12 @@ export function ProductExperienceRuntime({
     const requested = new URLSearchParams(window.location.search).get("experience");
     return graph.screens.some((screen) => screen.id === requested) ? requested! : graph.defaultScreenId;
   });
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
+  const [executedScenarioId, setExecutedScenarioId] = useState<string | null>(null);
   const [rowsByCapability, setRowsByCapability] = useState<Record<string, Row[]>>({});
   const [collectionErrors, setCollectionErrors] = useState<Record<string, string>>({});
   const [loadingCollections, setLoadingCollections] = useState(false);
   const [selected, setSelected] = useState<Row | null>(null);
-  const [selectedIsSynthetic, setSelectedIsSynthetic] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [lastActionId, setLastActionId] = useState<string | null>(null);
@@ -902,6 +844,7 @@ export function ProductExperienceRuntime({
   const [searchOpen, setSearchOpen] = useState(false);
   const [screenQuery, setScreenQuery] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const failedStepRef = useRef<{ scenarioId: string; stageId: string } | null>(null);
 
   const listCapabilities = useMemo(
     () => capabilities.filter((capability) => capability.type === "LIST" && capability.risk === "SAFE"),
@@ -922,7 +865,6 @@ export function ProductExperienceRuntime({
         settled
           .filter((result): result is PromiseFulfilledResult<readonly [string, Row[]]> => result.status === "fulfilled")
           .map((result) => result.value)
-          .filter(([, rows]) => rows.length > 0)
       );
       const errors = Object.fromEntries(
         settled.flatMap((result, index) => result.status === "rejected"
@@ -947,7 +889,7 @@ export function ProductExperienceRuntime({
     };
     // URL이나 목록 capability 구성이 달라졌을 때만 초기 데이터를 다시 읽는다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.apiBaseUrl, listCapabilities]);
+  }, [config.apiBaseUrl, config.authToken, listCapabilities]);
 
   useEffect(() => {
     const syncScreenFromHistory = () => {
@@ -962,9 +904,12 @@ export function ProductExperienceRuntime({
 
   const activeScreen = graph.screens.find((screen) => screen.id === activeScreenId)
     ?? graph.screens[0];
-  const liveRows = activeScreen?.capabilityIds.flatMap((capabilityId) => rowsByCapability[capabilityId] ?? []) ?? [];
-  const usingSyntheticRows = liveRows.length === 0;
-  const visibleRows = usingSyntheticRows ? seedRows(graph.archetype) : liveRows;
+  const screenLists = (activeScreen?.capabilityIds ?? []).flatMap((id) => listCapabilities.filter((capability) => capability.id === id));
+  const activeCollection = screenLists.find((capability) => capability.id === activeCollectionId) ?? screenLists[0];
+  const liveRows = activeCollection ? rowsByCapability[activeCollection.id] ?? [] : [];
+  const screenErrors = screenLists.flatMap((capability) => collectionErrors[capability.id] ? [collectionErrors[capability.id]] : []);
+  const visibleRows = liveRows;
+  const screenScenario = scenarios.find((scenario) => activeScreen?.id === `flow-${scenario.id}`) ?? null;
   const normalizedQuery = screenQuery.trim().toLowerCase();
   const rows = normalizedQuery
     ? visibleRows.filter((row, index) => `${titleOf(row, index)} ${subtitleOf(row)}`.toLowerCase().includes(normalizedQuery))
@@ -973,7 +918,8 @@ export function ProductExperienceRuntime({
   const activeAction = graph.actions.find((action) => action.id === activeActionId) ?? null;
   const activeScenario = scenarios.find((scenario) => scenario.id === activeAction?.scenarioId) ?? null;
   const inspectedAction = activeAction
-    ?? graph.actions.find((action) => action.id === lastActionId)
+    ?? graph.actions.find((action) => action.id === lastActionId && action.screenId === activeScreen?.id)
+    ?? screenActions[0]
     ?? null;
   const inspectedScenario = scenarios.find((scenario) => scenario.id === inspectedAction?.scenarioId) ?? null;
   const actionOverlays = activeAction
@@ -990,7 +936,7 @@ export function ProductExperienceRuntime({
     window.history.pushState(null, "", `${window.location.pathname}?${query.toString()}`);
     setActiveScreenId(screenId);
     setSelected(null);
-    setSelectedIsSynthetic(false);
+    setActiveCollectionId(null);
     const nextState = { ...stateRef.current };
     delete nextState.selectedId;
     delete nextState.selectedRecord;
@@ -1003,35 +949,25 @@ export function ProductExperienceRuntime({
 
   function selectRow(row: Row, open = true) {
     setSelected(row);
-    setSelectedIsSynthetic(usingSyntheticRows);
-    const next = { ...stateRef.current };
-    if (usingSyntheticRows) {
-      delete next.selectedId;
-      delete next.selectedRecord;
-    } else {
-      next.selectedId = rowId(row);
-      next.selectedRecord = row;
-    }
+    const next = { ...stateRef.current, selectedId: rowId(row), selectedRecord: row };
     stateRef.current = next;
     setScenarioState(next);
     if (open && activeScreen.kind !== "INBOX") setDetailOpen(true);
   }
 
   function openAction(action: ExperienceAction) {
+    if (busy) return;
+    failedStepRef.current = null;
     const scenario = scenarios.find((candidate) => candidate.id === action.scenarioId);
     const allowedState = new Set([...(scenario?.scenarioState ?? []), "authToken"]);
     const scopedState = Object.fromEntries(
       Object.entries(stateRef.current).filter(([key]) => allowedState.has(key))
     );
-    if (selected && !selectedIsSynthetic) {
+    if (selected) {
       const selectedId = rowId(selected);
       scopedState.selectedId = selectedId;
       scopedState.selectedRecord = selected;
-      const pathStateKeys = scenario?.stages.flatMap((stage) => stage.inputBindings)
-        .filter((binding) => binding.targetKind === "PATH" && binding.source.startsWith("$scenario."))
-        .map((binding) => binding.source.slice("$scenario.".length).split(".")[0])
-        .filter((key) => key && key !== "createdId") ?? [];
-      for (const key of pathStateKeys) scopedState[key] = selectedId;
+
     }
     stateRef.current = scopedState;
     setScenarioState(scopedState);
@@ -1075,6 +1011,10 @@ export function ProductExperienceRuntime({
     if (!activeOverlay || !activeScenario) return;
     const stages = activeScenario.stages.filter((stage) => activeOverlay.stageIds.includes(stage.id));
     if (activeOverlay.kind === "FORM_MODAL") saveLocalStages(stages);
+    if (actionOverlays[overlayIndex + 1]?.kind === "RESULT_TOAST") {
+      void executeAction();
+      return;
+    }
     if (overlayIndex < actionOverlays.length - 1) {
       setOverlayIndex((index) => index + 1);
       setActionError(null);
@@ -1087,7 +1027,11 @@ export function ProductExperienceRuntime({
     const executionAction = activeAction ?? inspectedAction;
     const executionScenario = activeScenario ?? inspectedScenario;
     if (!executionAction || !executionScenario || busy) return;
-    const executionPath = buildScenarioExecutionPath(executionScenario, startStageId);
+    if (executedScenarioId !== executionScenario.id) { setExecutions({}); setExecutionTimeline([]); }
+    setExecutedScenarioId(executionScenario.id);
+    const resumeStageId = startStageId ?? (failedStepRef.current?.scenarioId === executionScenario.id
+      ? failedStepRef.current.stageId : undefined);
+    const executionPath = buildScenarioExecutionPath(executionScenario, resumeStageId);
     if (executionPath.error) {
       setActionError(executionPath.error);
       return;
@@ -1097,7 +1041,7 @@ export function ProductExperienceRuntime({
     const controller = new AbortController();
     abortRef.current = controller;
     let nextState = { ...stateRef.current };
-    if (selected && !selectedIsSynthetic) {
+    if (selected) {
       nextState.selectedId = rowId(selected);
       nextState.selectedRecord = selected;
     }
@@ -1108,8 +1052,10 @@ export function ProductExperienceRuntime({
     const preflightErrors = preflightScenarioExecution(executionPath.stages, nextState);
     if (preflightErrors.length > 0) {
       setActionError(`실행 전 검증 실패: ${preflightErrors.join(" ")}`);
-      setBusy(false);
-      abortRef.current = null;
+      if (abortRef.current === controller) {
+        setBusy(false);
+        abortRef.current = null;
+      }
       return;
     }
     let failedStage: PreviewCompiledScenarioStage | null = null;
@@ -1126,17 +1072,7 @@ export function ProductExperienceRuntime({
         }
         if (stage.role === "SELECT") {
           if (!nextState.selectedId) {
-            const scenarioCollection = [nextState.collection, nextState.authenticatedCollection]
-              .find((value): value is Row[] => Array.isArray(value)
-                && value.length > 0
-                && value.every((item) => item && typeof item === "object" && !Array.isArray(item)));
-            const firstRow = scenarioCollection?.[0] ?? liveRows[0];
-            const firstRowId = firstRow ? rowId(firstRow) : "";
-            if (!firstRow || !firstRowId) {
-              throw new Error("실제 API에서 선택할 항목과 식별자를 얻지 못했습니다. 샘플 데이터는 API 요청에 사용할 수 없습니다.");
-            }
-            nextState.selectedId = firstRowId;
-            nextState.selectedRecord = firstRow;
+            throw new Error("목록에서 실제 항목을 선택한 뒤 다시 실행하세요. 임의의 첫 항목을 자동 선택하지 않습니다.");
           }
           stateRef.current = nextState;
           setScenarioState({ ...nextState });
@@ -1206,7 +1142,7 @@ export function ProductExperienceRuntime({
         stateRef.current = nextState;
         setScenarioState({ ...nextState });
         const collection = extractArray(result.execution.response, capability.collectionPath);
-        if (collection.length > 0) {
+        if (capability.type === "LIST") {
           setRowsByCapability((current) => ({ ...current, [capability.id]: collection }));
         }
         if (stage.role === "AUTHENTICATE" && typeof nextState.authToken === "string") {
@@ -1215,6 +1151,7 @@ export function ProductExperienceRuntime({
       }
       stateRef.current = nextState;
       setScenarioState(nextState);
+      failedStepRef.current = null;
       await loadCollections(controller.signal);
       const executionOverlays = executionAction.overlayIds
         .map((id) => graph.overlays.find((overlay) => overlay.id === id))
@@ -1228,6 +1165,7 @@ export function ProductExperienceRuntime({
     } catch (cause) {
       if (!controller.signal.aborted) {
         const detail = cause instanceof Error ? cause.message : "작업을 완료하지 못했습니다.";
+        if (failedStage) failedStepRef.current = { scenarioId: executionScenario.id, stageId: failedStage.id };
         const message = failedStage ? `${failedStage.intent}: ${detail}` : detail;
         setActionError(message);
         if (failedStage && !failureRecorded) {
@@ -1242,8 +1180,10 @@ export function ProductExperienceRuntime({
         if (progressIndex >= 0) setOverlayIndex(progressIndex);
       }
     } finally {
-      setBusy(false);
-      abortRef.current = null;
+      if (abortRef.current === controller) {
+        setBusy(false);
+        abortRef.current = null;
+      }
     }
   }
 
@@ -1263,7 +1203,7 @@ export function ProductExperienceRuntime({
       data-blueprint-theme={theme.blueprintThemeId}
     >
       <header className="sticky top-0 z-20 border-b border-[var(--px-line)] bg-[color-mix(in_srgb,var(--px-surface)_95%,transparent)] px-5 backdrop-blur-xl md:px-8">
-        <div className="mx-auto flex min-h-[72px] max-w-[1380px] items-center gap-6">
+        <div className="mx-auto flex min-h-[64px] max-w-[1380px] flex-wrap items-center gap-2 py-3 sm:gap-4">
           <button
             type="button"
             className="flex shrink-0 items-center gap-3"
@@ -1274,7 +1214,7 @@ export function ProductExperienceRuntime({
             </span>
             <strong className="hidden text-base font-black tracking-[-.02em] text-[var(--px-ink)] sm:block">{graph.productName}</strong>
           </button>
-          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2" aria-label="서비스 메뉴">
+          <nav className="order-3 flex w-full min-w-0 items-center gap-1 overflow-x-auto py-2 sm:order-none sm:w-auto sm:flex-1" aria-label="서비스 메뉴">
             {graph.screens.map((screen) => (
               <button
                 type="button"
@@ -1288,7 +1228,7 @@ export function ProductExperienceRuntime({
               </button>
             ))}
           </nav>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setInspectorOpen(true)}
@@ -1297,11 +1237,7 @@ export function ProductExperienceRuntime({
               테스트 Inspector
             </button>
             <button type="button" aria-label="화면 검색" aria-pressed={searchOpen} onClick={() => setSearchOpen((value) => !value)} className="grid h-9 w-9 place-items-center rounded-full border border-[var(--px-line)] bg-[var(--px-surface)] text-xs">⌕</button>
-            <button type="button" aria-label="프로필 화면" onClick={() => {
-              const profile = graph.screens.find((screen) => screen.kind === "PROFILE");
-              if (profile) navigateScreen(profile.id);
-              else setToast("이 서비스 구성에는 별도 프로필 화면이 없습니다.");
-            }} className="grid h-9 w-9 place-items-center rounded-full bg-[var(--px-tint-strong)] text-xs font-black text-[var(--px-accent)]">ME</button>
+
           </div>
         </div>
         {searchOpen && (
@@ -1311,7 +1247,7 @@ export function ProductExperienceRuntime({
         )}
       </header>
 
-      <main className="mx-auto min-h-[680px] max-w-[1380px] px-5 py-8 md:px-8 md:py-10">
+      <main className="mx-auto min-h-[440px] max-w-[1380px] px-5 py-8 md:px-8 md:py-8">
         <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
           <div>
             <p className="text-xs font-bold text-[var(--px-muted)]">{activeScreen.label}</p>
@@ -1340,23 +1276,31 @@ export function ProductExperienceRuntime({
           </div>
         )}
 
-        {usingSyntheticRows && (
+        {screenErrors.length > 0 && (
           <div className="mb-5 rounded-[16px] border border-amber-400/35 bg-amber-400/10 p-4 text-xs leading-5 text-amber-700 dark:text-amber-200">
-            <strong className="block font-black">샘플 화면 모드</strong>
-            실제 목록 데이터를 가져오지 못해 화면용 샘플만 표시합니다. 이 항목의 ID는 API 요청에 절대 사용하지 않으며,
-            실제 데이터가 필요한 작업은 실행 전에 중단됩니다.
-            {Object.keys(collectionErrors).length > 0 && (
-              <span className="mt-1 block opacity-80">{Object.values(collectionErrors).slice(0, 2).join(" · ")}</span>
-            )}
+            <strong className="block font-black">서버 목록을 불러오지 못했습니다</strong>
+            인증·주소·CORS와 요청·응답을 확인한 뒤 새로고침하세요. 실제 서버 응답만 표시합니다.
+            <span className="mt-1 block break-words opacity-80">{screenErrors.join(" · ")}</span>
           </div>
         )}
 
-        {!usingSyntheticRows && normalizedQuery && rows.length === 0 && (
+        {normalizedQuery && rows.length === 0 && (
           <div className="mb-5 rounded-[16px] border border-[var(--px-line)] bg-[var(--px-surface)] p-5 text-sm text-[var(--px-muted)]">
             “{screenQuery}”와 일치하는 항목이 없습니다.
           </div>
         )}
 
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+        {screenLists.length > 1 && <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="조회할 데이터">
+          {screenLists.map((capability) => <button type="button" key={capability.id}
+            aria-pressed={activeCollection?.id === capability.id} disabled={busy}
+            className="rounded-lg border border-[var(--px-line)] px-3 py-2 text-xs aria-pressed:bg-[var(--px-tint)]"
+            onClick={() => { setActiveCollectionId(capability.id); setSelected(null); setDetailOpen(false);
+              const next = { ...stateRef.current }; delete next.selectedId; delete next.selectedRecord;
+              stateRef.current = next; setScenarioState(next);
+            }}>{capability.resourceName} · {capability.operationId || capability.id}</button>)}
+        </div>}
         {rows.length > 0 ? (
           <ScreenContent
             screen={activeScreen}
@@ -1366,15 +1310,22 @@ export function ProductExperienceRuntime({
           />
         ) : (
           <div className="grid min-h-72 place-items-center rounded-[24px] border border-dashed border-[var(--px-line)] bg-[var(--px-surface)] text-sm text-[var(--px-muted)]">
-            표시할 항목이 없습니다.
+            <div className="max-w-md p-5 text-center" role="status">
+              <strong className="block">{loadingCollections ? "실제 서버 데이터를 불러오는 중" : screenErrors.length > 0 ? "목록 요청 실패" : screenLists.length === 0 ? "이 흐름에는 목록 조회가 없습니다" : "서버가 빈 목록을 반환했습니다"}</strong>
+              <p className="mt-2 text-xs leading-5">{screenLists.length === 0 ? "흐름 테스트에서 입력과 API 연결을 확인하세요." : "테스트 데이터를 생성하거나 입력·인증을 확인한 뒤 다시 조회하세요."}</p>
+            </div>
           </div>
         )}
+        </div>
+        <UserFlowTrace scenario={screenScenario} capabilities={capabilities} diagnostics={diagnostics}
+          executions={executedScenarioId === screenScenario?.id ? executions : {}} onInspect={() => setInspectorOpen(true)} />
+        </div>
       </main>
 
       <footer className="border-t border-[var(--px-line)] bg-[color-mix(in_srgb,var(--px-surface)_62%,transparent)] px-8 py-5">
         <div className="mx-auto flex max-w-[1380px] flex-wrap items-center justify-between gap-3 text-[10px] font-bold text-[var(--px-subtle)]">
-          <span>{graph.productName} · 모든 변경 사항이 자동으로 저장됩니다.</span>
-          <span>개인정보 · 이용약관 · 도움말</span>
+          <span>프리뷰 · 실행한 변경은 연결된 백엔드에 반영됩니다.</span>
+          <span>서버 기능과 사용자 흐름을 확인하는 테스트 화면</span>
         </div>
       </footer>
 
@@ -1411,9 +1362,9 @@ export function ProductExperienceRuntime({
         action={inspectedAction}
         scenario={inspectedScenario}
         scenarioState={scenarioState}
-        executions={executions}
-        timeline={executionTimeline}
-        currentStageId={currentStageId}
+        executions={executedScenarioId === inspectedScenario?.id ? executions : {}}
+        timeline={executedScenarioId === inspectedScenario?.id ? executionTimeline : []}
+        currentStageId={executedScenarioId === inspectedScenario?.id ? currentStageId : null}
         running={busy}
         selectedRecord={selected}
         rawBodyDrafts={rawBodyDrafts}

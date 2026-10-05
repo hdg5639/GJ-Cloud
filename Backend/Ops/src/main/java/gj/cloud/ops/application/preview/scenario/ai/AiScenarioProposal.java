@@ -11,8 +11,16 @@ import java.util.List;
  */
 public record AiScenarioProposal(
         AiServiceUnderstanding understanding,
-        List<AiScenario> scenarios
+        List<AiScenario> scenarios,
+        List<AiCoverageGap> coverageGaps
 ) {
+    public AiScenarioProposal(AiServiceUnderstanding understanding, List<AiScenario> scenarios) {
+        this(understanding, scenarios, List.of());
+    }
+
+    public record AiCoverageGap(String scenarioId, String intent, String reason, List<String> evidence) {
+    }
+
     public record AiServiceUnderstanding(
             String domain,
             String serviceType,
