@@ -73,7 +73,7 @@ public class ScenarioCompiler {
                     else partial = true;
                     continue;
                 }
-                stages.add(compileStage(plan, stage, capability));
+                stages.add(compileStage(plan, stage, capability, catalog));
             }
 
             CompilationStatus status = requiredMissing
@@ -107,7 +107,7 @@ public class ScenarioCompiler {
     private CompiledScenarioStage compileStage(
             ScenarioPlan plan,
             ScenarioStagePlan stage,
-            Capability capability
+            Capability capability, Map<String, Capability> catalog
     ) {
         if (capability == null) {
             return new CompiledScenarioStage(
@@ -131,7 +131,8 @@ public class ScenarioCompiler {
         }
         if (!"GET".equalsIgnoreCase(capability.method()) && !"DELETE".equalsIgnoreCase(capability.method())) {
             for (String field : capability.fields()) {
-                inputs.add(new StageInputBinding(field, BindingTarget.BODY, "$scenario." + field,
+                String stateKey = resolveBodyStateKey(plan, stage, field, catalog);
+                inputs.add(new StageInputBinding(field, BindingTarget.BODY, "$scenario." + stateKey,
                         capability.inputSchema() == null || capability.inputSchema().required().contains(field)));
             }
         }
@@ -228,13 +229,61 @@ public class ScenarioCompiler {
         return new VerificationContract(stage.verificationIntent(), null, null, null, List.of(), stage.required());
     }
 
+    // A generic selected/created ID is usable only when its documented producer owns this entity.
+    // Do not reuse the path fallback here: a cart ID and product ID can coexist in one request.
+    private String resolveBodyStateKey(ScenarioPlan plan, ScenarioStagePlan stage, String field,
+                                       Map<String, Capability> catalog) {
+        if (plan.scenarioState().contains(field) || !field.toLowerCase(Locale.ROOT).endsWith("id")) return field;
+        List<ScenarioStagePlan> prefix = new ArrayList<>();
+        Map<String, ScenarioStagePlan> byId = plan.stages().stream()
+                .collect(Collectors.toMap(ScenarioStagePlan::id, value -> value, (left, right) -> left));
+        String current = ScenarioValidator.resolveEntryStageId(plan.stages());
+        Set<String> visited = new java.util.HashSet<>();
+        while (current != null && !current.equals(stage.id())) {
+            ScenarioStagePlan prior = byId.get(current);
+            if (prior == null || !visited.add(current) || prior.nextStageIds().size() > 1) return field;
+            prefix.add(prior);
+            current = prior.nextStageIds().isEmpty() ? null : prior.nextStageIds().get(0);
+        }
+        if (current == null) return field;
+        List<String> matches = stage.inputs().stream().distinct()
+                .filter(plan.scenarioState()::contains)
+                .filter(input -> input.toLowerCase(Locale.ROOT).endsWith("id"))
+                .filter(input -> {
+                    String resource = identifierResource(input, prefix, prefix.size(), catalog);
+                    if (resource == null) return false;
+                    String singular = resource.endsWith("ies") ? resource.substring(0, resource.length() - 3) + "y"
+                            : resource.endsWith("s") ? resource.substring(0, resource.length() - 1) : resource;
+                    return field.equalsIgnoreCase(singular + "Id");
+                }).toList();
+        return matches.size() == 1 ? matches.get(0) : field;
+    }
+
+    private String identifierResource(String stateKey, List<ScenarioStagePlan> prefix, int before,
+                                      Map<String, Capability> catalog) {
+        for (int index = before - 1; index >= 0; index--) {
+            ScenarioStagePlan producer = prefix.get(index);
+            if (!producer.outputs().contains(stateKey)) continue;
+            Capability capability = catalog.get(producer.capabilityRequirement());
+            if (capability != null && (capability.type() == CapabilityType.LIST || capability.type() == CapabilityType.CREATE)) {
+                return capability.resourceName();
+            }
+            if (producer.role() == StageRole.SELECT && producer.inputs().size() == 1) {
+                return identifierResource(producer.inputs().get(0), prefix, index, catalog);
+            }
+            return null;
+        }
+        return null;
+    }
+
     private String resolveStateKey(List<String> state, String parameter, ScenarioStagePlan stage) {
         String lower = parameter.toLowerCase(Locale.ROOT);
         if (lower.endsWith("id")) {
+            // An explicit cartId must not be replaced by a selected product's generic ID.
+            if (stage.inputs().contains(parameter)) return parameter;
             for (String preferred : List.of("createdId", "selectedId", "targetId")) {
                 if (stage.inputs().contains(preferred)) return preferred;
             }
-            if (stage.inputs().contains(parameter)) return parameter;
             if (state.contains(parameter)) return parameter;
             return state.stream().filter(value -> value.toLowerCase(Locale.ROOT).endsWith("id"))
                     .findFirst().orElse(parameter);

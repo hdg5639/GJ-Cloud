@@ -212,6 +212,75 @@ class ScenarioCompilerTest {
                 diagnostic.message().contains("추출할 수 없는 stage output(projectRows)"));
     }
 
+    @Test
+    void connectsSelectedProductAliasToBodyWithoutReplacingCartId() {
+        var result = compileBodyAliasPlan("products", false);
+        var scenario = result.scenarios().get(0);
+        assertThat(scenario.status()).as("%s", result.diagnostics()).isEqualTo(CompilationStatus.EXECUTABLE);
+        var add = scenario.stages().stream().filter(stage -> stage.id().equals("add")).findFirst().orElseThrow();
+        assertThat(add.inputBindings()).anySatisfy(binding -> {
+            assertThat(binding.target()).isEqualTo("productId");
+            assertThat(binding.source()).isEqualTo("$scenario.selectedId");
+        }).anySatisfy(binding -> {
+            assertThat(binding.target()).isEqualTo("cartId");
+            assertThat(binding.source()).isEqualTo("$scenario.cartId");
+        });
+    }
+
+    @Test
+    void doesNotUseCartSelectionAsProductIdentifier() {
+        var result = compileBodyAliasPlan("carts", false);
+        assertThat(result.scenarios().get(0).status()).isEqualTo(CompilationStatus.UNSUPPORTED);
+        assertThat(result.diagnostics()).anyMatch(diagnostic -> diagnostic.message().contains("productId"));
+    }
+
+    @Test
+    void rejectsAmbiguousProductAliases() {
+        var result = compileBodyAliasPlan("products", true);
+        assertThat(result.scenarios().get(0).status()).isEqualTo(CompilationStatus.UNSUPPORTED);
+        assertThat(result.diagnostics()).anyMatch(diagnostic -> diagnostic.message().contains("productId"));
+    }
+
+    private ScenarioCompiler.CompilationResult compileBodyAliasPlan(String selectedResource, boolean ambiguous) {
+        Capability list = capability("source.list", selectedResource, CapabilityType.LIST, "listResources",
+                "/" + selectedResource, "GET", List.of(), CapabilityKind.QUERY);
+        Capability add = new Capability("carts.items", "carts", null, "addCartItem", "/carts/{cartId}/items", "POST",
+                false, false, false, "HIGH", List.of("test"), List.of("productId", "variantCode", "quantity"),
+                null, null, RiskLevel.STATE_CHANGING, AutomationPolicy.USER_INITIATED, null, null,
+                CapabilityKind.COMMAND, "items", List.of());
+        Capability order = capability("orders.create", "orders", CapabilityType.CREATE, "placeOrder", "/orders", "POST",
+                List.of("cartId", "customerName", "email", "shippingAddress"), CapabilityKind.MUTATION);
+        Capability detail = capability("orders.detail", "orders", CapabilityType.DETAIL, "getOrder", "/orders/{orderId}", "GET",
+                List.of(), CapabilityKind.QUERY);
+        var stages = new java.util.ArrayList<ScenarioStagePlan>();
+        stages.add(new ScenarioStagePlan("list", StageRole.DISCOVER, "목록", list.id(), true,
+                List.of(), List.of("collection"), List.of("select"), null));
+        stages.add(new ScenarioStagePlan("select", StageRole.SELECT, "선택", null, true,
+                List.of("collection"), List.of("selectedId"), List.of(ambiguous ? "other" : "prepare"), null));
+        if (ambiguous) stages.add(new ScenarioStagePlan("other", StageRole.SELECT, "다른 선택", null, true,
+                List.of("collection"), List.of("targetId"), List.of("prepare"), null));
+        stages.add(new ScenarioStagePlan("prepare", StageRole.PREPARE, "기존 장바구니와 주문 정보", null, true,
+                List.of(), List.of("cartId", "variantCode", "quantity", "customerName", "email", "shippingAddress"), List.of("review"), null));
+        stages.add(new ScenarioStagePlan("review", StageRole.REVIEW, "확인", null, true,
+                List.of(), List.of(), List.of("add"), null));
+        stages.add(new ScenarioStagePlan("add", StageRole.COMMIT, "상품 담기", add.id(), true,
+                ambiguous ? List.of("selectedId", "targetId", "cartId", "variantCode", "quantity")
+                        : List.of("selectedId", "cartId", "variantCode", "quantity"), List.of(), List.of("order"), null));
+        stages.add(new ScenarioStagePlan("order", StageRole.COMMIT, "주문", order.id(), true,
+                List.of("cartId", "customerName", "email", "shippingAddress"), List.of("createdId"), List.of("verify"), null));
+        stages.add(new ScenarioStagePlan("verify", StageRole.VERIFY, "주문 조회", detail.id(), true,
+                List.of("createdId"), List.of("verifiedResource"), List.of("done"), ScenarioModels.VerificationType.RESOURCE_EXISTS));
+        stages.add(new ScenarioStagePlan("done", StageRole.COMPLETE, "완료", null, true,
+                List.of("verifiedResource"), List.of(), List.of(), null));
+        var state = new java.util.ArrayList<>(List.of("collection", "selectedId", "cartId", "variantCode", "quantity",
+                "customerName", "email", "shippingAddress", "createdId", "verifiedResource"));
+        if (ambiguous) state.add("targetId");
+        // Deliberately shuffled: lineage must follow edges, not provider array order.
+        java.util.Collections.reverse(stages);
+        var plan = new ScenarioPlan("body-alias", "구매", "사용자", "선택 상품으로 주문", List.of(), stages, state, 0.9, List.of());
+        return compiler.compile(List.of(plan), List.of(list, add, order, detail));
+    }
+
     private OpenApiEvidence evidence() {
         return new OpenApiEvidence("Project API", "1", List.of("https://api.example.com"),
                 List.of(), List.of(), 0);

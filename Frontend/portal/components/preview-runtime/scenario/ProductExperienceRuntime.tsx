@@ -501,21 +501,25 @@ export function ProductExperienceRuntime({
     const scopedState = Object.fromEntries(
       Object.entries(stateRef.current).filter(([key]) => allowedState.has(key) && (key === "authToken" || !produced.has(key)))
     );
-    if (selected) {
-      const selectedId = rowId(selected);
-      scopedState.selectedId = selectedId;
-      scopedState.selectedRecord = selected;
-
+    const actionSelection = needsSelection(action) ? selected : null;
+    if (actionSelection) {
+      scopedState.selectedId = rowId(actionSelection);
+      scopedState.selectedRecord = actionSelection;
+    } else {
+      delete scopedState.selectedId;
+      delete scopedState.selectedRecord;
+      delete scopedState.selectedResource;
     }
+    setSelected(actionSelection);
     setDetailOpen(false);
     setActiveActionId(action.id);
     setLastActionId(action.id);
     setOverlayIndex(0);
     const generated: Record<string, string> = {};
     for (const stage of scenario?.stages ?? []) for (const key of stage.outputs) {
-      if (["PREPARE", "CONFIGURE", "SELECT_CONTEXT"].includes(stage.role) && activeCollection && selected
+      if (["PREPARE", "CONFIGURE", "SELECT_CONTEXT"].includes(stage.role) && activeCollection && actionSelection
           && key.toLowerCase() === `${activeCollection.resourceName.replace(/s$/, "")}id`.toLowerCase()
-          && stage.inputs.includes("selectedId")) scopedState[key] = rowId(selected);
+          && stage.inputs.includes("selectedId")) scopedState[key] = rowId(actionSelection);
       const contract = inputContract(key, capabilities.filter(cap => scenario?.stages.some(stage => stage.capabilityId === cap.id)));
       if (contract.schema?.type === "array" && !contract.required && !scopedState[key]) generated[key] = "[]";
     }
