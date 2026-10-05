@@ -49,3 +49,46 @@ assert.deepEqual(validateProductExperience(similar, [
   { ...booking, id: "book.room" }, { ...booking, id: "book-room" },
 ]), []);
 console.log("PASS user-goal screens, resource ownership, edited page plan, unsupported flow, stable IDs");
+
+// Re-run the real runtime with the compiled plan captured from live Commerce analysis.
+function loadTs(name, imports = {}) {
+  const code = ts.transpileModule(readFileSync(new URL(name, import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const result = {};
+  new Function("exports", "require", code)(result, (id) => {
+    if (!(id in imports)) throw Error(`Unexpected runtime dependency: ${id}`);
+    return imports[id];
+  });
+  return result;
+}
+const realApi = loadTs("../components/preview-runtime/api.ts");
+const runtime = loadTs("../components/preview-runtime/scenario/runtime.ts", { "../api": realApi });
+const stage = (id, role, inputs = [], outputs = [], extras = {}) => ({
+  id, role, intent: id, inputs, outputs, capabilityId: null, inputBindings: [], outputBindings: [], ...extras,
+});
+const chooseProduct = stage("choose-product", "SELECT", ["collection"], ["productId"]);
+assert.deepEqual(runtime.resolveSelectionOutputs(chooseProduct, { selectedId: "product-42" }), { productId: "product-42" });
+assert.throws(() => runtime.resolveSelectionOutputs(chooseProduct, { collection: [{ id: "product-1" }] }));
+const selectCart = stage("select-cart", "SELECT", ["createdId"], ["cartId"]);
+assert.deepEqual(runtime.resolveSelectionOutputs(selectCart, { selectedId: "product-42", createdId: "cart-99" }), { cartId: "cart-99" });
+const executionStages = [
+  stage("create-cart", "COMMIT", [], ["createdId"], { capabilityId: "carts.create", outputBindings: [{ to: "createdId" }] }),
+  selectCart,
+  stage("add-item", "COMMIT", ["cartId", "productId"], [], { capabilityId: "carts.items", inputBindings: [
+    { target: "cartId", targetKind: "PATH", source: "$scenario.cartId", required: true },
+    { target: "productId", targetKind: "BODY", source: "$scenario.productId", required: true },
+  ] }),
+];
+assert.deepEqual(runtime.preflightScenarioExecution(executionStages, { productId: "product-42" }), []);
+assert.notEqual(runtime.preflightScenarioExecution([selectCart], { selectedId: "product-42" }).length, 0);
+assert.notEqual(runtime.preflightScenarioExecution([chooseProduct], { collection: [] }).length, 0);
+assert.throws(() => runtime.resolveSelectionOutputs(stage("ambiguous", "SELECT", ["productId", "cartId"], ["id"]), { productId: "p", cartId: "c" }));
+console.log("PASS real SELECT aliases, creation dependencies, no implicit first row, ambiguous input rejection");
+
+assert.deepEqual(runtime.parseScenarioInput("[]"), []);
+assert.deepEqual(runtime.parseScenarioInput('[{"productId":"p","quantity":2}]'), [{ productId: "p", quantity: 2 }]);
+assert.deepEqual(runtime.parseScenarioInput('{"address":"Seoul"}'), { address: "Seoul" });
+assert.equal(runtime.parseScenarioInput("1000"), 1000);
+assert.equal(runtime.parseScenarioInput("KRW"), "KRW");
+console.log("PASS shared product/inspector input conversion for arrays, objects, numbers and text");

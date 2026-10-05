@@ -45,6 +45,16 @@ class PreviewComposeArtifactBuilderTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
+    void userVmPortIsSharedByComposeHealthAndPublicRoute() {
+        var artifact = builder.buildForVm("https://api.example.test", List.of(), List.of(), List.of(),
+                List.of(), null, Purpose.API_TEST, List.of(), PreviewMode.OPERATION_PREVIEW, Map.of(), List.of(), 20042);
+        assertThat(artifact.composeContent()).contains("20042:80").doesNotContain("80:80");
+        assertThat(artifact.exposedRoutes().get(0).port()).isEqualTo(20042);
+        assertThat(artifact.healthChecks().get(0).hostPort()).isEqualTo(20042);
+        assertThat(artifact.healthChecks().get(0).containerPort()).isEqualTo(80);
+    }
+
+    @Test
     void editedPagePlanIsPassedToTheSameRuntimeInUserVmAndManagedArtifacts() {
         var capabilities = sampleCapabilities();
         var pages = samplePages();

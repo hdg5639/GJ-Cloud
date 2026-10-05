@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AiScenarioPlanner {
 
-    public static final String PROMPT_VERSION = "scenario-planner-v2-user-flow-preview";
+    public static final String PROMPT_VERSION = "scenario-planner-v3-contract-complete";
     private static final int MAX_CAPABILITY_INPUTS = 120;
     private static final int MAX_OPERATION_INPUTS = 160;
     private static final String SYSTEM_PROMPT = """
@@ -173,7 +173,9 @@ public class AiScenarioPlanner {
                                 .map(parameter -> parameter.name() + ":" + parameter.in() + ":" + parameter.type()
                                         + (parameter.required() ? ":required" : ""))
                                 .toList(),
-                        operation.requestBodyFields(), operation.responseFieldPaths(),
+                        operation.requestBodyFields(), java.util.stream.Stream.concat(
+                                operation.responseFieldPaths().stream(), operation.arrayFieldPaths().stream())
+                                .distinct().toList(),
                         operation.enumFields().stream()
                                 .map(enumField -> enumField.path() + "=" + enumField.values())
                                 .toList()))

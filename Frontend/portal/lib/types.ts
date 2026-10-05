@@ -392,7 +392,7 @@ export interface DeploymentResponse {
   triggerType: "MANUAL" | "GIT_PUSH" | "RETRY" | "ROLLBACK";
   requestedRevision: string | null;
   status: string;
-  sourceType: "TEMPLATE_SPEC" | "AI_SPEC" | "RAW_COMPOSE";
+  sourceType: "TEMPLATE_SPEC" | "AI_SPEC" | "RAW_COMPOSE" | "AUTO_PREVIEW";
   sourceRevision: string | null;
   releaseDir: string | null;
   previousDeploymentId: string | null;
@@ -409,7 +409,7 @@ export interface DeploymentTargetResponse {
   repositoryUrl: string;
   repositoryFullName: string | null;
   branch: string;
-  sourceType: "TEMPLATE_SPEC" | "AI_SPEC" | "RAW_COMPOSE";
+  sourceType: "TEMPLATE_SPEC" | "AI_SPEC" | "RAW_COMPOSE" | "AUTO_PREVIEW";
   autoDeployEnabled: boolean;
   latestRequestedRevision: string | null;
   latestDeployedRevision: string | null;

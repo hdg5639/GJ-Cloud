@@ -8,7 +8,7 @@ import type {
 } from "@/lib/types";
 import type { PreviewCapability, PreviewRuntimeConfig } from "../types";
 import { extractArray, rowId } from "../api";
-import { buildScenarioRequest, emptyExecution, runApiStage, type ScenarioRequest, type ScenarioState } from "./runtime";
+import { buildScenarioRequest, emptyExecution, resolveSelectionOutputs, parseScenarioInput, runApiStage, type ScenarioRequest, type ScenarioState } from "./runtime";
 import { ScenarioBlueprintSurface } from "./ScenarioBlueprintSurface";
 import {
   buildScenarioProjections,
@@ -53,21 +53,6 @@ function displayValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function parseInput(value: string): unknown {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (trimmed === "true") return true;
-  if (trimmed === "false") return false;
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
-  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-    try {
-      return JSON.parse(trimmed);
-    } catch {
-      return value;
-    }
-  }
-  return value;
-}
 
 function executionLabel(status: string): string {
   return {
@@ -226,7 +211,7 @@ export function ScenarioWorkbench({
     focusStage(stage.id);
     if (stage.role === "PREPARE" || stage.role === "CONFIGURE" || stage.role === "SELECT_CONTEXT") {
       const keys = localInputKeys(stage);
-      const values = Object.fromEntries(keys.map((key) => [key, parseInput(inputDrafts[`${stage.id}:${key}`] ?? "")]));
+      const values = Object.fromEntries(keys.map((key) => [key, parseScenarioInput(inputDrafts[`${stage.id}:${key}`] ?? "")]));
       if (keys.some((key) => values[key] === "" || values[key] === undefined)) {
         markWaiting(stage, "필수 입력값을 채워주세요.");
         return false;
@@ -241,17 +226,16 @@ export function ScenarioWorkbench({
       return true;
     }
     if (stage.role === "SELECT") {
-      if (!stateRef.current.selectedId) {
-        markWaiting(stage, "목록에서 다음 단계에 사용할 항목을 선택해주세요.");
+      try {
+        const outputs = resolveSelectionOutputs(stage, stateRef.current);
+        stateRef.current = { ...stateRef.current, ...outputs };
+        setScenarioState({ ...stateRef.current });
+        recordExecution({ ...emptyExecution(stage), status: "SUCCESS", extractedOutputs: outputs, durationMs: 0 });
+        return true;
+      } catch (error) {
+        markWaiting(stage, error instanceof Error ? error.message : "선택 결과를 확인해주세요.");
         return false;
       }
-      recordExecution({
-        ...emptyExecution(stage),
-        status: "SUCCESS",
-        extractedOutputs: { selectedId: stateRef.current.selectedId },
-        durationMs: 0,
-      });
-      return true;
     }
     if (stage.role === "REVIEW") {
       if (!reviewedStages[stage.id]) {

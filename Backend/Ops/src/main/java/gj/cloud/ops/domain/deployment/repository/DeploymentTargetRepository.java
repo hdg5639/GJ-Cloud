@@ -24,6 +24,9 @@ public interface DeploymentTargetRepository extends JpaRepository<DeploymentTarg
             @Param("compose") String compose, @Param("environments") String environments,
             @Param("routes") String routes, @Param("checks") String checks, @Param("now") LocalDateTime now);
 
+    @Query("select target.exposedRoutesJson from DeploymentTargetEntity target where target.vmId = :vmId and target.active = true and target.exposedRoutesJson is not null")
+    List<String> findReservedRoutesByVmId(@Param("vmId") String vmId);
+
     List<DeploymentTargetEntity> findAllByVmIdAndActiveTrueOrderByCreatedAtAsc(String vmId);
 
     @Query("""

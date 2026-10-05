@@ -61,6 +61,7 @@ const STATUS_TONE: Record<string, "ok" | "off"> = {
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
   RAW_COMPOSE: "사용자 지정",
+  AUTO_PREVIEW: "Auto Preview",
   TEMPLATE_SPEC: "기본 템플릿",
   AI_SPEC: "AI 자동생성",
 };
@@ -1934,7 +1935,7 @@ export default function DeploymentsPage() {
   }
 
   async function handleCreateFromCompose() {
-    if (!accessToken || !repoUrl || !branch || !composeContent) return;
+    if (!accessToken || !composeContent || (!editingTarget && (!repoUrl || !branch))) return;
     if (!routingSubdomainsReady) return;
     setSubmitting(true);
     setError(null);
@@ -2091,7 +2092,8 @@ export default function DeploymentsPage() {
   }
 
   const repositoryStepReady = Boolean(
-    repoUrl.trim() && branch.trim() && (retryNotice || targetName.trim())
+    (editingTarget || (repoUrl.trim() && branch.trim()))
+    && (retryNotice || targetName.trim())
   );
   const composeStepReady = Boolean(composeContent.trim());
   const aiHintsStepReady = (

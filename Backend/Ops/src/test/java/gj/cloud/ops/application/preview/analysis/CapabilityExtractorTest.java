@@ -252,6 +252,16 @@ class CapabilityExtractorTest {
         assertThat(start.action()).isEqualTo("start");
     }
 
+    @Test
+    void preservesCommandBodyForCartItemBinding() {
+        var operation = new ApiOperationEvidence("/carts/{cartId}/items", "POST", "addItem", null,
+                List.of(), List.of(), List.of("productId", "variantCode", "quantity"), false, false,
+                List.of("data.id"), List.of());
+        var evidence = new OpenApiEvidence("commerce", "1", List.of(), List.of(), List.of(operation), 0);
+        assertThat(findCapability(extractor.extract(evidence), "carts.items").fields())
+                .containsExactly("productId", "variantCode", "quantity");
+    }
+
     private Capability findCapability(List<Capability> capabilities, String id) {
         return capabilities.stream().filter(c -> c.id().equals(id)).findFirst().orElseThrow();
     }

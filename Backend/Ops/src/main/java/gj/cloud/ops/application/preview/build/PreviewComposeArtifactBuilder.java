@@ -92,6 +92,17 @@ public class PreviewComposeArtifactBuilder {
                 scenarios, previewMode, partOverrides, hostPort, containerName, pagePlans);
     }
 
+    public ComposeArtifact buildForVm(
+            String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
+            List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
+            List<CompiledScenario> scenarios, PreviewMode previewMode, Map<String, String> partOverrides,
+            List<PagePlan> pagePlans, int hostPort
+    ) {
+        if (hostPort < 1024 || hostPort > 65535) throw new IllegalArgumentException("Invalid preview host port");
+        return buildInternal(apiBaseUrl, capabilities, pages, flows, bindings, authStrategy, purpose,
+                scenarios, previewMode, partOverrides, hostPort, null, pagePlans);
+    }
+
     private ComposeArtifact buildInternal(
             String apiBaseUrl, List<Capability> capabilities, List<PageDraft> pages, List<FlowBlueprint> flows,
             List<ApiBinding> bindings, AuthStrategy authStrategy, Purpose purpose,
@@ -116,7 +127,7 @@ public class PreviewComposeArtifactBuilder {
         // 포털 preview-runtime + ui 프리미티브 + lib/types 실물(build.gradle이 baked).
         uploadedFiles.addAll(readPreviewTemplateFiles());
 
-        if (hostPort != null) {
+        if (containerName != null && hostPort != null) {
             String compose = """
                     services:
                       web:
@@ -137,10 +148,11 @@ public class PreviewComposeArtifactBuilder {
                     SourceType.AUTO_PREVIEW);
         }
         String nickname = "preview-" + UUID.randomUUID().toString().substring(0, 8);
-        ExposedRoute route = new ExposedRoute("web", CONTAINER_PORT, "HTTP", "PUBLIC", nickname, null);
-        HealthCheck healthCheck = new HealthCheck("web", "/", CONTAINER_PORT, CONTAINER_PORT);
+        int publicPort = hostPort == null ? CONTAINER_PORT : hostPort;
+        ExposedRoute route = new ExposedRoute("web", publicPort, "HTTP", "PUBLIC", nickname, null);
+        HealthCheck healthCheck = new HealthCheck("web", "/", publicPort, CONTAINER_PORT);
         return new ComposeArtifact(
-                COMPOSE_CONTENT, List.of(), uploadedFiles, List.of(route), List.of(healthCheck),
+                COMPOSE_CONTENT.formatted(publicPort), List.of(), uploadedFiles, List.of(route), List.of(healthCheck),
                 SourceType.AUTO_PREVIEW);
     }
 
@@ -217,7 +229,7 @@ public class PreviewComposeArtifactBuilder {
               web:
                 build: .
                 ports:
-                  - "80:80"
+                  - "%d:80"
             """;
 
     // ── 전면 이전(Phase B) 전용 생성 config: 포털 실물 컴포넌트를 Tailwind v4 + @/ alias로 번들 ──

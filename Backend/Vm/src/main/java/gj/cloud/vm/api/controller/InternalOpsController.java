@@ -56,6 +56,14 @@ public class InternalOpsController {
                 .map(ApiResponse::ok);
     }
 
+    @GetMapping("/vms/{vmId}/occupied-ports")
+    public Mono<ApiResponse<java.util.List<Integer>>> getOccupiedPorts(
+            @PathVariable UUID vmId, @AuthenticationPrincipal VmPrincipal principal
+    ) {
+        return portService.getPorts(principal.userId(), principal.email(), vmId)
+                .map(port -> port.port()).distinct().collectList().map(ApiResponse::ok);
+    }
+
     // 1.5절 규칙1 — 배포마다 포트를 누적 추가하는 게 아니라, 현재 배포가 원하는 route 집합으로 동기화(PUT)
     @PutMapping("/vms/{vmId}/deployment-routes")
     public Mono<ApiResponse<Void>> syncDeploymentRoutes(
