@@ -69,6 +69,8 @@ Auto Preview는 OpenAPI URL 또는 JSON/YAML 원문과 서비스 설명·문서 
 5. 포털 공용 Runtime에서 실제 API 호출과 검증
 6. 동일 Runtime 소스를 사용한 Vite + React 배포 아티팩트 생성
 
+OpenAPI의 로컬 `$ref`와 `allOf`를 해석한 제한된 `InputSchema`를 Capability에 전달한다. 중첩 객체·배열, 필수 필드, enum, 숫자 범위와 날짜 형식을 Runtime 입력에 사용하며 문서의 예시나 기본값을 실행 데이터로 복사하지 않는다. AI는 사용자 행동을 설명하는 `actionLabel`과 입력이 필요한 시점의 PREPARE 경계를 계획한다. Compiler는 필수 요청 필드만 필수 Binding으로 만들고 기존 경로·위험·검증 정책을 유지한다.
+
 포털의 `components/preview-runtime`과 Ops 배포본은 별도 구현이 아니다. `syncPreviewTemplate` Gradle 작업이 포털 소스를 Ops 리소스로 복사한다. Blueprint manifest도 `syncBlueprintManifest`가 단일 정본을 동기화한다.
 
 VM이 없는 사용자는 `/ops/preview/deploy`로 관리형 타겟을 선택한다. Ops의 `SystemWorker` 레지스트리가 `AUTO_PREVIEW` 역할 전용 VM을 조정하고, Preview마다 고유 포트·컨테이너·Compose project·호스트명을 배정한다. 컨테이너는 0.5 CPU/256MB로 제한하며 FREE는 6시간, PRO는 24시간 후 자동 정리한다. 일반 사용자 응답에는 worker ID, VMID, node, 내부 IP, SSH 정보를 포함하지 않는다.

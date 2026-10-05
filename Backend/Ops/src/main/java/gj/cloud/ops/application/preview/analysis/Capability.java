@@ -52,8 +52,21 @@ public record Capability(
         // AC-4 상태 전이 폴링 힌트 — DETAIL 응답 status enum에서 전이값+종료값이 함께 확인될 때만
         // 채워진다(CapabilityExtractor.detectPollHint). 감지 못 하면 null이고 폴링을 만들지 않는다.
         // DETAIL 외 타입은 항상 null.
-        PollHint pollHint
+        PollHint pollHint,
+        InputSchema inputSchema
 ) {
+    public Capability(
+            String id, String resourceName, CapabilityType type, String operationId, String path, String method,
+            boolean hasSearch, boolean hasSort, boolean hasPagination, String confidence, List<String> evidence,
+            List<String> fields, String accessTokenPath, String searchParam, RiskLevel risk,
+            AutomationPolicy automationPolicy, String collectionPath, String totalCountPath,
+            CapabilityKind kind, String action, List<String> dependencies, PollHint pollHint
+    ) {
+        this(id, resourceName, type, operationId, path, method, hasSearch, hasSort, hasPagination, confidence,
+                evidence, fields, accessTokenPath, searchParam, risk, automationPolicy, collectionPath,
+                totalCountPath, kind, action, dependencies, pollHint, null);
+    }
+
     // 폴링 종료 판정에 필요한 최소 정보 — 상태 필드 dot-path와 "종료로 간주할" 값 집합(예:
     // statusPath="status", terminalValues=["RUNNING","STOPPED","FAILED"]). 값은 API 원본 표기 그대로.
     public record PollHint(String statusPath, List<String> terminalValues) {
@@ -88,6 +101,12 @@ public record Capability(
     public Capability withId(String newId) {
         return new Capability(newId, resourceName, type, operationId, path, method, hasSearch, hasSort,
                 hasPagination, confidence, evidence, fields, accessTokenPath, searchParam, risk, automationPolicy,
-                collectionPath, totalCountPath, kind, action, dependencies, pollHint);
+                collectionPath, totalCountPath, kind, action, dependencies, pollHint, inputSchema);
     }
+    public Capability withInputSchema(InputSchema schema) {
+        return new Capability(id, resourceName, type, operationId, path, method, hasSearch, hasSort,
+                hasPagination, confidence, evidence, fields, accessTokenPath, searchParam, risk, automationPolicy,
+                collectionPath, totalCountPath, kind, action, dependencies, pollHint, schema);
+    }
+
 }

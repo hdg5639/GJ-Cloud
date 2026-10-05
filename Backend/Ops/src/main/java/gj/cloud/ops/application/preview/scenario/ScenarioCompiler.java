@@ -113,7 +113,7 @@ public class ScenarioCompiler {
             return new CompiledScenarioStage(
                     stage.id(), stage.role(), stage.intent(), null, null, !stage.required(),
                     stage.inputs(), stage.outputs(), stage.nextStageIds(), List.of(), List.of(),
-                    localVerification(stage), RiskLevel.SAFE);
+                    localVerification(stage), RiskLevel.SAFE, stage.actionLabel());
         }
 
         List<StageInputBinding> inputs = new ArrayList<>();
@@ -131,7 +131,8 @@ public class ScenarioCompiler {
         }
         if (!"GET".equalsIgnoreCase(capability.method()) && !"DELETE".equalsIgnoreCase(capability.method())) {
             for (String field : capability.fields()) {
-                inputs.add(new StageInputBinding(field, BindingTarget.BODY, "$scenario." + field, true));
+                inputs.add(new StageInputBinding(field, BindingTarget.BODY, "$scenario." + field,
+                        capability.inputSchema() == null || capability.inputSchema().required().contains(field)));
             }
         }
 
@@ -139,7 +140,7 @@ public class ScenarioCompiler {
         return new CompiledScenarioStage(
                 stage.id(), stage.role(), stage.intent(), capability.id(), capability.operationId(),
                 !stage.required(), stage.inputs(), stage.outputs(), stage.nextStageIds(), inputs, outputs,
-                verification(stage, capability), capability.risk());
+                verification(stage, capability), capability.risk(), stage.actionLabel());
     }
 
     private List<StageOutputBinding> outputBindings(ScenarioStagePlan stage, Capability capability) {

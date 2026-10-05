@@ -162,7 +162,7 @@ public class ScenarioProposalNormalizer {
                     capability, stage.required(),
                     safeStateKeys(stage.inputs()), safeStateKeys(stage.outputs()),
                     safe(stage.nextStageIds()).stream().filter(ScenarioProposalNormalizer::safeId).distinct().toList(),
-                    stage.verificationIntent()
+                    stage.verificationIntent(), blank(stage.actionLabel()) ? null : stage.actionLabel().trim().substring(0, Math.min(60, stage.actionLabel().trim().length()))
             ));
         }
         return new ScenarioPlan(

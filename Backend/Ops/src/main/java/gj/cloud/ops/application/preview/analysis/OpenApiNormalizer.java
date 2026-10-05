@@ -272,7 +272,7 @@ public class OpenApiNormalizer {
                 extractEnumFieldPaths(operation.path("responses"), schemas);
 
         return new ApiOperationEvidence(path, method, operationId, summary, tags, parameters,
-                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths, arrayFieldPaths, enumFields);
+                requestBodyFields, requiresAuth, responseIsArray, responseFieldPaths, arrayFieldPaths, enumFields, extractInputSchema(operation.path("requestBody"), schemas));
     }
 
     private List<ApiParameterEvidence> extractParameters(JsonNode parametersNode) {
@@ -314,6 +314,40 @@ public class OpenApiNormalizer {
         JsonNode firstMediaType = content.elements().next();
         JsonNode schema = resolveSchema(firstMediaType.path("schema"), schemas);
         return schemaPropertyNames(schema, schemas);
+    }
+
+    private InputSchema extractInputSchema(JsonNode requestBody, JsonNode schemas) {
+        JsonNode content = requestBody.path("content");
+        if (!content.isObject() || content.isEmpty()) return null;
+        return inputSchema(content.elements().next().path("schema"), schemas, 0, new int[]{256});
+    }
+
+    private InputSchema inputSchema(JsonNode source, JsonNode schemas, int depth, int[] remaining) {
+        if (depth > 7 || --remaining[0] < 0) return null;
+        JsonNode node = resolveSchema(source, schemas);
+        if (!node.isObject() || node.isEmpty() || node.has("$ref")) return null;
+        var properties = new java.util.LinkedHashMap<String, InputSchema>();
+        var required = new java.util.LinkedHashSet<String>();
+        for (JsonNode key : arrayOrEmpty(node.path("required"))) required.add(key.asText());
+        for (JsonNode part : arrayOrEmpty(node.path("allOf"))) {
+            JsonNode resolved = resolveSchema(part, schemas);
+            for (JsonNode key : arrayOrEmpty(resolved.path("required"))) required.add(key.asText());
+        }
+        JsonNode merged = mergedProperties(node, schemas);
+        var fields = merged.fields();
+        while (fields.hasNext() && properties.size() < 64 && remaining[0] > 0) {
+            var field = fields.next();
+            InputSchema schema = inputSchema(field.getValue(), schemas, depth + 1, remaining);
+            if (schema != null) properties.put(field.getKey(), schema);
+        }
+        var values = new java.util.ArrayList<String>();
+        for (JsonNode value : arrayOrEmpty(node.path("enum"))) if (value.isValueNode() && values.size() < 100) values.add(value.asText());
+        String type = node.path("type").asText(properties.isEmpty() ? null : "object");
+        return new InputSchema(type, node.path("title").asText(null), node.path("description").asText(null),
+                node.path("format").asText(null), List.copyOf(required), properties,
+                "array".equals(type) ? inputSchema(node.path("items"), schemas, depth + 1, remaining) : null,
+                values, node.path("minimum").isNumber() ? node.path("minimum").asDouble() : null,
+                node.path("maximum").isNumber() ? node.path("maximum").asDouble() : null);
     }
 
     private boolean extractResponseIsArray(JsonNode responses, JsonNode schemas) {

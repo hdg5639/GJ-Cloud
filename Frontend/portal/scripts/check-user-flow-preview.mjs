@@ -3,13 +3,27 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+function loadTs(name, imports = {}) {
+  const code = ts.transpileModule(readFileSync(new URL(name, import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const result = {};
+  new Function("exports", "require", code)(result, (id) => {
+    if (!(id in imports)) throw Error(`Unexpected runtime dependency: ${id}`);
+    return imports[id];
+  });
+  return result;
+}
+const realApi = loadTs("../components/preview-runtime/api.ts");
+const runtime = loadTs("../components/preview-runtime/scenario/runtime.ts", { "../api": realApi });
+
 // Exercise the real pure projection without adding another test runner dependency.
 const path = fileURLToPath(new URL("../components/preview-runtime/scenario/productExperience.ts", import.meta.url));
 const source = ts.transpileModule(readFileSync(path, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const exports = {};
-new Function("exports", source)(exports);
+new Function("exports", "require", source)(exports, () => runtime);
 const { composeProductExperience, validateProductExperience } = exports;
 const capability = (id, resourceName, type = "LIST") => ({
   id, resourceName, type, method: "GET", path: `/${resourceName}`, risk: "SAFE",
@@ -25,7 +39,7 @@ const capabilities = [capability("rooms.list", "rooms"), capability("posts.list"
 const booking = scenario("book.room", "회의실 예약", "공간을 선택하고 예약", "rooms.list");
 const community = scenario("write.post", "게시글 작성", "글을 작성하고 확인", "posts.list");
 const graph = composeProductExperience([booking, community], capabilities);
-assert.deepEqual(graph.screens.map((screen) => screen.label), ["회의실 예약", "게시글 작성"]);
+assert.deepEqual(graph.screens.map((screen) => screen.label), ["rooms", "posts"]);
 assert.deepEqual(graph.screens[0].capabilityIds, ["rooms.list"]);
 assert.deepEqual(graph.screens[1].capabilityIds, ["posts.list"]);
 assert.equal(graph.screens.some((screen) => screen.kind === "PROFILE"), false);
@@ -51,19 +65,6 @@ assert.deepEqual(validateProductExperience(similar, [
 console.log("PASS user-goal screens, resource ownership, edited page plan, unsupported flow, stable IDs");
 
 // Re-run the real runtime with the compiled plan captured from live Commerce analysis.
-function loadTs(name, imports = {}) {
-  const code = ts.transpileModule(readFileSync(new URL(name, import.meta.url), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const result = {};
-  new Function("exports", "require", code)(result, (id) => {
-    if (!(id in imports)) throw Error(`Unexpected runtime dependency: ${id}`);
-    return imports[id];
-  });
-  return result;
-}
-const realApi = loadTs("../components/preview-runtime/api.ts");
-const runtime = loadTs("../components/preview-runtime/scenario/runtime.ts", { "../api": realApi });
 const stage = (id, role, inputs = [], outputs = [], extras = {}) => ({
   id, role, intent: id, inputs, outputs, capabilityId: null, inputBindings: [], outputBindings: [], ...extras,
 });
@@ -92,3 +93,43 @@ assert.deepEqual(runtime.parseScenarioInput('{"address":"Seoul"}'), { address: "
 assert.equal(runtime.parseScenarioInput("1000"), 1000);
 assert.equal(runtime.parseScenarioInput("KRW"), "KRW");
 console.log("PASS shared product/inspector input conversion for arrays, objects, numbers and text");
+
+// User input boundaries, not array ordering, define executable chunks. Related APIs share confirmation.
+const stages = [
+  stage("choose", "SELECT", ["collection"], ["productId"], { nextStageIds: ["configure"] }),
+  stage("configure", "PREPARE", ["productId"], ["quantity"], { actionLabel: "수량 선택", nextStageIds: ["cart-review"] }),
+  stage("cart-review", "REVIEW", [], [], { nextStageIds: ["cart-save"] }),
+  stage("cart-save", "COMMIT", [], ["cartId"], { capabilityId: "cart.save", actionLabel: "장바구니 담기", nextStageIds: ["address"] }),
+  stage("address", "PREPARE", ["cartId"], ["shippingAddress"], { nextStageIds: ["order-review"] }),
+  stage("order-review", "REVIEW", [], [], { nextStageIds: ["order-save"] }),
+  stage("order-save", "COMMIT", [], ["orderId"], { capabilityId: "order.save", nextStageIds: ["other-review"] }),
+  stage("other-review", "REVIEW", [], [], { nextStageIds: ["done"] }),
+  stage("done", "COMPLETE", [], [], { nextStageIds: [] }),
+];
+const checkout = { id: "checkout", entryStageId: "choose", name: "주문", stages: [...stages].reverse() };
+const chunks = exports.groupOverlayStages("checkout", "shop", checkout, false);
+assert.deepEqual(chunks.map(chunk => chunk.stageIds), [
+  ["choose", "configure"], ["cart-review", "cart-save"], ["address"], ["order-review", "order-save", "other-review", "done"], [],
+]);
+assert.equal(chunks[1].submitLabel, "장바구니 담기");
+const dangerousChunks = exports.groupOverlayStages("checkout", "shop", checkout, true);
+assert.deepEqual(dangerousChunks.slice(-3).map(chunk => chunk.stageIds), [["order-review", "order-save"], ["other-review", "done"], []]);
+assert.deepEqual(runtime.preflightScenarioExecution(stages.slice(0, 2), { selectedId: "p42", collection: [], quantity: 2 }), []);
+assert(runtime.preflightScenarioExecution(stages.slice(4, 5), { cartId: "c1" }).length > 0);
+assert.deepEqual(runtime.preflightScenarioExecution([stage("optional", "PREPARE", [], ["images"])], {}, new Set(["images"])), []);
+assert.deepEqual(runtime.buildScenarioExecutionPath(checkout, "order-save").stages.map(s => s.id), ["order-save", "other-review", "done"]);
+console.log("PASS graph-ordered interaction boundaries, shared action confirmation and separate destructive reviews, future input isolation, optional fields, retry suffix");
+
+const writePost = { id: "write-post", name: "게시글 작성", goal: "게시글 발행", actor: "사용자", status: "EXECUTABLE", entryStageId: "prepare", stages: [
+  stage("prepare", "PREPARE", [], ["title"], { nextStageIds: ["review"] }),
+  stage("review", "REVIEW", [], [], { nextStageIds: ["save"] }),
+  stage("save", "COMMIT", ["title"], [], { capabilityId: "posts.create", nextStageIds: ["done"] }),
+  stage("done", "COMPLETE", [], [], { nextStageIds: [] }),
+] };
+const posts = composeProductExperience([writePost], [
+  capability("posts.list", "posts"), { ...capability("posts.create", "posts", "CREATE"), method: "POST", risk: "STATE_CHANGING" },
+]);
+assert.equal(posts.screens.length, 1);
+assert.equal(posts.screens[0].kind, "FEED");
+assert.deepEqual(posts.screens[0].capabilityIds, ["posts.create", "posts.list"]);
+console.log("PASS creation flow and same-resource feed share navigation instead of duplicate menus");

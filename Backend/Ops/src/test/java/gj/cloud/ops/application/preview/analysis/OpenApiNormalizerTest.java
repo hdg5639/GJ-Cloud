@@ -21,6 +21,49 @@ class OpenApiNormalizerTest {
     private final OpenApiNormalizer normalizer =
             new OpenApiNormalizer(new ObjectMapper(), new OpenApiDocumentSecurityValidator());
 
+    @Test
+    void preservesTypedNestedInputsAndOptionalFieldsWithoutExamples() {
+        var evidence = normalizer.normalizeContent("""
+            {"openapi":"3.0.3","info":{"title":"Booking","version":"1"},"paths":{
+              "/bookings":{"post":{"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Booking"}}}},"responses":{"201":{"description":"created"}}}}
+            },"components":{"schemas":{
+              "Booking":{"allOf":[{"$ref":"#/components/schemas/Base"},{"type":"object","required":["address"],"properties":{
+                "address":{"type":"object","required":["postalCode"],"properties":{"postalCode":{"type":"string"},"city":{"type":"string"}}},
+                "images":{"type":"array","items":{"type":"object","properties":{"url":{"type":"string","format":"uri"},"primary":{"type":"boolean"}}}}
+              }}]},
+              "Base":{"type":"object","required":["date","quantity"],"properties":{
+                "date":{"type":"string","format":"date"},"quantity":{"type":"integer","minimum":1,"maximum":20},
+                "status":{"type":"string","enum":["DRAFT","CONFIRMED"],"example":"never copy me"}
+              }}
+            }}}
+            """);
+        var schema = evidence.operations().get(0).requestSchema();
+        assertThat(schema.type()).isEqualTo("object");
+        assertThat(schema.required()).containsExactlyInAnyOrder("date", "quantity", "address");
+        assertThat(schema.properties().get("date").format()).isEqualTo("date");
+        assertThat(schema.properties().get("quantity").minimum()).isEqualTo(1d);
+        assertThat(schema.properties().get("quantity").maximum()).isEqualTo(20d);
+        assertThat(schema.properties().get("status").enumValues()).containsExactly("DRAFT", "CONFIRMED");
+        assertThat(schema.properties().get("address").required()).containsExactly("postalCode");
+        assertThat(schema.properties().get("images").items().properties()).containsKeys("url", "primary");
+        assertThat(schema.required()).doesNotContain("images", "status");
+        var capabilities = new CapabilityExtractor().extract(evidence);
+        assertThat(capabilities).anySatisfy(capability -> assertThat(capability.inputSchema()).isEqualTo(schema));
+    }
+
+    @Test
+    void recursiveInputReferencesAreBounded() {
+        var evidence = normalizer.normalizeContent("""
+            {"openapi":"3.0.3","info":{"title":"Tree","version":"1"},"paths":{
+              "/nodes":{"post":{"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Node"}}}},"responses":{"201":{"description":"created"}}}}
+            },"components":{"schemas":{"Node":{"type":"object","properties":{"child":{"$ref":"#/components/schemas/Node"}}}}}}
+            """);
+        var schema = evidence.operations().get(0).requestSchema();
+        int depth = 0;
+        while (schema != null) { depth++; schema = schema.properties().get("child"); }
+        assertThat(depth).isBetween(1, 8);
+    }
+
     private static final String VM_SERVICE_LIKE_DOC = """
             {
               "openapi": "3.0.1",

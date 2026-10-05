@@ -153,7 +153,7 @@ export function resolveSelectionOutputs(stage: PreviewCompiledScenarioStage, sta
 // anticipated로 추적하되, 사용자 입력을 생산하는 로컬 stage의 값은 현재 state에 실제로 있어야 한다.
 export function preflightScenarioExecution(
   stages: PreviewCompiledScenarioStage[],
-  initialState: ScenarioState
+  initialState: ScenarioState, optionalInputs = new Set<string>()
 ): string[] {
   const errors: string[] = [];
   const available = new Set(
@@ -171,7 +171,7 @@ export function preflightScenarioExecution(
     }
     if (localInputStage) {
       for (const output of stage.outputs) {
-        if (!available.has(output)) {
+        if (!available.has(output) && !optionalInputs.has(output)) {
           errors.push(`${stage.intent}: 사용자 입력 ${output} 값이 비어 있습니다.`);
         }
       }

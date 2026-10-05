@@ -105,7 +105,9 @@ public class CapabilityExtractor {
             extractCommandCapability(operation, detailIdByResource)
                     .ifPresent(capability -> capabilities.add(registerUnique(capability, usedIds)));
         }
-        return capabilities;
+        return capabilities.stream().map(capability -> evidence.operations().stream()
+                .filter(operation -> isSameOperation(operation, capability)).findFirst()
+                .map(operation -> capability.withInputSchema(operation.requestSchema())).orElse(capability)).toList();
     }
 
     // id가 이미 쓰였으면 "-2", "-3" … 접미사를 붙여 유일하게 만든다. 접미사는 문서상 오퍼레이션
