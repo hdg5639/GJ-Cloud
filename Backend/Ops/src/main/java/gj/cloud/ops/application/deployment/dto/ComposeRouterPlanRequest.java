@@ -14,6 +14,11 @@ public record ComposeRouterPlanRequest(
         Map<String, @Min(1) @Max(65535) Integer> servicePorts,
         Map<String, @Valid ComposeRouterRouteOverride> routeOverrides,
         // 배포 직전 화면에서 '공개 안 함'으로 끈 서비스 — 라우팅/CNAME에서 제외한다(내부 전용으로 남음).
-        java.util.List<String> excludedServices
+        java.util.List<String> excludedServices,
+        Boolean reconfigureGeneratedRouter
 ) {
+    public ComposeRouterPlanRequest(String composeContent, Integer routerHostPort, Map<String, Integer> servicePorts,
+            Map<String, ComposeRouterRouteOverride> routeOverrides, java.util.List<String> excludedServices) {
+        this(composeContent, routerHostPort, servicePorts, routeOverrides, excludedServices, false);
+    }
 }

@@ -13,6 +13,7 @@ import type {
   ServiceCard,
   InfraSelection,
   ComposeSpecResponse,
+  ComposePreparationResult,
   GenerationStatus,
   UnresolvedField,
   ComposeReviewFinding,
@@ -35,6 +36,8 @@ import { StatusBadge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
 import { InstanceToolbar } from "@/components/ui/instance-toolbar";
+import { EnvironmentEditor } from "@/components/deployments/environment-editor";
+import { RoutingWorkspace } from "@/components/deployments/routing-workspace";
 import { DeploymentTargetCard } from "@/components/deployments/deployment-target-card";
 
 type NetworkMode = "create" | "reuse";
@@ -89,7 +92,6 @@ function retryStorageKey(vmId: string): string {
 
 const emptyExposedRoute = (): ExposedRoute => ({ serviceName: "", port: 80, protocol: "HTTP", visibility: "PUBLIC", nickname: "", customSubdomain: "" });
 const emptyHealthCheck = (): HealthCheck => ({ serviceName: "", path: "/", hostPort: undefined, containerPort: undefined });
-const emptyEnvFile = (): EnvironmentFile => ({ vmPath: ".env", content: "" });
 const emptyServiceCard = (): ServiceCard => ({ name: "", runtime: "docker", context: ".", containerPort: 3000, expose: true });
 const emptyInfra = (): InfraSelection => ({ type: "postgres", version: "" });
 
@@ -881,6 +883,7 @@ export default function DeploymentsPage() {
   const [cnameLinkError, setCnameLinkError] = useState<string | null>(null);
   const [redeployingTargetId, setRedeployingTargetId] = useState<string | null>(null);
 
+  const [editingTarget, setEditingTarget] = useState<{ id: string; version: string; name: string } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("compose");
   const [createStep, setCreateStep] = useState<CreateStep>(1);
@@ -938,6 +941,8 @@ export default function DeploymentsPage() {
   const [planningRouter, setPlanningRouter] = useState(false);
   const [routerApplied, setRouterApplied] = useState(false);
   const [routerHostPort, setRouterHostPort] = useState(18080);
+  const [editingEnvironment, setEditingEnvironment] = useState(false);
+  const [routingDirty, setRoutingDirty] = useState(false);
   const [routerServicePorts, setRouterServicePorts] = useState<Record<string, number>>({});
   const [routerRouteOverrides, setRouterRouteOverrides] = useState<Record<string, ComposeRouterRouteOverride>>({});
   // 라우터 보강 전 원본 compose(재-플랜 기준) + 배포 직전 화면에서 '공개 안 함'으로 끈 서비스 목록.
@@ -959,6 +964,9 @@ export default function DeploymentsPage() {
   const [serviceCards, setServiceCards] = useState<ServiceCard[]>([emptyServiceCard()]);
   const [infraSelections, setInfraSelections] = useState<InfraSelection[]>([]);
   const [generatedSpec, setGeneratedSpec] = useState<string>("");
+  const [preparation, setPreparation] = useState<{ key: string; result: ComposePreparationResult } | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [preparationError, setPreparationError] = useState<string | null>(null);
   const [renderedSpec, setRenderedSpec] = useState<ComposeSpecResponse | null>(null);
   const [generating, setGenerating] = useState(false);
   const [renderingSpec, setRenderingSpec] = useState(false);
@@ -974,6 +982,7 @@ export default function DeploymentsPage() {
   const furthestCreateStep = furthestStepByTab[createTab];
 
   function visitCreateStep(step: CreateStep) {
+    if (editingTarget && step < 3) return;
     if (generating || submitting || reviewing || detectingCompose || reviewingCompose || planningRouter) return;
     if (step <= furthestCreateStep) setCreateStep(step);
   }
@@ -1162,6 +1171,10 @@ export default function DeploymentsPage() {
       if (gatewayName && route.serviceName !== gatewayName) return route;
       return { ...route, customSubdomain: lower };
     }));
+    setRenderedSpec(previous => previous ? { ...previous, exposedRoutes: previous.exposedRoutes.map(route => {
+      const gateway = previous.routerPlan?.routerServiceName;
+      return route.protocol === "HTTP" && (!gateway || route.serviceName === gateway) ? { ...route, customSubdomain: lower } : route;
+    }) } : previous);
     setGeneratedSpec((previous) => {
       if (!previous) return previous;
       try {
@@ -1193,6 +1206,7 @@ export default function DeploymentsPage() {
 
   // 도메인 모드 서비스의 전용 서브도메인 입력 — override에 반영하고 가용성을 서비스별로 확인한다.
   function handleDomainSubdomainChange(service: string, value: string) {
+    setRoutingDirty(true);
     const lower = value.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 30);
     setRouterRouteOverrides((previous) => ({
       ...previous,
@@ -1341,7 +1355,7 @@ export default function DeploymentsPage() {
     setAutoDeploy(false);
     setEnvFiles(spec.environmentFiles);
     setRoutes(spec.exposedRoutes);
-    setHealthChecks(spec.healthChecks);
+    setHealthChecks(spec.healthChecks.filter(check => !check.readinessOnly));
     setShowAdvanced(spec.environmentFiles.length > 0 || spec.exposedRoutes.length > 0 || spec.healthChecks.length > 0);
     setCreateTab("compose");
     setCreateStep(2);
@@ -1388,6 +1402,8 @@ export default function DeploymentsPage() {
   }
 
   function resetCreateForm() {
+    setRoutingDirty(false);
+    setEditingTarget(null);
     setRepositorySource("github");
     setManualRepoUrl("");
     setManualBranch("main");
@@ -1397,6 +1413,9 @@ export default function DeploymentsPage() {
     setAutoDeploy(true);
     setSelectedGithubRepositoryKey("");
     setComposeContent("");
+    setPreparation(null);
+    setPreparationError(null);
+    setPreparing(false);
     setContext("");
     setComposeDetection(null);
     setSelectedDetectedComposePath("");
@@ -1439,7 +1458,7 @@ export default function DeploymentsPage() {
   }
 
   function closeCreate() {
-    if (submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter) return;
+    if (submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter || renderingSpec || editingEnvironment) return;
     setShowCreate(false);
     setError(null);
     resetCreateForm();
@@ -1496,6 +1515,29 @@ export default function DeploymentsPage() {
       setTargetName(repository.fullName.split("/").pop() ?? "");
     }
     invalidateAiGeneration();
+  }
+
+  async function handleEditTarget(target: DeploymentTargetResponse) {
+    if (!accessToken) return;
+    setError(null);
+    try {
+      const result = await api.ops.deployments.getTargetConfig(accessToken, vmId, target.id);
+      resetCreateForm();
+      setEditingTarget({ id: target.id, version: result.version, name: target.name });
+      setRepositorySource("url"); setManualRepoUrl(target.repositoryUrl); setManualBranch(target.branch);
+      setTargetName(target.name); setCreateTab("compose"); setCreateStep(3); setFurthestStepByTab({ compose: 4, ai: 1 });
+      setContext(result.config.context ?? ""); setComposeContent(result.config.composeContent); setBaseComposeContent(result.config.composeContent);
+      setEnvFiles(result.config.environmentFiles); setRoutes(result.config.exposedRoutes); setHealthChecks(result.config.healthChecks.filter(check => !check.readinessOnly));
+      setShowCreate(true);
+      const plan = await api.ops.deployments.planComposeRouter(accessToken, vmId, { composeContent: result.config.composeContent });
+      setRouterPlan(plan); setRouterApplied(plan.status === "ADDED" || plan.status === "ALREADY_CONFIGURED");
+      setRouterRouteOverrides(Object.fromEntries(plan.routes.map(route => [route.serviceName, {
+        mode: route.mode, routePath: route.routePath, stripPrefix: route.stripPrefix, customSubdomain: route.customSubdomain,
+      }])));
+      setDomainSubdomainCheck(Object.fromEntries(plan.routes.filter(route => route.mode === "DOMAIN").map(route => [route.serviceName, "available" as const])));
+      const gateway = result.config.exposedRoutes.find(route => route.serviceName === plan.routerServiceName);
+      setDeploymentCustomSubdomain(gateway?.customSubdomain ?? ""); setDeploymentSubdomainCheck("available");
+    } catch (err) { setError(err instanceof Error ? err.message : "배포 구성을 불러오지 못했습니다."); }
   }
 
   async function handleAutoDeployToggle(target: DeploymentTargetResponse) {
@@ -1629,7 +1671,8 @@ export default function DeploymentsPage() {
   }
 
   function applyRouterPlan(plan: ComposeRouterPlanResult) {
-    if (plan.status !== "ADDED" || !plan.routerHostPort) return;
+    if ((plan.status !== "ADDED" && !(plan.status === "ALREADY_CONFIGURED" && plan.routerConfig)) || !plan.routerHostPort) return;
+    setRoutingDirty(false);
     setComposeContent(plan.enhancedComposeContent);
     setRouterPlan(plan);
     setRouterApplied(true);
@@ -1676,14 +1719,14 @@ export default function DeploymentsPage() {
     const routeByService = new Map(plan.routes.map((route) => [route.serviceName, route]));
     setHealthChecks((previous) => previous.map((check) => {
       const route = routeByService.get(check.serviceName);
-      if (!route) return check;
+      if (!route || check.readinessOnly) return check;
       const originalPath = check.path?.startsWith("/") ? check.path : `/${check.path || ""}`;
       // 루트/도메인 라우트는 자기 도메인 루트에서 그대로 서비스되므로 경로를 접두하지 않는다.
       return {
-        serviceName: plan.routerServiceName,
-        path: (route.root || route.mode === "DOMAIN") ? originalPath : `${route.routePath}${originalPath}`,
-        hostPort: plan.routerHostPort!,
-        containerPort: undefined,
+        serviceName: check.serviceName,
+        path: originalPath,
+        hostPort: undefined,
+        containerPort: route.containerPort,
       };
     }));
     setShowAdvanced(true);
@@ -1711,9 +1754,11 @@ export default function DeploymentsPage() {
   // Caddy를 새로 만들지 않는 계획도 최종 공개 라우트 상태로 반영해야 step 4에서
   // 자동 CNAME/PRO 커스텀 CNAME을 설정할 수 있다. 기존에는 NOT_REQUIRED 결과를
   // 감지만 하고 routes에 옮기지 않는 경로가 있어 '공개 설정' 껍데기만 노출됐다.
-  function applyExistingPublicEndpointPlan(plan: ComposeRouterPlanResult, base: string) {
+  function applyExistingPublicEndpointPlan(plan: ComposeRouterPlanResult) {
+    if (plan.status === "ALREADY_CONFIGURED" && plan.routerConfig) { applyRouterPlan(plan); return; }
     if (plan.status !== "NOT_REQUIRED" && plan.status !== "ALREADY_CONFIGURED") return;
-    setComposeContent(base);
+    setComposeContent(plan.enhancedComposeContent);
+    setRoutingDirty(false);
     setRouterPlan(plan);
     setRouterApplied(plan.status === "ALREADY_CONFIGURED");
     setComposeReviewFindings(null);
@@ -1763,6 +1808,7 @@ export default function DeploymentsPage() {
         ),
         routeOverrides: Object.keys(routerRouteOverrides).length > 0 ? routerRouteOverrides : undefined,
         excludedServices: excluded.length > 0 ? excluded : undefined,
+        reconfigureGeneratedRouter: true,
       });
       setRouterPlan(plan);
       setRouterApplied(false);
@@ -1770,7 +1816,7 @@ export default function DeploymentsPage() {
         if (plan.status === "ADDED") {
           applyRouterPlan(plan);
         } else if (plan.status === "NOT_REQUIRED" || plan.status === "ALREADY_CONFIGURED") {
-          applyExistingPublicEndpointPlan(plan, base);
+          applyExistingPublicEndpointPlan(plan);
         }
       }
       return plan;
@@ -1793,7 +1839,7 @@ export default function DeploymentsPage() {
       applyRouterPlan(plan);
       content = plan.enhancedComposeContent;
     } else if (plan?.status === "NOT_REQUIRED" || plan?.status === "ALREADY_CONFIGURED") {
-      applyExistingPublicEndpointPlan(plan, file.content);
+      applyExistingPublicEndpointPlan(plan);
     } else {
       setComposeContent(content);
     }
@@ -1893,6 +1939,18 @@ export default function DeploymentsPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const prepared = await api.ops.deployments.prepareCompose(accessToken, vmId, {
+        composeContent, environmentFiles: envFiles, exposedRoutes: routes, healthChecks,
+        context: context.trim() || undefined,
+      });
+      if (!prepared.valid) { setError(prepared.errors.join(" / ")); return; }
+      if (editingTarget) {
+        await api.ops.deployments.updateTargetConfig(accessToken, vmId, editingTarget.id, {
+          version: editingTarget.version, config: { composeContent, environmentFiles: envFiles,
+            exposedRoutes: routes, healthChecks, context: context.trim() || undefined },
+        });
+        setShowCreate(false); resetCreateForm(); await load(); return;
+      }
       const deployment = await api.ops.deployments.create(accessToken, vmId, {
         repoUrl,
         branch,
@@ -1904,7 +1962,7 @@ export default function DeploymentsPage() {
         composeContent,
         context: context.trim() || undefined,
         installPath: installPath.trim() || undefined,
-        environmentFiles: envFiles.filter((f) => f.vmPath && f.content),
+        environmentFiles: envFiles,
         exposedRoutes: routes.filter((r) => r.serviceName && r.nickname),
         healthChecks: healthChecks.filter((h) => h.serviceName && h.path),
       });
@@ -1998,18 +2056,24 @@ export default function DeploymentsPage() {
   }
 
   async function handleCreateFromSpec() {
-    if (!accessToken || !repoUrl || !branch || !generatedSpec) return;
+    if (!accessToken || !repoUrl || !branch || !generatedSpec || !renderedSpec) return;
     if (!routingSubdomainsReady) return;
     setSubmitting(true);
     setError(null);
     try {
       // 분석 결과 단계에서 지정한 공개 진입점 CNAME과 서비스별 Prefix 보정을 배포 직전에 스펙에 반영한다.
-      const spec: DeploymentSpec = applyRoutingSettingsToSpec(JSON.parse(generatedSpec));
+      const spec: DeploymentSpec = JSON.parse(generatedSpec);
+      const prepared = await api.ops.deployments.prepareCompose(accessToken, vmId, {
+        composeContent: renderedSpec!.composeContent, environmentFiles: envFiles,
+        exposedRoutes: renderedSpec!.exposedRoutes, healthChecks: renderedSpec!.healthChecks,
+      });
+      if (!prepared.valid) { setError(prepared.errors.join(" / ")); return; }
       const deployment = await api.ops.deployments.createFromSpec(accessToken, vmId, {
         repoUrl,
         branch,
         patToken: repositorySource === "url" ? patToken || undefined : undefined,
         spec,
+        composeOverride: { ...renderedSpec!, environmentFiles: envFiles },
         installPath: installPath.trim() || undefined,
         targetName: targetName.trim() || undefined,
         autoDeploy: Boolean(activeGithubRepository && autoDeploy),
@@ -2115,38 +2179,129 @@ export default function DeploymentsPage() {
     try { return JSON.parse(generatedSpec) as DeploymentSpec; } catch { return null; }
   })();
   const aiExcludedServices = (aiSpecParsed?.services ?? [])
-    .filter((service) => service.expose && service.expose.protocol?.toLowerCase() === "http" && service.expose.enabled === false)
+    .filter((service) => !service.expose || service.expose.enabled === false || service.expose.protocol?.toLowerCase() !== "http")
     .map((service) => service.name);
 
   function handleToggleAiServiceExpose(service: string, exposed: boolean) {
+    setRoutingDirty(true);
     if (!aiSpecParsed) return;
     const next: DeploymentSpec = {
       ...aiSpecParsed,
       services: aiSpecParsed.services.map((candidate) => (
-        candidate.name === service && candidate.expose
-          ? { ...candidate, expose: { ...candidate.expose, enabled: exposed } }
+        candidate.name === service
+          ? { ...candidate, expose: { ...candidate.expose, protocol: "http", enabled: exposed } }
           : candidate
       )),
     };
     setGeneratedSpec(JSON.stringify(next, null, 2));
-    setRenderedSpec(null);
+    if (exposed) setRouterRouteOverrides(previous => ({ ...previous, [service]: previous[service] ?? { mode: "PREFIX", routePath: "/" + service, stripPrefix: false, customSubdomain: null } }));
   }
 
   // AI 흐름에서 서비스별 Prefix를 보정한 뒤 최종 Compose를 다시 렌더링한다 — 보정값을 스펙에 반영하고 재렌더.
   async function handleRegenerateAiRouting() {
-    if (!accessToken || !generatedSpec) return;
+    if (!accessToken || !renderedSpec) return;
     setRenderingSpec(true);
     setError(null);
     try {
-      const spec = applyRoutingSettingsToSpec(JSON.parse(generatedSpec) as DeploymentSpec);
-      setGeneratedSpec(JSON.stringify(spec, null, 2));
-      setRenderedSpec(await api.ops.deployments.renderSpec(accessToken, vmId, spec));
+      const plan = await api.ops.deployments.planComposeRouter(accessToken, vmId, {
+        composeContent: renderedSpec.composeContent,
+        routerHostPort: renderedSpec.routerPlan?.routerHostPort ?? routerHostPort,
+        servicePorts: routerServicePorts,
+        routeOverrides: routerRouteOverrides,
+        excludedServices: aiExcludedServices,
+        reconfigureGeneratedRouter: true,
+      });
+      if (plan.status === "NEEDS_INPUT") {
+        setError(plan.unresolvedServices.map(service => service.serviceName + ": " + service.reason).join(" / "));
+        return;
+      }
+      const usedNicknames = new Set<string>();
+      setRoutingDirty(false);
+      const publicRoutes: ExposedRoute[] = plan.status === "ADDED" && plan.routerHostPort ? [
+        { serviceName: plan.routerServiceName, port: plan.routerHostPort, protocol: "HTTP", visibility: "PUBLIC", nickname: "gateway", customSubdomain: deploymentCustomSubdomain },
+        ...plan.routes.filter(route => route.mode === "DOMAIN").map(route => ({ serviceName: route.serviceName, port: plan.routerHostPort!, protocol: "HTTP", visibility: "PUBLIC", nickname: uniqueNicknameFor(route.serviceName, usedNicknames), customSubdomain: route.customSubdomain ?? "" })),
+      ] : plan.routes.filter(route => route.hostPort).map(route => ({ serviceName: route.serviceName, port: route.hostPort!, protocol: "HTTP", visibility: "PUBLIC", nickname: uniqueNicknameFor(route.serviceName, usedNicknames), customSubdomain: deploymentCustomSubdomain }));
+      setRenderedSpec(previous => previous ? {
+        ...previous, composeContent: plan.enhancedComposeContent, routerPlan: plan,
+        healthChecks: previous.healthChecks.map(check => { const route = plan.routes.find(route => route.serviceName === check.serviceName); return route && !check.readinessOnly ? { ...check, hostPort: undefined, containerPort: route.containerPort } : check; }),
+        exposedRoutes: [...publicRoutes, ...previous.exposedRoutes.filter(route => route.protocol !== "HTTP")],
+      } : previous);
     } catch (err) {
       setError(err instanceof Error ? err.message : "라우팅을 다시 생성하지 못했습니다.");
     } finally {
       setRenderingSpec(false);
     }
   }
+
+  const draftCompose = createTab === "ai" ? renderedSpec?.composeContent ?? "" : composeContent;
+  const draftRoutes = createTab === "ai" ? renderedSpec?.exposedRoutes ?? [] : routes;
+  const draftChecks = createTab === "ai" ? renderedSpec?.healthChecks ?? [] : healthChecks;
+  const preparationKey = JSON.stringify({ composeContent: draftCompose, environmentFiles: envFiles,
+    exposedRoutes: draftRoutes, healthChecks: draftChecks, context: createTab === "ai" ? undefined : context.trim() || undefined });
+  const currentPreparation = preparation?.key === preparationKey ? preparation.result : null;
+
+  useEffect(() => {
+    if (!showCreate || !accessToken || !draftCompose.trim()) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setPreparing(true);
+      setPreparationError(null);
+      try {
+        const result = await api.ops.deployments.prepareCompose(accessToken, vmId, JSON.parse(preparationKey));
+        if (!cancelled) setPreparation({ key: preparationKey, result });
+      } catch (err) {
+        if (!cancelled) setPreparationError(err instanceof Error ? err.message : "Compose 검증을 완료하지 못했습니다.");
+      } finally { if (!cancelled) setPreparing(false); }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [showCreate, accessToken, vmId, draftCompose, preparationKey]);
+
+  const environmentEditor = <EnvironmentEditor files={envFiles}
+    services={(currentPreparation?.services ?? preparation?.result.services ?? []).map(service => service.name)}
+    onChange={next => {
+      const removed = envFiles.filter(file => !next.some(candidate => candidate.vmPath === file.vmPath));
+      if (!removed.length || !accessToken || !draftCompose) { setEnvFiles(next); return; }
+      setEditingEnvironment(true);
+      void api.ops.deployments.prepareCompose(accessToken, vmId, {
+        ...JSON.parse(preparationKey), environmentFiles: [...next, ...removed.map(file => ({ ...file, serviceNames: [] }))],
+      }).then(prepared => {
+        if (createTab === "ai") setRenderedSpec(previous => previous ? { ...previous, composeContent: prepared.composeContent } : previous);
+        else { setComposeContent(prepared.composeContent); setBaseComposeContent(prepared.composeContent); }
+        setEnvFiles(next);
+      }).catch(err => setError(err instanceof Error ? err.message : "환경 파일 연결을 제거하지 못했습니다.")).finally(() => setEditingEnvironment(false));
+    }} disabled={submitting || editingEnvironment} />;
+  const routingEditor = <RoutingWorkspace plan={createTab === "ai" ? aiRouterPlan : routerPlan}
+    services={currentPreparation?.services ?? preparation?.result.services ?? []}
+    overrides={routerRouteOverrides} ports={routerServicePorts}
+    excluded={createTab === "ai" ? aiExcludedServices : excludedServices}
+    disabled={submitting || renderingSpec || planningRouter}
+    onOverride={(service, override) => { setRoutingDirty(true); setRouterRouteOverrides(previous => ({ ...previous, [service]: override })); }}
+    onPort={(service, port) => { setRoutingDirty(true); setRouterServicePorts(previous => ({ ...previous, [service]: port })); }}
+    onExpose={(service, exposed) => {
+      setRoutingDirty(true);
+      if (createTab === "ai") handleToggleAiServiceExpose(service, exposed);
+      else {
+        setExcludedServices(previous => exposed ? previous.filter(name => name !== service) : [...new Set([...previous, service])]);
+        if (exposed) setRouterRouteOverrides(previous => ({ ...previous, [service]: previous[service] ?? { mode: "PREFIX", routePath: "/" + service, stripPrefix: false, customSubdomain: null } }));
+      }
+    }}
+    onApply={() => { if (createTab === "ai") void handleRegenerateAiRouting(); else void handleRegenerateComposeRouting(); }}
+    onCaddyApply={async code => {
+      if (!accessToken) return;
+      try {
+        const prepared = await api.ops.deployments.prepareCompose(accessToken, vmId, { ...JSON.parse(preparationKey), caddyfileOverride: code });
+        if (!prepared.valid) { setError(prepared.errors.join(" / ")); return; }
+        if (createTab === "ai") setRenderedSpec(previous => previous ? { ...previous, composeContent: prepared.composeContent, routerPlan: previous.routerPlan ? { ...previous.routerPlan, routerConfig: code } : null } : previous);
+        else { setComposeContent(prepared.composeContent); setBaseComposeContent(prepared.composeContent); setRouterPlan(previous => previous ? { ...previous, routerConfig: code } : previous); }
+      } catch (err) { setError(err instanceof Error ? err.message : "Caddyfile 적용에 실패했습니다."); }
+    }} />;
+
+  const preparationFeedback = draftCompose && <div className="space-y-1 text-xs" role="status">
+    <p className="text-muted-soft">{routingDirty ? "연결 설정에 적용하지 않은 변경이 있습니다. 연결 설정 적용을 눌러주세요." : preparing || !currentPreparation ? "변경한 구성을 정적으로 확인하고 있습니다…" : currentPreparation.valid ? "정적 검증 통과 · 실제 파일·빌드·컨테이너 검증은 배포 중 수행합니다." : "수정이 필요한 설정이 있습니다."}</p>
+    {preparationError && <p className="text-danger">{preparationError}</p>}
+    {currentPreparation?.errors.map(message => <p key={message} className="text-danger">{message}</p>)}
+    {currentPreparation?.warnings.map(message => <p key={message} className="text-[#e8b657]">{message}</p>)}
+  </div>;
 
   async function handleNextCreateStep() {
     if (createStep === 1) {
@@ -2166,20 +2321,6 @@ export default function DeploymentsPage() {
       return;
     }
     if (createStep === 3 && createTab === "compose" && composeStepReady) {
-      let effectivePlan = routerPlan;
-      if (!effectivePlan) {
-        effectivePlan = await handlePlanComposeRouter(composeContent, true);
-      } else if (effectivePlan.status === "ADDED" && !routerApplied) {
-        applyRouterPlan(effectivePlan);
-      } else if (
-        (effectivePlan.status === "NOT_REQUIRED" || effectivePlan.status === "ALREADY_CONFIGURED")
-        && !routes.some((route) => route.visibility === "PUBLIC" && route.protocol === "HTTP")
-      ) {
-        applyExistingPublicEndpointPlan(effectivePlan, baseComposeContent || composeContent);
-      }
-      if (!effectivePlan || effectivePlan.status === "NEEDS_INPUT") {
-        return;
-      }
       advanceCreateStep(4);
       return;
     }
@@ -2193,6 +2334,7 @@ export default function DeploymentsPage() {
   }
 
   function handlePreviousCreateStep() {
+    if (editingTarget && createStep === 3) return;
     setCreateStep((step) => Math.max(1, step - 1) as CreateStep);
   }
 
@@ -2270,6 +2412,7 @@ export default function DeploymentsPage() {
                         onRedeploy={() => handleRedeployTarget(target)}
                         onViewLatest={latestDeployment ? () => router.push(`/instances/${vmId}/deployments/${latestDeployment.id}`) : undefined}
                         onToggleAutoDeploy={() => handleAutoDeployToggle(target)}
+                        onEditConfig={() => void handleEditTarget(target)}
                         onManageCnames={() => openCnameManager(target)}
                         onDelete={() => openDeleteTargetModal(target)}
                       />
@@ -2495,7 +2638,7 @@ export default function DeploymentsPage() {
           <div className="flex items-center justify-between border-b border-line bg-panel px-6 py-5 shrink-0">
             <div>
               <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">DEPLOYMENT</span>
-              <h2 className="mt-[5px] text-xl font-extrabold">{retryNotice ? "재시도 / 수정 후 재배포" : "새 배포"}</h2>
+              <h2 className="mt-[5px] text-xl font-extrabold">{editingTarget ? editingTarget.name + " 구성 편집" : retryNotice ? "재시도 / 수정 후 재배포" : "새 배포"}</h2>
               <p className="mt-1 text-sm text-muted">
                 {createTab === "compose"
                   ? "직접 작성한 docker-compose.yaml로 서비스를 배포합니다. 세부 설정을 완전히 제어할 수 있어요."
@@ -2507,12 +2650,12 @@ export default function DeploymentsPage() {
             </button>
           </div>
 
-          <DeploymentWizardProgress
+          {!editingTarget && <DeploymentWizardProgress
             createTab={createTab}
             currentStep={createStep}
             furthestStep={furthestCreateStep}
             onStepChange={visitCreateStep}
-          />
+          />}
 
           {/* 본문 (스크롤 영역) */}
           <div className="flex-1 overflow-y-auto p-6">
@@ -2757,6 +2900,7 @@ export default function DeploymentsPage() {
                 </Section>
               </div>}
 
+              {editingTarget && <p className="mb-3 rounded-md border border-line p-3 text-xs text-muted">현재 컨테이너는 유지됩니다. 저장한 Compose·환경변수·주소 설정은 다음 재배포 또는 Git push 자동 배포에서 적용됩니다.</p>}
               {createTab === "compose" ? (
                 createStep === 3 ? (
                 <div className="wizard-step-enter space-y-4">
@@ -2797,6 +2941,7 @@ export default function DeploymentsPage() {
                         value={composeContent}
                         onChange={(e) => {
                           setComposeContent(e.target.value);
+                          setBaseComposeContent(e.target.value);
                           setComposeReviewFindings(null);
                           setRouterPlan(null);
                           setRouterApplied(false);
@@ -2818,6 +2963,9 @@ export default function DeploymentsPage() {
                         : planningRouter ? "다중 서비스 라우팅 분석 중..." : "다중 서비스 라우팅 자동 구성"}
                     </Button>
 
+                    <div className="my-4">{environmentEditor}</div>
+                    {routingEditor}
+                    <div className="my-3">{preparationFeedback}</div>
                     <button
                       type="button"
                       onClick={() => setShowAdvanced((v) => !v)}
@@ -2829,33 +2977,6 @@ export default function DeploymentsPage() {
                     {showAdvanced && (
                       <div className="mt-3 space-y-4 rounded-md border border-line p-3">
                         <p className="text-[11px] text-muted-soft">모두 선택 사항입니다. 필요한 항목만 채우세요.</p>
-                        {/* 환경변수 파일 */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs font-bold text-foreground">환경변수 파일</p>
-                            <button type="button" onClick={() => setEnvFiles((prev) => [...prev, emptyEnvFile()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
-                          </div>
-                          <p className="mb-1.5 text-[11px] text-muted-soft">VM에 업로드할 .env 파일의 경로와 내용을 지정합니다.</p>
-                          {envFiles.map((f, i) => (
-                            <div key={i} className="flex gap-2 mb-2">
-                              <input
-                                value={f.vmPath}
-                                onChange={(e) => setEnvFiles((prev) => prev.map((x, xi) => (xi === i ? { ...x, vmPath: e.target.value } : x)))}
-                                placeholder="경로 (예: .env)"
-                                className="w-32 h-8 px-2 border border-line-strong rounded text-xs shrink-0"
-                              />
-                              <textarea
-                                value={f.content}
-                                onChange={(e) => setEnvFiles((prev) => prev.map((x, xi) => (xi === i ? { ...x, content: e.target.value } : x)))}
-                                placeholder="KEY=value"
-                                rows={2}
-                                className="flex-1 px-2 py-1.5 border border-line-strong rounded text-xs font-mono resize-none"
-                              />
-                              <button type="button" onClick={() => setEnvFiles((prev) => prev.filter((_, xi) => xi !== i))} className="text-muted-soft hover:text-danger self-start mt-1.5">✕</button>
-                            </div>
-                          ))}
-                        </div>
-
                         {/* 라우트 노출 */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
@@ -2887,7 +3008,7 @@ export default function DeploymentsPage() {
                             <p className="text-xs font-bold text-foreground">헬스체크</p>
                             <button type="button" onClick={() => setHealthChecks((prev) => [...prev, emptyHealthCheck()])} className="text-xs text-brand-strong font-bold">+ 추가</button>
                           </div>
-                          <p className="mb-1.5 text-[11px] text-muted-soft">컨테이너 교체 후 정상 기동을 확인할 방법을 지정합니다. 실패 시 자동 롤백됩니다.</p>
+                          <p className="mb-1.5 text-[11px] text-muted-soft">모든 서비스의 컨테이너 상태는 자동 확인합니다. HTTP 응답도 확인하려면 아래에 추가하세요. 실패 시 자동 롤백됩니다.</p>
                           {healthChecks.map((h, i) => (
                             <div key={i} className="grid grid-cols-5 gap-1.5 mb-2 items-center">
                               <input value={h.serviceName} onChange={(e) => setHealthChecks((prev) => prev.map((x, xi) => (xi === i ? { ...x, serviceName: e.target.value } : x)))} placeholder="서비스명" className="h-8 px-2 border border-line-strong rounded text-xs col-span-1" />
@@ -2913,14 +3034,17 @@ export default function DeploymentsPage() {
                       planType={planType}
                       subdomainCheck={domainSubdomainCheck}
                       onHostPortChange={(port) => {
+                        setRoutingDirty(true);
                         setRouterHostPort(port);
                         setRouterApplied(false);
                       }}
                       onServicePortChange={(service, port) => {
+                        setRoutingDirty(true);
                         setRouterServicePorts((previous) => ({ ...previous, [service]: port }));
                         setRouterApplied(false);
                       }}
                       onRouteOverrideChange={(service, override) => {
+                        setRoutingDirty(true);
                         setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }));
                         setRouterApplied(false);
                       }}
@@ -3006,7 +3130,8 @@ export default function DeploymentsPage() {
                                 excludedServices={excludedServices}
                                 onToggleExpose={(service, exposed) => { void handleToggleServiceExpose(service, exposed); }}
                                 onOverrideChange={(service, override) => {
-                                  setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }));
+                                  setRoutingDirty(true);
+                        setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }));
                                   setRouterApplied(false);
                                 }}
                                 onDomainSubdomainChange={handleDomainSubdomainChange}
@@ -3298,6 +3423,8 @@ export default function DeploymentsPage() {
                   {generatedSpec && (
                     <Section title="생성된 배포 구성" description="결정론적 규칙으로 확정된 부분과 AI가 확정한 부분이 합쳐진 결과입니다. 검토 후 필요하면 직접 수정할 수 있습니다.">
                       <div className="space-y-3">
+                        <details className="rounded-md border border-line p-3">
+                          <summary className="cursor-pointer text-xs font-bold">고급 설정: 생성 근거와 배포 스펙 JSON</summary>
                         <Textarea
                           id="deploy-generated-spec"
                           name="deploy-generated-spec"
@@ -3309,11 +3436,12 @@ export default function DeploymentsPage() {
                           }}
                           rows={12}
                           spellCheck={false}
-                          className="font-mono resize-none"
+                          className="mt-3 font-mono resize-none"
                         />
+                        </details>
                         <div className="flex flex-wrap gap-2">
                           <Button type="button" onClick={handleRenderSpec} disabled={renderingSpec}>
-                            {renderingSpec ? "최종 Compose 생성 중..." : "최종 Compose 다시 생성"}
+                            {renderingSpec ? "최종 Compose 생성 중..." : "스펙에서 Compose 다시 생성"}
                           </Button>
                           <Button type="button" onClick={handleReviewSpec} disabled={reviewing}>
                             {reviewing ? "AI 검수 중..." : "AI 검수 요청 (선택 — 결과가 배포를 막지 않습니다)"}
@@ -3328,9 +3456,13 @@ export default function DeploymentsPage() {
                                 {renderedSpec.composeContent.includes("gamjabox-router") && " · Caddy 자동 보강됨"}
                               </span>
                             </div>
-                            <pre className="max-h-80 overflow-auto rounded-[10px] border border-line bg-[#0c0e12] p-3 font-mono text-[11px] leading-[1.6] text-foreground">
-                              {renderedSpec.composeContent}
-                            </pre>
+                            <Textarea aria-label="최종 Compose 편집" value={renderedSpec.composeContent} disabled={submitting}
+                              onChange={event => { const value = event.target.value; setRenderedSpec(previous => previous ? { ...previous, composeContent: value } : previous); setReviewFindings(null); }}
+                              rows={18} spellCheck={false} className="w-full font-mono text-xs" />
+                            <p className="mt-2 text-[11px] text-muted-soft">직접 수정한 이 Compose가 실제 배포됩니다. 스펙에서 다시 생성하면 수정 내용이 교체됩니다.</p>
+                            <div className="mt-4">{environmentEditor}</div>
+                            <div className="mt-4">{routingEditor}</div>
+                            <div className="mt-3">{preparationFeedback}</div>
                           </div>
                         )}
                         {aiRouterPlan
@@ -3361,9 +3493,7 @@ export default function DeploymentsPage() {
                               disabled={renderingSpec}
                               excludedServices={aiExcludedServices}
                               onToggleExpose={handleToggleAiServiceExpose}
-                              onOverrideChange={(service, override) =>
-                                setRouterRouteOverrides((previous) => ({ ...previous, [service]: override }))
-                              }
+                              onOverrideChange={(service, override) => { setRoutingDirty(true); setRouterRouteOverrides((previous) => ({ ...previous, [service]: override })); }}
                               onDomainSubdomainChange={handleDomainSubdomainChange}
                             />
                           </div>
@@ -3418,7 +3548,7 @@ export default function DeploymentsPage() {
             >
               취소
             </Button>
-            {createStep > 1 && (
+            {createStep > (editingTarget ? 3 : 1) && (
               <Button type="button" onClick={handlePreviousCreateStep} disabled={submitting || generating || reviewing || detectingCompose || reviewingCompose || planningRouter}>
                 이전
               </Button>
@@ -3457,10 +3587,10 @@ export default function DeploymentsPage() {
                 onClick={handleCreateFromCompose}
                 disabled={
                   submitting || reviewingCompose || planningRouter || !repositoryStepReady || !composeStepReady ||
-                  !routingSubdomainsReady
+                  editingEnvironment || routingDirty || !routingSubdomainsReady || !currentPreparation?.valid
                 }
               >
-                {submitting ? "배포 시작 중..." : "배포 시작"}
+                {submitting ? editingTarget ? "저장 중..." : "배포 시작 중..." : editingTarget ? "설정 저장" : "배포 시작"}
               </Button>
             )}
             {createStep === 4 && createTab === "ai" && generatedSpec && (
@@ -3473,10 +3603,10 @@ export default function DeploymentsPage() {
                   variant="primary"
                   onClick={handleCreateFromSpec}
                   disabled={
-                    submitting || !repositoryStepReady || !routingSubdomainsReady
+                    submitting || !repositoryStepReady || editingEnvironment || routingDirty || !routingSubdomainsReady || !currentPreparation?.valid || renderingSpec
                   }
                 >
-                  {submitting ? "배포 시작 중..." : "이 스펙으로 배포 시작"}
+                  {submitting ? "배포 시작 중..." : "이 Compose로 배포 시작"}
                 </Button>
               </>
             )}

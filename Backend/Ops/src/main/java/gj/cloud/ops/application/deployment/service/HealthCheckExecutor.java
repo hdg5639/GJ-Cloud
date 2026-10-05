@@ -13,8 +13,7 @@ import java.util.regex.Pattern;
 
 // D.7 헬스체크 기준 — 라우트 등록(8단계) 이전이라 외부 도메인 확인 불가, VM 내부에서만 확인.
 // hostPort가 있으면 VM 호스트에서 직접 curl(127.0.0.1). containerPort만 있으면 서비스명 DNS는
-// compose 네트워크 내부에서만 유효하므로, 대상 컨테이너 자신 안에서 curl(localhost)로 실행함
-// (docker compose exec 사용 — 대상 이미지에 curl이 설치돼 있어야 하는 제약이 있음, 알려진 한계).
+// compose 네트워크 내부에서만 유효하므로 Docker 라벨로 컨테이너 IP를 찾고 VM의 curl로 실행한다.
 @Component
 @RequiredArgsConstructor
 public class HealthCheckExecutor {
@@ -31,16 +30,20 @@ public class HealthCheckExecutor {
     }
 
     HealthCheckResult checkDetailed(Session session, String appId, HealthCheck healthCheck) {
+        sanitizeServiceName(appId);
+        if (Boolean.TRUE.equals(healthCheck.readinessOnly())) return checkRuntime(session, appId, healthCheck);
         String path = sanitizePath(healthCheck.path());
         String command;
         if (healthCheck.hostPort() != null) {
             command = "curl -s -o /dev/null -w '%{http_code}' --max-time 10 'http://127.0.0.1:"
-                    + healthCheck.hostPort() + path + "'";
+                    + requirePort(healthCheck.hostPort()) + path + "'";
         } else if (healthCheck.containerPort() != null) {
             String serviceName = sanitizeServiceName(healthCheck.serviceName());
-            command = "docker compose -p gj_" + appId + " exec -T '" + serviceName + "'"
-                    + " curl -s -o /dev/null -w '%{http_code}' --max-time 10 'http://localhost:"
-                    + healthCheck.containerPort() + path + "'";
+            command = containerIdCommand(appId, serviceName)
+                    + " ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' \"$container_id\" | awk '{print $1}');"
+                    + " case \"$ip\" in ''|*[!0-9.]*) exit 1;; esac;"
+                    + " curl -s -o /dev/null -w '%{http_code}' --max-time 10 \"http://$ip:"
+                    + requirePort(healthCheck.containerPort()) + path + "\"";
         } else {
             return new HealthCheckResult(false, null, new CommandResult(-1, "", "포트가 지정되지 않음"));
         }
@@ -54,6 +57,43 @@ public class HealthCheckExecutor {
                 httpStatus != null && httpStatus >= 200 && httpStatus < 300,
                 httpStatus,
                 result);
+    }
+
+    private HealthCheckResult checkRuntime(Session session, String appId, HealthCheck healthCheck) {
+        String serviceName = sanitizeServiceName(healthCheck.serviceName());
+        String command = "container_ids=$(docker ps -aq --filter 'label=com.docker.compose.project=gj_" + appId
+                + "' --filter 'label=com.docker.compose.service=" + serviceName + "'); [ -n \"$container_ids\" ] || exit 1;"
+                + " docker inspect --format '{{.State.Status}} {{.State.ExitCode}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $container_ids";
+        CommandResult result = sshCommandExecutor.exec(session, command, CURL_TIMEOUT_MS);
+        String state = result.stdout() == null ? "" : result.stdout().trim();
+        boolean healthy = result.isSuccess() && !state.isEmpty() && state.lines().allMatch(line -> {
+            String status = line.trim();
+            return status.equals("running 0") || status.equals("running 0 healthy")
+                    || Boolean.TRUE.equals(healthCheck.allowCompleted()) && status.equals("exited 0");
+        });
+        if (healthy && healthCheck.containerPort() != null) {
+            String probe = "container_ids=$(docker ps -aq --filter 'label=com.docker.compose.project=gj_" + appId
+                    + "' --filter 'label=com.docker.compose.service=" + serviceName + "'); [ -n \"$container_ids\" ] || exit 1;"
+                    + " for container_id in $container_ids; do"
+                    + " ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' \"$container_id\" | awk '{print $1}');"
+                    + " case \"$ip\" in ''|*[!0-9.]*) exit 1;; esac;"
+                    + " timeout 5 bash -c 'exec 3<>/dev/tcp/$1/$2' -- \"$ip\" " + requirePort(healthCheck.containerPort())
+                    + " || exit 1; done";
+            CommandResult connected = sshCommandExecutor.exec(session, probe, CURL_TIMEOUT_MS);
+            return new HealthCheckResult(connected.isSuccess(), null, connected);
+        }
+        return new HealthCheckResult(healthy, null, result);
+    }
+
+    private String containerIdCommand(String appId, String service) {
+        return "container_id=$(docker ps -aq --filter 'label=com.docker.compose.project=gj_" + appId
+                + "' --filter 'label=com.docker.compose.service=" + service + "' | head -n 1);"
+                + " [ -n \"$container_id\" ] || exit 1;";
+    }
+
+    private int requirePort(int port) {
+        if (port < 1 || port > 65535) throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        return port;
     }
 
     private Integer parseHttpStatus(String stdout) {

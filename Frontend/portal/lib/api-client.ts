@@ -37,6 +37,7 @@ import type {
   InfraSelection,
   DeploymentEventPayload,
   ComposeSpecResponse,
+  ComposePreparationResult,
   AiGenerationResult,
   ComposeReviewFinding,
   ComposeDetectionResult,
@@ -706,6 +707,7 @@ export const api = {
           branch: string;
           patToken?: string;
           spec: DeploymentSpec;
+          composeOverride?: ComposeSpecResponse;
           installPath?: string;
           targetName?: string;
           autoDeploy?: boolean;
@@ -772,6 +774,16 @@ export const api = {
           body: JSON.stringify({ composeContent }),
           accessToken,
         }),
+      prepareCompose: (accessToken: string, vmId: string, body: {
+        composeContent: string;
+        environmentFiles: EnvironmentFile[];
+        exposedRoutes: ExposedRoute[];
+        healthChecks: HealthCheck[];
+        context?: string;
+        caddyfileOverride?: string;
+      }) => request<ComposePreparationResult>("ops", "/ops/" + vmId + "/deployments/compose/prepare", {
+        method: "POST", accessToken, body: JSON.stringify(body),
+      }),
       planComposeRouter: (
         accessToken: string,
         vmId: string,
@@ -781,6 +793,7 @@ export const api = {
           servicePorts?: Record<string, number>;
           routeOverrides?: Record<string, ComposeRouterRouteOverride>;
           excludedServices?: string[];
+          reconfigureGeneratedRouter?: boolean;
         }
       ) =>
         request<ComposeRouterPlanResult>("ops", `/ops/${vmId}/deployments/compose/router/plan`, {
@@ -790,6 +803,16 @@ export const api = {
         }),
       listTargets: (accessToken: string, vmId: string) =>
         request<DeploymentTargetResponse[]>("ops", `/ops/${vmId}/deployment-targets`, { accessToken }),
+      getTargetConfig: (accessToken: string, vmId: string, targetId: string) =>
+        request<{ version: string; config: { composeContent: string; environmentFiles: EnvironmentFile[];
+          exposedRoutes: ExposedRoute[]; healthChecks: HealthCheck[]; context: string | null } }>(
+          "ops", "/ops/" + vmId + "/deployment-targets/" + targetId + "/compose-spec", { accessToken }),
+      updateTargetConfig: (accessToken: string, vmId: string, targetId: string, body: { version: string; config: {
+        composeContent: string; environmentFiles: EnvironmentFile[]; exposedRoutes: ExposedRoute[];
+        healthChecks: HealthCheck[]; context?: string;
+      } }) => request<void>("ops", "/ops/" + vmId + "/deployment-targets/" + targetId + "/compose-spec", {
+        method: "PUT", accessToken, body: JSON.stringify(body),
+      }),
       setAutoDeploy: (accessToken: string, vmId: string, targetId: string, enabled: boolean) =>
         request<DeploymentTargetResponse>("ops", `/ops/${vmId}/deployment-targets/${targetId}/auto-deploy`, {
           method: "PATCH",

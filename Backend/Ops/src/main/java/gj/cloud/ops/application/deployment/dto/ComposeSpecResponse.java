@@ -9,7 +9,7 @@ import java.util.List;
 public record ComposeSpecResponse(
         String composeContent,
         List<EnvironmentFile> environmentFiles,
-        List<ExposedRoute> exposedRoutes,
+        List<@jakarta.validation.Valid ExposedRoute> exposedRoutes,
         List<HealthCheck> healthChecks,
         String context,
         String installPath,

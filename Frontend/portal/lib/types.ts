@@ -441,6 +441,7 @@ export interface GithubInstallationCompleteResponse {
 export interface EnvironmentFile {
   vmPath: string;
   content: string;
+  serviceNames?: string[];
 }
 
 export interface ExposedRoute {
@@ -458,6 +459,18 @@ export interface HealthCheck {
   path: string;
   hostPort?: number;
   containerPort?: number;
+  readinessOnly?: boolean;
+  allowCompleted?: boolean;
+}
+
+export interface ComposePreparationResult {
+  valid: boolean;
+  composeContent: string;
+  environmentFiles: EnvironmentFile[];
+  healthChecks: HealthCheck[];
+  services: { name: string; containerPorts: number[]; hostPorts: number[]; environmentKeys: string[] }[];
+  errors: string[];
+  warnings: string[];
 }
 
 export interface ServiceCard {

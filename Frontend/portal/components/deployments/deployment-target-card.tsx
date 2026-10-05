@@ -19,6 +19,7 @@ interface DeploymentTargetCardProps {
   onViewLatest?: () => void;
   onToggleAutoDeploy: () => void;
   onManageCnames: () => void;
+  onEditConfig?: () => void;
   onDelete: () => void;
 }
 
@@ -46,7 +47,7 @@ function DomainLink({ port }: { port: PortResponse }) {
 
 export function DeploymentTargetCard({
   target, publicPorts, status, sourceLabel, updatedLabel, redeploying, toggling, deleting,
-  onRedeploy, onViewLatest, onToggleAutoDeploy, onManageCnames, onDelete,
+  onRedeploy, onViewLatest, onToggleAutoDeploy, onManageCnames, onDelete, onEditConfig,
 }: DeploymentTargetCardProps) {
   const primaryPort = publicPorts.find((port) => port.protocol === "HTTP");
   return (
@@ -68,6 +69,7 @@ export function DeploymentTargetCard({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {onEditConfig && <Button type="button" size="small" className={focusStyle} onClick={onEditConfig}>구성 편집</Button>}
           {onViewLatest && <Button type="button" size="small" className={focusStyle} onClick={onViewLatest}>최근 배포</Button>}
           <Button type="button" size="small" variant="primary" className={focusStyle} onClick={onRedeploy} disabled={redeploying}>
             {redeploying ? "요청 중..." : "재배포"}

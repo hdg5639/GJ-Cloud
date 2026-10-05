@@ -25,6 +25,18 @@ import static org.mockito.Mockito.mock;
 
 class AiSpecGeneratorClientTest {
 
+    @Test
+    void rejectsAiResultsThatChangeConfirmedRepositoryContextOrPort() {
+        ServiceSpec original = service(null);
+        ServiceCard requested = new ServiceCard(original.name(), "node", "confirmed/module", 18081,
+                null, null, 22, null, null, null, null, true, null);
+        var output = new AiServiceSpecOutput(GenerationStatus.READY, List.of(original), List.of(), List.of());
+        assertThat(client.validateAiOutput(output, List.of(requested)))
+                .extracting(error -> error.userMessage())
+                .anyMatch(message -> message.contains("context"))
+                .anyMatch(message -> message.contains("포트"));
+    }
+
     private final AiSpecGeneratorClient client = new AiSpecGeneratorClient(
             mock(OpenAIClient.class),
             "standard",

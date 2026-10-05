@@ -22,6 +22,7 @@ import gj.cloud.ops.application.preview.dto.PreviewBlueprintSnapshot;
 import gj.cloud.ops.application.preview.regression.RegressionSuiteService;
 import gj.cloud.ops.application.deployment.git.GitReleaseManager;
 import gj.cloud.ops.application.deployment.validation.ComposeValidator;
+import gj.cloud.ops.application.deployment.validation.ValidationError;
 import gj.cloud.ops.application.deployment.validation.ValidationResult;
 import gj.cloud.ops.application.vmclient.VmDeploymentRoutesClient;
 import gj.cloud.ops.application.vmclient.VmAutomationClient;
@@ -52,6 +53,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 // D.7 실행 파이프라인 — HTTP 요청 스레드가 아니라 전용 deploymentTaskExecutor에서 실행됨(I절 체크리스트).
 // 배포 하나당 SSH 세션 1개를 처음부터 끝까지 재사용(git→업로드→검증→빌드→교체→헬스체크).
@@ -67,6 +69,8 @@ public class DeploymentExecutor {
     private static final long IMAGE_CLEANUP_TIMEOUT_MS = 120_000;
     private static final long HEALTH_CHECK_INTERVAL_MS = 3_000;
     private static final int HEALTH_CHECK_MAX_ATTEMPTS = 10;
+    // compose 검증 실패 사유를 응답 메시지에 실을 때 노출할 최대 건수 (나머지는 "외 N건"으로 축약)
+    private static final int COMPOSE_ERROR_DETAIL_LIMIT = 3;
     // vmPath가 mkdir -p '...' 셸 커맨드에 그대로 꽂히므로 따옴표/셸 메타문자를 차단 (명령 인젝션 방지)
     private static final Pattern UNSAFE_SHELL_CHARS = Pattern.compile("[;&`|$'\"\\\\]");
     // 배포 시 내부에서 생성한 태그만 삭제 대상으로 허용한다. DB 값이 손상되거나 변조돼도 임의의 Docker
@@ -132,7 +136,7 @@ public class DeploymentExecutor {
             ComposeArtifact artifact
     ) {
         ValidationResult validation = composeValidator.validate(artifact.composeContent());
-        if (!validation.valid()) throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
+        requireValidCompose(validation);
         String sourceCiphertext = cipher.encrypt(artifact.composeContent().getBytes(StandardCharsets.UTF_8));
         String environmentFilesCiphertext = artifact.environmentFiles().isEmpty() ? null
                 : cipher.encrypt(toJson(artifact.environmentFiles()).getBytes(StandardCharsets.UTF_8));
@@ -160,6 +164,26 @@ public class DeploymentExecutor {
         }
     }
 
+    // 원문을 포함하지 않는 Validator 사유를 응답에 요약한다. 로그에는 건수만 기록한다.
+    private void requireValidCompose(ValidationResult validation) {
+        if (validation.valid()) {
+            return;
+        }
+        List<ValidationError> errors = validation.errors();
+        String detail = errors.stream()
+                .limit(COMPOSE_ERROR_DETAIL_LIMIT)
+                .map(ValidationError::message)
+                .collect(Collectors.joining(" / "));
+        int remaining = errors.size() - COMPOSE_ERROR_DETAIL_LIMIT;
+        if (remaining > 0) {
+            detail = detail + " 외 " + remaining + "건";
+        }
+        log.warn("compose 검증 실패 ({}건)", errors.size());
+        throw new OpsException(
+                OpsErrorCode.INVALID_COMPOSE, detail.isBlank() ? OpsErrorCode.INVALID_COMPOSE.getMessage()
+                        : OpsErrorCode.INVALID_COMPOSE.getMessage() + ": " + detail);
+    }
+
     private DeploymentEntity enqueueInternal(
             String bearerToken,
             String vmId,
@@ -177,9 +201,7 @@ public class DeploymentExecutor {
         }
 
         ValidationResult validation = composeValidator.validate(artifact.composeContent());
-        if (!validation.valid()) {
-            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
-        }
+        requireValidCompose(validation);
 
         String previousDeploymentId = findLatestSucceeded(vmId, target)
                 .map(DeploymentEntity::getId)
@@ -240,9 +262,7 @@ public class DeploymentExecutor {
             throw new OpsException(OpsErrorCode.VM_NOT_RUNNING);
         }
         ValidationResult validation = composeValidator.validate(artifact.composeContent());
-        if (!validation.valid()) {
-            throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
-        }
+        requireValidCompose(validation);
 
         String previousDeploymentId = findLatestSucceeded(target.getVmId(), target)
                 .map(DeploymentEntity::getId)

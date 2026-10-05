@@ -4,6 +4,10 @@ import gj.cloud.ops.application.deployment.dto.DeploymentTargetResponse;
 import gj.cloud.ops.application.deployment.dto.DeploymentTargetToggleRequest;
 import gj.cloud.ops.application.deployment.dto.DeploymentResponse;
 import gj.cloud.ops.application.deployment.dto.RepoConfig;
+import gj.cloud.ops.application.deployment.dto.ComposeArtifact;
+import gj.cloud.ops.application.deployment.dto.ComposePreparationRequest;
+import gj.cloud.ops.application.deployment.dto.DeploymentTargetConfig;
+import gj.cloud.ops.application.deployment.service.ComposePreparationService;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
 import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
 import gj.cloud.ops.application.github.dto.GithubRepositoryAccess;
@@ -39,6 +43,39 @@ import java.util.UUID;
 @RequestMapping("/ops/{vmId}/deployment-targets")
 @RequiredArgsConstructor
 public class DeploymentTargetController {
+    private final ComposePreparationService composePreparationService;
+
+    @Operation(summary = "배포 대상 Compose 설정 조회", description = "암호화된 설정을 DEPLOY 권한으로 조회합니다. 저장 버전을 반환해 동시 편집을 방지합니다.")
+    @GetMapping("/{targetId}/compose-spec")
+    public ApiResponse<DeploymentTargetConfig> configuration(HttpServletRequest request, @PathVariable UUID vmId,
+            @PathVariable String targetId) {
+        requireDeployPermission(request, vmId);
+        DeploymentTargetEntity target = targetService.findOwned(vmId.toString(), targetId);
+        ComposeArtifact artifact = targetService.restoreArtifact(target);
+        return ApiResponse.ok(new DeploymentTargetConfig(targetService.configurationVersion(target),
+                new ComposePreparationRequest(artifact.composeContent(), composePreparationService.editableEnvironmentFiles(artifact, target.getContext()),
+                        artifact.exposedRoutes(), artifact.healthChecks(), target.getContext())));
+    }
+
+    @Operation(summary = "배포 대상 Compose 설정 수정", description = "검증한 설정을 암호화 저장합니다. 현재 컨테이너는 변경하지 않으며 다음 수동·자동 배포에서 적용됩니다.")
+    @PutMapping("/{targetId}/compose-spec")
+    public ApiResponse<Void> updateConfiguration(HttpServletRequest request, @PathVariable UUID vmId,
+            @PathVariable String targetId, @Valid @RequestBody DeploymentTargetConfig body) {
+        requireDeployPermission(request, vmId);
+        DeploymentTargetEntity target = targetService.findOwned(vmId.toString(), targetId);
+        ComposeArtifact previous = targetService.restoreArtifact(target);
+        if (!java.util.Objects.equals(normalizeContext(target.getContext()), normalizeContext(body.config().context()))) {
+            throw new OpsException(OpsErrorCode.INVALID_COMPOSE, "기존 배포 대상의 저장소 디렉터리는 이 편집기에서 변경할 수 없습니다.");
+        }
+        ComposeArtifact artifact = composePreparationService.prepare(new ComposeArtifact(body.config().composeContent(),
+                body.config().environmentFiles() == null ? List.of() : body.config().environmentFiles(),
+                previous.uploadedFiles(), body.config().exposedRoutes() == null ? List.of() : body.config().exposedRoutes(),
+                body.config().healthChecks() == null ? List.of() : body.config().healthChecks(), previous.sourceType()), target.getContext());
+        targetService.updateConfiguration(target, body.version(), artifact);
+        return ApiResponse.ok();
+    }
+
+    private String normalizeContext(String context) { return context == null || context.isBlank() ? "." : context; }
 
     private static final String PERMISSION_DEPLOY = "DEPLOY";
 

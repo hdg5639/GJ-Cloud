@@ -115,4 +115,19 @@ class ComposeValidatorTest {
         String compose = composeWith("    security_opt:\n      - \"apparmor:unconfined\"");
         assertThat(validator.validate(compose).valid()).isFalse();
     }
+    @Test
+    void validationMessagesDoNotEchoUntrustedFieldValues() {
+        for (String field : new String[] {
+                "    volumes: ['data;PASSWORD=private-fixture:/data']",
+                "    security_opt: ['seccomp:unconfined;TOKEN=private-fixture']"
+        }) {
+            ValidationResult result = validator.validate(composeWith(field));
+            assertThat(result.valid()).isFalse();
+            assertThat(result.errors()).allSatisfy(error -> assertThat(error.message()).doesNotContain("private-fixture"));
+        }
+        ValidationResult invalidName = validator.validate("services:\n  'bad;PASSWORD=private-fixture':\n    privileged: true\n");
+        assertThat(invalidName.valid()).isFalse();
+        assertThat(invalidName.errors()).allSatisfy(error -> assertThat(error.message())
+                .contains("1번째").doesNotContain("private-fixture"));
+    }
 }
