@@ -10,8 +10,8 @@ function sensitiveField(name: string): boolean {
 }
 
 export function fieldLabel(name: string, schema?: PreviewInputSchema | null): string {
-  const labels: Record<string, string> = { name: "이름", title: "제목", description: "설명", content: "내용", quantity: "수량", price: "가격", currency: "통화", inventory: "재고", email: "이메일", customerName: "받는 분", shippingAddress: "배송지", postalCode: "우편번호", addressLine1: "주소", addressLine2: "상세 주소", city: "도시", countryCode: "국가 코드", images: "이미지", url: "주소", alt: "이미지 설명", primary: "대표 이미지", optionGroups: "옵션 그룹", options: "옵션", code: "코드", label: "표시 이름", required: "필수 여부", additionalPrice: "추가 금액", available: "선택 가능", variantCode: "상품 옵션 코드" };
-  return schema?.title || labels[name] || name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
+  const labels: Record<string, string> = { name: "이름", title: "제목", description: "설명", content: "내용", quantity: "수량", price: "가격", currency: "통화", category: "카테고리", initialStock: "초기 재고", lowStockThreshold: "재고 경고 기준", inventory: "재고", email: "이메일", customerName: "받는 분", shippingAddress: "배송지", postalCode: "우편번호", addressLine1: "주소", addressLine2: "상세 주소", city: "도시", countryCode: "국가 코드", images: "이미지", url: "주소", alt: "이미지 설명", primary: "대표 이미지", optionGroups: "옵션 그룹", options: "옵션", code: "코드", label: "표시 이름", required: "필수 여부", additionalPrice: "추가 금액", available: "선택 가능", variantCode: "상품 옵션 코드" };
+  return schema?.title || (name === "available" && ["integer", "number"].includes(schema?.type ?? "") ? "재고 수량" : labels[name]) || name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
 }
 
 export function SchemaField({ name, schema, value, required = false, onChange, depth = 0 }: {
@@ -70,7 +70,7 @@ export function ResourceDetails({ value, depth = 0 }: { value: unknown; depth?: 
   if (Array.isArray(value)) return <ul className="space-y-3">{value.map((item, index) => <li key={index}><ResourceDetails value={item} depth={depth + 1} /></li>)}</ul>;
   if (typeof value !== "object") return <span className="break-words text-sm">{typeof value === "boolean" ? value ? "예" : "아니요" : String(value)}</span>;
   const row = value as Record<string, unknown>;
-  if ("data" in row && Object.keys(row).every(key => ["data", "success", "message", "errorCode", "status", "timestamp"].includes(key))) return <ResourceDetails value={row.data} depth={depth} />;
+  if ("data" in row && Object.keys(row).every(key => ["data", "success", "code", "message", "errorCode", "status", "timestamp"].includes(key))) return <ResourceDetails value={row.data} depth={depth} />;
   const heading = row.title ?? row.name ?? row.subject;
   const body = row.description ?? row.content ?? row.summary;
   const image = resourceImage(row);
