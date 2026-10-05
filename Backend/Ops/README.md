@@ -212,3 +212,19 @@ npm run blueprint:check
 - SVG·HTML·XML은 Ops API origin에서 inline 미리보기하지 않고, 다운로드 응답은 `attachment` + `nosniff` + sandbox CSP를 적용한다.
 - `OPS_KEY_ENCRYPTION_SECRET`, GitHub private key, webhook secret, OpenAI key를 로그나 배포 스펙에 포함하지 않는다.
 - Blueprint manifest나 Runtime을 바꾼 뒤에는 포털 검사와 Ops 빌드를 모두 실행한다.
+
+## 웹 콘솔 세션 수명
+
+`TerminalSessionRegistry`는 사용자·VM·브라우저 세션 ID 조합으로 SSH/PTY를 보관한다. WebSocket을 닫아도 셸은 유지되므로 콘솔을 떠난 동안 실행된 명령과 출력이 이어진다. 재접속에도 VM 접근 권한을 다시 검증한 새 일회용 티켓과 허용된 Origin이 필요하다. 세션 ID 자체는 인증 수단이 아니며 다른 사용자 또는 VM의 버퍼를 공유하지 않는다. 같은 세션에 두 연결이 붙으면 이전 연결을 닫고 이전 입력·종료 콜백을 무시한다.
+
+`/ws/terminal/{connectionId}?ticket=…&sessionId={UUID}`의 출력은 UTF-8 바이트를 그대로 보존한 binary frame이다. text frame은 `attached`(복원·잘림 여부), `ready`, `heartbeat` 제어 메시지로 사용한다. 클라이언트는 기존처럼 키 입력 원문과 JSON `resize`를 보내고 JSON `heartbeat`에는 응답을 받는다. `sessionId`가 없는 기존 클라이언트에는 text stdout과 연결 종료 시 SSH 정리를 유지해 배포 순서에 따른 호환성을 보존한다.
+
+| 설정 | 기본값 | 동작 |
+|---|---:|---|
+| `ops.terminal-idle-timeout-minutes` | 30 | 연결 중 실제 입력·출력이 없는 셸 종료 |
+| `ops.terminal-session-retention-minutes` | 30 | 연결 분리 시점부터 보관 후 종료; 백그라운드 출력으로 연장하지 않음 |
+| `ops.terminal-replay-max-bytes` | 262144 | 세션별 최근 출력 메모리 상한 |
+| `ops.terminal-max-sessions` | 128 | 전체 SSH 세션 상한 |
+| `ops.terminal-max-sessions-per-user` | 4 | 사용자별 SSH 세션 상한 |
+
+서버는 20초 간격 Ping과 만료 검사를 수행하며 70초간 heartbeat/Pong이 없으면 브라우저 연결만 분리한다. 느린 WebSocket 전송에는 시간·버퍼 상한을 적용한다. heartbeat와 resize는 유휴 시간을 연장하거나 SSH 입력으로 전달하지 않는다. 셸 종료, VM 내부 주소 변경, 보관 만료와 애플리케이션 종료 시 SSH·PTY·출력 버퍼·사용량 카운터를 정리한다. 버퍼와 셸은 Ops 프로세스 메모리에 있으므로 재배포·프로세스 재시작을 넘는 복원 및 여러 Ops replica 간 이동은 지원하지 않는다. 여러 replica를 사용하려면 동일 세션이 동일 Ops 프로세스로 라우팅되어야 한다.

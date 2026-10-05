@@ -19,6 +19,7 @@ import type {
   VmResponse,
 } from "@/lib/types";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { InstanceToolbar } from "@/components/ui/instance-toolbar";
 import { PageLoader, Spinner } from "@/components/ui/loader";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -858,6 +859,12 @@ export function AutoPreviewWorkspace({ fixedVmId }: { fixedVmId?: string }) {
     <div className="mx-auto max-w-[1380px]">
       {fixedVmId && <InstanceSectionNav vmId={fixedVmId} />}
 
+      {fixedVmId ? (
+        <>
+          <InstanceToolbar><h1 className="flex min-h-10 items-center px-4 text-[15px] font-bold">Auto Preview</h1></InstanceToolbar>
+          <p className="mb-5 text-sm text-muted">OpenAPI와 서비스 문맥을 분석해 사용자 시나리오를 만들고 이 VM에 배포합니다.</p>
+        </>
+      ) : (
       <header className="mb-5">
         <span className="text-[11px] font-extrabold tracking-[.11em] text-muted-soft">AUTO PREVIEW</span>
         <h1 className="my-[5px] text-[22px] font-extrabold tracking-tight">API 문서로 테스트 페이지 자동 생성</h1>
@@ -865,6 +872,7 @@ export function AutoPreviewWorkspace({ fixedVmId }: { fixedVmId?: string }) {
           OpenAPI URL이나 파일과 서비스 문맥을 분석해 실제 사용자 시나리오를 만들고 {standalone ? "원하는 실행 환경에" : "이 VM에 바로"} 배포합니다.
         </p>
       </header>
+      )}
 
       {/* 1단계 */}
       {step === 1 && (

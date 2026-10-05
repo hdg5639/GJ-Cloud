@@ -2,12 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { cn } from "./cn";
 
-// instances/[id]/** 서브라우트(콘솔/파일/Docker/배포/백업/성능)는 각자 "뒤로가기"만 있고
-// 서로 옆으로 이동할 방법이 없었음 — 개요 페이지의 툴바(측정 기반 반응형 collapse)를 그대로
-// 복제하기엔 과해서, 가벼운 가로 스크롤 탭바만 별도로 둠. 개요 페이지 자체는 이미 툴바가
-// 같은 링크를 다 제공하므로 이 컴포넌트를 쓰지 않음.
+// 개요와 모든 하위 화면에서 동일한 순서와 선택 상태를 사용하는 이동 메뉴.
 const SECTIONS = [
   {
     key: "console",
@@ -87,13 +85,25 @@ const SECTIONS = [
   },
 ] as const;
 
-export function InstanceSectionNav({ vmId }: { vmId: string }) {
+export function InstanceSectionNav({ vmId, vmStatus }: { vmId: string; vmStatus?: string }) {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !active) return;
+    const bounds = nav.getBoundingClientRect();
+    const item = active.getBoundingClientRect();
+    if (item.left < bounds.left) nav.scrollLeft -= bounds.left - item.left + 6;
+    else if (item.right > bounds.right) nav.scrollLeft += item.right - bounds.right + 6;
+  }, [pathname]);
 
   return (
-    <nav className="mb-5 flex items-center gap-1 overflow-x-auto rounded-panel border border-line bg-panel p-1.5">
+    <nav ref={navRef} aria-label="인스턴스 메뉴" className="mb-3 flex min-w-0 shrink-0 items-center gap-1 overflow-x-auto rounded-panel border border-line bg-panel p-1.5">
       <Link
         href={`/instances/${vmId}`}
+        aria-current={pathname === `/instances/${vmId}` ? "page" : undefined}
         className={cn(
           "flex shrink-0 items-center gap-1.5 rounded-md px-3 h-8 text-[13px] font-bold whitespace-nowrap transition-colors",
           pathname === `/instances/${vmId}` ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
@@ -103,15 +113,24 @@ export function InstanceSectionNav({ vmId }: { vmId: string }) {
       </Link>
       {SECTIONS.map((section) => {
         const href = section.href(vmId);
-        const active = pathname.startsWith(href);
+        const active = pathname === href || pathname.startsWith(`${href}/`);
+        const disabled = vmStatus !== undefined && vmStatus !== "RUNNING" && section.key !== "metrics";
+        const className = cn(
+          "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-bold transition-colors focus-visible:outline-2 focus-visible:outline-brand",
+          active ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
+        );
+        if (disabled) return (
+          <span key={section.key} aria-disabled="true" title="VM이 실행 중일 때 이용할 수 있어요" className={cn(className, "cursor-not-allowed opacity-40")}>
+            <svg className="h-[14px] w-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>{section.icon}</svg>
+            {section.label}
+          </span>
+        );
         return (
           <Link
             key={section.key}
             href={href}
-            className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-md px-3 h-8 text-[13px] font-bold whitespace-nowrap transition-colors",
-              active ? "bg-soft text-brand-strong" : "text-muted hover:bg-white/[0.04] hover:text-foreground"
-            )}
+            aria-current={active ? "page" : undefined}
+            className={className}
           >
             <svg className="w-[14px] h-[14px] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden>
               {section.icon}
