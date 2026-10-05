@@ -10,6 +10,7 @@ import { PageLoader } from "@/components/ui/loader";
 import { Panel } from "@/components/ui/panel";
 import { StatGrid, StatCard } from "@/components/ui/stat-card";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { InstanceToolbar } from "@/components/ui/instance-toolbar";
 
 interface SSEMetrics {
   vmId: string;
@@ -150,8 +151,8 @@ export default function MetricsPage() {
   return (
     <div>
       <InstanceSectionNav vmId={vmId} />
-      <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
-        <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
+      <InstanceToolbar>
+        <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2.5 pl-4 pr-3.5">
           <button
             onClick={() => router.back()}
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted"
@@ -174,7 +175,7 @@ export default function MetricsPage() {
             </svg>
           </button>
         </div>
-      </div>
+      </InstanceToolbar>
 
       {error && (
         <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-6 text-sm">

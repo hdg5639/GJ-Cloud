@@ -15,6 +15,7 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.Optional;
 import java.util.Arrays;
 import java.util.Set;
@@ -29,6 +30,8 @@ public class TerminalHandshakeInterceptor implements HandshakeInterceptor {
     public static final String ATTR_USER_ID = "userId";
     public static final String ATTR_VM_ID = "vmId";
     public static final String ATTR_INTERNAL_IP = "internalIp";
+    public static final String ATTR_TERMINAL_SESSION_ID = "terminalSessionId";
+    public static final String ATTR_RESUMABLE = "terminalResumable";
 
     private final TerminalTicketService terminalTicketService;
 
@@ -54,6 +57,15 @@ public class TerminalHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
 
+        String terminalSessionId = UriComponentsBuilder.fromUri(request.getURI()).build()
+                .getQueryParams().getFirst("sessionId");
+        boolean resumable = StringUtils.hasText(terminalSessionId);
+        if (resumable && !terminalSessionId.matches("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")) {
+            response.setStatusCode(HttpStatus.BAD_REQUEST);
+            return false;
+        }
+        terminalSessionId = resumable ? UUID.fromString(terminalSessionId).toString() : UUID.randomUUID().toString();
+
         Optional<TicketPayload> payload = terminalTicketService.consumeTicket(ticket);
         if (payload.isEmpty() || !payload.get().vmId().equals(vmIdFromPath)) {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
@@ -63,6 +75,8 @@ public class TerminalHandshakeInterceptor implements HandshakeInterceptor {
         attributes.put(ATTR_USER_ID, payload.get().userId());
         attributes.put(ATTR_VM_ID, payload.get().vmId());
         attributes.put(ATTR_INTERNAL_IP, payload.get().internalIp());
+        attributes.put(ATTR_TERMINAL_SESSION_ID, terminalSessionId);
+        attributes.put(ATTR_RESUMABLE, resumable);
         return true;
     }
 

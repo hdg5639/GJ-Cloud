@@ -12,6 +12,7 @@ import { Modal } from "@/components/ui/modal";
 import { Field, Input, Select } from "@/components/ui/field";
 import { StatusBadge } from "@/components/ui/badge";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { InstanceToolbar } from "@/components/ui/instance-toolbar";
 import { ExpandableText } from "@/components/ui/expandable-text";
 
 type Tab = "containers" | "images" | "networks" | "compose";
@@ -228,8 +229,8 @@ export default function DockerManagementPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-170px)]">
       <InstanceSectionNav vmId={vmId} />
-      <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
-        <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
+      <InstanceToolbar>
+        <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2.5 pl-4 pr-3.5">
           <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -239,7 +240,7 @@ export default function DockerManagementPage() {
         </div>
 
         {installed && (
-          <div className="flex h-10 items-center gap-1 px-1">
+          <div className="flex h-10 min-w-0 items-center gap-1 overflow-x-auto px-1">
             {TABS.map((t) => (
               <button
                 key={t.key}
@@ -278,7 +279,7 @@ export default function DockerManagementPage() {
             </button>
           </div>
         )}
-      </div>
+      </InstanceToolbar>
 
       {notice && <div className="bg-soft text-brand-strong px-4 py-2 rounded-md mb-3 text-sm">{notice}</div>}
       {error && (

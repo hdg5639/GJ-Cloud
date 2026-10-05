@@ -12,6 +12,7 @@ import { StatGrid, StatCard } from "@/components/ui/stat-card";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { InstanceToolbar } from "@/components/ui/instance-toolbar";
 import { formatDeploymentEventDetail } from "@/lib/deployment-log";
 
 const STATUS_TONE: Record<string, "ok" | "off"> = {
@@ -200,7 +201,7 @@ export default function DeploymentDetailPage() {
     <div className="mx-auto max-w-[1380px]">
       <InstanceSectionNav vmId={vmId} />
       <div className="flex min-h-[640px] flex-col lg:h-[calc(100vh-185px)]">
-      <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
+      <InstanceToolbar>
         <div className="flex h-10 min-w-0 shrink items-center gap-2.5 pl-4 pr-3.5">
           <button onClick={() => router.back()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -233,7 +234,7 @@ export default function DeploymentDetailPage() {
             </button>
           )}
         </div>
-      </div>
+      </InstanceToolbar>
 
       {error && (
         <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">{error}</div>

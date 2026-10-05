@@ -55,6 +55,10 @@ ops:
   terminal-ticket-ttl-seconds: 30
   vm-ssh-username: ${VM_SSH_USERNAME:ubuntu}
   terminal-idle-timeout-minutes: 30
+  terminal-session-retention-minutes: 30
+  terminal-replay-max-bytes: 262144
+  terminal-max-sessions: 128
+  terminal-max-sessions-per-user: 4
   allowed-origin: ${PORTAL_ORIGIN}
   allowed-origins: ${PORTAL_ORIGIN},${ADMIN_ORIGIN},${LOCAL_DEV_ORIGINS:}
   file-browser-max-edit-size-bytes: ${OPS_FILE_BROWSER_MAX_EDIT_SIZE_BYTES:5242880}

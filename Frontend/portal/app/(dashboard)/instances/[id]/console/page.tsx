@@ -7,11 +7,12 @@ import { api } from "@/lib/api-client";
 import { PageLoader } from "@/components/ui/loader";
 import { StatusBadge } from "@/components/ui/badge";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { InstanceToolbar } from "@/components/ui/instance-toolbar";
 import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
-type ConnectionStatus = "connecting" | "connected" | "closed" | "error";
+type ConnectionStatus = "connecting" | "connected" | "closed" | "error" | "paused";
 
 export default function ConsolePage() {
   return <TerminalConsole />;
@@ -22,6 +23,21 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
   const router = useRouter();
   const vmId = systemWorker ? "" : params.id as string;
   const { accessToken } = useAuth();
+  const authenticated = Boolean(accessToken);
+  const accessTokenRef = useRef(accessToken);
+  const connectionGenerationRef = useRef(0);
+  const activeRef = useRef(false);
+  const sessionRef = useRef<{ key: string; id: string } | null>(null);
+  const connectingRef = useRef(false);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryCountRef = useRef(0);
+  const connectRef = useRef<() => Promise<void>>(async () => {});
+
+  // 토큰은 새 연결의 티켓 발급에만 사용한다. 갱신이 기존 SSH/PTY를 종료하지 않게 한다.
+  useEffect(() => {
+    accessTokenRef.current = accessToken;
+  }, [accessToken]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -31,20 +47,51 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const teardown = useCallback(() => {
-    wsRef.current?.close();
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+
+  const disconnectTransport = useCallback(() => {
+    connectionGenerationRef.current += 1;
+    connectingRef.current = false;
+    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    heartbeatRef.current = null;
+    retryTimerRef.current = null;
+    const previousSocket = wsRef.current;
     wsRef.current = null;
+    previousSocket?.close(1000, "view inactive");
+  }, []);
+
+  const teardown = useCallback(() => {
+    disconnectTransport();
     termRef.current?.dispose();
     termRef.current = null;
     fitRef.current = null;
     if (containerRef.current) containerRef.current.innerHTML = "";
-  }, []);
+  }, [disconnectTransport]);
 
   const connect = useCallback(async () => {
-    if (!accessToken || !containerRef.current) return;
+    const token = accessTokenRef.current;
+    if (!token || !containerRef.current || !activeRef.current || connectingRef.current) return;
     teardown();
+    connectingRef.current = true;
+    const generation = connectionGenerationRef.current;
+    const isCurrent = () => generation === connectionGenerationRef.current;
     setStatus("connecting");
     setErrorMessage(null);
+    const retry = () => {
+      connectingRef.current = false;
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+      if (!isCurrent() || !activeRef.current) return;
+      if (retryCountRef.current >= 5) {
+        setStatus("error");
+        setErrorMessage("콘솔 연결을 복구하지 못했습니다. 다시 연결을 눌러주세요.");
+        return;
+      }
+      setStatus("connecting");
+      const delay = Math.min(1000 * 2 ** retryCountRef.current++, 15000);
+      retryTimerRef.current = setTimeout(() => void connectRef.current(), delay);
+    };
 
     try {
       const [{ Terminal }, { FitAddon }] = await Promise.all([
@@ -52,8 +99,11 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
         import("@xterm/addon-fit"),
       ]);
 
+      if (!isCurrent() || !containerRef.current) return;
+
       const term = new Terminal({
         cursorBlink: true,
+        scrollback: 5000,
         fontSize: 13,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
         theme: { background: "#0f172a" },
@@ -218,26 +268,83 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
 
       // 티켓은 일회용(30초 TTL, Redis GETDEL) — 발급 직후 바로 WS 핸드셰이크에 사용해야 함
       const ticketResponse = systemWorker
-        ? await api.admin.systemWorker.consoleTicket(accessToken)
-        : { ...(await api.ops.issueTerminalTicket(accessToken, vmId)), connectionId: vmId };
+        ? await api.admin.systemWorker.consoleTicket(token)
+        : { ...(await api.ops.issueTerminalTicket(token, vmId)), connectionId: vmId };
+      if (!isCurrent()) return;
       const wsBase = process.env.NEXT_PUBLIC_OPS_API!.replace(/^http/, "ws");
-      const ws = new WebSocket(`${wsBase}/ws/terminal/${ticketResponse.connectionId}?ticket=${ticketResponse.ticket}`);
+      const storageKey = `terminal-session:${systemWorker ? "system-worker" : vmId}`;
+      let sessionId: string | null = sessionRef.current?.key === storageKey ? sessionRef.current.id : null;
+      try { sessionId ??= sessionStorage.getItem(storageKey); } catch { /* storage can be disabled */ }
+      if (!sessionId || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(sessionId)) {
+        sessionId = crypto.randomUUID();
+        try { sessionStorage.setItem(storageKey, sessionId); } catch { /* reconnect still works in this mount */ }
+      }
+      sessionRef.current = { key: storageKey, id: sessionId };
+      const ws = new WebSocket(`${wsBase}/ws/terminal/${ticketResponse.connectionId}?ticket=${encodeURIComponent(ticketResponse.ticket)}&sessionId=${sessionId}`);
+      ws.binaryType = "arraybuffer";
       wsRef.current = ws;
+      let lastReceived = Date.now();
+      let ready = false;
 
       ws.onopen = () => {
-        setStatus("connected");
-        // 서버는 접속 직후 80x24로 PTY를 고정하므로, 실제 터미널 크기로 즉시 맞춰줘야 함
+        if (!isCurrent()) return;
         ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-        term.focus();
+        heartbeatRef.current = setInterval(() => {
+          if (!isCurrent() || ws.readyState !== WebSocket.OPEN) return;
+          if (Date.now() - lastReceived > 60000) {
+            ws.close(4000, "heartbeat timeout");
+            return;
+          }
+          ws.send(JSON.stringify({ type: "heartbeat" }));
+        }, 20000);
       };
-      // 서버는 JSON 래핑 없이 SSH stdout 원문을 그대로 TextMessage로 보냄
       ws.onmessage = (event) => {
-        term.write(event.data as string);
+        if (!isCurrent()) return;
+        lastReceived = Date.now();
+        if (event.data instanceof ArrayBuffer) {
+          term.write(new Uint8Array(event.data));
+          return;
+        }
+        let control: { type?: string; resumed?: boolean; truncated?: boolean } | null = null;
+        try { control = JSON.parse(event.data as string); } catch { /* older servers send raw text */ }
+        if (control?.type === "attached") {
+          term.reset();
+          setSessionNotice(control.resumed
+            ? control.truncated ? "기존 셸에 다시 연결했습니다. 최근 출력부터 복구했습니다." : "기존 셸과 이전 출력을 복구했습니다."
+            : "새 셸이 시작되었습니다. 창을 떠나도 세션은 30분간 보관됩니다.");
+          return;
+        }
+        if (control?.type === "heartbeat") return;
+        if (control?.type === "ready" || !ready) {
+          ready = true;
+          connectingRef.current = false;
+          retryCountRef.current = 0;
+          setStatus("connected");
+          setErrorMessage(null);
+          term.focus();
+        }
+        if (control?.type !== "ready") term.write(event.data as string);
       };
-      ws.onclose = () => setStatus("closed");
+      ws.onclose = (event) => {
+        if (!isCurrent()) return;
+        wsRef.current = null;
+        connectingRef.current = false;
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+        const finished = ["idle timeout", "shell ended", "session expired", "replaced"].includes(event.reason);
+        if (!finished && event.code !== 1013) {
+          retry();
+          return;
+        }
+        setStatus("closed");
+        setErrorMessage(event.code === 1013
+          ? "보관 중인 콘솔 세션이 너무 많습니다. 다른 콘솔에서 exit로 셸을 종료한 뒤 다시 연결해주세요."
+          : event.reason === "replaced" ? "다른 연결에서 이 콘솔을 열었습니다."
+          : "셸이 종료되었거나 보관 시간이 만료되었습니다. 다시 연결하면 새 셸이 시작됩니다.");
+      };
       ws.onerror = () => {
-        setStatus("error");
-        setErrorMessage("연결 중 오류가 발생했습니다.");
+        // onclose owns recovery so error + close do not schedule duplicate connections.
+        if (isCurrent()) setErrorMessage("연결을 확인하고 있습니다…");
       };
 
       // 키 입력도 JSON 래핑 없이 원문 그대로 전송 (resize 제어 메시지만 예외)
@@ -247,14 +354,36 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
         }
       });
     } catch (err) {
-      console.error("콘솔 연결 실패:", err);
-      setStatus("error");
+      if (!isCurrent()) return;
       setErrorMessage(err instanceof Error ? err.message : "콘솔 연결에 실패했습니다.");
+      retry();
     }
-  }, [accessToken, vmId, systemWorker, teardown]);
+  }, [vmId, systemWorker, teardown]);
 
   useEffect(() => {
-    const connectTimer = setTimeout(() => void connect(), 0);
+    if (!authenticated) return;
+    connectRef.current = connect;
+    const pause = () => {
+      activeRef.current = false;
+      disconnectTransport();
+      setStatus("paused");
+    };
+    const resume = () => {
+      if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+      activeRef.current = true;
+      if (!wsRef.current && !connectingRef.current) {
+        retryCountRef.current = 0;
+        void connect();
+      }
+    };
+    const visibility = () => document.visibilityState === "hidden" ? pause() : resume();
+    const connectTimer = setTimeout(resume, 0);
+    window.addEventListener("blur", pause);
+    window.addEventListener("focus", resume);
+    window.addEventListener("pagehide", pause);
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", visibility);
 
     function handleResize() {
       const fitAddon = fitRef.current;
@@ -267,26 +396,35 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
       }
     }
     window.addEventListener("resize", handleResize);
+    const observer = new ResizeObserver(handleResize);
+    if (containerRef.current) observer.observe(containerRef.current);
 
     return () => {
       clearTimeout(connectTimer);
+      activeRef.current = false;
+      window.removeEventListener("blur", pause);
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("pagehide", pause);
+      window.removeEventListener("pageshow", resume);
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("resize", handleResize);
+      observer.disconnect();
       teardown();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vmId, accessToken]);
+  }, [authenticated, connect, teardown, disconnectTransport]);
 
   if (!accessToken) return <PageLoader />;
 
   const statusTone = status === "connected" ? "ok" : "off";
   const statusLabel =
-    status === "connecting" ? "연결 중" : status === "connected" ? "연결됨" : status === "closed" ? "연결 종료" : "오류";
+    status === "paused" ? "일시 중지" : status === "connecting" ? "연결 중" : status === "connected" ? "연결됨" : status === "closed" ? "연결 종료" : "오류";
 
   return (
-    <div className="flex flex-col h-[calc(100vh-170px)]">
+    <div className="flex min-h-[380px] flex-col h-[calc(100dvh-130px)] lg:h-[calc(100dvh-100px)]">
       {!systemWorker && <InstanceSectionNav vmId={vmId} />}
-      <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
-        <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
+      <InstanceToolbar>
+        <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2.5 pl-4 pr-3.5">
           <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -298,21 +436,24 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
           </StatusBadge>
         </div>
         <div className="ml-auto flex h-10 shrink-0 items-center">
-          <button onClick={connect} title="다시 연결" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel">
+          <button onClick={() => { retryCountRef.current = 0; void connect(); }} disabled={status === "connecting" || status === "paused"} aria-label="콘솔 다시 연결" title="기존 콘솔 다시 연결" className="flex h-10 w-10 shrink-0 items-center justify-center text-muted transition-colors hover:bg-white/[0.06] rounded-r-panel disabled:cursor-not-allowed disabled:opacity-40">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
         </div>
-      </div>
+      </InstanceToolbar>
 
+      {sessionNotice && !errorMessage && (
+        <p className="mb-2 px-1 text-xs text-muted-soft" role="status">{sessionNotice}</p>
+      )}
       {errorMessage && (
         <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm">
           {errorMessage}
         </div>
       )}
 
-      <div className="flex-1 rounded-panel overflow-hidden bg-[#0f172a] p-2">
+      <div className="min-h-0 flex-1 rounded-panel overflow-hidden bg-[#0f172a] p-2">
         <div ref={containerRef} className="w-full h-full" />
       </div>
     </div>
