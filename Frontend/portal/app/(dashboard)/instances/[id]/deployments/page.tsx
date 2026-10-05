@@ -34,6 +34,7 @@ import { Table, Th, Td } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
 import { InstanceSectionNav } from "@/components/ui/instance-section-nav";
+import { InstanceToolbar } from "@/components/ui/instance-toolbar";
 import { DeploymentTargetCard } from "@/components/deployments/deployment-target-card";
 
 type NetworkMode = "create" | "reuse";
@@ -2200,8 +2201,8 @@ export default function DeploymentsPage() {
   return (
     <div className="min-w-0">
       <InstanceSectionNav vmId={vmId} />
-      <div className="mb-3 flex items-center rounded-panel border border-line bg-panel">
-        <div className="flex h-10 shrink-0 items-center gap-2.5 pl-4 pr-3.5">
+      <InstanceToolbar>
+        <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2.5 pl-4 pr-3.5">
           <button onClick={() => router.back()} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-soft transition-colors hover:bg-white/[0.06] hover:text-muted" aria-label="뒤로가기">
             <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -2220,7 +2221,7 @@ export default function DeploymentsPage() {
             </svg>
           </button>
         </div>
-      </div>
+      </InstanceToolbar>
 
       {error && !showCreate && (
         <div className="bg-danger/10 border border-danger-soft text-danger px-4 py-3 rounded-md mb-3 text-sm flex items-center justify-between">
