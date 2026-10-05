@@ -74,7 +74,7 @@ class DeploymentSpecRendererTest {
                 });
         assertThat(artifact.healthChecks())
                 .extracting(check -> check.serviceName() + ":" + check.path())
-                .contains("gamjabox-router:/", "gamjabox-router:/api/health");
+                .contains("web:/", "api:/health");
     }
 
     @Test
@@ -119,7 +119,7 @@ class DeploymentSpecRendererTest {
         ComposeArtifact artifact = renderer.render(spec);
 
         assertThat(artifact.composeContent())
-                .contains("host_regexp ^community\\.")
+                .contains("expression {http.request.host}.startsWith('community.')")
                 .contains("reverse_proxy community:8082");
         // 게이트웨이(기본 도메인)와 도메인 모드 서비스가 하나의 router 호스트 포트를 공유한다.
         int routerPort = artifact.exposedRoutes().stream()

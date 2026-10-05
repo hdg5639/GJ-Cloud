@@ -1,5 +1,7 @@
 "use client";
 
+import { PORT_PRESETS } from "@/lib/port-presets";
+
 import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -929,6 +931,17 @@ sudo apt-get update && sudo apt-get install cloudflared`}
         <div className="mx-auto w-[min(420px,calc(100vw-32px))] rounded-panel bg-panel p-6">
           <h2 className="mb-4 text-base font-bold">포트 추가</h2>
           <form onSubmit={handleAddPort} className="flex flex-col gap-1">
+            <Field label="서비스 종류" htmlFor="port-preset">
+              <Select id="port-preset" defaultValue="custom" onChange={event => {
+                const preset = PORT_PRESETS.find(preset => preset.id === event.target.value);
+                if (preset && preset.id !== "custom") setPortForm(previous => ({ ...previous, port: preset.port,
+                  protocol: preset.protocol, nickname: preset.nickname, visibility: preset.visibility }));
+              }}>
+                {PORT_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+              </Select>
+              <p className="text-[11px] text-muted-soft">종류별 기본 포트와 연결 방식을 채웁니다. VM에서 해당 서비스가 실행 중이어야 연결됩니다.</p>
+              <p className="text-[11px] text-muted-soft">SSH·DB·RDP는 TCP 연결이며 Cloudflare 클라이언트 연결이 필요합니다. 포트 번호는 수정할 수 있습니다.</p>
+            </Field>
             <Field label="닉네임" htmlFor="port-nickname">
               <Input
                 id="port-nickname"

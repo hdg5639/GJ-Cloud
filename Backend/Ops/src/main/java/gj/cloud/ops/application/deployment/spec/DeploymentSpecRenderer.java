@@ -256,16 +256,8 @@ public class DeploymentSpecRenderer {
     ) {
         ComposeRouterRoute route = routeByService.get(check.serviceName());
         if (route == null) return check;
-        String originalPath = check.path() == null || check.path().isBlank() ? "/" : check.path();
-        // 루트/도메인 라우트는 자기 도메인 루트에서 그대로 서비스되므로 경로를 접두하지 않는다.
-        String routedPath = (route.root() || route.isDomain())
-                ? originalPath
-                : route.routePath() + (originalPath.startsWith("/") ? originalPath : "/" + originalPath);
-        return new HealthCheck(
-                ComposeRouterPlanner.ROUTER_SERVICE_NAME,
-                routedPath,
-                routerHostPort,
-                null);
+        // Check the application itself rather than the gateway's fallback service.
+        return new HealthCheck(check.serviceName(), check.path(), null, route.containerPort());
     }
 
     private void renderInfrastructure(InfrastructureSpec infra, String network, String volumeSuffix,

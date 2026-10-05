@@ -414,7 +414,7 @@ public class AiSpecGeneratorClient {
         return errors;
     }
 
-    private List<ValidationError> validateAiOutput(AiServiceSpecOutput output, List<ServiceCard> requestedCards) {
+    List<ValidationError> validateAiOutput(AiServiceSpecOutput output, List<ServiceCard> requestedCards) {
         List<ValidationError> errors = new ArrayList<>();
         if (output.status() == GenerationStatus.READY) {
             if (output.services() == null || output.services().size() != requestedCards.size()) {
@@ -428,6 +428,19 @@ public class AiSpecGeneratorClient {
                     errors.add(new ValidationError(
                             "요청한 서비스 이름과 응답의 services 이름이 일치하지 않습니다",
                             "The requested service names do not match the service names in the response"));
+                }
+                for (ServiceCard card : requestedCards) {
+                    output.services().stream().filter(service -> card.name().equals(service.name())).forEach(service -> {
+                        if (!java.util.Objects.equals(card.context(), service.context())) {
+                            errors.add(new ValidationError(card.name() + ": 분석한 저장소 디렉터리와 실행 context가 다릅니다",
+                                    "Preserve the requested repository context for " + card.name()));
+                        }
+                        if (card.containerPort() != null && service.run() != null
+                                && !java.util.Objects.equals(card.containerPort(), service.run().containerPort())) {
+                            errors.add(new ValidationError(card.name() + ": 확인된 포트와 실행 포트가 다릅니다",
+                                    "Preserve the repository/user confirmed container port for " + card.name()));
+                        }
+                    });
                 }
                 // 사용자 설정인 customSubdomain은 모델 응답을 신뢰하지 않고 덮어쓴 상태로 검증한다.
                 DeploymentSpec probe = assembleSpec(

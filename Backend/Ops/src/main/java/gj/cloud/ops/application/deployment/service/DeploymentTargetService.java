@@ -138,6 +138,25 @@ public class DeploymentTargetService {
         );
     }
 
+    public String configurationVersion(DeploymentTargetEntity target) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(target.getSourceComposeCiphertext().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(hash);
+        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
+
+    @Transactional
+    public void updateConfiguration(DeploymentTargetEntity target, String version, ComposeArtifact artifact) {
+        if (!configurationVersion(target).equals(version)) {
+            throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS, "다른 연결에서 배포 설정을 변경했습니다. 다시 불러온 뒤 수정해주세요.");
+        }
+        int changed = targetRepository.updateConfiguration(target.getId(), target.getSourceComposeCiphertext(),
+                encryptText(artifact.composeContent()), encryptJsonOrNull(artifact.environmentFiles()),
+                jsonOrNull(artifact.exposedRoutes()), jsonOrNull(artifact.healthChecks()), LocalDateTime.now());
+        if (changed != 1) throw new OpsException(OpsErrorCode.DEPLOYMENT_IN_PROGRESS, "배포 설정이 변경되었습니다. 다시 불러와주세요.");
+    }
+
     @Transactional
     public void markRequested(DeploymentTargetEntity target, String revision) {
         LocalDateTime now = LocalDateTime.now();
