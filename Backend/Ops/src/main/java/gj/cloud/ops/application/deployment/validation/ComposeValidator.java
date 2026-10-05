@@ -2,6 +2,7 @@ package gj.cloud.ops.application.deployment.validation;
 
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.error.MarkedYAMLException;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -42,7 +43,13 @@ public class ComposeValidator {
             Map<String, Object> casted = (Map<String, Object>) loaded;
             root = casted;
         } catch (Exception e) {
-            return ValidationResult.fail(List.of(new ValidationError("YAML 파싱 오류: " + e.getMessage())));
+            String location = "";
+            if (e instanceof MarkedYAMLException marked && marked.getProblemMark() != null) {
+                location = " (" + (marked.getProblemMark().getLine() + 1) + "행, "
+                        + (marked.getProblemMark().getColumn() + 1) + "열)";
+            }
+            // 파서 예외의 메시지에는 원문 줄(비밀값 포함 가능)이 들어가므로 위치만 사용한다.
+            return ValidationResult.fail(List.of(new ValidationError("YAML 파싱 오류" + location + ": 문법과 들여쓰기를 확인해주세요.")));
         }
 
         Object servicesObj = root.get("services");
@@ -52,11 +59,14 @@ public class ComposeValidator {
         }
 
         Set<Integer> seenHostPorts = new HashSet<>();
+        int serviceIndex = 0;
         for (Map.Entry<?, ?> entry : services.entrySet()) {
+            serviceIndex++;
             String serviceName = String.valueOf(entry.getKey());
             if (!SAFE_SERVICE_NAME.matcher(serviceName).matches()) {
                 errors.add(new ValidationError(
-                        "서비스명은 소문자/숫자로 시작하고 소문자, 숫자, '_', '-'만 포함할 수 있습니다: " + serviceName));
+                        "services의 " + serviceIndex + "번째 서비스명은 소문자/숫자로 시작하고 소문자, 숫자, '_', '-'만 포함할 수 있습니다."));
+                serviceName = "services의 " + serviceIndex + "번째 서비스";
             }
             if (!(entry.getValue() instanceof Map<?, ?> serviceDef)) {
                 continue;
@@ -96,7 +106,7 @@ public class ComposeValidator {
         }
         for (Object v : volumes) {
             if (v != null && DANGEROUS_CHARS.matcher(String.valueOf(v)).find()) {
-                errors.add(new ValidationError("볼륨 경로에 허용되지 않는 문자가 포함되어 있습니다: " + v));
+                errors.add(new ValidationError("volumes 경로에 허용되지 않는 문자가 포함되어 있습니다."));
             }
         }
     }
@@ -161,7 +171,7 @@ public class ComposeValidator {
         for (Object opt : opts) {
             String value = String.valueOf(opt).toLowerCase();
             if (value.contains("seccomp:unconfined") || value.contains("apparmor:unconfined") || value.contains("apparmor=unconfined")) {
-                errors.add(new ValidationError(serviceName + ": seccomp/apparmor 프로필 해제는 허용되지 않습니다: " + opt));
+                errors.add(new ValidationError(serviceName + ": security_opt의 seccomp/apparmor 프로필 해제는 허용되지 않습니다."));
             }
         }
     }

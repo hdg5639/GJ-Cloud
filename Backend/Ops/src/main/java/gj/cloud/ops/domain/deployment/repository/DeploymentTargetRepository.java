@@ -13,6 +13,16 @@ import java.util.Optional;
 import jakarta.persistence.LockModeType;
 
 public interface DeploymentTargetRepository extends JpaRepository<DeploymentTargetEntity, String> {
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("""
+            update DeploymentTargetEntity t set t.sourceComposeCiphertext = :compose,
+                t.environmentFilesCiphertext = :environments, t.exposedRoutesJson = :routes,
+                t.healthChecksJson = :checks, t.updatedAt = :now
+            where t.id = :id and t.active = true and t.sourceComposeCiphertext = :previous
+            """)
+    int updateConfiguration(@Param("id") String id, @Param("previous") String previous,
+            @Param("compose") String compose, @Param("environments") String environments,
+            @Param("routes") String routes, @Param("checks") String checks, @Param("now") LocalDateTime now);
 
     List<DeploymentTargetEntity> findAllByVmIdAndActiveTrueOrderByCreatedAtAsc(String vmId);
 

@@ -21,6 +21,9 @@ import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanResult;
 import gj.cloud.ops.application.deployment.routing.ComposeRouterPlanner;
 import gj.cloud.ops.application.deployment.service.DeploymentEventPublisher;
 import gj.cloud.ops.application.deployment.service.DeploymentExecutor;
+import gj.cloud.ops.application.deployment.service.ComposePreparationService;
+import gj.cloud.ops.application.deployment.dto.ComposePreparationRequest;
+import gj.cloud.ops.application.deployment.dto.ComposePreparationResult;
 import gj.cloud.ops.application.deployment.service.DeploymentTargetService;
 import gj.cloud.ops.application.github.dto.GithubRepositoryAccess;
 import gj.cloud.ops.application.github.service.GithubAppService;
@@ -75,6 +78,7 @@ public class DeploymentController {
     private final VmServiceClient vmServiceClient;
     private final DeploymentTargetService deploymentTargetService;
     private final GithubAppService githubAppService;
+    private final ComposePreparationService composePreparationService;
 
     @Operation(summary = "배포 생성 (Raw Compose)", description = "체크아웃~라우트 등록까지 비동기로 진행됩니다. 즉시 202를 반환하고 SSE로 진행 상황을 수신하세요.")
     @PostMapping
@@ -87,14 +91,14 @@ public class DeploymentController {
     ) {
         String bearerToken = extractToken(request);
         requireDeployPermission(bearerToken, vmId.toString());
-        ComposeArtifact artifact = new ComposeArtifact(
+        ComposeArtifact artifact = composePreparationService.prepare(new ComposeArtifact(
                 body.composeContent(),
                 body.environmentFiles() != null ? body.environmentFiles() : List.of(),
                 List.of(),
                 body.exposedRoutes() != null ? body.exposedRoutes() : List.of(),
                 body.healthChecks() != null ? body.healthChecks() : List.of(),
                 SourceType.RAW_COMPOSE
-        );
+        ), body.context());
         ResolvedRepository repository = resolveRepository(
                 principal.userId(), body.repoUrl(), body.branch(), body.patToken(),
                 body.githubInstallationId(), body.githubRepositoryId());
@@ -133,9 +137,15 @@ public class DeploymentController {
         deploymentSpecValidator.validate(body.spec());
         deploymentSpecPolicyValidator.validate(body.spec());
         ComposeArtifact rendered = deploymentSpecRenderer.render(body.spec());
-        ComposeArtifact artifact = new ComposeArtifact(
-                rendered.composeContent(), rendered.environmentFiles(), rendered.uploadedFiles(),
-                rendered.exposedRoutes(), rendered.healthChecks(), SourceType.AI_SPEC);
+        // Generated Dockerfiles come from the validated spec; edited final YAML is authoritative.
+        ComposeSpecResponse override = body.composeOverride();
+        ComposeArtifact artifact = composePreparationService.prepare(new ComposeArtifact(
+                override == null ? rendered.composeContent() : override.composeContent(),
+                override == null || override.environmentFiles() == null ? rendered.environmentFiles() : override.environmentFiles(),
+                rendered.uploadedFiles(),
+                override == null || override.exposedRoutes() == null ? rendered.exposedRoutes() : override.exposedRoutes(),
+                override == null || override.healthChecks() == null ? rendered.healthChecks() : override.healthChecks(),
+                override == null ? rendered.sourceType() : SourceType.AI_SPEC), null);
         ResolvedRepository repository = resolveRepository(
                 principal.userId(), body.repoUrl(), body.branch(), body.patToken(),
                 body.githubInstallationId(), body.githubRepositoryId());
@@ -238,6 +248,15 @@ public class DeploymentController {
                 renderResult.routerPlan()));
     }
 
+    @Operation(summary = "수정한 Compose 및 환경변수·주소 연결 검증",
+            description = "최종 YAML을 정적으로 검증하고 선택한 서비스에 env_file을 연결합니다. 실제 파일·이미지·Caddy 실행 검증은 배포 파이프라인에서 수행합니다. VM은 변경하지 않습니다.")
+    @PostMapping("/compose/prepare")
+    public ApiResponse<ComposePreparationResult> prepareCompose(HttpServletRequest request, @PathVariable UUID vmId,
+            @Valid @RequestBody ComposePreparationRequest body) {
+        requireDeployPermission(extractToken(request), vmId.toString());
+        return ApiResponse.ok(composePreparationService.inspect(body));
+    }
+
     @Operation(summary = "저장소 Compose 파일 탐지",
             description = "저장소를 임시로 얕게 클론해 저장소 전체의 Compose 파일을 탐지하고, "
                     + "지정한 배포 디렉터리의 후보를 우선 정렬합니다. Compose가 없을 때 사용할 실행 가능 "
@@ -287,7 +306,7 @@ public class DeploymentController {
         requireDeployPermission(bearerToken, vmId.toString());
         return ApiResponse.ok(composeRouterPlanner.plan(
                 body.composeContent(), body.routerHostPort(), body.servicePorts(),
-                body.routeOverrides(), body.excludedServices()));
+                body.routeOverrides(), body.excludedServices(), Boolean.TRUE.equals(body.reconfigureGeneratedRouter())));
     }
 
     @Operation(summary = "배포 이력 조회")

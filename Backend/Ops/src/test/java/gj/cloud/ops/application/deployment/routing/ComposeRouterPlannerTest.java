@@ -123,7 +123,7 @@ class ComposeRouterPlannerTest {
         assertThat(result.status()).isEqualTo(ComposeRouterPlanResult.STATUS_ADDED);
         // 도메인 모드 서비스는 Host 헤더로 라우팅되고, 나머지는 기본 도메인 아래 경로로 통합된다.
         assertThat(result.routerConfig())
-                .contains("host_regexp ^community\\.")
+                .contains("expression {http.request.host}.startsWith('community.')")
                 .contains("reverse_proxy community:8082");
         ComposeRouterRoute communityRoute = result.routes().stream()
                 .filter(route -> route.serviceName().equals("community"))

@@ -16,6 +16,7 @@ public record DeploymentFromSpecRequest(
         String targetName,
         Boolean autoDeploy,
         Long githubInstallationId,
-        Long githubRepositoryId
+        Long githubRepositoryId,
+        @Valid ComposeSpecResponse composeOverride
 ) {
 }

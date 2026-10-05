@@ -71,6 +71,12 @@ public class ComposeRouterPlanner {
             Map<String, ComposeRouterRouteOverride> routeOverrides,
             Collection<String> excludedServices
     ) {
+        return plan(composeContent, requestedRouterHostPort, servicePortOverrides, routeOverrides, excludedServices, false);
+    }
+
+    public ComposeRouterPlanResult plan(String composeContent, Integer requestedRouterHostPort,
+            Map<String, Integer> servicePortOverrides, Map<String, ComposeRouterRouteOverride> routeOverrides,
+            Collection<String> excludedServices, boolean reconfigureGeneratedRouter) {
         Set<String> excluded = excludedServices == null ? Set.of() : new LinkedHashSet<>(excludedServices);
         Map<String, Object> root = parse(composeContent);
         Map<String, Object> services = map(root.get("services"));
@@ -78,12 +84,32 @@ public class ComposeRouterPlanner {
             throw new OpsException(OpsErrorCode.INVALID_COMPOSE);
         }
 
+        Map<String, Object> generated = map(services.get(ROUTER_SERVICE_NAME));
+        boolean replacingRouter = reconfigureGeneratedRouter && generated != null && generatedConfig(root, generated).contains("@gamjabox_health");
+        if (replacingRouter) {
+            Map<String, Object> configs = map(root.get("configs"));
+            if (configs != null && generated.get("configs") instanceof List<?> mounts) {
+                for (Object mount : mounts) {
+                    Map<String, Object> config = map(mount);
+                    if (config != null) configs.remove(String.valueOf(config.get("source")));
+                }
+            }
+            services.remove(ROUTER_SERVICE_NAME);
+        }
         String existingRouter = findExistingRouter(services);
         if (existingRouter != null) {
             Map<String, Object> routerService = map(services.get(existingRouter));
             PortInfo portInfo = routerService == null
                     ? new PortInfo(null, null)
                     : inferPort(routerService);
+            String savedConfig = ROUTER_SERVICE_NAME.equals(existingRouter) && routerService != null
+                    ? generatedConfig(root, routerService) : "";
+            List<ComposeRouterRoute> restored = restoreGeneratedRoutes(savedConfig, portInfo.hostPort(), services);
+            if (!restored.isEmpty()) {
+                return new ComposeRouterPlanResult(ComposeRouterPlanResult.STATUS_ALREADY_CONFIGURED,
+                        composeContent, savedConfig, existingRouter, portInfo.hostPort(), portInfo.containerPort(),
+                        restored, List.of(), List.of("저장된 Caddy 연결을 복원했습니다. 구성 변경은 설정 적용 후 검증됩니다."));
+            }
             List<ComposeRouterRoute> existingRoute = portInfo.containerPort() == null
                     ? List.of()
                     : List.of(new ComposeRouterRoute(
@@ -115,7 +141,8 @@ public class ComposeRouterPlanner {
             // 사용자가 배포 직전 화면에서 '공개 안 함'으로 끈 서비스는 라우팅 후보에서 제외한다.
             // 서비스 정의는 그대로 두므로(내부 expose 유지) 컨테이너는 뜨지만 외부로는 노출되지 않는다.
             if (service == null || excluded.contains(serviceName)
-                    || isInfrastructure(serviceName, service) || !isRoutingEnabled(service)) {
+                    || isInfrastructure(serviceName, service)
+                    || (!isRoutingEnabled(service) && !overrides.containsKey(serviceName) && !safeRouteOverrides.containsKey(serviceName))) {
                 continue;
             }
             if (!SAFE_SERVICE_NAME.matcher(serviceName).matches()) {
@@ -151,13 +178,13 @@ public class ComposeRouterPlanner {
                     List.of(), List.copyOf(unresolved),
                     List.of("컨테이너 포트를 확정할 수 없는 서비스가 있어 Compose를 변경하지 않았습니다."));
         }
-        if (candidates.size() < 2) {
+        if (candidates.isEmpty() || (candidates.size() < 2 && !replacingRouter)) {
             List<ComposeRouterRoute> directRoute = candidates.isEmpty()
                     ? List.of()
                     : List.of(directRoute(candidates.get(0)));
             return new ComposeRouterPlanResult(
                     ComposeRouterPlanResult.STATUS_NOT_REQUIRED,
-                    composeContent, "", candidates.isEmpty() ? ROUTER_SERVICE_NAME : candidates.get(0).name(),
+                    replacingRouter ? dump(root) : composeContent, "", candidates.isEmpty() ? ROUTER_SERVICE_NAME : candidates.get(0).name(),
                     directRoute.isEmpty() ? null : directRoute.get(0).hostPort(),
                     directRoute.isEmpty() ? null : directRoute.get(0).containerPort(),
                     directRoute, List.of(),
@@ -209,6 +236,47 @@ public class ComposeRouterPlanner {
                 List.copyOf(routes),
                 List.of(),
                 List.copyOf(warnings));
+    }
+
+    private String generatedConfig(Map<String, Object> root, Map<String, Object> router) {
+        Map<String, Object> definitions = map(root.get("configs"));
+        if (definitions == null || !(router.get("configs") instanceof List<?> configs)) return "";
+        for (Object mount : configs) {
+            Map<String, Object> entry = map(mount);
+            if (entry == null || !"/etc/caddy/Caddyfile".equals(entry.get("target"))) continue;
+            Map<String, Object> definition = map(definitions.get(String.valueOf(entry.get("source"))));
+            if (definition != null && definition.get("content") instanceof String text) return text;
+        }
+        return "";
+    }
+
+    // Recognize only our generated simple handle blocks; arbitrary Caddy programs stay in code mode.
+    private List<ComposeRouterRoute> restoreGeneratedRoutes(String code, Integer hostPort, Map<String, Object> services) {
+        if (!code.contains("@gamjabox_health")) return List.of();
+        Map<String, String> paths = new LinkedHashMap<>();
+        Map<String, String> domains = new LinkedHashMap<>();
+        var pathMatcher = Pattern.compile("@([A-Za-z0-9_]+)\\s+path\\s+(/[A-Za-z0-9_/-]+)").matcher(code);
+        while (pathMatcher.find()) paths.put(pathMatcher.group(1), pathMatcher.group(2));
+        var domainMatcher = Pattern.compile("@([A-Za-z0-9_]+)\\s+expression\\s+\\{http.request.host\\}\\.startsWith\\('([a-z0-9-]+)\\.'\\)").matcher(code);
+        while (domainMatcher.find()) domains.put(domainMatcher.group(1), domainMatcher.group(2));
+        var legacyMatcher = Pattern.compile("@([A-Za-z0-9_]+)\\s+host_regexp\\s+\\^([a-z0-9-]+)").matcher(code);
+        while (legacyMatcher.find()) domains.put(legacyMatcher.group(1), legacyMatcher.group(2));
+        var blocks = Pattern.compile("(?s)\\bhandle(?:\\s+@([A-Za-z0-9_]+))?\\s*\\{([^{}]*)}").matcher(code);
+        List<ComposeRouterRoute> routes = new ArrayList<>();
+        while (blocks.find()) {
+            String matcher = blocks.group(1), body = blocks.group(2);
+            var upstream = Pattern.compile("reverse_proxy\\s+([a-z0-9_-]+):([0-9]+)").matcher(body);
+            if (!upstream.find() || !services.containsKey(upstream.group(1))) continue;
+            boolean root = matcher == null, domain = domains.containsKey(matcher);
+            if (!root && !domain && !paths.containsKey(matcher)) continue;
+            int port = Integer.parseInt(upstream.group(2));
+            if (port < 1 || port > 65535) return List.of();
+            routes.add(new ComposeRouterRoute(upstream.group(1), root || domain ? "/" : paths.get(matcher),
+                    upstream.group(1) + ":" + port, port, hostPort, root, body.contains("uri strip_prefix"),
+                    "SAVED_CONFIG", "HIGH", domain ? ComposeRouterRoute.MODE_DOMAIN : ComposeRouterRoute.MODE_PREFIX,
+                    domain ? domains.get(matcher) : null));
+        }
+        return routes.stream().anyMatch(ComposeRouterRoute::root) ? List.copyOf(routes) : List.of();
     }
 
     private Map<String, Object> parse(String composeContent) {
@@ -364,6 +432,11 @@ public class ComposeRouterPlanner {
             List<ServiceCandidate> candidates,
             Map<String, ComposeRouterRouteOverride> overrides
     ) {
+        ServiceCandidate explicitRoot = candidates.stream().filter(candidate -> {
+            ComposeRouterRouteOverride override = overrides.get(candidate.name());
+            return override != null && !override.isDomain() && "/".equals(override.routePath());
+        }).findFirst().orElse(null);
+        if (explicitRoot != null) return explicitRoot;
         // 도메인 모드로 지정된 서비스는 자기 서브도메인으로 노출되므로 기본 진입점(루트)으로는 피한다.
         java.util.function.Predicate<ServiceCandidate> notDomain = candidate -> {
             ComposeRouterRouteOverride override = overrides.get(candidate.name());
@@ -617,7 +690,7 @@ public class ComposeRouterPlanner {
                     + route.customSubdomain().replaceAll("[^A-Za-z0-9_]", "_")
                     + "_" + matcherIndex++;
             config.append("  @").append(matcher)
-                    .append(" host_regexp ^").append(route.customSubdomain()).append("\\.\n")
+                    .append(" expression {http.request.host}.startsWith('").append(route.customSubdomain()).append(".')\n")
                     .append("  handle @").append(matcher).append(" {\n")
                     .append("    reverse_proxy ").append(route.upstream()).append("\n")
                     .append("  }\n\n");
@@ -656,6 +729,9 @@ public class ComposeRouterPlanner {
         Map<String, Object> router = new LinkedHashMap<>();
         router.put("image", "caddy:2.10-alpine");
         router.put("restart", "unless-stopped");
+        router.put("labels", Map.of("gamjabox.router.managed", "true"));
+        router.put("entrypoint", List.of("/bin/sh", "-ec"));
+        router.put("command", List.of("caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"));
         // cloudflared는 VM의 내부 IP:port로 접근하므로 loopback에만 바인딩하면 터널에서 도달할 수 없다.
         router.put("ports", List.of(routerHostPort + ":" + ROUTER_CONTAINER_PORT));
         router.put("configs", List.of(Map.of(
