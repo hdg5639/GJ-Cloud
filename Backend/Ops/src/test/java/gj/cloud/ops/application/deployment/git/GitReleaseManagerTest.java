@@ -8,6 +8,7 @@ import gj.cloud.ops.global.ssh.SshCommandExecutor;
 import gj.cloud.ops.global.ssh.VmSshSessionFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,6 +23,24 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class GitReleaseManagerTest {
+
+    @Test
+    void cloneInheritsVmProcessLimitAndKeepsBoundedGitResources() {
+        when(sshCommandExecutor.exec(eq(session), org.mockito.ArgumentMatchers.startsWith("test -d"), anyLong()))
+                .thenReturn(new CommandResult(1, "", ""));
+        when(sshCommandExecutor.exec(eq(session), org.mockito.ArgumentMatchers.contains("clone --mirror"), anyLong()))
+                .thenReturn(new CommandResult(0, "", ""));
+
+        manager.ensureBareRepo(session, "target-1", "https://github.com/example/repository.git", null);
+
+        ArgumentCaptor<String> commands = ArgumentCaptor.forClass(String.class);
+        verify(sshCommandExecutor, times(2)).exec(eq(session), commands.capture(), anyLong());
+        assertThat(commands.getAllValues().get(1))
+                .doesNotContain("--nproc")
+                .contains("timeout --signal=TERM --kill-after=5s 120s", "--as=536870912", "--fsize=536870912",
+                        "--cpu=120", "--nofile=256", "pack.threads=1", "index.threads=1", "checkout.workers=1",
+                        "fetch.parallel=1", "submodule.fetchJobs=1", "gc.auto=0", "http.followRedirects=false");
+    }
 
     private final SshCommandExecutor sshCommandExecutor = mock(SshCommandExecutor.class);
     private final Session session = mock(Session.class);

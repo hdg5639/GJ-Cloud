@@ -35,7 +35,10 @@ public class GitReleaseManager {
     private static final long GIT_NETWORK_RETRY_DELAY_MS = 5_000;
     private static final String BASE_DIR_TEMPLATE = "/home/%s/gamjabox/apps/%s";
     private static final String GIT_RESOURCE_LIMITS = "timeout --signal=TERM --kill-after=5s 120s "
-            + "prlimit --as=536870912 --fsize=536870912 --cpu=120 --nproc=64 --nofile=256 -- ";
+            // RLIMIT_NPROC는 Git 자식만이 아니라 동일 UID의 모든 스레드를 센다.
+            // 실행 중인 앱이 있는 VM에서는 64 한도가 정상적인 remote-https fork도 막으므로
+            // VM의 기존 사용자 한도를 상속하고 Git 자체의 병렬성만 아래에서 제한한다.
+            + "prlimit --as=536870912 --fsize=536870912 --cpu=120 --nofile=256 -- ";
 
     // repoUrl/branch는 사용자 입력이 그대로 셸 커맨드 문자열에 꽂히므로 반드시 사전 검증함.
     // https:// 로만 제한하는 이유: git의 ext:: 트랜스포트는 임의 셸 명령을 실행할 수 있는 알려진 벡터라
@@ -322,7 +325,9 @@ public class GitReleaseManager {
             }
             command.append(" -c http.proxy=").append(gj.cloud.ops.global.ssh.PosixShellArgument.quote(gitRemoteEgressProxyUrl));
         }
-        return command.append(" -c http.followRedirects=false").toString();
+        return command.append(" -c http.followRedirects=false")
+                .append(" -c pack.threads=1 -c index.threads=1 -c checkout.workers=1")
+                .append(" -c fetch.parallel=1 -c submodule.fetchJobs=1 -c gc.auto=0").toString();
     }
 
     // GIT_ASKPASS 스크립트: PAT는 SFTP로 파일 내용만 전송(ps aux에 노출되지 않음), exec 커맨드 라인에는 경로만 등장시킴.
