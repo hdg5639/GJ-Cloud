@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="910" viewBox="0 0 900 910" role="img" aria-labelledby="title desc">
+<title id="title">GamjaBox 요청과 데이터 구조</title><desc id="desc">브라우저 요청은 Cloudflare Tunnel과 Caddy를 거쳐 화면과 네 백엔드로 분기된다. Auth와 User는 같은 MySQL 인스턴스의 별도 DB, VM과 Ops는 각각 PostgreSQL을 사용한다. Redis는 Auth, VM, Ops가 공유하고 User 이미지는 영속 볼륨에 저장한다.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#526775"/></marker></defs>
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif; fill: #182c36; }
+.title { font-size: 30px; font-weight: 700; } .name { font-size: 23px; font-weight: 650; }
+.body { font-size: 18px; } .small { font-size: 16px; fill: #4e626e; }
+.label { font-size: 15px; font-weight: 650; fill: #32604c; letter-spacing: 1px; }
+.line { fill: none; stroke: #526775; stroke-width: 2; marker-end: url(#arrow); }
+.rule { stroke: #dce5e8; }
+</style><rect width="900" height="910" rx="12" fill="#fafcfc"/>
+<text x="36" y="35" class="label" text-anchor="start">GAMJABOX / 01</text>
+<text x="36" y="74" class="title" text-anchor="start">요청이 들어오고, 데이터가 저장되는 곳</text>
+<rect x="310" y="108" width="280" height="62" rx="8" fill="#ffffff" stroke="#bdcdd4" stroke-width="1.5"/>
+<text x="450.0" y="139" class="name" text-anchor="middle">사용자 · 관리자 브라우저</text>
+<path d="M 450 170 V 212" class="line"/>
+<text x="468" y="197" class="small" text-anchor="start">HTTPS · SSE · WebSocket</text>
+<rect x="310" y="212" width="280" height="82" rx="8" fill="#eef8f3" stroke="#5b977b" stroke-width="1.5"/>
+<text x="450.0" y="243" class="name" text-anchor="middle">Cloudflare Edge</text>
+<text x="450.0" y="269" class="small" text-anchor="middle">HTTPS 종료 · Tunnel</text>
+<path d="M 450 294 V 348" class="line"/>
+<text x="468" y="328" class="small" text-anchor="start">Tunnel → HTTP origin</text>
+<rect x="310" y="348" width="280" height="86" rx="8" fill="#eef8f3" stroke="#5b977b" stroke-width="1.5"/>
+<text x="450.0" y="379" class="name" text-anchor="middle">Caddy Gateway</text>
+<text x="450.0" y="405" class="small" text-anchor="middle">도메인 · 경로 라우팅</text>
+<rect x="36" y="348" width="230" height="86" rx="8" fill="#ffffff" stroke="#bdcdd4" stroke-width="1.5"/>
+<text x="151.0" y="379" class="name" text-anchor="middle">Portal + ControlBox</text>
+<text x="151.0" y="405" class="small" text-anchor="middle">Next.js · 같은 앱 / 별도 도메인</text>
+<rect x="634" y="348" width="230" height="86" rx="8" fill="#ffffff" stroke="#bdcdd4" stroke-width="1.5"/>
+<text x="749.0" y="379" class="name" text-anchor="middle">랜딩 페이지</text>
+<text x="749.0" y="405" class="small" text-anchor="middle">정적 HTML · CSS · JS</text>
+<path d="M 310 385 H 266" class="line"/>
+<path d="M 590 385 H 634" class="line"/>
+<text x="288" y="374" class="small" text-anchor="middle">화면</text>
+<text x="612" y="374" class="small" text-anchor="middle">소개</text>
+<path d="M 450 434 V 484 M 132 484 H 768" fill="none" stroke="#526775" stroke-width="2"/>
+<text x="468" y="465" class="small" text-anchor="start">API 경로별 분기</text>
+<path d="M 132 484 V 518" class="line"/>
+<rect x="36" y="518" width="192" height="100" rx="8" fill="#eef4f8" stroke="#8ba8ba" stroke-width="1.5"/>
+<text x="132.0" y="549" class="name" text-anchor="middle">Auth</text>
+<text x="132.0" y="575" class="small" text-anchor="middle">계정 · JWT · 세션</text>
+<text x="132.0" y="598" class="small" text-anchor="middle">Spring MVC</text>
+<path d="M 132 618 V 666" class="line"/>
+<rect x="36" y="666" width="192" height="79" rx="8" fill="#fff8ee" stroke="#cdb894" stroke-width="1.5"/>
+<text x="132.0" y="697" class="body" text-anchor="middle">MySQL · Auth DB</text>
+<text x="132.0" y="723" class="small" text-anchor="middle">인증 데이터</text>
+<path d="M 344 484 V 518" class="line"/>
+<rect x="248" y="518" width="192" height="100" rx="8" fill="#eef4f8" stroke="#8ba8ba" stroke-width="1.5"/>
+<text x="344.0" y="549" class="name" text-anchor="middle">User</text>
+<text x="344.0" y="575" class="small" text-anchor="middle">프로필 · 키 · 플랜 · Docs</text>
+<text x="344.0" y="598" class="small" text-anchor="middle">Spring MVC</text>
+<path d="M 344 618 V 666" class="line"/>
+<rect x="248" y="666" width="192" height="79" rx="8" fill="#fff8ee" stroke="#cdb894" stroke-width="1.5"/>
+<text x="344.0" y="697" class="body" text-anchor="middle">MySQL · User DB</text>
+<text x="344.0" y="723" class="small" text-anchor="middle">사용자 데이터</text>
+<path d="M 556 484 V 518" class="line"/>
+<rect x="460" y="518" width="192" height="100" rx="8" fill="#eef4f8" stroke="#8ba8ba" stroke-width="1.5"/>
+<text x="556.0" y="549" class="name" text-anchor="middle">VM</text>
+<text x="556.0" y="575" class="small" text-anchor="middle">VM · 포트 · 조직</text>
+<text x="556.0" y="598" class="small" text-anchor="middle">WebFlux / R2DBC</text>
+<path d="M 556 618 V 666" class="line"/>
+<rect x="460" y="666" width="192" height="79" rx="8" fill="#fff8ee" stroke="#cdb894" stroke-width="1.5"/>
+<text x="556.0" y="697" class="body" text-anchor="middle">PostgreSQL</text>
+<text x="556.0" y="723" class="small" text-anchor="middle">VM 전용 인스턴스</text>
+<path d="M 768 484 V 518" class="line"/>
+<rect x="672" y="518" width="192" height="100" rx="8" fill="#eef4f8" stroke="#8ba8ba" stroke-width="1.5"/>
+<text x="768.0" y="549" class="name" text-anchor="middle">Ops</text>
+<text x="768.0" y="575" class="small" text-anchor="middle">콘솔 · 배포 · Preview</text>
+<text x="768.0" y="598" class="small" text-anchor="middle">Spring MVC / WebSocket</text>
+<path d="M 768 618 V 666" class="line"/>
+<rect x="672" y="666" width="192" height="79" rx="8" fill="#fff8ee" stroke="#cdb894" stroke-width="1.5"/>
+<text x="768.0" y="697" class="body" text-anchor="middle">PostgreSQL</text>
+<text x="768.0" y="723" class="small" text-anchor="middle">Ops 전용 인스턴스</text>
+<text x="238" y="766" class="small" text-anchor="middle">하나의 인스턴스 · DB 분리</text>
+<line x1="36" y1="779" x2="864" y2="779" class="rule"/>
+<text x="36" y="811" class="name" text-anchor="start">Redis</text>
+<text x="166" y="811" class="body" text-anchor="start">Auth · VM · Ops  /  토큰 · 티켓 · 캐시 · 실행 락</text>
+<text x="36" y="849" class="name" text-anchor="start">영속 볼륨</text>
+<text x="166" y="849" class="body" text-anchor="start">User  /  프로필 이미지 · Docs 이미지</text>
+<text x="36" y="886" class="small" text-anchor="start">화살표는 대표 요청·DB 접근 경로. 서비스 간 내부 API 호출은 아래 설명 참조.</text>
+</svg>

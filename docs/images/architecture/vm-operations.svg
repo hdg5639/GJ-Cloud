@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="780" viewBox="0 0 900 780" role="img" aria-labelledby="title desc">
+<title id="title">GamjaBox VM 생성과 운영 연동</title><desc id="desc">VM 서비스가 Proxmox와 Cloudflare API를 관리한다. Ops는 VM 서비스에서 권한과 내부 IP를 확인하고 대상 VM에 SSH와 SFTP로 접속한다. GitHub App과 OpenAI API는 Ops와 연동되며 GitHub Webhook은 Cloudflare와 Caddy를 경유한다.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#526775"/></marker></defs>
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif; fill: #182c36; }
+.title { font-size: 30px; font-weight: 700; } .name { font-size: 23px; font-weight: 650; }
+.body { font-size: 18px; } .small { font-size: 16px; fill: #4e626e; }
+.label { font-size: 15px; font-weight: 650; fill: #32604c; letter-spacing: 1px; }
+.line { fill: none; stroke: #526775; stroke-width: 2; marker-end: url(#arrow); }
+.rule { stroke: #dce5e8; }
+</style><rect width="900" height="780" rx="12" fill="#fafcfc"/>
+<text x="36" y="35" class="label" text-anchor="start">GAMJABOX / 02</text>
+<text x="36" y="74" class="title" text-anchor="start">VM을 만들고, 그 안에서 앱을 운영하는 흐름</text>
+<text x="50" y="116" class="label" text-anchor="start">인프라 제어</text>
+<text x="490" y="116" class="label" text-anchor="start">VM 내부 작업</text>
+<rect x="50" y="144" width="340" height="92" rx="8" fill="#eef4f8" stroke="#8ba8ba" stroke-width="1.5"/>
+<text x="220.0" y="175" class="name" text-anchor="middle">VM 서비스</text>
+<text x="220.0" y="201" class="small" text-anchor="middle">프로비저닝 · 공개 주소 · 접근 정책</text>
+<rect x="490" y="144" width="340" height="92" rx="8" fill="#eef4f8" stroke="#8ba8ba" stroke-width="1.5"/>
+<text x="660.0" y="175" class="name" text-anchor="middle">Ops 서비스</text>
+<text x="660.0" y="201" class="small" text-anchor="middle">배포 · 터미널 · 파일 · 백업 · Preview</text>
+<path d="M 490 191 H 390" class="line"/>
+<text x="440" y="167" class="small" text-anchor="middle">권한 · IP</text>
+<path d="M 220 236 V 264 H 130 V 304" class="line" stroke-dasharray="6 5"/>
+<path d="M 220 236 V 264 H 310 V 304" class="line" stroke-dasharray="6 5"/>
+<rect x="50" y="304" width="160" height="92" rx="8" fill="#f3f1f8" stroke="#aaa0bb" stroke-width="1.5"/>
+<text x="130.0" y="335" class="body" text-anchor="middle">Proxmox VE</text>
+<text x="130.0" y="361" class="small" text-anchor="middle">클론 · 전원</text>
+<text x="130.0" y="384" class="small" text-anchor="middle">리소스 · 메트릭</text>
+<rect x="230" y="304" width="160" height="92" rx="8" fill="#f3f1f8" stroke="#aaa0bb" stroke-width="1.5"/>
+<text x="310.0" y="335" class="body" text-anchor="middle">Cloudflare API</text>
+<text x="310.0" y="361" class="small" text-anchor="middle">DNS · Tunnel</text>
+<text x="310.0" y="384" class="small" text-anchor="middle">Zero Trust Access</text>
+<path d="M 660 236 V 264 H 570 V 304" class="line" stroke-dasharray="6 5"/>
+<path d="M 660 236 V 264 H 750 V 304" class="line" stroke-dasharray="6 5"/>
+<rect x="490" y="304" width="160" height="92" rx="8" fill="#f3f1f8" stroke="#aaa0bb" stroke-width="1.5"/>
+<text x="570.0" y="335" class="body" text-anchor="middle">GitHub App</text>
+<text x="570.0" y="361" class="small" text-anchor="middle">저장소 접근</text>
+<text x="570.0" y="384" class="small" text-anchor="middle">Push Webhook</text>
+<rect x="670" y="304" width="160" height="92" rx="8" fill="#f3f1f8" stroke="#aaa0bb" stroke-width="1.5"/>
+<text x="750.0" y="335" class="body" text-anchor="middle">OpenAI API</text>
+<text x="750.0" y="361" class="small" text-anchor="middle">배포 스펙</text>
+<text x="750.0" y="384" class="small" text-anchor="middle">Preview 계획 · 검수</text>
+<path d="M 510 304 V 280 H 510 V 236" class="line" stroke-dasharray="6 5"/>
+<path d="M 830 191 H 858 V 526 H 660 V 562" class="line"/>
+<text x="818" y="468" class="body" text-anchor="end">SSH · SFTP</text>
+<text x="818" y="493" class="small" text-anchor="end">내부 네트워크</text>
+<path d="M 130 396 V 526 H 300 V 562" class="line" stroke-dasharray="6 5"/>
+<text x="146" y="468" class="body" text-anchor="start">VM 생성 · 제어</text>
+<rect x="230" y="562" width="440" height="102" rx="8" fill="#eef8f3" stroke="#5b977b" stroke-width="1.5"/>
+<text x="450.0" y="593" class="name" text-anchor="middle">대상 VM</text>
+<text x="450.0" y="619" class="small" text-anchor="middle">Docker Compose · 사용자 앱</text>
+<text x="450.0" y="642" class="small" text-anchor="middle">사용자 VM / 관리형 Auto Preview Worker</text>
+<line x1="36" y1="696" x2="864" y2="696" class="rule"/>
+<text x="36" y="724" class="small" text-anchor="start">실선  내부 API · SSH/SFTP     점선  외부 API · Webhook · 프로비저닝</text>
+<text x="36" y="751" class="small" text-anchor="start">GitHub Webhook은 Cloudflare → Caddy → Ops. 공개 앱 주소는 VM 서비스가 관리.</text>
+</svg>

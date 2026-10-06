@@ -58,118 +58,34 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 
 ## 아키텍처
 
-외부 요청은 Cloudflare Tunnel을 통해 서비스에 도달하고, 애플리케이션과 저장소는 내부 네트워크로 연결된다. Caddy는 화면과 API 요청을 분기하고, 네 서비스는 각자 소유한 데이터와 인프라를 관리한다. 실선은 요청·데이터 접근, 점선은 인프라 연동을 나타낸다.
+**① 요청과 데이터** — 위에서 아래로 읽으면 외부 진입점, 화면·API 분기, 서비스별 데이터 소유권이 이어진다.
 
-```mermaid
-flowchart TB
-    browser(["사용자 · 관리자<br/>Browser"])
-    edge["Cloudflare Edge<br/>HTTPS · Tunnel"]
-    gateway["Caddy Gateway<br/>Host · Path 라우팅 / CORS"]
-    browser -->|HTTPS · SSE · WebSocket| edge
-    edge -->|Tunnel| gateway
+[![GamjaBox 요청·데이터 구조: Cloudflare와 Caddy, 네 백엔드와 저장소](docs/images/architecture/request-data.svg)](docs/images/architecture/request-data.svg)
 
-    subgraph app["APPLICATION · 서비스"]
-        direction TB
-        portal["Portal + ControlBox<br/>Next.js"]
-        auth["Auth<br/>계정 / JWT / 세션"]
-        user["User<br/>프로필 / SSH 키 / 플랜 / Docs"]
-        vm["VM<br/>프로비저닝 / 포트 / 조직"]
-        ops["Ops<br/>터미널 / 배포 / Auto Preview / 백업"]
-    end
+Caddy는 화면을 Next.js 기반 **Portal + ControlBox** 또는 정적 랜딩 페이지로 전달하고, API는 **Auth · User · VM · Ops**로 분기한다. 브라우저의 화면 요청과 API 요청은 모두 Caddy에 도달한 뒤 각각 프론트엔드와 해당 백엔드로 전달된다. 관리자 화면은 별도 도메인을 사용하고, API 권한은 각 백엔드에서 다시 검증한다.
 
-    gateway -->|화면| portal
-    gateway -->|인증| auth
-    gateway -->|사용자 정보| user
-    gateway -->|VM 관리| vm
-    gateway -->|운영 · 실시간 연결| ops
+Auth와 User는 **하나의 MySQL 인스턴스 안에서 DB를 분리**한다. VM과 Ops는 **각각 별도 PostgreSQL 인스턴스**를 사용한다. Redis는 Auth·VM·Ops의 토큰·티켓·캐시·락 등에 사용하고, User의 프로필·Docs 이미지는 컨테이너 외부 영속 볼륨에 보관한다.
 
-    subgraph data["DATA · 서비스별 소유권"]
-        authdb[("MySQL<br/>인증 데이터")]
-        userdb[("MySQL<br/>사용자 데이터")]
-        vmdb[("PostgreSQL<br/>VM 데이터")]
-        opsdb[("PostgreSQL<br/>운영 데이터")]
-        redis[("Redis<br/>토큰 / 티켓 / 캐시 / 락")]
-        files[("영속 볼륨<br/>프로필 · Docs 이미지")]
-    end
+**② VM 생성과 운영** — VM 서비스는 인프라를 제어하고, Ops는 대상 VM 내부에서 작업한다.
 
-    auth --> authdb
-    user --> userdb
-    user --> files
-    vm --> vmdb
-    ops --> opsdb
-    auth --> redis
-    vm --> redis
-    ops --> redis
+[![GamjaBox VM·운영 구조: Proxmox·Cloudflare 제어와 SSH 기반 배포, GitHub·AI 연동](docs/images/architecture/vm-operations.svg)](docs/images/architecture/vm-operations.svg)
 
-    subgraph infra["INFRASTRUCTURE · 외부 연동"]
-        proxmox["Proxmox VE<br/>클론 / 전원 / 리소스 / 메트릭"]
-        cloudflare["Cloudflare API<br/>DNS / Tunnel / Zero Trust"]
-        guest["대상 VM<br/>Docker Compose · 사용자 앱"]
-        github["GitHub App<br/>저장소 접근 / Push Webhook"]
-        ai["OpenAI API<br/>AI 배포 스펙 / Auto Preview"]
-    end
+VM 서비스는 Proxmox API로 VM을 생성·제어하고 Cloudflare API로 DNS·Tunnel ingress·Zero Trust Access를 관리한다. Ops는 VM 서비스에서 **사용자 권한과 내부 IP를 확인한 뒤 SSH/SFTP로 접속**해 터미널·배포·파일·백업 작업을 수행한다. 관리형 Auto Preview Worker도 전용 VM이며, 사용자 앱과 Preview Runtime은 대상 VM에서 실행된다.
 
-    vm -.->|API| proxmox
-    vm -.->|API| cloudflare
-    proxmox -.->|프로비저닝| guest
-    ops -.->|SSH · SFTP| guest
-    ops -.->|저장소 접근| github
-    github -.->|Webhook · Caddy 경유| ops
-    ops -.->|구조화 생성 · 검수| ai
-
-    classDef entry fill:#ecfdf5,stroke:#059669,color:#064e3b,stroke-width:2px;
-    classDef service fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a;
-    classDef storage fill:#fff7ed,stroke:#f97316,color:#7c2d12;
-    classDef external fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95;
-    class browser,edge,gateway entry;
-    class portal,auth,user,vm,ops service;
-    class authdb,userdb,vmdb,opsdb,redis,files storage;
-    class proxmox,cloudflare,guest,github,ai external;
-```
-
-외부 HTTPS는 Cloudflare에서 처리하고, Caddy가 내부 서비스로 요청을 전달한다.
-
-VM 서비스는 Proxmox와 Cloudflare API로 인프라를 관리하고, Ops는 대상 VM에 SSH/SFTP로 접속해 배포와 운영 작업을 수행한다. 서비스 간 API 호출은 내부 네트워크를 사용하며, 그림에서는 가독성을 위해 개별 호출선을 생략했다.
+GitHub App의 저장소 접근과 OpenAI의 배포 스펙·Preview 계획·검수는 Ops에 연결된다. GitHub Webhook은 외부 요청과 같은 Cloudflare·Caddy 진입 경로를 사용한다. **플랫폼 앞단 Caddy**와 다중 서비스 배포에서 선택적으로 생성하는 **앱 내부 Caddy 라우터**는 서로 별개다.
 
 <details>
-<summary><b>요청 흐름 — 화면과 API의 분리</b></summary>
+<summary><b>그림에서 생략한 연결과 실제 설정</b></summary>
 
-Caddy는 도메인과 요청 경로에 따라 화면과 API를 구분한다. 사용자 포털과 관리자 콘솔은 같은 프론트엔드 애플리케이션을 사용하고, 관리자 API 권한은 각 백엔드에서 다시 검증한다.
+- 그림은 요청·데이터 소유권과 주요 운영 연동에 초점을 맞춘 논리 구조도다. 서비스 간 호출은 이 설명에 정리하고, 내부 네트워크와 서버는 역할 중심 이름으로 표현했다.
+- Auth는 회원가입·탈퇴 과정에서 User·VM과 연동한다. User는 VM·Ops와 사용량·플랜 등을 조정하고, VM은 User의 플랜·SSH 키와 Ops의 SSH 준비 검증을 사용한다. Ops는 VM의 권한·내부 IP, User의 플랜을 조회한다.
+- 서비스 간 내부 API는 호출 목적에 따라 사용자 위임 Token Exchange와 순수 서비스 client-credentials를 구분한다. 각 서비스가 audience·scope와 권한을 검증한다.
+- 사용자 앱의 공개 트래픽은 해당 Cloudflare Tunnel ingress가 대상 VM의 공개 포트로 전달한다. 플랫폼 API의 Caddy 경로와 사용자 앱의 ingress 경로는 각각 구성된다.
+- 개발 전용 API Console은 Caddy의 동일 출처 프록시로 명세 조회와 API 실행을 제공한다. 운영의 기본 공개 화면에는 포함하지 않았다.
 
-```mermaid
-flowchart LR
-    request(["외부 요청"]) --> caddy["Caddy<br/>도메인 · 경로 분기"]
-
-    caddy -->|서비스 소개| landing["랜딩 페이지"]
-    caddy -->|사용자 · 관리자 화면| portal["Portal + ControlBox"]
-    caddy -->|API 요청| api{"서비스별 분기"}
-    caddy -.->|개발 환경| docs["API Console"]
-
-    api -->|인증 · 세션| auth["Auth"]
-    api -->|프로필 · 플랜 · Docs| user["User"]
-    api -->|VM · 조직 · 포트| vm["VM"]
-    api -->|터미널 · 배포 · 백업| ops["Ops"]
-    docs -.->|명세 조회 · API 실행| api
-
-    classDef gateway fill:#ecfdf5,stroke:#059669,color:#064e3b,stroke-width:2px;
-    classDef screen fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95;
-    classDef service fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a;
-    class request,caddy,api gateway;
-    class landing,docs,portal screen;
-    class auth,user,vm,ops service;
-```
-
-개발 API Console은 동일 출처 프록시로 명세 조회와 API 실행을 제공하며 운영 화면과 분리된다. 구체적인 라우팅 설정은 [Caddyfile.example](Caddyfile.example)을 참고한다.
+라우팅은 [Caddyfile.example](Caddyfile.example), 컨테이너·저장소 구성은 [compose.yaml](compose.yaml), 인프라 제어와 운영 책임은 [VM README](Backend/Vm/README.md)·[Ops README](Backend/Ops/README.md)에 대응한다. 그림을 클릭하면 원본 크기로 볼 수 있다.
 
 </details>
-
-내부 API는 호출 목적에 따라 인증 문맥을 나눈다. 관리 키 발급처럼 순수 서비스 신원이 필요한 작업은 client-credentials로 발급한 audience/scope 제한 토큰을 사용하고, 사용자별 리소스 조회처럼 최종 사용자 문맥이 필요한 작업은 `sub`를 보존한 위임 체인에서 별도로 검증한다.
-
-사용자 포털 외에, <img src="Frontend/portal/public/controlbox-symbol.svg" alt="ControlBox" width="18" height="18" align="absmiddle"> **ControlBox** — 플랜 변경 승인과 사용 설명서 작성·발행 등을 처리하는 별도 관리자 콘솔이 비공개 도메인으로 분리 운영된다.
-
-Auth와 User는 하나의 MySQL 인스턴스 안에서 DB를 분리하고, VM과 Ops는 각각 별도 PostgreSQL 인스턴스를 사용한다. Redis는 Auth의 Refresh Token·이메일 인증·Token Exchange·레이트 리밋, VM의 캐시·상태, Ops의 일회용 티켓·배포 락·AI 캐시를 저장한다. 프로필과 Docs 이미지는 User의 컨테이너 외부 영속 볼륨에 보관한다.
-
-외부 요청은 Gateway로 모으고, 백엔드와 저장소는 내부 네트워크에서 통신한다.
 
 ---
 
