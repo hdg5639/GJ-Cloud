@@ -30,6 +30,7 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
   const sessionRef = useRef<{ key: string; id: string } | null>(null);
   const connectingRef = useRef(false);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const probeConnectionRef = useRef<(() => void) | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
   const connectRef = useRef<() => Promise<void>>(async () => {});
@@ -55,6 +56,7 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     heartbeatRef.current = null;
+    probeConnectionRef.current = null;
     retryTimerRef.current = null;
     const previousSocket = wsRef.current;
     wsRef.current = null;
@@ -82,6 +84,7 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
       connectingRef.current = false;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
+      probeConnectionRef.current = null;
       if (!isCurrent() || !activeRef.current) return;
       if (retryCountRef.current >= 5) {
         setStatus("error");
@@ -289,9 +292,16 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
       ws.onopen = () => {
         if (!isCurrent()) return;
         ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+        // Background timers can be suspended even while WebSocket Ping/Pong stays healthy.
+        // Give the transport a fresh response window when the user returns.
+        probeConnectionRef.current = () => {
+          if (!isCurrent() || ws.readyState !== WebSocket.OPEN) return;
+          lastReceived = Date.now();
+          ws.send(JSON.stringify({ type: "heartbeat" }));
+        };
         heartbeatRef.current = setInterval(() => {
           if (!isCurrent() || ws.readyState !== WebSocket.OPEN) return;
-          if (Date.now() - lastReceived > 60000) {
+          if (document.visibilityState === "visible" && Date.now() - lastReceived > 60000) {
             ws.close(4000, "heartbeat timeout");
             return;
           }
@@ -321,7 +331,7 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
           retryCountRef.current = 0;
           setStatus("connected");
           setErrorMessage(null);
-          term.focus();
+          if (document.visibilityState === "visible" && document.hasFocus()) term.focus();
         }
         if (control?.type !== "ready") term.write(event.data as string);
       };
@@ -331,6 +341,7 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
         connectingRef.current = false;
         if (heartbeatRef.current) clearInterval(heartbeatRef.current);
         heartbeatRef.current = null;
+        probeConnectionRef.current = null;
         const finished = ["idle timeout", "shell ended", "session expired", "replaced"].includes(event.reason);
         if (!finished && event.code !== 1013) {
           retry();
@@ -369,16 +380,18 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
       setStatus("paused");
     };
     const resume = () => {
-      if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+      if (document.visibilityState !== "visible") return;
+      const wasPaused = !activeRef.current;
       activeRef.current = true;
-      if (!wsRef.current && !connectingRef.current) {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        probeConnectionRef.current?.();
+      } else if (wasPaused && !wsRef.current && !connectingRef.current) {
         retryCountRef.current = 0;
         void connect();
       }
     };
-    const visibility = () => document.visibilityState === "hidden" ? pause() : resume();
+    const visibility = () => { if (document.visibilityState === "visible") resume(); };
     const connectTimer = setTimeout(resume, 0);
-    window.addEventListener("blur", pause);
     window.addEventListener("focus", resume);
     window.addEventListener("pagehide", pause);
     window.addEventListener("pageshow", resume);
@@ -402,7 +415,6 @@ export function TerminalConsole({ systemWorker = false }: { systemWorker?: boole
     return () => {
       clearTimeout(connectTimer);
       activeRef.current = false;
-      window.removeEventListener("blur", pause);
       window.removeEventListener("focus", resume);
       window.removeEventListener("pagehide", pause);
       window.removeEventListener("pageshow", resume);
