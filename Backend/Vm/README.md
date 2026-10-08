@@ -66,6 +66,8 @@ Cloudflare의 멱등한 DNS·Tunnel·Access 조회·갱신·삭제 호출은 네
 
 포트 프로비저닝은 `CNAME → ingress → Access App/Policy → DB` 순으로 진행하며 중간 실패 시 이번 시도에서 생성한 리소스만 역순으로 정리한다. 기존 CNAME을 안전하게 채택한 경우에는 후속 실패가 나도 해당 DNS 레코드를 삭제하지 않는다. 배포 대상에 연결된 수동 CNAME이 포트·프로토콜·공개 범위·subdomain까지 요청 라우트와 일치하면 새 레코드를 만들지 않고 그 라우트를 사용한다.
 
+수동 포트와 배포 자동 라우트 모두 **서로 다른 CNAME으로 같은 VM 포트에 연결**할 수 있다. 예를 들어 `shop.example.test`와 `api.example.test`를 같은 `8080`에 연결하고, VM 안의 Caddy·애플리케이션이 HTTP Host를 기준으로 분기할 수 있다. 같은 주소와 VM 내 같은 닉네임의 중복은 거부하며, VM당 최대 5개 제한은 포트 번호의 종류가 아니라 등록된 라우트 수에 적용한다. PUBLIC/PRIVATE Access 설정과 삭제는 각 주소별로 독립적이다. TCP 라우트도 같은 포트를 공유할 수 있지만 HTTP Host 기반 분기는 HTTP 서비스에서 구성한다.
+
 ## 권한 모델
 
 - 개인 VM은 소유자 문맥으로 접근한다.
