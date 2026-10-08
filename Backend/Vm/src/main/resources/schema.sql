@@ -58,9 +58,8 @@ CREATE TABLE IF NOT EXISTS vm_ports (
     CONSTRAINT uq_vm_port_nickname UNIQUE (vm_id, nickname)
 );
 
--- 단일 진입 포트 호스트 라우팅: 같은 배포의 여러 도메인 CNAME이 하나의 Caddy router 포트를 공유하므로
--- (vm_id, port) 유일성은 더 이상 성립하지 않는다. 대신 subdomain(UNIQUE)·nickname(UNIQUE per vm)으로
--- 각 라우트를 구분하고, 포트 충돌은 애플리케이션 레벨에서 소유자 기준으로 검사한다.
+-- 호스트 기반 라우팅: 수동·배포 라우트 모두 서로 다른 CNAME으로 같은 VM 포트를 공유할 수 있다.
+-- 라우트의 유일성은 subdomain(UNIQUE)·nickname(UNIQUE per vm)으로 보장한다.
 ALTER TABLE vm_ports DROP CONSTRAINT IF EXISTS uq_vm_port;
 
 ALTER TABLE vm_ports ADD COLUMN IF NOT EXISTS nickname VARCHAR(20);

@@ -69,12 +69,6 @@ public class PortServiceImpl implements PortService {
                                         if (count >= PORT_MAX_COUNT) {
                                             return Mono.error(new VmException(VmErrorCode.PORT_LIMIT_EXCEEDED));
                                         }
-                                        return vmPortRepository.countByVmIdAndPort(vmId, request.port());
-                                    })
-                                    .flatMap(existing -> {
-                                        if (existing > 0) {
-                                            return Mono.error(new VmException(VmErrorCode.PORT_ALREADY_EXISTS));
-                                        }
                                         return vmPortRepository.countByVmIdAndNickname(vmId, request.nickname());
                                     })
                                     .flatMap(nickExists -> {
@@ -510,15 +504,6 @@ public class PortServiceImpl implements PortService {
                     if (count >= PORT_MAX_COUNT) {
                         return Mono.error(new VmException(VmErrorCode.PORT_LIMIT_EXCEEDED));
                     }
-                    // 같은 배포의 도메인 라우트들은 하나의 Caddy router 포트를 공유할 수 있으므로,
-                    // 수동 포트나 다른 배포가 점유한 경우에만 충돌로 처리한다.
-                    return vmPortRepository.countByVmIdAndPortForOtherOwners(
-                            vm.getId(), route.port(), deploymentAppId);
-                })
-                .flatMap(existing -> {
-                    if (existing > 0) {
-                        return Mono.error(new VmException(VmErrorCode.PORT_ALREADY_EXISTS));
-                    }
                     return vmPortRepository.countByVmIdAndNickname(vm.getId(), route.nickname());
                 })
                 .flatMap(nickExists -> {
@@ -582,6 +567,14 @@ public class PortServiceImpl implements PortService {
                 && expectedSubdomain.equals(port.getSubdomain());
     }
 
+    // A hostname owns its DNS/ingress/Access resources; the upstream port can be shared.
+    private Mono<Void> ensureRouteHostnameAvailable(String subdomain) {
+        return vmPortRepository.countBySubdomain(subdomain)
+                .flatMap(count -> count > 0
+                        ? Mono.error(new VmException(VmErrorCode.SUBDOMAIN_ALREADY_TAKEN))
+                        : Mono.empty());
+    }
+
     private <T> Mono<T> provisionCloudflarePort(
             String subdomain,
             String internalIp,
@@ -592,29 +585,30 @@ public class PortServiceImpl implements PortService {
             Function<PortProvisioningState, Mono<T>> persistence
     ) {
         PortProvisioningState state = new PortProvisioningState(subdomain);
-        return cloudflareClient.ensureCname(subdomain)
-                .doOnNext(registration -> {
-                    state.dnsRecordId = registration.recordId();
-                    state.dnsCreated = registration.created();
-                })
-                .flatMap(registration -> {
-                    // 응답 유실로 성공 여부를 모르는 경우에도 remove는 멱등하므로 보상 정리 대상으로 표시한다.
-                    state.ingressTouched = true;
-                    return cloudflareClient.addIngressRule(subdomain, internalIp, port, protocol.name());
-                })
-                .then(Mono.defer(() -> {
-                    if (visibility == Visibility.PUBLIC) {
-                        return Mono.empty();
-                    }
-                    return cloudflareClient.createAccessApp(subdomain, "self_hosted")
-                            .doOnNext(appId -> state.accessAppId = appId)
-                            .flatMap(appId -> cloudflareClient.createAccessPolicy(appId, accessEmails))
-                            .doOnNext(policyId -> state.accessPolicyId = policyId)
-                            .then();
-                }))
-                .then(Mono.defer(() -> persistence.apply(state)))
-                .onErrorResume(error -> compensateProvisioning(state)
-                        .then(Mono.error(error)));
+        return ensureRouteHostnameAvailable(subdomain)
+                .then(Mono.defer(() -> cloudflareClient.ensureCname(subdomain)
+                        .doOnNext(registration -> {
+                            state.dnsRecordId = registration.recordId();
+                            state.dnsCreated = registration.created();
+                        })
+                        .flatMap(registration -> {
+                            // 응답 유실로 성공 여부를 모르는 경우에도 remove는 멱등하므로 보상 정리 대상으로 표시한다.
+                            state.ingressTouched = true;
+                            return cloudflareClient.addIngressRule(subdomain, internalIp, port, protocol.name());
+                        })
+                        .then(Mono.defer(() -> {
+                            if (visibility == Visibility.PUBLIC) {
+                                return Mono.empty();
+                            }
+                            return cloudflareClient.createAccessApp(subdomain, "self_hosted")
+                                    .doOnNext(appId -> state.accessAppId = appId)
+                                    .flatMap(appId -> cloudflareClient.createAccessPolicy(appId, accessEmails))
+                                    .doOnNext(policyId -> state.accessPolicyId = policyId)
+                                    .then();
+                        }))
+                        .then(Mono.defer(() -> persistence.apply(state)))
+                        .onErrorResume(error -> compensateProvisioning(state)
+                                .then(Mono.error(error)))));
     }
 
     private Mono<Void> compensateProvisioning(PortProvisioningState state) {

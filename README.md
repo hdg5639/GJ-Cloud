@@ -28,7 +28,7 @@ AWS EC2 같은 VM 생성 경험을 개인 서버 환경에서도 구현해보고
 |---|---|
 | **VM 프로비저닝** | Proxmox 템플릿 클론 → cloud-init DHCP 주소 할당 → SSH/cloud-init 준비 검증 → Cloudflare 연동까지 자동화. SSE로 생성 상태 실시간 수신 |
 | **SSH 접속** | VM마다 전용 서브도메인 자동 발급. 관리 키로 접속 준비 상태와 사용자 `authorized_keys`를 검증·복구하고, Cloudflare Zero Trust로 이메일 기반 접근 제어 |
-| **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. PUBLIC / PRIVATE 구분, PRO 플랜의 자동 ID 없는 커스텀 CNAME 지원 |
+| **포트 노출** | HTTP/TCP 포트를 Cloudflare Tunnel로 외부 노출. 서로 다른 CNAME의 동일 포트 연결, PUBLIC / PRIVATE 구분, PRO 플랜의 자동 ID 없는 커스텀 CNAME 지원 |
 | **플랜 관리** | FREE / PRO 플랜 전환, 디스크 온라인 확장. 플랜 변경은 관리자 승인 후 반영 |
 | **계정 보안** | RS256 세션과 Refresh Token Rotation, 이메일 인증·비밀번호 재설정 메일, 점진적 로그인 제한, 현재 비밀번호 재확인 기반 회원 탈퇴 |
 | **협업 (Organization)** | 팀 단위로 VM 공유. 메모·공지·요청 게시판, 역할별 권한(OWNER / ADMIN / MEMBER) |
